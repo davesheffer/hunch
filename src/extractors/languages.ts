@@ -1,9 +1,8 @@
 /**
- * Language registry: one LanguageSpec per supported language, consumed by
- * parse.ts (tree-sitter grammar/query dispatch), indexer.ts / diff.ts /
- * synthesize.ts ("is this a code file?"). Adding a language is a new entry
- * here (+ a new tree-sitter-* dependency), not edits scattered across those
- * four files.
+ * The single language registry: one `LanguageSpec` per supported language. The
+ * parser reads grammar and query data from here, and the indexer, diff analysis
+ * and synthesis ask it "is this a code file?". Adding a language means adding an
+ * entry here plus a grammar dependency.
  */
 import { basename } from "node:path";
 import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
@@ -12,21 +11,22 @@ import type { Edge } from "../core/types.js";
 export type ParsedSymbolKind = "function" | "method" | "class" | "interface" | "trait" | "enum" | "type" | "variable" | "file";
 
 export interface LanguageSpec {
-  /** Stable id, also used as the grammar-bundle cache key by parse.ts. */
+  /** Stable language id (`typescript`, `python`, `go`, `php`, `yaml`). */
   id: string;
+  /** File suffixes, leading dot included, that this spec handles. */
   extensions: string[];
-  /** Cache key parse.ts's bundleFor() uses (one grammar+query pair may serve
-   *  several extensions, e.g. tsx serves both .tsx and .jsx). */
+  /** Memoization key for the parser+query bundle. One grammar can serve several
+   *  extensions, and two specs may share an `id` yet differ here (TS vs TSX). */
   grammarKey: string;
-  /** Lazily returns the tree-sitter Language object for this spec. */
+  /** Lazily returns the tree-sitter Language object. */
   loadGrammar(): unknown;
-  /** Tree-sitter query source capturing every construct this language cares about. */
+  /** Tree-sitter query source capturing every construct of interest. */
   query: string;
-  /** Node types ascendToDef() walks up to when resolving a name capture's enclosing def. */
+  /** Node types the parser climbs to when attaching a name capture to its definition. */
   defNodeTypes: Set<string>;
-  /** Query capture-name (ending in ".def") -> the ParsedSymbolKind it represents. */
+  /** Symbol kind for each capture name ending in `.def`. */
   defKindOf: Record<string, ParsedSymbolKind>;
-  /** Query capture-name (ending in ".name") -> the matching ".def" capture-name. */
+  /** Maps each `.name` capture to the `.def` capture it belongs to. */
   nameToDef: Record<string, string>;
   /** Optional query binding a local name to an imported module, run with
    *  matches() so captures pair up: @bind.src (module specifier), @bind.local
@@ -40,21 +40,17 @@ export interface LanguageSpec {
   /** Optional semantic relationship captures. The generic parser/indexer emit
    * these through the normal graph path; languages only describe syntax. */
   relationKindOf?: Record<string, { edgeType: Edge["type"]; label: string }>;
-  /** Common builtin/stdlib method names. Member calls to these (e.g. `arr.map(...)`)
-   *  must NOT create call edges to unrelated repo symbols that happen to share the
-   *  name (DESIGN: keep the graph clean). */
+  /** Common builtin/stdlib method names. A member call whose property is in this
+   *  set never produces a call edge to a same-named repo symbol. */
   builtinMethods: Set<string>;
   /** Direct-call builtins for languages such as PHP. These never become repo
    * call edges merely because a project symbol shares the runtime name. */
   builtinFunctions?: Set<string>;
-  /** Edge type emitted for this language's calls-list entries (e.g. YAML's
-   *  alias->anchor references aren't function calls). Defaults to "calls"
-   *  when omitted — every language before YAML. */
+  /** Edge type emitted for this language's call-list entries; defaults to
+   *  `"calls"`. YAML sets it because alias-to-anchor links are references. */
   referenceEdgeType?: Edge["type"];
-  /** Fallback name for a ".def" capture with no paired ".name" capture (e.g.
-   *  a whole-file root symbol with no natural identifier of its own). Omit
-   *  for a language where every ".def" always has a name capture — parse.ts
-   *  then keeps dropping unnamed defs, the current behavior for TS/Python. */
+  /** Name for a `.def` capture that has no paired `.name` capture (a whole-file
+   *  root symbol, say). When omitted, unnamed defs are dropped. */
   fallbackDefName?: (file: string) => string;
   /** Ancestor shapes in which an ERROR node is a known limitation of THIS grammar
    *  rather than a real syntax error. parse.ts forgives an error only when some
@@ -72,22 +68,16 @@ export interface LanguageSpec {
    *  every captured value from the original source at the tree's unchanged
    *  offsets. Keep replacements syntax-equivalent outside the grammar defect. */
   parseErrorRecovery?: (source: string) => string;
-  /** Patterns whose presence anywhere in the source mean "this isn't actually
-   *  {id} text yet — it's a template that renders to {id} later" (Go/Jinja/Helm
-   *  delimiters in a .yaml file, e.g.). parse.ts still runs the real parse — a
-   *  genuine anchor/symbol elsewhere in the file is still extracted, same as any
-   *  other {id} file — but no longer lets the resulting ERROR nodes fail-close
-   *  the whole-repo scan completeness gate the way toleratedErrorScopes protects
-   *  narrower, per-grammar false positives (issue #33). Keep these narrow: a
-   *  pattern that also matches ordinary, always-valid {id} syntax (e.g. GitHub
-   *  Actions' `${{ }}` expressions) would silently disable the fail-closed
-   *  guarantee for files that were never templated at all. */
+  /** Patterns whose presence anywhere in a file's text means the file is a
+   *  template that renders into this language later (Go/Jinja/Helm delimiters in
+   *  YAML). The real parse still runs, but the resulting error nodes must not make
+   *  the file unparseable, so the whole-repo completeness gate does not fail
+   *  closed. Keep patterns narrow so they never match always-valid syntax such as
+   *  GitHub Actions `${{ }}` expressions. */
   templatingMarkers?: readonly RegExp[];
-  /** Extensions within this language where EVERY file is inherently a template
-   *  regardless of content — unlike templatingMarkers, this never content-sniffs.
-   *  The extension alone means "this file is a template, parseable must never
-   *  become false for it," matching Helm's `_helpers.tpl` convention where the
-   *  file may be pure Go-template text with no YAML structure of its own at all. */
+  /** Extensions where every file is a template regardless of content, with no
+   *  sniffing (Helm's `_helpers.tpl` convention). Such files are never reported
+   *  unparseable. */
   alwaysTemplatedExtensions?: readonly string[];
 }
 
@@ -140,15 +130,23 @@ const TS_BINDING_QUERY = `
 `;
 
 const TS_BUILTIN_METHODS = new Set([
+  // arrays
   "map", "filter", "forEach", "reduce", "find", "findIndex", "some", "every", "includes",
-  "push", "pop", "shift", "unshift", "slice", "splice", "concat", "join", "split", "flat", "flatMap",
-  "indexOf", "lastIndexOf", "keys", "values", "entries", "sort", "reverse", "fill", "at",
+  "push", "pop", "shift", "unshift", "slice", "splice", "concat", "join", "split", "flat",
+  "flatMap", "indexOf", "lastIndexOf", "keys", "values", "entries", "sort", "reverse", "fill", "at",
+  // Map / Set
   "get", "set", "has", "add", "delete", "clear",
+  // Promise
   "then", "catch", "finally", "all", "race", "resolve", "reject",
+  // object basics
   "toString", "valueOf", "toJSON", "hasOwnProperty",
-  "replace", "replaceAll", "trim", "trimStart", "trimEnd", "padStart", "padEnd", "startsWith", "endsWith",
-  "toLowerCase", "toUpperCase", "charAt", "charCodeAt", "substring", "substr", "repeat", "match", "matchAll",
+  // strings
+  "replace", "replaceAll", "trim", "trimStart", "trimEnd", "padStart", "padEnd", "startsWith",
+  "endsWith", "toLowerCase", "toUpperCase", "charAt", "charCodeAt", "substring", "substr",
+  "repeat", "match", "matchAll",
+  // Function / RegExp / JSON / Date / Array / Object statics
   "call", "apply", "bind", "test", "exec", "now", "parse", "stringify", "from", "of", "isArray", "assign",
+  // console
   "log", "error", "warn", "info", "debug",
 ]);
 
@@ -156,8 +154,13 @@ const TS_SHARED = {
   id: "typescript",
   query: TS_QUERY,
   defNodeTypes: new Set([
-    "function_declaration", "generator_function_declaration", "method_definition",
-    "class_declaration", "interface_declaration", "type_alias_declaration", "variable_declarator",
+    "function_declaration",
+    "generator_function_declaration",
+    "method_definition",
+    "class_declaration",
+    "interface_declaration",
+    "type_alias_declaration",
+    "variable_declarator",
     "public_field_definition",
   ]),
   defKindOf: {
@@ -189,10 +192,9 @@ const TYPESCRIPT: LanguageSpec = {
   loadGrammar: () => loadNativeTreeSitter().typescript,
 };
 
-/** .tsx/.jsx use the TSX grammar variant; everything else in the TS spec uses
- *  the plain typescript grammar. Both share the same query/def maps/builtins,
- *  so this is a second LanguageSpec entry with a distinct grammarKey/loadGrammar
- *  only — not a second `id` (languageFor callers only care about extension match). */
+/** TSX is a second entry that differs from TYPESCRIPT only in grammar and cache
+ *  key (the `id` is shared). It also overrides the query with TSX_QUERY, widens
+ *  the tolerated error scopes and adds a recovery pass. */
 const TSX: LanguageSpec = {
   ...TS_SHARED,
   extensions: [".tsx", ".jsx"],
@@ -215,13 +217,15 @@ const TSX: LanguageSpec = {
 };
 
 const PY_QUERY = `
+  ;; A class whose body directly holds a def (plain or decorated): the nested def is
+  ;; a method. parse.ts keeps the first classification per node, so the generic
+  ;; function pattern below does not reclassify it.
   (class_definition
-    name: (identifier) @class.name
-    body: (block
-      [
-        (function_definition name: (identifier) @method.name) @method.def
-        (decorated_definition definition: (function_definition name: (identifier) @method.name) @method.def)
-      ])) @class.def
+     name: (identifier) @class.name
+     body: (block [
+       (function_definition name: (identifier) @method.name) @method.def
+       (decorated_definition definition: (function_definition name: (identifier) @method.name) @method.def)
+     ])) @class.def
   ;; Every class, including one with no directly-nested def: dataclasses, Exception
   ;; subclasses, Enums, TypedDicts and pydantic models are method-less by design and
   ;; were invisible to the entire graph (no symbol, no component, no edges), so
@@ -232,21 +236,19 @@ const PY_QUERY = `
   (function_definition name: (identifier) @fn.name) @fn.def
   (import_statement name: (dotted_name) @import.src)
   (import_statement name: (aliased_import name: (dotted_name) @import.src))
-  (import_from_statement module_name: (dotted_name) @import.src)
-  (import_from_statement module_name: (relative_import) @import.src)
+  (import_from_statement module_name: [(dotted_name) (relative_import)] @import.src)
   (call function: (identifier) @call.id)
   (call function: (attribute attribute: (identifier) @call.member))
 `;
 
 const PY_BUILTIN_METHODS = new Set([
-  "get", "set", "keys", "values", "items", "pop", "popitem", "update", "setdefault", "copy", "clear",
-  "append", "extend", "insert", "remove", "reverse", "sort", "count", "index",
-  "add", "discard", "union", "intersection", "difference",
-  "format", "join", "split", "rsplit", "splitlines", "strip", "lstrip", "rstrip",
-  "startswith", "endswith", "replace", "find", "rfind", "lower", "upper", "title", "capitalize",
-  "encode", "decode", "isdigit", "isalpha", "isalnum", "isspace",
-  "read", "write", "close", "open", "readline", "readlines",
-  "run", "wait", "poll", "communicate",
+  "get", "set", "keys", "values", "items", "pop", "popitem", "update", "setdefault", "copy",
+  "clear", "append", "extend", "insert", "remove", "reverse", "sort", "count", "index", "add",
+  "discard", "union", "intersection", "difference", "format", "join", "split", "rsplit",
+  "splitlines", "strip", "lstrip", "rstrip", "startswith", "endswith", "replace", "find",
+  "rfind", "lower", "upper", "title", "capitalize", "encode", "decode", "isdigit", "isalpha",
+  "isalnum", "isspace", "read", "write", "close", "open", "readline", "readlines", "run",
+  "wait", "poll", "communicate",
 ]);
 
 const PYTHON: LanguageSpec = {
@@ -382,7 +384,9 @@ const PHP: LanguageSpec = {
 const YAML_QUERY = `
   (block_node (anchor (anchor_name) @anchor.name)) @anchor.def
   (flow_node (anchor (anchor_name) @anchor.name)) @anchor.def
+  ;; An alias is a reference to its anchor.
   (alias (alias_name) @call.id)
+  ;; The whole document gets a root symbol (named via fallbackDefName).
   (stream) @doc.def
 `;
 
@@ -392,46 +396,35 @@ const YAML: LanguageSpec = {
   grammarKey: "yaml",
   loadGrammar: () => loadNativeTreeSitter().yaml,
   query: YAML_QUERY,
-  // Both block-style (`key: &x\n  ...`) and flow-style (`key: &x {...}`) anchors
-  // wrap only the sigil+name; ascendToDef climbs from anchor_name -> anchor ->
-  // this enclosing node to find the def whose byte range covers the full value.
   defNodeTypes: new Set(["block_node", "flow_node"]),
   defKindOf: { "anchor.def": "variable", "doc.def": "file" },
   nameToDef: { "anchor.name": "anchor.def" },
   builtinMethods: new Set(),
-  // Alias references aren't calls; label the edge accordingly (Task 5).
   referenceEdgeType: "references",
-  // Most aliases reference an anchor from OUTSIDE that anchor's own byte range
-  // (a sibling key, not a nested value) — without a whole-file fallback symbol,
-  // attributeCalls's containment check would silently drop them. See Task 4.
+  // Most aliases sit outside their anchor's byte range, so without a root symbol
+  // call attribution would drop them. The file's own name is the root.
   fallbackDefName: (file) => basename(file),
-  // Helm charts / templated CI configs are common .yaml content that only
-  // becomes valid YAML after a render step (issue #33). The negative lookbehind
-  // on "{{" excludes GitHub Actions' `${{ expression }}` syntax, which is
-  // ordinary, always-valid YAML — every workflow file in this repo uses it, so
-  // treating it as a templating marker would blanket-disable the fail-closed
-  // gate for .github/workflows/**.
-  templatingMarkers: [/(?<!\$)\{\{/, /\{%/],
+  // Go/Jinja/Helm delimiters make a file invalid YAML until rendered. A `{{` not
+  // preceded by `$` (GitHub Actions `${{ }}` is plain valid YAML) and a Jinja `{%`.
+  templatingMarkers: [/(?<!\$)\{\{/u, /\{%/u],
+  // `.tpl` files (Helm `_helpers.tpl`) are templates by convention, whatever they hold.
   alwaysTemplatedExtensions: [".tpl"],
 };
 
 export const LANGUAGES: LanguageSpec[] = [TYPESCRIPT, TSX, PYTHON, GO, PHP, YAML];
 
+/** Every registered extension, de-duplicated, in registry order. */
 export const CODE_EXTENSIONS: string[] = [...new Set(LANGUAGES.flatMap((l) => l.extensions))];
 
+/** First spec (registry order) with an extension the file name ends with. */
 export function languageFor(file: string): LanguageSpec | null {
-  for (const lang of LANGUAGES) {
-    if (lang.extensions.some((ext) => file.endsWith(ext))) return lang;
-  }
-  return null;
+  return LANGUAGES.find((l) => l.extensions.some((ext) => file.endsWith(ext))) ?? null;
 }
 
-/** Prose formats worth drafting a decision from even though no LanguageSpec parses
- *  them — no grammar, no symbols/edges, just eligible input to synthesis (issue #12). */
+/** Prose formats eligible as synthesis input but never parsed. */
 export const PROSE_EXTENSIONS: string[] = [".md"];
 
-/** Broader than languageFor: "is this worth reasoning about" (synthesis input)
- *  rather than "can tree-sitter parse this" (symbol/dependency extraction). */
+/** True for parseable code or prose. Deliberately broader than parseability. */
 export function isSubstantive(file: string): boolean {
   return languageFor(file) !== null || PROSE_EXTENSIONS.some((ext) => file.endsWith(ext));
 }

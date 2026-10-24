@@ -7,11 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { indexRepo, isExtractorEdge, mergeScannedEdges } from "../src/extractors/indexer.js";
+import { indexRepo, isExtractorEdge, mergeScannedEdges, nearestChartRoot } from "../src/extractors/indexer.js";
 import { pathMatchesGlob } from "../src/core/glob.js";
 import { edgeId, resourceId, resourceRelationshipId } from "../src/core/ids.js";
 import { EdgeSchema, RESOURCE_RELATIONSHIP_SCHEMA_VERSION, extracted } from "../src/core/types.js";
 import { SYMLINK_SKIP, indexedFixtureStore, seedRootLevelFileFixture } from "./helpers.js";
+import { dirname } from "node:path";
 
 function fixtureRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-idx-"));
@@ -235,333 +236,200 @@ test("unimported same-named callbacks do NOT resolve to unrelated cross-file sym
   cleanupDir(root);
 });
 
-function pythonFixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-"));
-  mkdirSync(join(root, "src/auth"), { recursive: true });
-  mkdirSync(join(root, "src/billing"), { recursive: true });
-  writeFileSync(
-    join(root, "src/auth/session.py"),
-    // same-file (same-component) import used in a call — should yield a same-file
-    // call edge — PLUS a cross-component relative import (`..billing.charge`) that
-    // is never called, so import resolution (issue #5) genuinely gets exercised
-    // as a depends_on edge rather than trivially having nothing to resolve.
-    `from .jwt import decode_token\nfrom ..billing.charge import charge\n\ndef verify_session(t):\n    return decode_token(t)\n`,
-  );
-  writeFileSync(join(root, "src/auth/jwt.py"), `def decode_token(t):\n    return t\n`);
-  writeFileSync(
-    join(root, "src/billing/charge.py"),
-    `def charge(t):\n    return t\n`,
-  );
-  return root;
-}
-
-test("indexRepo resolves Python relative imports across component boundaries (issue #5)", () => {
-  const root = pythonFixtureRepo();
+/** Write `files` (repo-relative path -> content) into a fresh temp repo, index it
+ *  with the standard harness, and hand back the loaded records. */
+function indexTree(files: Record<string, string>) {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-"));
+  for (const [rel, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), content);
+  }
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   const res = indexRepo(store, root, { churn: false });
   store.reindex();
+  return {
+    root, store, res,
+    symbols: store.json.loadAll("symbols"),
+    edges: store.json.loadAll("edges"),
+    components: store.json.loadAll("components"),
+  };
+}
+
+const CHART_YAML = "apiVersion: v2\nname: demo\nversion: 0.1.0\n";
+
+const refsFrom = (edges: Array<{ type: string; from: string }>, id: string) =>
+  edges.filter((e) => e.type === "references" && e.from === id);
+const refsTo = (edges: Array<{ type: string; to: string }>, id: string) =>
+  edges.filter((e) => e.type === "references" && e.to === id);
+
+const deploymentYaml = (name: string, labels: string[], extra = "") => `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${name}
+spec:
+  template:
+    metadata:
+      labels:
+${labels.map((l) => `        ${l}`).join("\n")}
+    spec:
+      containers:
+        - name: app
+          image: example/app:1
+${extra}`;
+
+const serviceYaml = (name: string, selectorBlock: string) => `apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+spec:
+${selectorBlock}
+  ports:
+    - port: 80
+`;
+
+const helmDefine = (name: string) => `{{- define "${name}" -}}\napp: demo\n{{- end -}}\n`;
+const helmDeployment = (include: string) => `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  labels:
+    {{- include "${include}" . | nindent 4 }}
+`;
+
+function pythonFixtureFiles(): Record<string, string> {
+  return {
+    "src/auth/session.py": "from .jwt import decode_token\nfrom ..billing.charge import charge\n\ndef verify_session(t):\n    return decode_token(t)\n",
+    "src/auth/jwt.py": "def decode_token(t):\n    return t\n",
+    "src/billing/charge.py": "def charge(t):\n    return t\n",
+  };
+}
+
+test("indexRepo resolves Python imports, calls and component dependencies (#5)", () => {
+  const { root, store, res, symbols, edges, components } = indexTree(pythonFixtureFiles());
 
   assert.equal(res.files, 3);
   assert.ok(res.symbols >= 3);
 
-  const syms = store.json.loadAll("symbols");
-  const verify = syms.find((s) => s.name === "verify_session");
-  assert.ok(verify, "verify_session indexed");
-  assert.equal(verify!.file, "src/auth/session.py");
-
-  const decode = syms.find((s) => s.name === "decode_token");
+  const verify = symbols.find((s) => s.name === "verify_session")!;
+  assert.equal(verify?.file, "src/auth/session.py");
+  const decode = symbols.find((s) => s.name === "decode_token")!;
   assert.ok(decode, "decode_token indexed");
+  assert.ok(store.getDependents(decode.id).some((d) => d.via.includes("verify_session")));
 
-  // verify_session -> decode_token resolved as a same-file call edge
-  const deps = store.getDependents(decode!.id).map((d) => d.via);
-  assert.ok(deps.some((v) => v.includes("verify_session")), "verify_session is a dependent of decode_token");
-
-  // components derived from src/<dir>, same as TS
-  const comps = store.json.loadAll("components");
-  assert.deepEqual(comps.map((c) => c.name).sort(), ["Auth", "Billing"]);
-
-  const auth = comps.find((c) => c.name === "Auth")!;
-  const billing = comps.find((c) => c.name === "Billing")!;
-
-  // `from ..billing.charge import charge` in src/auth/session.py now resolves to
-  // src/billing/charge.py: 2 leading dots -> up 1 directory from src/auth -> "src",
-  // plus the "billing/charge" tail -> src/billing/charge.py. A real, resolvable
-  // cross-component import must produce a depends_on edge (issue #5) — this
-  // replaces the old assertion that no edge was fabricated (that was true only
-  // because resolution didn't exist yet, not because this import is ambiguous).
-  const edges = store.json.loadAll("edges");
-  assert.ok(
-    edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id),
-    "Auth depends_on Billing via the resolved cross-package relative import",
-  );
+  assert.deepEqual(components.map((c) => c.name).sort(), ["Auth", "Billing"]);
+  const auth = components.find((c) => c.name === "Auth")!;
+  const billing = components.find((c) => c.name === "Billing")!;
+  // two dots from src/auth resolves to src/billing/charge.py
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id));
 
   store.close();
   cleanupDir(root);
 });
 
-function pythonTooManyDotsFixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-toomanydots-"));
-  mkdirSync(join(root, "src/auth"), { recursive: true });
-  mkdirSync(join(root, "src/billing"), { recursive: true });
-  // src/auth/session.py sits 2 directory levels under the repo root (src, auth).
-  // 4 leading dots asks to go up 3 levels from src/auth — past the repo root
-  // entirely. This must be skipped, not guessed at or crashed on.
-  writeFileSync(
-    join(root, "src/auth/session.py"),
-    `from ....nonexistent import thing\n\ndef verify_session(t):\n    return t\n`,
-  );
-  writeFileSync(join(root, "src/billing/charge.py"), `def charge(t):\n    return t\n`);
-  return root;
-}
-
-test("Python relative import with too many leading dots (above repo root) is skipped, not guessed", () => {
-  const root = pythonTooManyDotsFixtureRepo();
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  const res = indexRepo(store, root, { churn: false }); // must not throw
-  store.reindex();
-
+test("a relative Python import climbing above the repo root resolves to nothing", () => {
+  const { root, store, res, edges } = indexTree({
+    "src/auth/session.py": "from ....outside import thing\n\ndef verify(t):\n    return t\n",
+    "src/billing/charge.py": "def charge(t):\n    return t\n",
+  });
   assert.equal(res.files, 2);
-  const edges = store.json.loadAll("edges");
-  assert.ok(
-    !edges.some((e) => e.type === "depends_on"),
-    "no depends_on edge is fabricated for an out-of-repo relative import",
-  );
+  assert.equal(edges.filter((e) => e.type === "depends_on").length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-function pythonRelativeAtRepoRootBoundaryFixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-relroot-"));
-  mkdirSync(join(root, "pkgs/auth"), { recursive: true });
-  mkdirSync(join(root, "otherpkg"), { recursive: true });
-  // 3 leading dots from pkgs/auth lands EXACTLY on the repo root (pop === segments.length,
-  // not pop > segments.length) — the boundary the "too many dots" guard sits right next to.
-  writeFileSync(
-    join(root, "pkgs/auth/session.py"),
-    `from ...otherpkg.mod import thing\n\ndef verify_session(t):\n    return t\n`,
-  );
-  writeFileSync(join(root, "otherpkg/mod.py"), `def thing(t):\n    return t\n`);
-  return root;
-}
-
-test("Python relative import landing exactly on the repo root (dot count == directory depth) resolves", () => {
-  const root = pythonRelativeAtRepoRootBoundaryFixtureRepo();
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const comps = store.json.loadAll("components");
-  const pkgs = comps.find((c) => c.name === "Pkgs")!;
-  const otherpkg = comps.find((c) => c.name === "Otherpkg")!;
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(
-    edges.some((e) => e.type === "depends_on" && e.from === pkgs.id && e.to === otherpkg.id),
-    "Pkgs depends_on Otherpkg when the leading-dot count exactly reaches the repo root",
-  );
+test("a relative Python import that exactly reaches the repo root still resolves", () => {
+  const { root, store, components, edges } = indexTree({
+    "pkgs/auth/session.py": "from ...otherpkg.mod import value\n\ndef verify(t):\n    return value\n",
+    "otherpkg/mod.py": "value = 1\n\ndef helper():\n    return value\n",
+  });
+  const pkgs = components.find((c) => c.name === "Pkgs")!;
+  const other = components.find((c) => c.name === "Otherpkg")!;
+  assert.ok(pkgs && other, "both components exist");
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === pkgs.id && e.to === other.id));
 
   store.close();
   cleanupDir(root);
 });
 
-function pythonBareDotFixtureRepo(withInit: boolean): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-baredot-"));
-  mkdirSync(join(root, "src/billing"), { recursive: true });
-  writeFileSync(
-    join(root, "src/billing/api.py"),
-    `from . import charge\n\ndef process(t):\n    return t\n`,
-  );
-  if (withInit) {
-    writeFileSync(join(root, "src/billing/__init__.py"), `def charge(t):\n    return t\n`);
-  }
-  return root;
+function bareDotFixture(withInit: boolean): Record<string, string> {
+  return {
+    "src/billing/api.py": "from . import charge\n\ndef run():\n    return 1\n",
+    ...(withInit ? { "src/billing/__init__.py": "def charge():\n    return 1\n" } : {}),
+  };
 }
 
-test("Python bare-dot relative import (`from . import x`) resolves within its own package without crashing", () => {
-  // `from . import x` always targets the importing file's OWN directory, which the
-  // component-derivation scheme (src/<dir>) always groups into the SAME component
-  // as the importer — so this can never surface as a depends_on edge (same-component
-  // targets are filtered at indexer.ts:162, same as a JS/TS `./sibling` import).
-  // This is a crash-safety / file-discovery check, not an edge assertion.
-  const withInitRoot = pythonBareDotFixtureRepo(true);
-  const storeWithInit = new HunchStore(hunchPaths(withInitRoot));
-  storeWithInit.json.ensureDirs();
-  const resWithInit = indexRepo(storeWithInit, withInitRoot, { churn: false });
-  storeWithInit.reindex();
-  assert.equal(resWithInit.files, 2);
-  assert.ok(
-    storeWithInit.json.loadAll("symbols").some((s) => s.name === "charge" && s.file === "src/billing/__init__.py"),
-    "the __init__.py the bare-dot import targets is indexed",
-  );
-  storeWithInit.close();
+test("a bare-dot Python import resolves within its own package without crashing", () => {
+  // Crash-safety / discovery check, not an edge check: the target lives in the
+  // same component, so no depends_on edge is expected either way.
+  const { root: withInitRoot, store: withInitStore, res: withInit, symbols } = indexTree(bareDotFixture(true));
+  assert.equal(withInit.files, 2);
+  assert.ok(symbols.some((s) => s.name === "charge" && s.file === "src/billing/__init__.py"));
+  withInitStore.close();
   cleanupDir(withInitRoot);
 
-  const noInitRoot = pythonBareDotFixtureRepo(false);
-  const storeNoInit = new HunchStore(hunchPaths(noInitRoot));
-  storeNoInit.json.ensureDirs();
-  // no __init__.py exists to resolve against — must not throw
-  const resNoInit = indexRepo(storeNoInit, noInitRoot, { churn: false });
-  storeNoInit.reindex();
-  assert.equal(resNoInit.files, 1);
-  storeNoInit.close();
+  const { root: noInitRoot, store: noInitStore, res: noInit } = indexTree(bareDotFixture(false));
+  assert.equal(noInit.files, 1);
+  noInitStore.close();
   cleanupDir(noInitRoot);
 });
 
-function pythonAbsoluteRepoRootFixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-abs-root-"));
-  mkdirSync(join(root, "authpkg"), { recursive: true });
-  mkdirSync(join(root, "billingpkg"), { recursive: true });
-  // no "src/" anywhere in this repo — resolution must fall back to the repo root.
-  // `import os` alongside a real same-repo absolute import proves genuinely external
-  // names are skipped rather than accidentally matched.
-  writeFileSync(
-    join(root, "authpkg/session.py"),
-    `import billingpkg.charge\nimport os\n\ndef verify_session(t):\n    return t\n`,
-  );
-  writeFileSync(join(root, "billingpkg/charge.py"), `def charge(t):\n    return t\n`);
-  return root;
-}
-
-test("Python absolute import resolves off the repo root when there is no src/ layout (issue #5)", () => {
-  const root = pythonAbsoluteRepoRootFixtureRepo();
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  const res = indexRepo(store, root, { churn: false });
-  store.reindex();
-
+test("absolute Python imports resolve without a src/ layout; stdlib imports do not", () => {
+  const { root, store, res, components, edges } = indexTree({
+    "authpkg/session.py": "import billingpkg.charge\nimport os\n\ndef verify(t):\n    return t\n",
+    "billingpkg/charge.py": "def charge(t):\n    return t\n",
+  });
   assert.equal(res.files, 2);
-  const comps = store.json.loadAll("components");
-  const authpkg = comps.find((c) => c.name === "Authpkg")!;
-  const billingpkg = comps.find((c) => c.name === "Billingpkg")!;
-  assert.ok(authpkg && billingpkg, "both top-level packages become components");
-
-  const edges = store.json.loadAll("edges").filter((e) => e.type === "depends_on");
-  assert.equal(edges.length, 1, "only the resolvable absolute import produces an edge — `import os` does not");
-  assert.equal(edges[0]!.from, authpkg.id);
-  assert.equal(edges[0]!.to, billingpkg.id);
+  const auth = components.find((c) => c.name === "Authpkg")!;
+  const billing = components.find((c) => c.name === "Billingpkg")!;
+  assert.ok(auth && billing);
+  const deps = edges.filter((e) => e.type === "depends_on");
+  assert.equal(deps.length, 1);
+  assert.ok(deps[0]!.from === auth.id && deps[0]!.to === billing.id);
 
   store.close();
   cleanupDir(root);
 });
 
-function pythonAbsoluteBarePackageFixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-abs-barepkg-"));
-  mkdirSync(join(root, "authpkg"), { recursive: true });
-  mkdirSync(join(root, "billingpkg"), { recursive: true });
-  // `import billingpkg` (no submodule) — only resolvable via the __init__.py
-  // candidate, a branch the existing `import billingpkg.charge` test doesn't reach.
-  writeFileSync(
-    join(root, "authpkg/session.py"),
-    `import billingpkg\n\ndef verify_session(t):\n    return t\n`,
-  );
-  writeFileSync(join(root, "billingpkg/__init__.py"), `def charge(t):\n    return t\n`);
-  return root;
-}
-
-test("Python absolute import of a bare package (no submodule) resolves via __init__.py", () => {
-  const root = pythonAbsoluteBarePackageFixtureRepo();
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const comps = store.json.loadAll("components");
-  const authpkg = comps.find((c) => c.name === "Authpkg")!;
-  const billingpkg = comps.find((c) => c.name === "Billingpkg")!;
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(
-    edges.some((e) => e.type === "depends_on" && e.from === authpkg.id && e.to === billingpkg.id),
-    "Authpkg depends_on Billingpkg via a bare-package absolute import resolved to __init__.py",
-  );
+test("a bare package import resolves through __init__.py", () => {
+  const { root, store, components, edges } = indexTree({
+    "authpkg/session.py": "import billingpkg\n\ndef verify(t):\n    return t\n",
+    "billingpkg/__init__.py": "def charge():\n    return 1\n",
+  });
+  const auth = components.find((c) => c.name === "Authpkg")!;
+  const billing = components.find((c) => c.name === "Billingpkg")!;
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id));
 
   store.close();
   cleanupDir(root);
 });
 
-function pythonAbsoluteSrcLayoutFixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-abs-src-"));
-  mkdirSync(join(root, "src/auth"), { recursive: true });
-  mkdirSync(join(root, "src/billing"), { recursive: true });
-  // absolute import omits the `src.` prefix, matching a poetry/setuptools src-layout
-  // repo where `src/` is a build root, not part of the importable package path — only
-  // resolvable via the src/ layout root candidate, not the plain repo root.
-  writeFileSync(
-    join(root, "src/auth/session.py"),
-    `import billing.charge\n\ndef verify_session(t):\n    return t\n`,
-  );
-  writeFileSync(join(root, "src/billing/charge.py"), `def charge(t):\n    return t\n`);
-  return root;
-}
-
-test("Python absolute import resolves via a detected src/ layout root (issue #5)", () => {
-  const root = pythonAbsoluteSrcLayoutFixtureRepo();
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const comps = store.json.loadAll("components");
-  const auth = comps.find((c) => c.name === "Auth")!;
-  const billing = comps.find((c) => c.name === "Billing")!;
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(
-    edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id),
-    "Auth depends_on Billing via the src/-layout-resolved absolute import",
-  );
+test("an absolute Python import resolves under the src root in a src layout", () => {
+  const { root, store, components, edges } = indexTree({
+    "src/auth/session.py": "import billing.charge\n\ndef verify(t):\n    return t\n",
+    "src/billing/charge.py": "def charge(t):\n    return t\n",
+  });
+  const auth = components.find((c) => c.name === "Auth")!;
+  const billing = components.find((c) => c.name === "Billing")!;
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id));
 
   store.close();
   cleanupDir(root);
 });
 
-function pythonDecoratedMethodFixtureRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-py-decorated-"));
-  mkdirSync(join(root, "src/auth"), { recursive: true });
-  mkdirSync(join(root, "src/billing"), { recursive: true });
-  // A decorated method (kind must classify as "method", not "function" — Finding 1)
-  // defined in one component and called via member access from a DIFFERENT file/
-  // component. resolveName() requires the callee's file to be statically imported
-  // (issue: unimported same-named callbacks must not resolve to unrelated cross-file
-  // symbols) — so charge.py imports Base, matching how this call would actually be
-  // reached in real code, rather than relying on a bare global-uniqueness guess.
-  writeFileSync(
-    join(root, "src/auth/session.py"),
-    `class Base:\n    @classmethod\n    def create(cls):\n        return cls()\n`,
-  );
-  writeFileSync(
-    join(root, "src/billing/charge.py"),
-    `from ..auth.session import Base\n\ndef use_it(b):\n    return b.create()\n`,
-  );
-  return root;
-}
-
-test("cross-file member call to a decorated Python method creates a call edge (regression: Finding 1)", () => {
-  const root = pythonDecoratedMethodFixtureRepo();
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const create = syms.find((s) => s.name === "create");
+test("a cross-file member call to a decorated Python method yields an edge", () => {
+  const { root, store, symbols } = indexTree({
+    "src/auth/session.py": "class Base:\n    @classmethod\n    def create(cls):\n        return cls()\n",
+    "src/billing/charge.py": "from ..auth.session import Base\n\ndef use_it(b):\n    return b.create()\n",
+  });
+  const create = symbols.find((s) => s.name === "create")!;
   assert.ok(create, "create indexed");
-  assert.equal(create!.kind, "method", "decorated method classifies as kind \"method\"");
-  assert.equal(create!.file, "src/auth/session.py");
-
-  const useIt = syms.find((s) => s.name === "use_it");
-  assert.ok(useIt, "use_it indexed");
-  assert.notEqual(useIt!.file, create!.file, "caller and callee are in different files");
-
-  // the cross-file member call edge must exist — before the fix, the misclassified
-  // "function" symbol was neither `kind === "method"` nor same-file, so the edge
-  // was silently dropped.
-  const deps = store.getDependents(create!.id).map((d) => d.via);
-  assert.ok(deps.some((v) => v.includes("use_it")), "use_it is a dependent of the decorated method create");
+  assert.equal(create.kind, "method");
+  assert.equal(create.file, "src/auth/session.py");
+  const useIt = symbols.find((s) => s.name === "use_it")!;
+  assert.ok(useIt && useIt.file !== create.file);
+  assert.ok(store.getDependents(create.id).some((d) => d.via.includes("use_it")));
 
   store.close();
   cleanupDir(root);
@@ -580,989 +448,364 @@ test("indexing is deterministic — same ids on re-run", () => {
   cleanupDir(root);
 });
 
-test("YAML anchor/alias produces a \"references\" edge end-to-end, counted toward fan-in like a call", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-yaml-"));
-  mkdirSync(join(root, "config"), { recursive: true });
-  writeFileSync(join(root, "config/database.yml"), `
-defaults: &defaults
-  adapter: postgres
-
-development:
-  <<: *defaults
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  const res = indexRepo(store, root, { churn: false });
-  store.reindex();
-
+test("YAML aliases become references edges to their anchor and count toward fan_in", () => {
+  const { root, store, res, symbols, edges } = indexTree({
+    "config/database.yml": "defaults: &defaults\n  adapter: postgres\ndevelopment:\n  <<: *defaults\n  database: dev\n",
+  });
   assert.equal(res.files, 1);
-  const syms = store.json.loadAll("symbols");
-  const anchor = syms.find((s) => s.name === "defaults");
-  assert.ok(anchor, "anchor symbol indexed");
-  assert.equal(anchor!.kind, "variable");
-
-  const edges = store.json.loadAll("edges");
-  const refEdge = edges.find((e) => e.to === anchor!.id && e.type === "references");
-  assert.ok(refEdge, "alias->anchor edge recorded with type \"references\", not \"calls\"");
-
-  assert.ok(anchor!.metrics.fan_in >= 1, "references edges count toward fan-in the same way calls do");
+  const defaults = symbols.find((s) => s.name === "defaults")!;
+  assert.ok(defaults, "anchor indexed");
+  assert.equal(defaults.kind, "variable");
+  assert.ok(refsTo(edges, defaults.id).length >= 1);
+  assert.ok(defaults.metrics.fan_in >= 1);
 
   store.close();
   cleanupDir(root);
 });
 
-test("Helm define/include produces a \"references\" edge, chart-scoped by nearest Chart.yaml", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/_helpers.tpl"), `
-{{- define "mychart.labels" -}}
-app: {{ .Chart.Name }}
-{{- end -}}
-`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    {{- include "mychart.labels" . | nindent 4 }}
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const define = syms.find((s) => s.name === "mychart.labels" && s.file === "templates/_helpers.tpl");
-  assert.ok(define, "define block indexed as a symbol");
-  assert.equal(define!.kind, "variable");
-
-  const edges = store.json.loadAll("edges");
-  const refEdge = edges.find((e) => e.to === define!.id && e.type === "references");
-  assert.ok(refEdge, "include -> define recorded as a \"references\" edge across files");
-  assert.ok(define!.metrics.fan_in >= 1, "the include counts toward the define's fan_in");
+test("a Helm include links to its define across files in a chart", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": helmDefine("mychart.labels"),
+    "templates/deployment.yaml": helmDeployment("mychart.labels"),
+  });
+  const define = symbols.find((s) => s.name === "mychart.labels" && s.file === "templates/_helpers.tpl")!;
+  assert.ok(define, "define indexed");
+  assert.equal(define.kind, "variable");
+  assert.ok(refsTo(edges, define.id).length >= 1);
+  assert.ok(define.metrics.fan_in >= 1);
 
   store.close();
   cleanupDir(root);
 });
 
-test("two charts defining the same helper name never produce a cross-chart edge; each chart's own include still resolves within its own chart", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-multi-"));
-  for (const chart of ["chartA", "chartB"]) {
-    mkdirSync(join(root, chart, "templates"), { recursive: true });
-    writeFileSync(join(root, chart, "Chart.yaml"), `apiVersion: v2\nname: ${chart}\nversion: 0.1.0\n`);
-    writeFileSync(join(root, chart, "templates/_helpers.tpl"), `
-{{- define "labels" -}}
-app: ${chart}
-{{- end -}}
-`);
-    writeFileSync(join(root, chart, "templates/deployment.yaml"), `
-metadata:
-  labels:
-    {{- include "labels" . | nindent 4 }}
-`);
+test("same-named Helm defines in two charts do not cross-link", () => {
+  const chart = (dir: string) => ({
+    [`${dir}/Chart.yaml`]: CHART_YAML,
+    [`${dir}/templates/_helpers.tpl`]: helmDefine("labels"),
+    [`${dir}/templates/deployment.yaml`]: helmDeployment("labels"),
+  });
+  const { root, store, symbols, edges } = indexTree({ ...chart("chartA"), ...chart("chartB") });
+  const fileOf = new Map(symbols.map((s) => [s.id, s.file]));
+  for (const dir of ["chartA", "chartB"]) {
+    const define = symbols.find((s) => s.name === "labels" && s.kind === "variable" && s.file === `${dir}/templates/_helpers.tpl`)!;
+    assert.ok(define, `${dir} define indexed`);
+    const incoming = refsTo(edges, define.id);
+    assert.ok(incoming.length >= 1, `${dir} define is referenced`);
+    assert.ok(incoming.every((e) => fileOf.get(e.from)?.startsWith(`${dir}/`)), `${dir} define only referenced from inside ${dir}`);
   }
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  // Each _helpers.tpl produces TWO symbols: the YAML fallback file-root symbol
-  // (kind "file", spanning the whole file) plus the Helm define block itself
-  // (kind "variable") — filter to the define, not whichever comes first.
-  const defineA = syms.find((s) => s.file === "chartA/templates/_helpers.tpl" && s.kind === "variable")!;
-  const defineB = syms.find((s) => s.file === "chartB/templates/_helpers.tpl" && s.kind === "variable")!;
-  assert.ok(defineA && defineB, "both charts' define blocks indexed");
-
-  const edges = store.json.loadAll("edges");
-  // each chart's include resolves to ITS OWN chart's define, not the other's
-  assert.ok(edges.some((e) => e.to === defineA.id && e.type === "references"), "chartA's include resolves within chartA");
-  assert.ok(edges.some((e) => e.to === defineB.id && e.type === "references"), "chartB's include resolves within chartB");
-  // no edge crosses from a chartB file to chartA's define, or vice versa. An
-  // edge's `from`/`to` are symbol ids, not file paths, so resolve `from` back
-  // to its file via the symbols list before checking the chart prefix.
-  const fileOf = new Map(syms.map((s) => [s.id, s.file] as const));
-  const crossChart = edges.filter((e) => e.type === "references" && (
-    (e.to === defineA.id && !(fileOf.get(e.from) ?? "").startsWith("chartA/")) ||
-    (e.to === defineB.id && !(fileOf.get(e.from) ?? "").startsWith("chartB/"))
-  ));
-  assert.equal(crossChart.length, 0, "no cross-chart edge for a same-named helper in two separate charts");
 
   store.close();
   cleanupDir(root);
 });
 
-test("a nested subchart (charts/<sub>/Chart.yaml) resolves to its OWN chart root, not the parent's (issue #42)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-subchart-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: parent\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/_helpers.tpl"), `
-{{- define "labels" -}}
-app: parent
-{{- end -}}
-`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-metadata:
-  labels:
-    {{- include "labels" . | nindent 4 }}
-`);
-
-  mkdirSync(join(root, "charts/sub/templates"), { recursive: true });
-  writeFileSync(join(root, "charts/sub/Chart.yaml"), `apiVersion: v2\nname: sub\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "charts/sub/templates/_helpers.tpl"), `
-{{- define "labels" -}}
-app: sub
-{{- end -}}
-`);
-  writeFileSync(join(root, "charts/sub/templates/deployment.yaml"), `
-metadata:
-  labels:
-    {{- include "labels" . | nindent 4 }}
-`);
-
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const parentDefine = syms.find((s) => s.file === "templates/_helpers.tpl" && s.kind === "variable")!;
-  const subDefine = syms.find((s) => s.file === "charts/sub/templates/_helpers.tpl" && s.kind === "variable")!;
-  assert.ok(parentDefine && subDefine, "both the parent chart's and the subchart's define blocks indexed");
-
-  const edges = store.json.loadAll("edges");
-  // the subchart's own include resolves within the subchart's own scope, not the parent's
-  assert.ok(edges.some((e) => e.to === subDefine.id && e.type === "references"), "subchart's include resolves within its own chart scope");
-  assert.ok(edges.some((e) => e.to === parentDefine.id && e.type === "references"), "parent chart's include resolves within its own chart scope");
-  // no edge crosses the nested-chart boundary in either direction (nearest-ancestor
-  // scoping is a deliberate conservative approximation -- see nearestChartRoot's doc
-  // comment: it misses a legitimate parent-includes-subchart-define edge rather than
-  // ever fabricating a wrong one)
-  const fileOf = new Map(syms.map((s) => [s.id, s.file] as const));
-  const crossChart = edges.filter((e) => e.type === "references" && (
-    (e.to === subDefine.id && !(fileOf.get(e.from) ?? "").startsWith("charts/sub/")) ||
-    (e.to === parentDefine.id && (fileOf.get(e.from) ?? "").startsWith("charts/sub/"))
-  ));
-  assert.equal(crossChart.length, 0, "no edge crosses the nested subchart boundary in either direction");
+test("a subchart define is not linked to its parent chart's includes (#42)", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": helmDefine("labels"),
+    "templates/deployment.yaml": helmDeployment("labels"),
+    "charts/sub/Chart.yaml": CHART_YAML,
+    "charts/sub/templates/_helpers.tpl": helmDefine("labels"),
+    "charts/sub/templates/deployment.yaml": helmDeployment("labels"),
+  });
+  const fileOf = new Map(symbols.map((s) => [s.id, s.file]));
+  const parent = symbols.find((s) => s.name === "labels" && s.file === "templates/_helpers.tpl")!;
+  const sub = symbols.find((s) => s.name === "labels" && s.file === "charts/sub/templates/_helpers.tpl")!;
+  assert.ok(parent && sub, "both defines indexed");
+  const intoParent = refsTo(edges, parent.id);
+  const intoSub = refsTo(edges, sub.id);
+  assert.ok(intoParent.length >= 1 && intoSub.length >= 1);
+  assert.ok(intoSub.every((e) => fileOf.get(e.from)?.startsWith("charts/sub/")));
+  assert.ok(intoParent.every((e) => !fileOf.get(e.from)?.startsWith("charts/sub/")));
 
   store.close();
   cleanupDir(root);
 });
 
-test("a parent chart including a define that exists ONLY in a subchart produces no edge (conservative miss, issue #42)", () => {
-  // Real Helm's template namespace is release-global, so this include WOULD
-  // resolve in an actual `helm template` run -- nearest-ancestor scoping
-  // deliberately doesn't model that (see nearestChartRoot's doc comment) and
-  // misses this edge rather than guessing which chart's define was meant.
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-subchart-miss-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: parent\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-metadata:
-  labels:
-    {{- include "sub.labels" . | nindent 4 }}
-`);
-
-  mkdirSync(join(root, "charts/sub/templates"), { recursive: true });
-  writeFileSync(join(root, "charts/sub/Chart.yaml"), `apiVersion: v2\nname: sub\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "charts/sub/templates/_helpers.tpl"), `
-{{- define "sub.labels" -}}
-app: sub
-{{- end -}}
-`);
-
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const subDefine = syms.find((s) => s.name === "sub.labels" && s.kind === "variable")!;
-  assert.ok(subDefine, "the subchart's define is still indexed as a symbol");
-
-  const edges = store.json.loadAll("edges");
-  assert.equal(
-    edges.filter((e) => e.to === subDefine.id && e.type === "references").length,
-    0,
-    "nearest-ancestor scoping misses the release-global resolution rather than fabricating an edge",
-  );
+test("a parent chart include of a subchart-only define is a conservative miss", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/deployment.yaml": helmDeployment("sub.labels"),
+    "charts/sub/Chart.yaml": CHART_YAML,
+    "charts/sub/templates/_helpers.tpl": helmDefine("sub.labels"),
+  });
+  const define = symbols.find((s) => s.name === "sub.labels")!;
+  assert.ok(define, "subchart define indexed");
+  assert.equal(define.kind, "variable");
+  assert.equal(refsTo(edges, define.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a plain .yaml file with no ancestor Chart.yaml is unaffected by Helm-shaped text", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-nochart-"));
-  mkdirSync(join(root, "config"), { recursive: true });
-  writeFileSync(join(root, "config/notachart.yaml"), `
-note: |
-  literal text that happens to look like {{ include "something" . }}
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  assert.ok(!syms.some((s) => s.name === "something"), "no Helm dialect extraction outside a chart");
-  const edges = store.json.loadAll("edges");
-  assert.ok(!edges.some((e) => e.type === "references"), "no references edge fabricated outside a chart");
+test("Helm-looking text outside any chart produces no define and no references", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "config/notachart.yaml": "note: |\n  {{ include \"something\" . }}\n",
+  });
+  assert.ok(!symbols.some((s) => s.name === "something"));
+  assert.equal(edges.filter((e) => e.type === "references").length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a literal ConfigMap reference from a Deployment produces a \"references\" edge and correct fan_in/fan_out", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: my-config
-`);
-  writeFileSync(join(root, "manifests/configmap.yaml"), `
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: my-config
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
-  assert.ok(deployment && configMap, "both resource symbols indexed");
-
-  const edges = store.json.loadAll("edges");
-  const refEdge = edges.find((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references");
-  assert.ok(refEdge, "Deployment -> ConfigMap recorded as a \"references\" edge");
-  assert.ok(configMap!.metrics.fan_in >= 1, "the reference counts toward the ConfigMap's fan_in");
-  assert.equal(edges.some((e) => e.type === "depends_on" && (e.from === deployment!.id || e.to === deployment!.id)), false, "no component-level depends_on edge for this same-directory pair (spec Non-goals)");
+test("a Deployment referencing a ConfigMap by name gets a references edge, not a depends_on", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "manifests/deployment.yaml": deploymentYaml("my-app", ["app: my-app"], "          envFrom:\n            - configMapRef:\n                name: my-config\n"),
+    "manifests/configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  k: v\n",
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const cm = symbols.find((s) => s.name === "ConfigMap/my-config")!;
+  assert.ok(dep && cm, "both resources indexed");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === cm.id));
+  assert.ok(cm.metrics.fan_in >= 1);
+  assert.ok(!edges.some((e) => e.type === "depends_on" && (e.from === dep.id || e.to === dep.id)));
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Helm chart's Secret name and its Deployment's secretKeyRef.name are the identical template text -- resolves via template-text equality", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-tpl-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/secret.yaml"), `
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ include "mychart.secretName" . }}
-`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        env:
-          - name: X
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "mychart.secretName" . }}
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const secret = syms.find((s) => s.kind === "variable" && s.file === "templates/secret.yaml" && s.name.startsWith("Secret/"));
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  assert.ok(secret && deployment, "both resource symbols indexed");
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === secret!.id && e.type === "references"), "identical template-expression text resolves to a references edge");
+test("templated resource names resolve by identical template text", () => {
+  const name = '{{ include "app.fullname" . }}-secret';
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/secret.yaml": `apiVersion: v1\nkind: Secret\nmetadata:\n  name: ${name}\nstringData:\n  k: v\n`,
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app"], `          env:\n            - name: K\n              valueFrom:\n                secretKeyRef:\n                  name: ${name}\n                  key: k\n`),
+  });
+  const secret = symbols.find((s) => s.kind === "variable" && s.file === "templates/secret.yaml" && s.name.startsWith("Secret/"))!;
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  assert.ok(secret && dep, "both resources indexed");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === secret.id));
 
   store.close();
   cleanupDir(root);
 });
 
-test("two ConfigMaps with the same name in the same chart scope are ambiguous -- no edge is fabricated", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-ambig-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap-a.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n`);
-  writeFileSync(join(root, "templates/configmap-b.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: shared-name
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const edges = store.json.loadAll("edges");
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  assert.equal(edges.filter((e) => e.type === "references" && e.from === deployment!.id).length, 0, "ambiguous (2 candidates) match produces no edge");
+test("two same-named ConfigMaps in a chart make the reference ambiguous: no edge", () => {
+  const cm = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  k: v\n";
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/a.yaml": cm,
+    "templates/b.yaml": cm,
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app"], "          envFrom:\n            - configMapRef:\n                name: my-config\n"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  assert.equal(refsFrom(edges, dep.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a raw manifest (no Chart.yaml) resolves a ConfigMap reference WITHIN its own file but not to an unrelated file", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-raw-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "manifests/bundle.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: my-config
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: my-config
-`);
-  // Deliberately the SAME name as bundle.yaml's own ConfigMap (not a
-  // different name) -- this is what actually exercises file-scope isolation.
-  // A different name would never match on any code path, silently passing
-  // regardless of whether isolation works at all.
-  writeFileSync(join(root, "manifests/unrelated.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const ownConfigMap = syms.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/bundle.yaml");
-  const unrelatedConfigMap = syms.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/unrelated.yaml");
-  assert.ok(deployment && ownConfigMap && unrelatedConfigMap, "all three resource symbols indexed, including the same-named unrelated one");
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === ownConfigMap!.id && e.type === "references"), "own-file (no chart root) resolution still works");
-  assert.equal(edges.some((e) => e.from === deployment!.id && e.to === unrelatedConfigMap!.id), false, "the same-named ConfigMap in a different, unrelated file (no shared chart scope) is never targeted");
+test("outside a chart, K8s references resolve only within the same file", () => {
+  // The unrelated file deliberately reuses the SAME ConfigMap name: file scope
+  // is what must keep the Deployment bound to its own bundle's ConfigMap.
+  const cm = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  k: v\n";
+  const { root, store, symbols, edges } = indexTree({
+    "manifests/bundle.yaml": `${deploymentYaml("my-app", ["app: my-app"], "          envFrom:\n            - configMapRef:\n                name: my-config\n")}---\n${cm}`,
+    "manifests/unrelated.yaml": cm,
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const local = symbols.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/bundle.yaml")!;
+  const other = symbols.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/unrelated.yaml")!;
+  assert.ok(dep && local && other, "all three resources indexed");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === local.id));
+  assert.ok(!edges.some((e) => e.type === "references" && e.from === dep.id && e.to === other.id));
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Service's literal selector resolves to a workload whose pod-template labels are a superset", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-spec:
-  selector:
-    app: my-app
-`);
-  writeFileSync(join(root, "manifests/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-        tier: web
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-service");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  assert.ok(service && deployment);
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === service!.id && e.to === deployment!.id && e.type === "references"), "Service selector subset-matches the Deployment's pod-template labels");
+test("a Service selector that is a subset of workload labels links to the workload", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: my-app"),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app", "tier: web"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  assert.ok(edges.some((e) => e.type === "references" && e.from === svc.id && e.to === dep.id));
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Service's selector that is NOT a subset of a workload's labels produces no edge to it", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-nomatch-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-spec:
-  selector:
-    app: other-app
-`);
-  writeFileSync(join(root, "manifests/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-service");
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0, "non-matching selector produces no edge");
+test("a Service selector that differs from workload labels links nothing", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: other-app"),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Service's selector with ONE same-line templated key among literal siblings produces no edge, not a false-positive on the literal keys alone (issue #82 review)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-partial-template-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-spec:
-  selector:
-    app: {{ .Values.name }}
-    tier: web
-`);
-  writeFileSync(join(root, "manifests/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    metadata:
-      labels:
-        tier: web
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-service");
-  const edges = store.json.loadAll("edges");
-  assert.equal(
-    edges.filter((e) => e.from === service!.id && e.type === "references").length,
-    0,
-    "a partially-templated selector must resolve to no map at all, not a subset map that happens to match on the untemplated keys",
-  );
+test("a partially templated selector yields no selector map at all (#82)", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", '  selector:\n    app: {{ .Values.app }}\n    tier: web'),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["tier: web"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Service's selector matching TWO workloads' labels produces edges to BOTH -- fan-out is intentional here, unlike Phase 1's ambiguity guard", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-fanout-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-spec:
-  selector:
-    app: my-app
-`);
-  writeFileSync(join(root, "manifests/deployment-blue.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app-blue
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-        track: blue
-    spec:
-      containers:
-      - name: app
-`);
-  writeFileSync(join(root, "manifests/deployment-green.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app-green
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-        track: green
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-service");
-  const blue = syms.find((s) => s.name === "Deployment/my-app-blue");
-  const green = syms.find((s) => s.name === "Deployment/my-app-green");
-  assert.ok(service && blue && green);
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === service!.id && e.to === blue!.id && e.type === "references"), "matches the blue deployment");
-  assert.ok(edges.some((e) => e.from === service!.id && e.to === green!.id && e.type === "references"), "AND matches the green deployment -- a real blue/green pattern, not an error to guard against");
-
-  store.close();
-  cleanupDir(root);
-});
-
-test("a dotted app.kubernetes.io/instance label that genuinely differs between Service selector and workload labels does NOT produce a references edge (regression: a false-positive edge on real, untemplated YAML)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-dotted-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-spec:
-  selector:
-    app: my-app
-    app.kubernetes.io/instance: prod
-`);
-  writeFileSync(join(root, "manifests/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-        app.kubernetes.io/instance: staging
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-service");
-  assert.ok(service);
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
-    "the app label matches but app.kubernetes.io/instance genuinely differs (prod vs staging) -- must not read as a match");
-
-  store.close();
-  cleanupDir(root);
-});
-
-test("a quoted selector key the scanner can't parse produces NO edge, not an over-permissive false-positive one (regression)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-quoted-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  // svc-a's selector genuinely requires BOTH name=mychart AND instance=rel-a.
-  // The quoted key must not be silently dropped -- if it were, the selector
-  // would collapse to {instance: rel-a}, which dep-other-chart satisfies even
-  // though its own name label is a completely different chart's.
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: svc-a
-spec:
-  selector:
-    "app.kubernetes.io/name": mychart
-    app.kubernetes.io/instance: rel-a
-`);
-  writeFileSync(join(root, "manifests/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: dep-other-chart
-spec:
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: OTHERCHART
-        app.kubernetes.io/instance: rel-a
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/svc-a");
-  assert.ok(service);
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
-    "the quoted app.kubernetes.io/name key must taint the whole selector, not silently vanish and over-match on the remainder");
-
-  store.close();
-  cleanupDir(root);
-});
-
-test("a column-0 template conditional inside a Service's selector does not produce a false-positive edge to the wrong workload (regression)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-col0-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  // The selector's REAL intent is app=my-app AND track=stable, but the
-  // second line lives inside a column-0 {{- if }} -- the idiomatic way Helm
-  // charts guard an optional selector constraint. If the action's own column
-  // were (wrongly) treated as structure, this would either drop the
-  // conditional line's taint entirely or attach it to the wrong ancestor,
-  // leaving app=my-app as a fully literal (and over-permissive) selector.
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-svc
-spec:
-  selector:
-    app: my-app
-{{- if .Values.stableOnly }}
-    track: stable
-{{- end }}
-`);
-  writeFileSync(join(root, "manifests/deployment-canary.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app-canary
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-        track: canary
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-svc");
-  assert.ok(service);
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
-    "the column-0 conditional must taint the whole selector, not leave app=my-app as a false-positive match against the canary track");
-
-  store.close();
-  cleanupDir(root);
-});
-
-test("a multi-line flow-style selector does not produce a false-positive edge from a dropped key (regression)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-flow-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  // The selector's real intent is app=web-frontend AND tier=web. Written as a
-  // multi-line flow mapping, `app` sits on the SAME line as `selector:` --
-  // invisible to a line-oriented scan unless that key's whole container is
-  // marked unresolved. A workload with a DIFFERENT app but the same tier
-  // must never match.
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: web-svc
-spec:
-  selector: {app: web-frontend,
-    tier: web
+test("a Service fans out to every workload its selector matches", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: my-app"),
+    "templates/blue.yaml": deploymentYaml("my-app-blue", ["app: my-app", "track: blue"]),
+    "templates/green.yaml": deploymentYaml("my-app-green", ["app: my-app", "track: green"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  for (const name of ["Deployment/my-app-blue", "Deployment/my-app-green"]) {
+    const dep = symbols.find((s) => s.name === name)!;
+    assert.ok(edges.some((e) => e.type === "references" && e.from === svc.id && e.to === dep.id), name);
   }
-`);
-  writeFileSync(join(root, "manifests/api.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: api-backend
-spec:
-  template:
-    metadata:
-      labels:
-        app: api-backend
-        tier: web
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/web-svc");
-  assert.ok(service);
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0,
-    "the multi-line flow selector's dropped app key must taint the whole map, not leave tier=web as a false-positive match against a different app");
 
   store.close();
   cleanupDir(root);
 });
 
-test("two resources whose names are both block-scalar headers do not collide into a false-positive edge (regression)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sref-blockscalar-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  // Both this ConfigMap's name and the Deployment's reference to a
-  // COMPLETELY DIFFERENT ConfigMap use a block-scalar header -- if the
-  // header token itself were read as the value, both would collapse to the
-  // same garbage key ("|-") and collide, even though nothing about them
-  // actually matches.
-  writeFileSync(join(root, "manifests/configmap.yaml"), `
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: |-
-    real-config
-`);
-  writeFileSync(join(root, "manifests/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: |-
-              totally-different-config
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  // Neither block-scalar-named resource should produce a real symbol at all
-  // (unidentifiable), let alone a symbol literally named "ConfigMap/|-".
-  assert.equal(syms.some((s) => s.name.includes("|-")), false, "no symbol should be literally named using the block-scalar header token");
-  const deployment = syms.find((s) => s.name === "Deployment/web");
-  assert.ok(deployment);
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.from === deployment!.id && e.type === "references").length, 0,
-    "two unrelated block-scalar-named resources must not collide into a references edge");
+test("dotted selector keys are compared exactly, not as nested paths", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: my-app\n    app.kubernetes.io/instance: prod"),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app", "app.kubernetes.io/instance: staging"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.ok(svc, "service indexed");
+  assert.equal(refsFrom(edges, svc.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Helm-templated block-form selector/labels pair produces no Phase 2 edge and does not crash indexing", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8ssel-tpl-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-spec:
-  selector:
-    {{- include "mychart.selectorLabels" . | nindent 4 }}
-`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    metadata:
-      labels:
-        {{- include "mychart.labels" . | nindent 8 }}
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  const res = indexRepo(store, root, { churn: false }); // must not throw
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-service");
-  assert.ok(service, "Service resource still indexed even though its selector is unresolved");
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.from === service!.id && e.type === "references").length, 0, "templated block-form selector/labels: documented gap, not a guess");
-  assert.ok(res, "indexRepo completes without throwing");
+test("a quoted selector key taints the whole selector", () => {
+  // An unparseable key means we cannot prove the selector is complete; matching
+  // on only the keys we did understand could link a Service to the wrong workload.
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("svc-a", '  selector:\n    "app.kubernetes.io/name": mychart\n    app.kubernetes.io/instance: rel-a'),
+    "templates/deployment.yaml": deploymentYaml("dep-other-chart", ["app.kubernetes.io/name: other", "app.kubernetes.io/instance: rel-a"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/svc-a")!;
+  assert.ok(svc, "service indexed");
+  assert.equal(refsFrom(edges, svc.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a chart-wide Helm define does not fabricate a cross-language edge into a same-named TS symbol (finding #1)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-nofab-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  mkdirSync(join(root, "src"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/_helpers.tpl"), `
-{{- define "labels" -}}
-app: x
-{{- end -}}
-`);
-  writeFileSync(join(root, "src/app.ts"), `export function run() { return labels(); }\n`);
-
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const helmLabels = syms.find((s) => s.name === "labels" && s.file === "templates/_helpers.tpl" && s.kind === "variable");
-  const run = syms.find((s) => s.name === "run" && s.file === "src/app.ts");
-  assert.ok(helmLabels, "Helm labels define indexed as a symbol");
-  assert.ok(run, "TS run function indexed as a symbol");
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(
-    !edges.some((e) => e.from === run!.id && e.to === helmLabels!.id),
-    "a TS function calling an unrelated same-named identifier must not get an edge into an unrelated chart-wide Helm define",
-  );
+test("a selector with a conditional Helm block yields no edge", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-svc", '  selector:\n    app: my-app\n{{- if .Values.canary }}\n    track: canary\n{{- end }}'),
+    "templates/deployment.yaml": deploymentYaml("my-app-canary", ["app: my-app", "track: canary"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-svc")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("chart-wide widening for YAML files must not silently drop a genuine cross-file TS import edge (finding #1)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-noloss-"));
-  mkdirSync(join(root, "src"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "src/helper.ts"), `export function labels() { return "x"; }\n`);
-  writeFileSync(join(root, "src/app.ts"), `import { labels } from "./helper.js";\nexport function run() { return labels(); }\n`);
-  // An unrelated chart-scoped YAML anchor sharing the same name as the real
-  // imported TS symbol — the spurious candidate that, pre-fix, made resolveName's
-  // "more than one candidate in scope -> null, don't guess" rule fire on a
-  // resolution scope it was never supposed to see.
-  writeFileSync(join(root, "values.yaml"), `commonLabels: &labels\n  app: x\n`);
-
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const run = syms.find((s) => s.name === "run" && s.file === "src/app.ts");
-  const helperLabels = syms.find((s) => s.name === "labels" && s.file === "src/helper.ts");
-  assert.ok(run && helperLabels, "both TS symbols indexed");
-
-  const edges = store.json.loadAll("edges");
-  const edge = edges.find((e) => e.from === run!.id && e.type === "calls");
-  assert.ok(edge, "run -> labels call edge must exist");
-  assert.equal(
-    edge!.to,
-    helperLabels!.id,
-    "the genuine cross-file TS import-based call edge must resolve to helper.ts's labels(), not be lost to a spurious chart-wide candidate",
-  );
+test("a flow-mapping selector yields no edge", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("web-svc", "  selector: {app: web-frontend,\n    tier: web}"),
+    "templates/deployment.yaml": deploymentYaml("api-backend", ["app: api-backend", "tier: web"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/web-svc")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Helm define at byte 0 (no leading newline) does not collide with the YAML whole-file fallback symbol, and a top-level include outside the define still resolves (regression: startByte-keyed attribution)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-helm-byte0-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  // No leading newline: the define block is the literal first bytes of the
-  // file, so both it and YAML's synthetic whole-file fallback symbol start at
-  // byte 0. The trailing include sits OUTSIDE the define, at the top level.
-  writeFileSync(
-    join(root, "templates/_helpers.tpl"),
-    `{{- define "c.name" -}}\nfoo\n{{- end -}}\n{{ include "c.name" . }}\n`,
-  );
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
+test("block-scalar names are never taken as literal resource names", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: |-\n    shared-config\ndata:\n  k: v\n",
+    "templates/deployment.yaml": deploymentYaml("web", ["app: web"], "          envFrom:\n            - configMapRef:\n                name: |-\n                  other-config\n"),
+  });
+  assert.ok(!symbols.some((s) => s.name.includes("|-")));
+  const dep = symbols.find((s) => s.name === "Deployment/web")!;
+  assert.ok(dep, "deployment indexed");
+  assert.equal(refsFrom(edges, dep.id).length, 0);
 
-  const syms = store.json.loadAll("symbols").filter((s) => s.file === "templates/_helpers.tpl");
-  const fileSym = syms.find((s) => s.kind === "file");
-  const defineSym = syms.find((s) => s.kind === "variable" && s.name === "c.name");
-  assert.ok(fileSym, "the whole-file fallback symbol still exists distinctly");
-  assert.ok(defineSym, "the c.name define block still exists as its own distinct symbol");
-  assert.notEqual(fileSym!.id, defineSym!.id, "the two byte-0 symbols must not collapse into one");
+  store.close();
+  cleanupDir(root);
+});
 
-  const edges = store.json.loadAll("edges");
-  const edge = edges.find((e) => e.to === defineSym!.id && e.type === "references");
-  assert.ok(edge, "the top-level include (outside the define) must produce a references edge into c.name");
-  assert.equal(
-    edge!.from,
-    fileSym!.id,
-    "the include is outside the define block, so its caller must be the whole-file fallback symbol, not the define itself",
-  );
+test("block-form Helm includes in selectors and labels never throw or link", () => {
+  const { root, store, res, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", '  selector:\n    {{- include "demo.selectorLabels" . | nindent 4 }}'),
+    "templates/deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\nspec:\n  template:\n    metadata:\n      labels:\n        {{- include \"demo.selectorLabels\" . | nindent 8 }}\n",
+  });
+  assert.ok(res);
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.ok(svc, "service still indexed");
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
+  cleanupDir(root);
+});
+
+test("a TS call never resolves to a Helm define of the same name", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": helmDefine("labels"),
+    "src/app.ts": "export function run() { return labels(); }\n",
+  });
+  const define = symbols.find((s) => s.name === "labels" && s.kind === "variable" && s.file === "templates/_helpers.tpl")!;
+  const run = symbols.find((s) => s.name === "run")!;
+  assert.ok(define && run, "both symbols indexed");
+  assert.ok(!edges.some((e) => e.from === run.id && e.to === define.id));
+
+  store.close();
+  cleanupDir(root);
+});
+
+test("chart-wide YAML sibling widening does not pollute TS call resolution", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "src/helper.ts": "export function labels() { return 1; }\n",
+    "src/app.ts": 'import { labels } from "./helper.js";\nexport function run() { return labels(); }\n',
+    "values.yaml": "labels: &labels\n  a: 1\n",
+  });
+  const run = symbols.find((s) => s.name === "run")!;
+  const helper = symbols.find((s) => s.name === "labels" && s.file === "src/helper.ts")!;
+  assert.ok(run && helper, "both TS symbols indexed");
+  const call = edges.find((e) => e.type === "calls" && e.from === run.id);
+  assert.ok(call, "run has a calls edge");
+  assert.equal(call!.to, helper.id);
+
+  store.close();
+  cleanupDir(root);
+});
+
+test("a top-level include sharing start byte 0 with a define is attributed by symbol index", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": '{{- define "c.name" -}}\nx\n{{- end -}}\n{{ include "c.name" . }}\n',
+  });
+  const inFile = symbols.filter((s) => s.file === "templates/_helpers.tpl");
+  const fileSym = inFile.find((s) => s.kind === "file")!;
+  const define = inFile.find((s) => s.name === "c.name" && s.kind === "variable")!;
+  assert.ok(fileSym && define, "file root and define both indexed");
+  assert.notEqual(fileSym.id, define.id);
+  const into = edges.filter((e) => e.type === "references" && e.to === define.id);
+  assert.equal(into.length, 1, "exactly one references edge into the included define");
+  assert.equal(into[0]!.from, fileSym.id, "the top-level include is attributed to the file root");
+  assert.ok(!edges.some((e) => e.from === define.id), "no edge originates from the define");
 
   store.close();
   cleanupDir(root);
@@ -1661,24 +904,16 @@ test("indexRepo resolves module-prefixed Go imports across component boundaries"
   cleanupDir(root);
 });
 
-test("root-level indexed files get exact-match component paths, not a match-everything glob (issue #34)", (t) => {
+test("root-level files are owned by exact path, never a catch-all glob (#34)", (t) => {
   const { store, cleanup } = indexedFixtureStore(seedRootLevelFileFixture);
   t.after(cleanup);
-
-  const comps = store.json.loadAll("components");
-  const rootComp = comps.find((c) => c.name === ".");
-  assert.ok(rootComp, "root-level files get a '.' component");
-  assert.deepEqual(
-    rootComp.paths,
-    ["config.ts", "settings.ts"],
-    "root component paths are exact files, not a './**' glob",
-  );
-
-  // every exact-match path must match its own root file only — never every file in the repo.
-  for (const p of rootComp.paths) {
-    assert.ok(pathMatchesGlob("config.ts", p) === (p === "config.ts"));
-    assert.ok(pathMatchesGlob("settings.ts", p) === (p === "settings.ts"));
-    assert.ok(!pathMatchesGlob("src/auth/session.ts", p));
+  const root = store.json.loadAll("components").find((c) => c.name === ".")!;
+  assert.ok(root, "root component exists");
+  assert.deepEqual(root.paths, ["config.ts", "settings.ts"]);
+  for (const path of root.paths) {
+    assert.equal(pathMatchesGlob("config.ts", path), path === "config.ts");
+    assert.equal(pathMatchesGlob("settings.ts", path), path === "settings.ts");
+    assert.equal(pathMatchesGlob("src/auth/session.ts", path), false);
   }
 });
 
@@ -2163,4 +1398,19 @@ spec:
 
   store.close();
   cleanupDir(root);
+});
+
+test("nearestChartRoot: absolute path with no chart returns null instead of recursing forever", () => {
+  assert.equal(nearestChartRoot([])("/abs/dir/x.yaml"), null);
+});
+
+test("nearestChartRoot: resolves the nearest tracked chart root", () => {
+  const lookup = nearestChartRoot(["charts/a/Chart.yaml", "charts/a/templates/t.yaml"]);
+  assert.equal(lookup("charts/a/templates/t.yaml"), "charts/a");
+  assert.equal(lookup("other/x.yaml"), null);
+});
+
+test("nearestChartRoot: repo-root chart has root empty string", () => {
+  const lookup = nearestChartRoot(["Chart.yaml", "templates/t.yaml"]);
+  assert.equal(lookup("templates/t.yaml"), "");
 });

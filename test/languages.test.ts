@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { LANGUAGES, CODE_EXTENSIONS, languageFor, isSubstantive } from "../src/extractors/languages.js";
@@ -7,9 +7,8 @@ const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.me
   dependencies: Record<string, string>;
 };
 
-test("LANGUAGES has typescript entries covering both grammars (plain + tsx)", () => {
-  const ts = LANGUAGES.filter((l) => l.id === "typescript");
-  assert.ok(ts.length >= 2, "expected a plain-TS entry and a TSX entry");
+test("LANGUAGES has a plain-TS entry and a TSX entry that share the typescript id", () => {
+  assert.ok(LANGUAGES.filter((l) => l.id === "typescript").length >= 2);
 });
 
 test("CODE_EXTENSIONS matches the supported TS/JS/Python/Go/PHP/YAML extension list", () => {
@@ -29,7 +28,7 @@ test("languageFor resolves .php to the PHP LanguageSpec", () => {
   assert.equal(languageFor("src/Worker.php")?.id, "php");
 });
 
-test("languageFor resolves every TS/JS extension to the typescript LanguageSpec", () => {
+test("every TS/JS extension resolves to the typescript spec", () => {
   for (const ext of [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]) {
     const lang = languageFor(`file${ext}`);
     assert.ok(lang, `no LanguageSpec for ${ext}`);
@@ -37,47 +36,37 @@ test("languageFor resolves every TS/JS extension to the typescript LanguageSpec"
   }
 });
 
-test("languageFor returns null for a non-code file", () => {
+test("languageFor does not resolve markdown", () => {
   assert.equal(languageFor("README.md"), null);
 });
 
-test("the typescript LanguageSpec's builtinMethods includes the existing JS builtin allowlist", () => {
-  const ts = LANGUAGES.find((l) => l.id === "typescript")!;
-  for (const m of ["map", "filter", "push", "then", "toString"]) {
-    assert.ok(ts.builtinMethods.has(m), `missing builtin method ${m}`);
-  }
+test("the typescript spec carries the common builtin method names", () => {
+  const builtins = languageFor("a.ts")!.builtinMethods;
+  for (const name of ["map", "filter", "push", "then", "toString"]) assert.ok(builtins.has(name), name);
 });
 
-test("languageFor resolves .yml and .yaml to the yaml LanguageSpec", () => {
-  for (const ext of [".yml", ".yaml"]) {
-    const lang = languageFor(`file${ext}`);
-    assert.ok(lang, `no LanguageSpec for ${ext}`);
-    assert.equal(lang!.id, "yaml");
-  }
+test("YAML extensions resolve to the yaml spec", () => {
+  assert.equal(languageFor("config/app.yml")?.id, "yaml");
+  assert.equal(languageFor("config/app.yaml")?.id, "yaml");
+  assert.equal(languageFor("templates/_helpers.tpl")?.id, "yaml");
 });
 
-test("languageFor resolves .tpl (Helm helper templates) to the yaml LanguageSpec", () => {
-  const lang = languageFor("templates/_helpers.tpl");
-  assert.ok(lang, "no LanguageSpec for .tpl");
-  assert.equal(lang!.id, "yaml");
+test("the yaml spec emits references edges", () => {
+  assert.equal(languageFor("a.yaml")!.referenceEdgeType, "references");
 });
 
-test("the yaml LanguageSpec declares its alias->anchor edges as \"references\", not \"calls\"", () => {
-  const yaml = LANGUAGES.find((l) => l.id === "yaml")!;
-  assert.equal(yaml.referenceEdgeType, "references");
-});
-
-test("isSubstantive is true for every parseable code file", () => {
+test("isSubstantive accepts code files", () => {
   assert.equal(isSubstantive("src/a.ts"), true);
   assert.equal(isSubstantive("cmd/server/main.go"), true);
 });
 
-test("isSubstantive is true for markdown even though languageFor returns null", () => {
-  assert.equal(languageFor("docs/adr/0012-use-postgres.md"), null);
-  assert.equal(isSubstantive("docs/adr/0012-use-postgres.md"), true);
+test("isSubstantive accepts prose that is not parseable code", () => {
+  const adr = "docs/adr/0001-use-sqlite.md";
+  assert.equal(languageFor(adr), null);
+  assert.equal(isSubstantive(adr), true);
 });
 
-test("isSubstantive is false for a file that is neither parseable nor prose", () => {
+test("isSubstantive rejects non-code, non-prose files", () => {
   assert.equal(isSubstantive("assets/logo.svg"), false);
 });
 

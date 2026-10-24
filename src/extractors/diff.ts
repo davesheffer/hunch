@@ -30,12 +30,12 @@ export interface DiffAnalysis {
   changedSymbols: SymbolChange[]; // appeared on both sides of the SAME file
   addedDeps: string[]; // new external (non-relative) imports
   removedDeps: string[];
-  addedLines: number; // substantive lines only (code + prose, per isSubstantive)
+  addedLines: number; // substantive files only (code + prose, per isSubstantive)
   removedLines: number;
-  /** Added line bodies (the "+" content, marker stripped) per file — every file,
-   *  not just substantive ones. The text veto's symbol/pattern tiers match against
-   *  — call sites, not just declarations, which addedSymbols can't see. Keyed by
-   *  the same (new-path) key as perFile. */
+  /** Added line bodies (content after the `+`) per file, for EVERY file, not only
+   *  substantive ones. The text veto's symbol/pattern tiers match call sites, which
+   *  `addedSymbols` cannot see. Keyed by the same new-side path as the per-file
+   *  declarations map. */
   addedLinesByFile: Map<string, string[]>;
 }
 
@@ -50,11 +50,9 @@ const DECL_PATTERNS: Array<{ kind: SymbolChange["kind"]; re: RegExp }> = [
   { kind: "type", re: /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*[=<]/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function/ },
+  // No Python class pattern: the generic class pattern above already matches a
+  // Python class header, and the first match wins.
   { kind: "function", re: /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/ },
-  // No Python-specific class pattern needed: the generic TS `class` pattern above has no
-  // trailing-syntax requirement (no `{`/`:`), so it already matches Python's
-  // `class Foo(Bar):` header too, and — since declOf() returns on the first match —
-  // always wins for Python class lines before any Python-specific pattern would run.
 ];
 import { languageFor, isSubstantive } from "./languages.js";
 
@@ -62,15 +60,13 @@ const IMPORT_RE = /^\s*import\s+(?:[^'"]*from\s+)?['"]([^'"]+)['"]/;
 const CONT_IMPORT_RE = /^\s*\}?\s*from\s+['"]([^'"]+)['"]/; // multi-line: "} from 'x'"
 const REQUIRE_RE = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/;
 const PHP_REQUIRE_RE = /\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?['"]([^'"]+)['"]/;
-// "import os" / "import a.b.c" / "import os as o" / "import os, sys" / trailing "# comment".
-// Anchored to the END of the line (optional "as alias", comma-separated modules, comment)
-// so it matches a COMPLETE Python import statement only — this deliberately rejects
-// TypeScript's `import Foo = Bar.Baz;` (import-equals), which would otherwise falsely
-// look like a Python "import Foo" prefix match.
-const PY_IMPORT_RE =
-  /^\s*import\s+([A-Za-z_][\w.]*)(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_][\w.]*(?:\s+as\s+\w+)?)*\s*(?:#.*)?$/;
-const PY_FROM_IMPORT_RE = /^\s*from\s+([.\w]+)\s+import\s+/; // "from os import path" / "from . import x"
-const isCode = (p: string) => !!p && languageFor(p) !== null;
+// A COMPLETE Python import statement: comma-separated dotted modules, each with an
+// optional alias, an optional trailing comment, and nothing else. The anchoring is
+// what rejects TypeScript's `import Foo = Bar.Baz;`.
+const PY_IMPORT_RE = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:\s+as\s+\w+)?)*\s*(?:#.*)?$/;
+const PY_FROM_RE = /^\s*from\s+(\.*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|\.+)\s+import\b/;
+
+const isCode = (p: string): boolean => p.length > 0 && languageFor(p) !== null;
 
 function declOf(line: string): SymbolChange | null {
   for (const { kind, re } of DECL_PATTERNS) {
@@ -85,7 +81,7 @@ function importOf(line: string): string | null {
     CONT_IMPORT_RE.exec(line) ??
     REQUIRE_RE.exec(line) ??
     PHP_REQUIRE_RE.exec(line) ??
-    PY_FROM_IMPORT_RE.exec(line) ??
+    PY_FROM_RE.exec(line) ??
     PY_IMPORT_RE.exec(line);
   return m ? m[1]! : null;
 }
@@ -317,15 +313,15 @@ export function analyzeDiff(diff: string): DiffAnalysis {
     // ---- inside a hunk: content lines ----
     if (raw.startsWith("+")) {
       const body = raw.slice(1);
-      // Raw added lines are captured for EVERY file, before the substantive gate:
+      // Raw added lines are captured for every file, before the substantive gate:
       // content-matched constraints and Veto tripwires are not code-only rules
       // (a blocking invariant legitimately scopes .github/workflows/**, *.sql,
       // Dockerfile). Skipping them here left `scopedAdded` empty, which
       // buildCheckReport reads as "cannot prove a violation ⇒ complies" — so the
       // pre-edit hook denied the edit while `hunch check --strict` passed the
-      // very commit that landed it. The churn counters below now also include
-      // prose (isSubstantive, issue #12); symbol/import extraction stays
-      // code-only (isCode/languageFor) since declarations are a code concept.
+      // same diff. Churn counters below now include prose (isSubstantive, issue
+      // #12), while symbol/import extraction stays code-only (isCode): a
+      // declaration is a code concept.
       let lines = addedLinesBy.get(curFile);
       if (!lines) { lines = []; addedLinesBy.set(curFile, lines); }
       lines.push(body);
@@ -333,10 +329,10 @@ export function analyzeDiff(diff: string): DiffAnalysis {
       addedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
       if (isCode(curFile)) {
-        const d = declOf(body);
-        if (d) declsFor(curFile)?.added.set(d.name, d);
-        const imp = importOf(body);
-        if (imp && !imp.startsWith(".")) addedImports.add(imp);
+        const decl = declOf(body);
+        if (decl) declsFor(curFile)!.added.set(decl.name, decl);
+        const spec = importOf(body);
+        if (spec && !spec.startsWith(".")) addedImports.add(spec);
       }
     } else if (raw.startsWith("-")) {
       if (!isSubstantive(curFile)) continue;
@@ -344,10 +340,10 @@ export function analyzeDiff(diff: string): DiffAnalysis {
       if (!curAdded && !curDeleted) filesModified.add(curFile);
       if (isCode(curFile)) {
         const body = raw.slice(1);
-        const d = declOf(body);
-        if (d) declsFor(curFile)?.removed.set(d.name, d);
-        const imp = importOf(body);
-        if (imp && !imp.startsWith(".")) removedImports.add(imp);
+        const decl = declOf(body);
+        if (decl) declsFor(curFile)!.removed.set(decl.name, decl);
+        const spec = importOf(body);
+        if (spec && !spec.startsWith(".")) removedImports.add(spec);
       }
     }
   }

@@ -12,6 +12,7 @@ const COPY_PREFIX = "hunch-tree-sitter-";
 const CACHE_PREFIX = "hunch-tree-sitter-cache-";
 /** A hash dir no process has used for this long is pruned. */
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** npm packages whose native addons are loaded from isolated copies. */
 const NATIVE_PACKAGES = [
   "tree-sitter",
   "tree-sitter-typescript",
@@ -187,12 +188,12 @@ function pruneCache(root: string, keep: ReadonlySet<string>): void {
   }
 }
 
-/** Load all native tree-sitter addons (the parser runtime + every grammar) from
+/** Loads every native tree-sitter addon (the parser runtime and each grammar) from
  * content-addressed copies in a per-user temp cache — never from the installed
  * package. Windows keeps loaded `.node` files locked for the
- * process lifetime; redirecting the upstream loaders means npm can replace the
- * installed package during an active MCP session without killing that session
- * or falling back to a stale binary. */
+ * lifetime of the process, so pointing the upstream loaders at copies lets npm
+ * replace the installed package during a live MCP session without killing it and
+ * without ever loading a stale binary. */
 export function loadNativeTreeSitter(): NativeTreeSitterRuntime {
   if (runtime) return runtime;
   // Only SUCCESS is memoized (in `runtime`), never the failure: the conditions
@@ -208,13 +209,12 @@ export function loadNativeTreeSitter(): NativeTreeSitterRuntime {
 }
 
 function loadRuntime(): NativeTreeSitterRuntime {
-  // Three binding spellings: prebuilds ship as tree-sitter[-typescript|-python].node
-  // or, for a scoped package like @tree-sitter-grammars/tree-sitter-yaml, as
-  // @scope+name.node; from-source builds are named after the binding.gyp target
-  // with underscores (tree_sitter_runtime_binding.node, tree_sitter_python_binding.node,
-  // tree_sitter_yaml_binding.node, …). Missing the underscore names let an
-  // already-loaded source-built addon slip past this guard and defeat the
-  // file-lock isolation entirely (issue #52).
+  // Recognised addon file names: the prebuilt names of the runtime and of each
+  // grammar package, the `@scope+name` spelling that scoped packages use inside
+  // their prebuilds, and from-source builds, which are named after the
+  // binding.gyp target with underscores and end in `_binding`. Missing the
+  // underscore form once let an already-loaded source build slip past isolation
+  // (issue #52).
   const preloaded = Object.keys(runtimeRequire.cache).filter((path) =>
     /(?:tree-sitter(?:-typescript|-python|-go|-php|-yaml)?|tree_sitter(?:_[a-z]+)*_binding)\.node$/.test(path)
     && !new RegExp(`(?:^|[\\\\/])(?:${COPY_PREFIX}\\d+-|${CACHE_PREFIX})`).test(path));

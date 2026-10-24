@@ -1,93 +1,95 @@
-import { test } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { analyzeDiff } from "../src/extractors/diff.js";
 
-function diffAddingFile(file: string, ...added: string[]): string {
+/** A unified diff that adds a new file with the given lines. */
+function addDiff(file: string, lines: string[]): string {
   return [
     `diff --git a/${file} b/${file}`,
     "new file mode 100644",
     "--- /dev/null",
     `+++ b/${file}`,
-    `@@ -0,0 +1,${added.length} @@`,
-    ...added.map((l) => `+${l}`),
+    `@@ -0,0 +1,${lines.length} @@`,
+    ...lines.map((l) => `+${l}`),
+    "",
   ].join("\n");
 }
 
-test("analyzeDiff counts a new markdown file's added lines and tracks it as added (issue #12)", () => {
-  const diff = diffAddingFile(
-    "docs/adr/0012-use-postgres.md",
-    "# Use Postgres",
-    "",
-    "We chose Postgres over MySQL for JSONB support.",
-  );
-  const a = analyzeDiff(diff);
-  assert.deepEqual(a.filesAdded, ["docs/adr/0012-use-postgres.md"]);
-  assert.equal(a.addedLines, 3, "markdown lines must count toward churn, not just code files");
-});
-
-test("analyzeDiff extracts no symbols/deps from markdown (prose has no declarations)", () => {
-  const diff = diffAddingFile(
-    "docs/adr/0012-use-postgres.md",
-    "function notReallyCode() {}",
-    "import fakeThing from 'nowhere';",
-  );
-  const a = analyzeDiff(diff);
-  assert.deepEqual(a.addedSymbols, [], "declOf/importOf must stay code-only (languageFor-gated)");
-  assert.deepEqual(a.addedDeps, []);
-});
-
-function diffModifyingFile(file: string, before: string[], after: string[]): string {
+/** A unified diff that modifies a file: removed lines, then added lines. */
+function modifyDiff(file: string, removed: string[], added: string[]): string {
   return [
     `diff --git a/${file} b/${file}`,
     `--- a/${file}`,
     `+++ b/${file}`,
-    `@@ -1,${before.length} +1,${after.length} @@`,
-    ...before.map((l) => `-${l}`),
-    ...after.map((l) => `+${l}`),
+    `@@ -1,${removed.length} +1,${added.length} @@`,
+    ...removed.map((l) => `-${l}`),
+    ...added.map((l) => `+${l}`),
+    "",
   ].join("\n");
 }
 
-test("analyzeDiff tracks a modified (not just new) markdown file in filesModified and both churn counters", () => {
-  const diff = diffModifyingFile(
-    "docs/adr/0001-use-postgres.md",
-    ["We chose Postgres for JSONB support."],
-    ["We chose Postgres for JSONB support and its extension ecosystem.", "Revisited 2026: still correct."],
-  );
-  const a = analyzeDiff(diff);
-  assert.deepEqual(a.filesModified, ["docs/adr/0001-use-postgres.md"]);
+test("adding a markdown ADR counts toward addedLines (prose churn, issue #12)", () => {
+  const a = analyzeDiff(addDiff("docs/adr/0001-use-sqlite.md", ["# Use SQLite", "", "Accepted."]));
+  assert.deepEqual(a.filesAdded, ["docs/adr/0001-use-sqlite.md"]);
+  assert.equal(a.addedLines, 3);
+});
+
+test("declaration and import extraction stay code-only for prose", () => {
+  const a = analyzeDiff(addDiff("docs/notes.md", ["function helper() {}", "import x from 'left-pad';"]));
+  assert.deepEqual(a.addedSymbols, []);
+  assert.deepEqual(a.addedDeps, []);
+});
+
+test("modifying a markdown file counts removed and added lines", () => {
+  const a = analyzeDiff(modifyDiff("docs/adr/0002.md", ["old line"], ["new line", "another line"]));
+  assert.deepEqual(a.filesModified, ["docs/adr/0002.md"]);
   assert.equal(a.removedLines, 1);
   assert.equal(a.addedLines, 2);
 });
 
-test("analyzeDiff records a pure markdown rename (issue #12: rename tracking widened to isSubstantive)", () => {
+test("a pure markdown rename is recorded", () => {
   const diff = [
     "diff --git a/docs/old.md b/docs/new.md",
     "similarity index 100%",
     "rename from docs/old.md",
     "rename to docs/new.md",
+    "",
   ].join("\n");
-  const a = analyzeDiff(diff);
-  assert.deepEqual(a.filesRenamed, [{ from: "docs/old.md", to: "docs/new.md" }]);
+  assert.deepEqual(analyzeDiff(diff).filesRenamed, [{ from: "docs/old.md", to: "docs/new.md" }]);
 });
 
-test("analyzeDiff tracks a deleted markdown file (issue #12: delete tracking widened to isSubstantive)", () => {
+test("deleting a markdown file is recorded with its removed lines", () => {
   const diff = [
     "diff --git a/docs/gone.md b/docs/gone.md",
     "deleted file mode 100644",
     "--- a/docs/gone.md",
     "+++ /dev/null",
     "@@ -1,2 +0,0 @@",
-    "-# Old ADR",
-    "-No longer relevant.",
+    "-first",
+    "-second",
+    "",
   ].join("\n");
   const a = analyzeDiff(diff);
   assert.deepEqual(a.filesDeleted, ["docs/gone.md"]);
   assert.equal(a.removedLines, 2);
 });
 
-test("analyzeDiff still ignores a non-code, non-prose file entirely (e.g. an SVG)", () => {
-  const diff = diffAddingFile("assets/logo.svg", "<svg></svg>");
-  const a = analyzeDiff(diff);
+test("an added SVG is neither code nor prose and is ignored", () => {
+  const a = analyzeDiff(addDiff("assets/logo.svg", ["<svg></svg>"]));
   assert.deepEqual(a.filesAdded, []);
   assert.equal(a.addedLines, 0);
+});
+
+test("python import regex: added `from x import(y)` and bare `from x import` yield dependency x", () => {
+  for (const line of ["from x import(y)", "from x import"]) {
+    const a = analyzeDiff(addDiff("src/mod.py", [line]));
+    assert.deepEqual(a.addedDeps, ["x"], line);
+  }
+});
+
+test("python import regex: malformed module paths yield no dependency", () => {
+  for (const line of ["import os.", "import a..b", "import a.1x", "from a..b import c", "from 1abc import x"]) {
+    const a = analyzeDiff(addDiff("src/mod.py", [line]));
+    assert.deepEqual(a.addedDeps, [], line);
+  }
 });

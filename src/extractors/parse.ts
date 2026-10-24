@@ -7,8 +7,8 @@
  * Uses NATIVE tree-sitter (synchronous, prebuilt for Node 20 — see decision in
  * the commit history; web-tree-sitter's WASM grammars had an incompatible ABI).
  *
- * Language-specific grammar/query/builtin-method data lives in languages.ts —
- * this file is a generic engine over whichever LanguageSpec matches a file.
+ * Language-specific grammar, query and builtin data lives in languages.ts; this
+ * file is a generic engine over whichever LanguageSpec matches a file.
  */
 import type TreeSitterParser from "tree-sitter";
 import type { SyntaxNode } from "tree-sitter";
@@ -17,7 +17,6 @@ import { languageFor, type LanguageSpec, type ParsedSymbolKind } from "./languag
 import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
 
 export type { ParsedSymbolKind } from "./languages.js";
-
 /** Resolved on first parse, not at import: loading the native addons copies six
  *  `.node` files into a temp dir and dlopens them (~1.5s+ cold), which every CLI
  *  command and every editor hook would otherwise pay just for importing this
@@ -92,28 +91,31 @@ function bundleFor(spec: LanguageSpec): LangBundle {
   return b;
 }
 
+/** Per-spec templating markers with g/y stripped, so `.test()` is stateless.
+ *  Built once per language spec rather than on every parseSource call. */
+const statelessMarkers = new WeakMap<LanguageSpec, readonly RegExp[]>();
+function templatingMarkersFor(spec: LanguageSpec): readonly RegExp[] {
+  let markers = statelessMarkers.get(spec);
+  if (!markers) {
+    markers = (spec.templatingMarkers ?? []).map((re) => new RegExp(re.source, re.flags.replace(/[gy]/g, "")));
+    statelessMarkers.set(spec, markers);
+  }
+  return markers;
+}
+
 const STR_QUOTES = /^['"`]|['"`]$/g;
-/** Cap on a stored symbol's bodyText — large enough for review context, small
- *  enough that a huge function/file doesn't bloat every JSON symbol record. */
+/** Cap on stored symbol body text: enough context for review without bloating JSON records. */
 export const MAX_BODY_TEXT_CHARS = 4000;
 
 export function parseSource(file: string, source: string, opts: { throwOnParseError?: boolean } = {}): ParsedFile | null {
   const spec = languageFor(file);
   if (!spec) return null;
-  // Templated text (Helm chart / Jinja CI config) isn't {spec.id} yet — a real
-  // grammar correctly reports ERROR nodes for the delimiters. Still run the
-  // parse below (a well-formed anchor elsewhere in the file still contributes
-  // a real symbol, same as any other YAML file) — just don't let those
-  // expected errors fail-close the whole-repo scan on content that was never
-  // meant to stand alone (#33). Heavy top-level templating can break error
-  // recovery badly enough that even the whole-file root node never forms
-  // (root.type becomes "ERROR", not "stream") — the fallback-symbol synthesis
-  // below covers that case so the file doesn't vanish from the component graph.
-  // String.prototype.search ignores lastIndex (unlike RegExp.test with a /g or
-  // /y flag), so a future templatingMarkers entry can't introduce cross-call
-  // statefulness here even if it forgets to keep its pattern flag-free.
-  const templated = (spec.alwaysTemplatedExtensions?.some((ext) => file.endsWith(ext)) ?? false)
-    || (spec.templatingMarkers?.some((marker) => source.search(marker) !== -1) ?? false);
+  // Templated text is not valid language text until rendered. Still parse, so real
+  // anchors/symbols are extracted, but do not let the expected errors mark the file
+  // unparseable. Severe templating may stop even the root document node from
+  // forming; the fallback whole-file symbol below covers that case.
+  const templated = (spec.alwaysTemplatedExtensions ?? []).some((ext) => file.endsWith(ext))
+    || templatingMarkersFor(spec).some((re) => re.test(source));
   const { parser, query, bindingQuery } = bundleFor(spec);
   // The native binding caps its scratch buffer at 32 KB unless bufferSize is
   // given — without this, any source >= 32768 bytes throws "Invalid argument"
@@ -164,13 +166,10 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     const cname = cap.name;
     const node = cap.node;
     if (cname.endsWith(".def")) {
-      // Keep the FIRST classification a node id receives: a query may have
-      // several patterns matching the same node at different specificity
-      // (e.g. a Python method inside a class body matches both a class-nested
-      // "method.def" pattern and a general "fn.def" pattern — Task 4 relies on
-      // this to classify methods correctly without special-casing Python here).
+      // First classification wins: a node matched by several patterns keeps the
+      // kind it received first (Python nested methods, Go struct/interface specs).
       if (!pendingDefs.has(node.id)) pendingDefs.set(node.id, { kind: spec.defKindOf[cname]!, def: node });
-    } else if (spec.nameToDef[cname]) {
+    } else if (Object.hasOwn(spec.nameToDef, cname)) {
       // name capture: find its parent def node id by walking up to the def type
       const defNode = ascendToDef(node, spec.defNodeTypes);
       if (defNode) {
@@ -227,28 +226,20 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
   }
 
   for (const { kind, def, name } of pendingDefs.values()) {
-    const resolvedName = name ?? spec.fallbackDefName?.(file);
-    if (!resolvedName) continue;
+    const symbolName = name ?? spec.fallbackDefName?.(file);
+    if (!symbolName) continue;
     const loc = def.endPosition.row - def.startPosition.row + 1;
     symbols.push({
-      name: resolvedName, kind,
+      name: symbolName, kind,
       startByte: def.startIndex, endByte: def.endIndex, loc,
       bodyText: originalText(def).slice(0, MAX_BODY_TEXT_CHARS),
     });
   }
-  // Every other successfully-parsed YAML file gets at least a file-root symbol
-  // (fallbackDefName). If templating broke error recovery badly enough that
-  // the doc.def capture never fired, synthesize the same fallback here rather
-  // than let the file silently drop out of the component graph. Push it before
-  // the sort below — parse()'s callers (indexer.ts) rely on symbols staying in
-  // start-byte order.
+  // Severe templating can stop the root node from forming; synthesize the whole-file symbol.
   if (templated && spec.fallbackDefName && !symbols.some((s) => s.kind === "file")) {
     symbols.push({
-      name: spec.fallbackDefName(file),
-      kind: "file",
-      startByte: 0,
-      endByte: source.length,
-      loc: source.split("\n").length,
+      name: spec.fallbackDefName(file), kind: "file",
+      startByte: 0, endByte: source.length, loc: source.split("\n").length,
       bodyText: source.slice(0, MAX_BODY_TEXT_CHARS),
     });
   }
@@ -296,7 +287,7 @@ function inToleratedScope(node: SyntaxNode, scopes: NonNullable<LanguageSpec["to
   return false;
 }
 
-/** Walk up to the nearest node whose type is a definition this language recognizes. */
+/** Nearest ancestor of `node` whose type is a definition type, or null. */
 function ascendToDef(node: SyntaxNode, defNodeTypes: Set<string>): SyntaxNode | null {
   let cur: SyntaxNode | null = node.parent;
   while (cur) {
@@ -307,17 +298,12 @@ function ascendToDef(node: SyntaxNode, defNodeTypes: Set<string>): SyntaxNode | 
 }
 
 /** Map each call site to the innermost symbol whose byte-range contains it.
- *  Keyed by the symbol's position (index) in `parsed.symbols` — NOT its
- *  startByte, which is not a reliable per-symbol identity: a language whose
- *  extractor merges a synthetic whole-file symbol with independently-derived
- *  symbols (e.g. YAML's fallback-root synthetic symbol alongside Helm's
- *  regex-derived `define` blocks) can produce two distinct symbols that both
- *  start at byte 0. Indexing by array position is unique by construction,
- *  regardless of byte overlap — the caller must consume the exact same
- *  `parsed.symbols` array (or an equivalently-ordered copy) to look up a
- *  symbol by the index this function returns. The value maps callee name ->
- *  `memberOnly` (true iff every occurrence was a `x.foo()` member call, never
- *  a direct `foo()`), so the indexer can resolve member calls conservatively. */
+ *  The result is keyed by the symbol's INDEX in `parsed.symbols`, not its start
+ *  byte: two distinct symbols can share a start byte (a synthetic whole-file root
+ *  beside others starting at byte 0), so callers must look symbols up in the same
+ *  array order. Each value maps callee name -> memberOnly, true iff every
+ *  occurrence of that callee inside the symbol was a member call, so the indexer
+ *  can resolve member calls conservatively. */
 export function attributeCalls(parsed: ParsedFile): Map<number, Map<string, boolean>> {
   const out = new Map<number, Map<string, boolean>>();
   for (const call of parsed.calls) {
@@ -333,8 +319,8 @@ export function attributeCalls(parsed: ParsedFile): Map<number, Map<string, bool
       }
     }
     if (best && best.name !== call.callee) {
-      if (!out.has(bestIndex)) out.set(bestIndex, new Map());
-      const m = out.get(bestIndex)!;
+      let m = out.get(bestIndex);
+      if (!m) { m = new Map(); out.set(bestIndex, m); }
       const prev = m.get(call.callee);
       m.set(call.callee, prev === undefined ? call.member : prev && call.member);
     }
