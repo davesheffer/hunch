@@ -11,7 +11,8 @@ Each of those individuals also signs the
 
 The organization named below ("Corporation") makes to the Owner (as defined in
 the Individual Agreement, including any transferee under its Section 7) the same
-assignment, fallback license, moral-rights waiver, promises and undertakings as
+retroactive assignment, release, waiver of compensation, patent non-assertion
+promise, fallback license, moral-rights waiver, promises and undertakings as
 Sections 2 to 6 of the Individual Agreement, for every Contribution that a
 Designated Contributor listed in Schedule A has submitted or later submits to the
 Project. In those sections, and notwithstanding the definition in Section 2,

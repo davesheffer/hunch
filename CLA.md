@@ -6,7 +6,8 @@ signature record; signatures given to one version stay with that version.
 This Agreement is between You and David Sheffer, the owner of the Hunch project
 (the "Project"). "Owner" means David Sheffer until an assignment under Section 7,
 and after it the assignee alone. By signing, You transfer to the Owner all of
-Your rights in Your Contributions.
+Your rights in Your Contributions, past and future, including patents, and give
+up any claim against the Owner or the Project's users.
 
 ## 1. How You accept
 
@@ -43,15 +44,33 @@ interest worldwide in and to Your Contributions, including:
 
 1. every copyright and other intellectual property right in them;
 2. every invention, and every patent and patent application, that a Contribution
-   discloses or that You disclosed to the Project or the Owner; and
+   discloses or that You disclosed to the Project or the Owner, including any
+   patent or application You filed before accepting this Agreement; and
 3. the right to sue for, and keep any recovery from, past, present and future
    infringement of those rights.
+
+This assignment is retroactive: for every Contribution, including those submitted
+before You accepted this Agreement, it takes effect as of the date the
+Contribution was created, so the Owner has owned it from that date.
 
 The Owner may use, change, license, sell and enforce those rights in any way,
 including under open-source, proprietary or commercial terms, without paying,
 crediting or notifying You. You keep no rights in Your Contributions, except the
 rights that any member of the public has under the license the Owner publishes
 them under.
+
+You release the Owner, its licensees, successors and customers, and every user of
+the Project, from every claim, known or unknown, that You have or may have arising
+from any use of Your Contributions or the Project up to the date You accept this
+Agreement. You waive any right to compensation, royalties, credit or other payment
+for Your Contributions or for any invention or patent assigned or licensed under
+this Agreement, including any such right given by statute, to the extent the law
+allows it to be waived.
+
+You also agree never to assert any patent or patent application You own or
+control, now or later, against the Owner, its licensees, successors or customers,
+or any user of the Project, for making, using, selling, offering, importing or
+distributing the Project or any work based on it.
 
 ## 4. Where an assignment is not possible
 
