@@ -4,12 +4,11 @@ Thanks for helping build Hunch's engineering-memory and deterministic Change Gat
 
 ## License of contributions
 
-Every contributor signs the **[Contributor License Agreement](CLA.md)** before a pull
-request can be merged. You keep the copyright in your work, and you give the owner a
-perpetual, irrevocable license to use, relicense and sell it, including under terms
-other than the project's Apache-2.0 license. If the owner's patent filings claim an
-invention you contributed, you assign that invention to the owner. The agreement also
-covers anything you contributed before you signed it.
+Every contributor signs the **[Contributor Assignment Agreement](CLA.md)** before a
+pull request can be merged. You assign to the owner all rights in your contributions,
+including copyright and patents, so the owner can use, relicense and sell them on any
+terms. You can still use them like anyone else, under the project's published
+license. The agreement also covers anything you contributed before you signed it.
 
 Signing takes one comment. On your first pull request, the **CLA** check posts
 instructions; reply with a comment that contains exactly this sentence and nothing
