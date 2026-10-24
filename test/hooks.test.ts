@@ -1,11 +1,11 @@
 import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-@@CLEANROOM_HOLE_1@@
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-@@CLEANROOM_HOLE_2@@
+import { installPostCommitHook, installPreCommitHook, installPostMergeHook, hookStatus } from "../src/integrations/hooks.js";
 import { HUNCH_PACKAGE_NAME } from "../src/core/version.js";
 
 const PROJECT_ROOT = process.cwd();
@@ -125,7 +125,8 @@ test("post-commit hook: installed from a LINKED worktree of Hunch's own checkout
     // installing from the linked worktree still writes into main's .git/hooks.
     assert.equal(existsSync(join(linkedDir, ".git", "hooks", "post-commit")), false);
     const h = hookText(main);
-    assert.ok(h.includes(JSON.stringify(join(main, "src", "cli", "index.ts"))), "must bake in the MAIN worktree's entry");
+    const mainReal = realpathSync.native(main);
+    assert.ok(h.includes(JSON.stringify(join(mainReal, "src", "cli", "index.ts"))), "must bake in the MAIN worktree entry");
     assert.ok(!h.includes(JSON.stringify(join(linkedDir, "src", "cli", "index.ts"))), "must NOT bake in the linked (removable) worktree's own entry");
   } finally {
     execFileSync("git", ["worktree", "remove", "--force", linkedDir], { cwd: main });
@@ -165,24 +166,93 @@ test("post-commit hook: re-install is idempotent (managed block replaced, not du
   } finally { cleanupDir(r); }
 });
 
-@@CLEANROOM_HOLE_3@@
+const mergeHookText = (r: string): string => readFileSync(join(r, ".git", "hooks", "post-merge"), "utf8");
+
+/** A repo with one commit, so the CLI has a HEAD to index. */
+function committedRepo(): string {
+  const r = repo();
+  writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
+  execFileSync("git", ["config", "user.email", "t@t.co"], { cwd: r });
+  execFileSync("git", ["config", "user.name", "T"], { cwd: r });
+  execFileSync("git", ["add", "-A"], { cwd: r });
+  execFileSync("git", ["commit", "-qm", "init"], { cwd: r });
+  return r;
+}
+const cliEnv = (): NodeJS.ProcessEnv => ({ ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" });
+const runCli = (r: string, ...args: string[]) =>
+  spawnSync(process.execPath, [TSX, CLI, ...args], { cwd: r, env: cliEnv(), encoding: "utf8" });
+
+test("post-merge hook: invokes repair-provenance from the hook, quietly, WITHOUT --apply (detect-and-queue only)", () => {
+  const r = repo();
+  try {
+    installPostMergeHook(r, "hunch");
+    const h = mergeHookText(r);
+    assert.match(h, /hunch repair-provenance --from-hook --quiet >/);
+    assert.doesNotMatch(h, /--apply/);
+    assert.match(h, /HUNCH_MERGE_SYNC/);
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_4@@
+});
+
+test("post-merge hook: re-install is idempotent (managed block replaced, not duplicated)", () => {
+  const r = repo();
+  try {
+    installPostMergeHook(r, "hunch");
+    installPostMergeHook(r, "hunch");
+    assert.equal(mergeHookText(r).match(/>>> hunch post-merge >>>/g)?.length, 1);
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_5@@
+});
+
+test("post-merge hook: appended to an existing hook file without clobbering it", () => {
+  const r = repo();
+  try {
+    mkdirSync(join(r, ".git", "hooks"), { recursive: true });
+    writeFileSync(join(r, ".git", "hooks", "post-merge"), "#!/bin/sh\necho user-hook-ran\n");
+    installPostMergeHook(r, "hunch");
+    const h = mergeHookText(r);
+    assert.match(h, /echo user-hook-ran/);
+    assert.match(h, />>> hunch post-merge >>>/);
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_6@@
+});
+
+test("post-merge hook: unchanged action when re-installed identically", () => {
+  const r = repo();
+  try {
+    installPostMergeHook(r, "hunch");
+    const second = installPostMergeHook(r, "hunch");
+    assert.equal(second.action, "unchanged");
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_7@@
+});
+
+test("hookStatus: read-only, reports nothing installed on a fresh repo and never creates a managed hook file", () => {
+  const r = repo();
+  try {
     assert.deepEqual(hookStatus(r), { postCommit: false, preCommit: false, postMerge: false, postCheckout: false });
-@@CLEANROOM_HOLE_8@@
+    // git's own *.sample files are irrelevant here: only the managed hook names matter.
+    for (const name of ["post-commit", "pre-commit", "post-merge"]) {
+      assert.equal(existsSync(join(r, ".git", "hooks", name)), false, `hookStatus must never create ${name}`);
+    }
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_9@@
+});
+
+test("hookStatus: reports exactly which of the three managed hooks are present", () => {
+  const r = repo();
+  try {
+    installPostCommitHook(r, "hunch");
+    installPostMergeHook(r, "hunch");
     assert.deepEqual(hookStatus(r), { postCommit: true, preCommit: false, postMerge: true, postCheckout: false });
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_10@@
+});
+
+test("hunch index installs/upgrades the post-merge hook for a repo that already has hunch's post-commit hook — the upgrade path for existing installations", () => {
+  const r = committedRepo();
+  try {
+    installPostCommitHook(r, "hunch"); // as if `hunch init` ran before the post-merge hook existed
+    const run = runCli(r, "index", "--no-auto-commit");
+    assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
+    assert.match(mergeHookText(r), /repair-provenance --from-hook --quiet/);
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_11@@
+});
+
 test("hunch index self-heals the missing hooks when the post-commit block is STALE — it still proves hunch init ran (issue #315)", () => {
   const r = repo();
   try {
@@ -212,19 +282,53 @@ test("hunch index self-heals the missing hooks when the post-commit block is STA
   } finally { cleanupDir(r); }
 });
 
-@@CLEANROOM_HOLE_12@@
+test("hunch index never installs any hook in a repo that never ran hunch init — no silent hooking of an un-hooked repo (e.g. a CI checkout)", () => {
+  const r = committedRepo();
+  try {
+    const run = runCli(r, "index", "--no-auto-commit");
+    assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
+    assert.equal(existsSync(join(r, ".git", "hooks", "post-merge")), false,
+      "index must never newly hook a repo that `hunch init` never ran on");
+    assert.equal(existsSync(join(r, ".git", "hooks", "post-commit")), false);
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_13@@
+});
+
+test("hunch doctor: both hooks missing points at hunch init, not hunch index (index alone can't fix this)", () => {
+  const r = committedRepo();
+  try {
+    const run = runCli(r, "doctor");
+    const out = `${run.stdout}${run.stderr}`;
+    assert.match(out, /hooks:[\s\S]*⚠[\s\S]*missing[\s\S]*post-commit[\s\S]*post-merge/);
+    assert.match(out, /hunch init/);
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_14@@
+});
+
+test("hunch doctor: only post-merge missing points at hunch index, which will actually fix it", () => {
+  const r = committedRepo();
+  try {
+    installPostCommitHook(r, "hunch");
+    const run = runCli(r, "doctor");
+    assert.match(`${run.stdout}${run.stderr}`, /hooks:[\s\S]*⚠[\s\S]*missing[\s\S]*post-merge/);
     // Scoped to the `missing …` line itself: doctor also prints an informational
     // line naming post-commit (where the live hook points — issue #315).
     assert.doesNotMatch(`${run.stdout}${run.stderr}`, /missing[^\n]*post-commit/);
-@@CLEANROOM_HOLE_15@@
+    assert.match(`${run.stdout}${run.stderr}`, /hunch index/);
+    assert.doesNotMatch(`${run.stdout}${run.stderr}`, /hunch init/,
+      "index alone fixes this, so the human must not be sent to the heavier command");
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_16@@
+});
+
+test("hunch doctor reports hooks installed once post-commit and post-merge are present", () => {
+  const r = committedRepo();
+  try {
+    installPostCommitHook(r, "hunch");
+    installPostMergeHook(r, "hunch");
+    const run = runCli(r, "doctor");
+    assert.match(run.stdout, /hooks:\s+post-commit, post-merge installed/);
+    assert.doesNotMatch(`${run.stdout}${run.stderr}`, /⚠[^\n]*missing/);
   } finally { cleanupDir(r); }
-@@CLEANROOM_HOLE_17@@
+});
+
 test("strict pre-commit enforces the exact alternate index Git is committing", { timeout: 60_000 }, () => {
   const base = mkdtempSync(join(tmpdir(), "hunch-hook-alt-index-"));
   const r = join(base, "repo");

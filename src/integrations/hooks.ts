@@ -131,7 +131,10 @@ export interface HookInstall {
   droppedFlags?: string[];
 }
 
-@@CLEANROOM_HOLE_1@@
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Portable invocation for text that lands in a TRACKED file (a husky script, a
  *  committed hooks dir, .pre-commit-config.yaml): the same exact-version npx
  *  package reference the committed MCP/provider configs use — never this
@@ -235,7 +238,7 @@ function resolveHookTarget(root: string, hookName: string, mark: string): HookTa
   // hooks dir). isAbsolute() handles both POSIX (/…) and Windows (C:\… / C:/…);
   // a bare startsWith("/") misfired on Windows worktrees → a doubled junk path.
   const abs = isAbsolute(dir) ? dir : join(root, dir);
-@@CLEANROOM_HOLE_2@@
+  const hookPath = join(abs, hookName);
   const slashed = abs.replace(/\\/g, "/").replace(/\/+$/, "");
 
   const huskyH = readText(join(abs, "h"));
@@ -757,7 +760,7 @@ function installManagedBlock(root: string, hookName: string, mark: string, end: 
     return { path: hookPath, action: "created", ...sharedNote };
   }
 
-@@CLEANROOM_HOLE_3@@
+  if (cur.includes(mark)) {
     const closed = blockRe.test(cur);
     let next = blk;
     let note: Partial<HookInstall> = sharedNote;
@@ -859,7 +862,7 @@ function selfBuildInvocation(root: string, invocation: string): string {
   return `${JSON.stringify(process.execPath)} ${JSON.stringify(tsx)} ${JSON.stringify(entry)}`;
 }
 
-@@CLEANROOM_HOLE_4@@
+export function installPostCommitHook(root: string, invocation: string, opts: { private?: boolean; commit?: boolean; localOnly?: boolean } = {}): HookInstall {
   // Resolve shared invocation/flags before selecting the in-tree generator.
   // Rewriting the caller first hides that it came from a linked worktree.
   return installManagedBlock(root, "post-commit", MARK, ENDMARK, (inv, ctx, keep) => block(ctx.portable ? inv : selfBuildInvocation(root, inv), opts, keep), invocation);
@@ -882,27 +885,60 @@ export function installPreCommitHook(root: string, invocation: string, strict = 
   return installManagedBlock(root, "pre-commit", PRE_MARK, PRE_END, build, invocation);
 }
 
-@@CLEANROOM_HOLE_5@@
+// The original grounding marker is kept unchanged for backward compatibility, so an
+// existing grounding block is still found and updated in place.
+const GROUNDING_MERGE_MARK = "# >>> hunch post-merge >>>";
+const GROUNDING_MERGE_END = "# <<< hunch post-merge <<<";
+// The repair-provenance block gets a SEPARATE marker so the two blocks never collide
+// in one post-merge file and each can be created, updated or removed on its own.
+const REPAIR_MERGE_MARK = "# >>> hunch post-merge (repair-provenance) >>>";
+const REPAIR_MERGE_END = "# <<< hunch post-merge (repair-provenance) <<<";
 
-@@CLEANROOM_HOLE_6@@
+function groundingMergeBlock(invocation: string): string {
+  return [
+    GROUNDING_MERGE_MARK,
     'if [ -z "$HUNCH_SYNC" ]; then',
     "  if ! git diff --quiet ORIG_HEAD HEAD -- .hunch 2>/dev/null; then",
     `    ( HUNCH_SYNC=1 ${invocation} grounding --refresh 2>/dev/null || true )`,
     "  fi",
     "fi",
-@@CLEANROOM_HOLE_7@@
+    GROUNDING_MERGE_END,
   ].join("\n");
-@@CLEANROOM_HOLE_8@@
-
-@@CLEANROOM_HOLE_9@@
 }
-@@CLEANROOM_HOLE_10@@
+
+function repairProvenanceMergeBlock(invocation: string): string {
+  return [
+    REPAIR_MERGE_MARK,
+    'if [ -z "$HUNCH_MERGE_SYNC" ]; then',
+    "  export HUNCH_MERGE_SYNC=1",
+    // Detect-and-queue only, never --apply: the file-overlap match is not strong
+    // enough to trust an unattended write to shared memory. A human confirms the
+    // queue (.hunch/pending-commit-repairs.json) with `repair-provenance --apply`.
+    `  ( ${invocation} repair-provenance --from-hook --quiet >/dev/null 2>&1 || true ) &`,
+    "fi",
+    REPAIR_MERGE_END,
+  ].join("\n");
+}
+
+/** Rank used to pick ONE HookInstall action out of two independent sub-installs
+ *  into the same file. "created" (the file itself is new) outranks "appended" /
+ *  "updated" (an existing file
  *  changed), which outrank "unchanged". Non-writing results are handled before
  *  ranking (they must never be masked by a sibling's success). */
 const ACTION_RANK: Record<HookInstall["action"], number> = { created: 3, appended: 2, updated: 2, unchanged: 1, "kept-shared": 1, "managed-elsewhere": 0, unreachable: 0, "opted-out": 0 };
 
 const writes = (h: HookInstall): boolean => h.action !== "managed-elsewhere" && h.action !== "unreachable" && h.action !== "opted-out";
-@@CLEANROOM_HOLE_11@@
+
+/** Install the post-merge hook. It carries two independently managed blocks:
+ *  - grounding: re-syncs committed grounding docs when a merge brought in memory.
+ *    Guarded by HUNCH_SYNC, runs in the foreground, never fails the merge.
+ *  - repair: detects a decision's commit provenance being orphaned by a
+ *    squash-merge (including a fast-forward from `git pull`) and queues the match
+ *    for `hunch repair-provenance --apply`. Guarded by HUNCH_MERGE_SYNC, runs in
+ *    the background.
+ *  Each block is keyed by its own marker pair, so a re-run updates only its own
+ *  block, and a hook that has only one half gets the other appended, not clobbered. */
+export function installPostMergeHook(root: string, invocation: string): HookInstall {
   // Only the grounding half regenerates committed docs; repair-provenance writes
   // no docs (it only queues a match for a human to confirm), so it keeps the
   // passed invocation unchanged — see selfBuildInvocation.
@@ -926,7 +962,7 @@ const writes = (h: HookInstall): boolean => h.action !== "managed-elsewhere" && 
     ...(picked.droppedFlags ?? other.droppedFlags ? { droppedFlags: picked.droppedFlags ?? other.droppedFlags } : {}),
   };
 }
-@@CLEANROOM_HOLE_12@@
+
 /** When two snippets for the same file are joined, drop the second's leading
  *  instruction comment (the first already says where it goes). */
 function stripComment(snippet: string, manager: HookManagerKind | undefined): string {
@@ -999,7 +1035,7 @@ function reportEntry(root: string, hookName: string, marks: string[]): HookRepor
     ...(state === "unreachable" ? { reason: pick.t.reason } : state === "stale" ? { reason: pick.staleReason } : {}),
     ...(invocation ? { invocation } : {}),
     ...(flags.length ? { flags } : {}),
-@@CLEANROOM_HOLE_13@@
+  };
 }
 
 /** Read-only diagnostic (used by `hunch doctor`): each managed hook's state —
@@ -1011,12 +1047,12 @@ function reportEntry(root: string, hookName: string, marks: string[]): HookRepor
  *  repair-provenance) — a repo carrying only one is a partial install, same as
  *  `installPostMergeHook` self-healing it. Never writes anything. */
 export function hookReport(root: string): HookReport {
-@@CLEANROOM_HOLE_14@@
+  return {
     postCommit: reportEntry(root, "post-commit", [MARK]),
     preCommit: reportEntry(root, "pre-commit", [PRE_MARK]),
     postMerge: reportEntry(root, "post-merge", [GROUNDING_MERGE_MARK, REPAIR_MERGE_MARK]),
     postCheckout: reportEntry(root, "post-checkout", [CHECKOUT_MARK]),
-@@CLEANROOM_HOLE_15@@
+  };
 }
 
 /** Boolean view of `hookReport`: a hook counts as installed only when its

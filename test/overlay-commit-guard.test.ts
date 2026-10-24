@@ -187,7 +187,38 @@ for (const push of [false, true]) test(`capture never publishes index-lock owner
   } finally { cleanup(); }
 });
 
-@@CLEANROOM_HOLE_1@@
+test("commitAndPushHunch never force-adds the local-only pending-commit-repairs queue into a shared overlay", () => {
+  const { root, git, cleanup } = repo("hunch-pending-repairs-");
+  try {
+    mkdirSync(join(root, ".hunch", "decisions"), { recursive: true });
+    writeFileSync(join(root, ".hunch", "decisions", "dec_1.json"), JSON.stringify({ id: "dec_1", title: "t" }));
+    writeFileSync(join(root, ".hunch", "pending-commit-repairs.json"), JSON.stringify([{ decision: "dec_1", commit: "abc123" }]));
+    // The overlay path force-adds every JSON file and ignores gitignore, so the exclusion must be by name.
+    const r = commitAndPushHunch(join(root, ".hunch"), "hunch: capture", { push: true, protectedRepoRoot: join(root, "..") });
+    assert.equal(r, "committed");
+    const tree = git("ls-tree", "-r", "--name-only", "HEAD");
+    assert.match(tree, /decisions\/dec_1\.json/);
+    assert.doesNotMatch(tree, /pending-commit-repairs\.json/);
+    assert.equal(git("diff", "--cached", "--name-only"), "");
+  } finally { cleanup(); }
+});
+
+test("commitAndPushHunch never force-adds the local-only dropped-commit-repairs tombstone file into a shared overlay", () => {
+  const { root, git, cleanup } = repo("hunch-dropped-repairs-");
+  try {
+    mkdirSync(join(root, ".hunch", "decisions"), { recursive: true });
+    writeFileSync(join(root, ".hunch", "decisions", "dec_1.json"), JSON.stringify({ id: "dec_1", title: "t" }));
+    writeFileSync(join(root, ".hunch", "dropped-commit-repairs.json"), JSON.stringify([{ decision: "dec_1", commit: "abc123" }]));
+    // The overlay path force-adds every JSON file and ignores gitignore, so the exclusion must be by name.
+    const r = commitAndPushHunch(join(root, ".hunch"), "hunch: capture", { push: true, protectedRepoRoot: join(root, "..") });
+    assert.equal(r, "committed");
+    const tree = git("ls-tree", "-r", "--name-only", "HEAD");
+    assert.match(tree, /decisions\/dec_1\.json/);
+    assert.doesNotMatch(tree, /dropped-commit-repairs\.json/);
+    assert.equal(git("diff", "--cached", "--name-only"), "");
+  } finally { cleanup(); }
+});
+
 test("commitAndPushHunch REFUSES a JSON-only nested overlay that resolves to the code repo", () => {
   const { root, git, cleanup } = repo("hunch-nested-overlay-");
   try {

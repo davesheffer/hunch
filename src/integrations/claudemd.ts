@@ -8,8 +8,9 @@ import { writeFileAtomic } from "../core/io.js";
 import { basename, join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
-@@CLEANROOM_HOLE_1@@
+import { PolicyRepository } from "../constitution/repository.js";
 import { renderCountsMatch, parseGroundingCounts, groundingTemplate } from "../core/groundingLag.js";
+import type { GroundingCounts } from "../core/groundingLag.js";
 
 export const HUNCH_START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
 export const HUNCH_END = "<!-- HUNCH:END -->";
@@ -79,10 +80,19 @@ export function stripManagedSection(text: string): string {
 export function renderHunchSection(store: HunchStore, root?: string): string {
   const constraints = store.json
     .loadAll("constraints")
-@@CLEANROOM_HOLE_2@@
+    .filter((c) => c.status === "active" && !c.valid_to)
     .sort((a, b) => sev(b.severity) - sev(a.severity))
     .slice(0, 8);
-@@CLEANROOM_HOLE_3@@
+
+  const counts: GroundingCounts = {
+    decisions: store.json.loadAll("decisions").length,
+    bugs: store.json.loadAll("bugs").length,
+    constraints: store.json.loadAll("constraints").length,
+    components: store.json.loadAll("components").length,
+    // Public policies only: private-overlay policies must not change the committed block.
+    policies: root ? new PolicyRepository(root, store).listPolicies({ publicOnly: true }).length : 0,
+    findings: store.json.loadAll("findings").filter((f) => f.triage === "open" || f.triage === "accepted-risk" || f.triage === "scheduled").length,
+  };
 
   // Name the policy tools only where the MCP server registers them by default
   // (src/mcp/toolset.ts: on once the repo holds a policy). Only committed evidence counts:

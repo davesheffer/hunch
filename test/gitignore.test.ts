@@ -45,7 +45,20 @@ test("the release gate's OVERLAY_IGNORE mirrors the managed block byte-for-byte"
   });
 });
 
-@@CLEANROOM_HOLE_1@@
+test("ensureGitignore ignores the local-only pending-commit-repairs queue", () => {
+  inTmp((root) => {
+    ensureGitignore(root);
+    assert.match(read(root), /\.hunch\/pending-commit-repairs\.json/);
+  });
+});
+
+test("ensureGitignore ignores the local-only dropped-commit-repairs tombstone file", () => {
+  inTmp((root) => {
+    ensureGitignore(root);
+    assert.match(read(root), /\.hunch\/dropped-commit-repairs\.json/);
+  });
+});
+
 test("ensureGitignore creates a managed block when no .gitignore exists", () => {
   inTmp((root) => {
     assert.equal(ensureGitignore(root).action, "created");
@@ -65,7 +78,7 @@ test("ensureGitignore adds NO redundant block when the user already lists every 
   inTmp((root) => {
     writeFileSync(
       join(root, ".gitignore"),
-@@CLEANROOM_HOLE_2@@
+      ["node_modules/", "# my Hunch derived index", ".hunch/*.sqlite", ".hunch/*.sqlite-shm", ".hunch/*.sqlite-wal", ".hunch/*.sqlite-journal", ".hunch/**/*.tmp*", ".hunch-cache/", ".hunch/local.json", ".hunch/events.log", ".hunch/pending-commit-repairs.json", ".hunch/dropped-commit-repairs.json", ".hunch-private/", ""].join("\n"),
     );
     assert.equal(ensureGitignore(root).action, "unchanged", "all entries present → no-op");
     assert.doesNotMatch(read(root), /# >>> hunch/, "no duplicate managed block");

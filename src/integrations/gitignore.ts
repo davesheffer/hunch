@@ -33,7 +33,11 @@ const ENTRIES = [
   ".hunch/local.json",
   // The strict hook's append-only catch-log: clone-local, never a memory record.
   ".hunch/events.log",
-@@CLEANROOM_HOLE_1@@
+  // The post-merge hook's clone-local queue of unconfirmed provenance repairs —
+  // never committed; cleared by `hunch repair-provenance --apply`.
+  ".hunch/pending-commit-repairs.json",
+  // Tombstones for matches rejected via `--drop` — clone-local, never committed.
+  ".hunch/dropped-commit-repairs.json",
   // A local PRIVATE overlay store (HUNCH_PRIVATE_DIR) for sensitive memory — never
   // committed. This is the conventional in-repo path; point the env elsewhere for a
   // fully separate private repo.
