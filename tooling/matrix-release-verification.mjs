@@ -85,8 +85,8 @@ export const OVERLAY_IGNORE = [
   ".hunch-cache/",
   ".hunch/local.json",
   ".hunch/events.log",
-  ".hunch/pending-commit-repairs.json",
-  ".hunch/dropped-commit-repairs.json",
+  ".hunch/pending-commit-repairs.json", // post-merge queue of unconfirmed provenance repairs
+  ".hunch/dropped-commit-repairs.json", // tombstones for repairs rejected via --drop
   ".hunch-private/",
   "# <<< hunch <<<",
   "",

@@ -19,7 +19,7 @@ const NATIVE_PACKAGES = [
   "tree-sitter-python",
   "tree-sitter-go",
   "tree-sitter-php",
-  "@tree-sitter-grammars/tree-sitter-yaml",
+  "tree-sitter-yaml",
 ] as const;
 
 type NodeGypBuild = ((root: string) => unknown) & { path(root: string): string };
@@ -102,8 +102,11 @@ function removeStaleCopies(): void {
   }
 }
 
+/** node-gyp-build keys the redirect on the package's own `name`, not the
+ *  specifier it was required by — the two differ for an npm alias. */
 function environmentKey(packageName: string): string {
-  return `${packageName.toUpperCase().replaceAll("-", "_")}_PREBUILD`;
+  const { name } = runtimeRequire(`${packageName}/package.json`) as { name: string };
+  return `${name.toUpperCase().replaceAll("-", "_")}_PREBUILD`;
 }
 
 /** The per-user copy cache. A binary copied to a fresh path costs a first-load
@@ -248,7 +251,7 @@ function loadRuntime(): NativeTreeSitterRuntime {
     const python = runtimeRequire("tree-sitter-python") as unknown;
     const go = runtimeRequire("tree-sitter-go") as unknown;
     const php = runtimeRequire("tree-sitter-php") as { php: unknown };
-    const yaml = runtimeRequire("@tree-sitter-grammars/tree-sitter-yaml") as unknown;
+    const yaml = runtimeRequire("tree-sitter-yaml") as unknown;
     runtime = { Parser, typescript: languages.typescript, tsx: languages.tsx, python, go, php: php.php, yaml };
   } finally {
     for (const [key, value] of previous) {

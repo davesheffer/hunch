@@ -165,12 +165,12 @@ export type Resource = z.infer<typeof ResourceSchema>;
 export const EdgeType = z.enum([
   "depends_on",
   "calls",
+  "references",
   "imports",
   "contains",
   "implements",
   "supersedes",
   "related_to",
-  "references",
   "provides",
   "belongs_to",
   "implemented_by",

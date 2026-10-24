@@ -137,9 +137,9 @@
 
 ## 1.39.3 — 2026-09-19
 
-- `hunch supersede <old> --by <new>` resolves both decisions in whichever memory home holds them, so it no longer fails with "not found" in shared mode and can close an overlay decision in private mode (#294). Contributed by @MrSampson.
-- `hunch_why`, `hunch_check_constraints`, `hunch_get_dependents`, `hunch_blast_radius` and the pre-edit hook no longer match the wrong file: an absolute path is resolved to its repo-relative form, a bare filename no longer matches a file that merely ends with it (`db.ts` vs `mongodb.ts`), and a nested same-named file (`index.ts`) no longer inherits records scoped to another file of that name (#296, #299, #300). Contributed by @MrSampson.
-- A `<!-- hunch:topic … -->` marker shown as an example inside a code fence is left alone: on a CRLF checkout `hunch drift` and the pre-edit hook no longer report it as a stale or dangling anchor (#298, contributed by @MrSampson), and wiki adoption no longer rewrites it or injects a callout into the fence (#332).
+- `hunch supersede <old> --by <new>` resolves both decisions in whichever memory home holds them, so it no longer fails with "not found" in shared mode and can close an overlay decision in private mode (#294).
+- `hunch_why`, `hunch_check_constraints`, `hunch_get_dependents`, `hunch_blast_radius` and the pre-edit hook no longer match the wrong file: an absolute path is resolved to its repo-relative form, a bare filename no longer matches a file that merely ends with it (`db.ts` vs `mongodb.ts`), and a nested same-named file (`index.ts`) no longer inherits records scoped to another file of that name (#296, #299, #300).
+- A `<!-- hunch:topic … -->` marker shown as an example inside a code fence is left alone: on a CRLF checkout `hunch drift` and the pre-edit hook no longer report it as a stale or dangling anchor (#298), and wiki adoption no longer rewrites it or injects a callout into the fence (#332).
 - Reindexing (`hunch index`, post-commit sync) replaces only the edges the scan can re-derive; `supersedes` edges and human-reviewed Landscape relationships are carried forward instead of deleted (#288).
 - Merging two branches that each moved the same decision's lifecycle (a supersede on one side, a review or accept on the other) keeps both moves instead of silently dropping one (#290).
 - A stray copy of a record file (a mergetool `_BASE_` leftover, an `.orig` backup, a cloud-sync `(1)` duplicate) no longer breaks the index rebuild: it is skipped with a warning when the canonical file exists, and kept with a warning when it is the record's only copy (#291).
@@ -183,8 +183,8 @@
 - Worktrees and branches sync across machines through the memory overlay you already have: each machine keeps one record, so two machines can never conflict over it. Records refresh on branch checkout, on `hunch worktree`, and whenever an agent reads the ledger; `hunch workspaces snapshot` records on demand. A machine is identified by a random id stored per user, never by its hostname or hardware, and the default `branches` publish mode shares branch verdicts without any local paths.
 - `hunch workspaces prune` prints the exact `git worktree remove` / `git branch -d` commands per machine for branches provably merged with a clean, unlocked worktree, and names every merged branch it leaves alone and why. `--apply` runs only this machine's commands, only from a snapshot taken at that moment, without force flags and after confirmation; it never deletes a remote branch and never acts on another machine.
 - `hunch now` and `hunch doctor` report the ledger (machines, worktrees, deletable branches; this machine's label and whether its record is in memory), and `hunch init` scaffolds a `/worktrees` command.
-- Kubernetes manifests become a graph: a Deployment's ConfigMap/Secret/PVC references, a Service's label selector, Ingress and HTTPRoute backends and `ownerReferences` are indexed as `references` edges between the manifests, including Helm charts whose names go through a shared template helper, so blast radius and dependents answer "what breaks if I change this ConfigMap". Anything the scanner cannot account for emits no edge rather than a guess. Contributed by @MrSampson.
-- Constitution source mutation splices text by string index instead of UTF-8 bytes, so a mutation target after non-ASCII source is no longer corrupted; Helm extractor offsets are named `*Char` to say what they are. Contributed by @MrSampson.
+- Kubernetes manifests become a graph: a Deployment's ConfigMap/Secret/PVC references, a Service's label selector, Ingress and HTTPRoute backends and `ownerReferences` are indexed as `references` edges between the manifests, including Helm charts whose names go through a shared template helper, so blast radius and dependents answer "what breaks if I change this ConfigMap". Anything the scanner cannot account for emits no edge rather than a guess.
+- Constitution source mutation splices text by string index instead of UTF-8 bytes, so a mutation target after non-ASCII source is no longer corrupted; Helm extractor offsets are named `*Char` to say what they are.
 - The post-commit G2 shadow sweep skips retired policies instead of adding a new shadow receipt for them on every commit.
 
 ## 1.38.1 — 2026-09-16
@@ -1131,7 +1131,7 @@ fails closed and GitHub Actions `${{ }}` expressions are not mistaken for Helm s
 The merge also fixes two graph-integrity seams surfaced by YAML: root-level files now belong to an
 exact-file component instead of a repository-wide `./**` glob, and call attribution keys on a
 symbol's stable array position so overlapping synthetic YAML/Helm symbols cannot collapse at byte
-zero. YAML and Helm support was contributed by Oliver Sampson and reconciled with the current Go,
+zero. YAML and Helm support was reconciled with the current Go,
 HLG, and schema-generation contracts before release.
 
 ### A repository becomes a versioned landscape fragment
