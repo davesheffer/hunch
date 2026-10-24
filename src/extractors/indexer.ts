@@ -750,7 +750,7 @@ function pushInto<K, V>(map: Map<K, V[]>, key: K, value: V): void {
  *  `<dir>/Chart.yaml` is tracked; nested subcharts resolve to their OWN root. This
  *  is a conservative approximation of Helm's release-global template namespace
  *  (issue #42): a parent including a subchart define is missed, never wrongly linked. */
-function nearestChartRoot(tracked: readonly string[]): (file: string) => string | null {
+export function nearestChartRoot(tracked: readonly string[]): (file: string) => string | null {
   const trackedSet = new Set(tracked);
   const memo = new Map<string, string | null>();
   const rootOf = (dir: string): string | null => {
@@ -760,7 +760,8 @@ function nearestChartRoot(tracked: readonly string[]): (file: string) => string 
     else if (dir === "") result = null;
     else {
       const parent = posix.dirname(dir);
-      result = rootOf(parent === "." ? "" : parent);
+      // dirname is a fixed point at the filesystem root ("/"): stop, no chart found.
+      result = parent === dir ? null : rootOf(parent === "." ? "" : parent);
     }
     memo.set(dir, result);
     return result;

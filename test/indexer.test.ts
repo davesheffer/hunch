@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { indexRepo, isExtractorEdge, mergeScannedEdges } from "../src/extractors/indexer.js";
+import { indexRepo, isExtractorEdge, mergeScannedEdges, nearestChartRoot } from "../src/extractors/indexer.js";
 import { pathMatchesGlob } from "../src/core/glob.js";
 import { edgeId, resourceId, resourceRelationshipId } from "../src/core/ids.js";
 import { EdgeSchema, RESOURCE_RELATIONSHIP_SCHEMA_VERSION, extracted } from "../src/core/types.js";
@@ -1398,4 +1398,19 @@ spec:
 
   store.close();
   cleanupDir(root);
+});
+
+test("nearestChartRoot: absolute path with no chart returns null instead of recursing forever", () => {
+  assert.equal(nearestChartRoot([])("/abs/dir/x.yaml"), null);
+});
+
+test("nearestChartRoot: resolves the nearest tracked chart root", () => {
+  const lookup = nearestChartRoot(["charts/a/Chart.yaml", "charts/a/templates/t.yaml"]);
+  assert.equal(lookup("charts/a/templates/t.yaml"), "charts/a");
+  assert.equal(lookup("other/x.yaml"), null);
+});
+
+test("nearestChartRoot: repo-root chart has root empty string", () => {
+  const lookup = nearestChartRoot(["Chart.yaml", "templates/t.yaml"]);
+  assert.equal(lookup("templates/t.yaml"), "");
 });
