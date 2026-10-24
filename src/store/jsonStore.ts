@@ -22,7 +22,7 @@ import { hostname } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, SCHEMAS, type EntityKind, type EntityFor } from "../core/types.js";
-import { BASELINE_VERSION, migrateRaw, SCHEMA_VERSION } from "../core/migrate.js";
+import { BASELINE_VERSION, hasPendingMigration, migrateRaw, SCHEMA_VERSION } from "../core/migrate.js";
 import { writeFileAtomic } from "../core/io.js";
 import { readStoreArtifact } from "../core/storeArtifact.js";
 import { createdAfterLock, heldLockNonces, judgeSameHostOwner, processStartedAt, selfStartToken, startTokenOf } from "../core/procstart.js";
@@ -929,18 +929,25 @@ export class JsonStore {
   }
 
   /** Persist a schema migration: rewrite every LOADABLE record in its current shape.
-   *  A record that still fails validation after migration is kept untouched (never
-   *  deleted) and counted as `skipped`, so migration can't lose data. The caller
-   *  bumps the manifest afterward. */
-  persistMigration(): { migrated: number; skipped: number } {
+   *  A record that still fails validation after migration (or whose migration
+   *  throws) is kept in its ORIGINAL shape (never deleted, never half-migrated) and
+   *  counted as `skipped`, so migration can't lose data. The caller stamps the
+   *  manifest at the returned `version`: SCHEMA_VERSION only when nothing was
+   *  skipped, else the FROM version, so a manual fix plus a rerun re-applies the
+   *  (idempotent) migrations to the skipped records instead of skipping them.
+   *  A bad record of a kind NO pending migration touches can't be fixed by a
+   *  rerun, so it is counted as `invalid` instead and doesn't hold the version. */
+  persistMigration(): { migrated: number; skipped: number; invalid: number; version: number } {
     let migrated = 0;
     let skipped = 0;
+    let invalid = 0;
     this.cache.clear(); // every record is rewritten; drop all memoized loads
     const version = this.schemaVersion(); // read once; we're migrating FROM this
     for (const kind of ENTITY_KINDS) {
       const directory = this.safeKindDirectory(kind, false);
       if (!directory) continue;
-      const schema = SCHEMAS[kind];
+      const pending = hasPendingMigration(kind, version);
+      const fail = (): void => { if (pending) skipped++; else invalid++; };
       const single = SINGLE_FILE[kind];
       if (single) {
         const f = join(directory.lexical, single);
@@ -950,22 +957,22 @@ export class JsonStore {
           if (text === null) continue;
           arr = JSON.parse(text);
         } catch {
-          skipped++;
+          fail();
           continue;
         }
         if (!Array.isArray(arr)) {
-          skipped++;
+          fail();
           continue;
         }
         const kept: unknown[] = [];
         for (const raw of arr) {
-          const r = schema.safeParse(this.migrate(kind, raw, version));
+          const r = this.tryMigrate(kind, raw, version);
           if (r.success) {
             kept.push(r.data);
             migrated++;
           } else {
             kept.push(raw); // preserve unmigratable records rather than drop them
-            skipped++;
+            fail();
           }
         }
         this.writeContainedFile(directory, f, encode(kept), this.maxBytes(kind));
@@ -976,21 +983,34 @@ export class JsonStore {
           try {
             const text = this.readContainedFile(directory, p, this.maxBytes(kind));
             if (text === null) continue;
+            // A 0-byte merge-driver tombstone holds no record (issue #37) — the
+            // loader's rule; counting it would pin the manifest version forever.
+            if (text.trim() === "") continue;
             raw = JSON.parse(text);
           } catch {
-            skipped++;
+            fail();
             continue;
           }
-          const r = schema.safeParse(this.migrate(kind, raw, version));
+          const r = this.tryMigrate(kind, raw, version);
           if (r.success) {
             this.writeContainedFile(directory, p, encode(r.data), this.maxBytes(kind));
             migrated++;
           } else {
-            skipped++; // leave the file as-is
+            fail(); // leave the file as-is
           }
         }
       }
     }
-    return { migrated, skipped };
+    return { migrated, skipped, invalid, version: skipped ? version : SCHEMA_VERSION };
+  }
+
+  /** Migrate + validate one raw record for persistMigration; a throwing migration
+   *  step counts as a failure, so the record stays in its original shape. */
+  private tryMigrate(kind: EntityKind, raw: unknown, version: number): { success: true; data: unknown } | { success: false } {
+    try {
+      return SCHEMAS[kind].safeParse(this.migrate(kind, raw, version));
+    } catch {
+      return { success: false };
+    }
   }
 }

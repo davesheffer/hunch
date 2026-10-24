@@ -77,7 +77,7 @@ test("persistMigration rewrites loadable records and never drops an unmigratable
 
   const res = store.persistMigration();
   assert.ok(res.migrated >= 2, "valid records rewritten");
-  assert.equal(res.skipped, 1, "the invalid symbol is counted skipped");
+  assert.equal(res.skipped + res.invalid, 1, "the invalid symbol is counted, not hidden");
   const after = JSON.parse(readFileSync(symIndex, "utf8")) as Array<{ id: string }>;
   assert.ok(after.some((r) => r.id === "sym_bad"), "unmigratable record preserved, not deleted");
   assert.ok(after.some((r) => r.id === "sym_ok"));
@@ -144,5 +144,118 @@ test("loadAll warns once and still loads when .hunch/ is from a NEWER schema", (
     console.warn = orig;
   }
   assert.ok(warnings.some((w) => /newer schema/.test(w)), "warned about forward-incompatibility");
+  cleanup();
+});
+
+test("migrateRaw never mutates its input, even when a step throws mid-way", () => {
+  const migs: Migration[] = [
+    { version: 2, description: "add a", up: (_k, r) => { r.a = 1; return r; } },
+    { version: 3, description: "boom", up: () => { throw new Error("boom"); } },
+  ];
+  const raw = { id: "x", nested: { n: 1 } };
+  const out = migrateRaw("decisions", raw, 1, migs.slice(0, 1), 2) as { nested: { n: number } };
+  out.nested.n = 99;
+  assert.deepEqual(raw, { id: "x", nested: { n: 1 } }, "result is a deep copy");
+  assert.throws(() => migrateRaw("decisions", raw, 1, migs, 3), /boom/);
+  assert.deepEqual(raw, { id: "x", nested: { n: 1 } }, "a failed run leaves the original intact");
+});
+
+const edgeRaw = (id: string, type: string) => ({
+  id, from: "a", to: "b", type, reason: "", strength: 0.5,
+  provenance: { source: "derived", confidence: 0.9, evidence: [] },
+});
+
+test("persistMigration: an unmigratable edge stays in its original shape and holds the version (#509)", () => {
+  const { root, cleanup } = tmp();
+  const paths = hunchPaths(root);
+  const store = new JsonStore(paths);
+  store.ensureDirs();
+  writeManifest(paths, 2); // pre-v3 edges: no schema/environment/metadata yet
+  const idx = join(paths.dir("edges"), "index.json");
+  const bad = edgeRaw("edge_bad", "not-a-real-type");
+  writeFileSync(idx, JSON.stringify([edgeRaw("edge_ok", "calls"), bad], null, 2));
+
+  const res = store.persistMigration();
+  assert.equal(res.skipped, 1);
+  assert.equal(res.version, 2, "version does not advance past the failed record");
+  const after = JSON.parse(readFileSync(idx, "utf8")) as Array<Record<string, unknown>>;
+  const keptBad = after.find((r) => r.id === "edge_bad");
+  assert.equal(JSON.stringify(keptBad), JSON.stringify(bad), "failed edge kept byte-for-byte, not half-migrated");
+  assert.equal(after.find((r) => r.id === "edge_ok")!.schema, "hunch.edge/1", "valid sibling migrated");
+
+  // Manual fix + rerun completes the migration.
+  writeManifest(paths, res.version);
+  writeFileSync(idx, JSON.stringify(after.map((r) => (r.id === "edge_bad" ? { ...r, type: "calls" } : r)), null, 2));
+  const rerun = store.persistMigration();
+  assert.deepEqual({ skipped: rerun.skipped, version: rerun.version }, { skipped: 0, version: SCHEMA_VERSION });
+  const fixed = (JSON.parse(readFileSync(idx, "utf8")) as Array<Record<string, unknown>>).find((r) => r.id === "edge_bad")!;
+  assert.equal(fixed.schema, "hunch.edge/1");
+  assert.deepEqual(fixed.metadata, {});
+  cleanup();
+});
+
+test("persistMigration: an unmigratable per-record file is untouched and a rerun after a fix migrates it (#509)", () => {
+  const { root, cleanup } = tmp();
+  const paths = hunchPaths(root);
+  const store = new JsonStore(paths);
+  store.ensureDirs();
+  writeManifest(paths, BASELINE_VERSION); // v1 decisions: no valid_from yet
+  const v1 = (id: string, status: string) => ({
+    id, title: "t", status, context: "", decision: "d", consequences: [], alternatives_rejected: [],
+    related_components: [], related_files: [], supersedes: null, caused_by_bug: null, commit: null,
+    provenance: { source: "llm_draft", confidence: 0.3, evidence: [] }, date: "2026-01-01T00:00:00Z",
+  });
+  const dir = paths.dir("decisions");
+  writeFileSync(join(dir, "dec_ok.json"), JSON.stringify(v1("dec_ok", "proposed"), null, 2));
+  const badPath = join(dir, "dec_bad.json");
+  const badBytes = JSON.stringify(v1("dec_bad", "bogus-status"), null, 2);
+  writeFileSync(badPath, badBytes);
+
+  const res = store.persistMigration();
+  assert.equal(res.skipped, 1);
+  assert.equal(res.version, BASELINE_VERSION, "version held so later migrations re-run on the failed record");
+  assert.equal(readFileSync(badPath, "utf8"), badBytes, "failed record unchanged byte-for-byte");
+  assert.equal((JSON.parse(readFileSync(join(dir, "dec_ok.json"), "utf8")) as { valid_from: string }).valid_from, "2026-01-01T00:00:00Z");
+
+  writeManifest(paths, res.version);
+  writeFileSync(badPath, JSON.stringify(v1("dec_bad", "proposed"), null, 2));
+  const rerun = store.persistMigration();
+  assert.deepEqual({ skipped: rerun.skipped, version: rerun.version }, { skipped: 0, version: SCHEMA_VERSION });
+  const fixed = JSON.parse(readFileSync(badPath, "utf8")) as { valid_from: string; superseded_by: unknown };
+  assert.equal(fixed.valid_from, "2026-01-01T00:00:00Z", "the v2 migration ran on the fixed record");
+  assert.equal(fixed.superseded_by, null);
+  cleanup();
+});
+
+test("persistMigration ignores a 0-byte merge-driver tombstone (it holds no record, #37)", () => {
+  const { root, cleanup } = tmp();
+  const paths = hunchPaths(root);
+  const store = new JsonStore(paths);
+  store.ensureDirs();
+  writeManifest(paths, 2);
+  const dir = paths.dir("decisions");
+  writeFileSync(join(dir, "dec_tomb.json"), "");
+  writeFileSync(join(dir, "dec_ok.json"), JSON.stringify({
+    id: "dec_ok", title: "t", status: "proposed", context: "", decision: "d", consequences: [], alternatives_rejected: [],
+    related_components: [], related_files: [], supersedes: null, caused_by_bug: null, commit: null,
+    provenance: { source: "llm_draft", confidence: 0.3, evidence: [] }, date: "2026-01-01T00:00:00Z",
+  }, null, 2));
+  const res = store.persistMigration();
+  assert.deepEqual({ skipped: res.skipped, invalid: res.invalid, version: res.version }, { skipped: 0, invalid: 0, version: SCHEMA_VERSION });
+  assert.equal(readFileSync(join(dir, "dec_tomb.json"), "utf8"), "", "tombstone left as-is");
+  cleanup();
+});
+
+test("persistMigration: a corrupt record of a kind no pending migration touches is invalid, not held (#509)", () => {
+  const { root, cleanup } = tmp();
+  const paths = hunchPaths(root);
+  const store = new JsonStore(paths);
+  store.ensureDirs();
+  writeManifest(paths, BASELINE_VERSION); // pending: v2 (decisions, constraints), v3 (edges)
+  const badPath = join(paths.dir("bugs"), "bug_bad.json");
+  writeFileSync(badPath, "{ not json");
+  const res = store.persistMigration();
+  assert.deepEqual({ skipped: res.skipped, invalid: res.invalid, version: res.version }, { skipped: 0, invalid: 1, version: SCHEMA_VERSION });
+  assert.equal(readFileSync(badPath, "utf8"), "{ not json", "left untouched");
   cleanup();
 });

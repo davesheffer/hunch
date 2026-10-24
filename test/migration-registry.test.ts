@@ -94,6 +94,7 @@ test("every kind a step touches has a raw fixture, and every fixture is a touche
     const touched = [...touchedKinds(m.up.bind(m))].sort();
     const registered = Object.keys(STEP_TESTS[m.version] ?? {}).sort();
     assert.deepEqual(registered, touched, `v${m.version} (${m.description}) fixtures must cover exactly the kinds it touches`);
+    if (m.kinds) assert.deepEqual([...m.kinds].sort(), touched, `v${m.version} declares exactly the kinds it touches`);
   }
 });
 
@@ -140,8 +141,8 @@ for (const m of MIGRATIONS) {
         assert.ok(existsSync(badFile), "unmigratable record's file survives");
         if (SINGLE_FILE_KINDS.has(kind)) {
           const after = JSON.parse(readFileSync(badFile, "utf8")) as Raw[];
-          // Index kinds keep the record as migration left it (migrateRaw mutates in
-          // place), so assert every original field survives rather than byte equality.
+          // Index kinds re-encode the whole file, so assert every original field
+          // survives rather than byte equality.
           const kept = after.find((r) => r.id === bad.id);
           assert.ok(kept, "unmigratable record preserved in the index");
           for (const [k, v] of Object.entries(bad)) assert.deepEqual(kept[k], v, `unmigratable ${kind}.${k} preserved`);
