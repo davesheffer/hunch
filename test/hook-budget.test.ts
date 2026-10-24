@@ -143,11 +143,10 @@ const GROWTH_CONSTANT = 4;
 const HOOKS: { name: string; payload: (root: string) => Record<string, unknown>; ceiling: number; growthTodo?: string }[] = [
   {
     name: "PreToolUse (pre-edit)", payload: preEdit, ceiling: 110,
-    // Measured 2026-10-22: N=10 → 24, N=40 → 84 (rev-parse 42, merge-base 40).
-    // The #473 memo is process-wide, but each hook call is a FRESH process, so
-    // every capture commit still costs `rev-parse --verify` + `merge-base
-    // --is-ancestor` per invocation: 2 spawns per decision, linear in N.
-    growthTodo: "pre-edit delivery still spawns 2 git processes per capture commit in a fresh hook process (#473 memo is in-process only); needs a batched or persisted reachability probe",
+    // Measured 2026-10-22: N=10 → 24, N=40 → 84 (rev-parse 42, merge-base 40):
+    // each hook call is a FRESH process, so the #473 memo never helped and every
+    // capture commit cost `rev-parse --verify` + `merge-base --is-ancestor`.
+    // #485 batches them into one `cat-file --batch-check` + one `rev-list`.
   },
   { name: "UserPromptSubmit", payload: promptSubmit, ceiling: 4 },
 ];

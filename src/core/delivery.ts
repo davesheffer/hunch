@@ -482,12 +482,14 @@ function componentResolves(id: string, target: string, options: DeliveryOptions)
 
 let gitProbeCount = 0;
 
-function gitProbe(root: string, args: string[]): { available: boolean; status: number | null; stdout: string } {
+function gitProbe(root: string, args: string[], input?: string): { available: boolean; status: number | null; stdout: string } {
   gitProbeCount++;
   const result = spawnSync("git", ["-C", root, ...args], {
     encoding: "utf8",
     env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" },
-    stdio: ["ignore", "pipe", "ignore"],
+    input,
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
     timeout: 2_000,
     windowsHide: true,
   });
@@ -530,11 +532,63 @@ function memoizeReachability(key: string, verdict: CommitReachability): CommitRe
   return verdict;
 }
 
-export function localCommitReachability(root: string): (commit: string) => CommitReachability {
+/** A per-build reachability probe. `prime` registers the commits the build may
+ *  ask about; the first lookup then judges all of them in two batched spawns. */
+export type LocalCommitReachability = ((commit: string) => CommitReachability) & {
+  prime: (commits: readonly string[]) => void;
+};
+
+export function localCommitReachability(root: string): LocalCommitReachability {
   let initialized = false;
   let branch: string | null = null;
   let tip: string | null = null;
-  return (commit: string): CommitReachability => {
+  // #485: each hook call is a fresh process, so the memo alone still cost two
+  // spawns per capture commit. Primed commits are judged together on the first
+  // lookup — one `cat-file --batch-check` resolves them, one `rev-list` tests
+  // ancestry — and kept for this build only. A spawn failure (timeout, ENOBUFS)
+  // primes every pending commit "unknown", the verdict a failed per-commit probe
+  // gives, so a slow git costs one timeout rather than 2N more spawns. Unexpected
+  // output leaves a commit unprimed and the per-commit path below decides it, so
+  // within a build the verdicts match that path.
+  let expected: string[] = [];
+  const primed = new Map<string, CommitReachability>();
+  const batch = (commits: readonly string[]): void => {
+    const pending = [...new Set(commits)].filter((commit) =>
+      /^[0-9a-f]{7,64}$/i.test(commit) && !primed.has(commit) && !(tip && reachabilityMemo.has(`${root}\0${tip}\0${commit}`)));
+    if (!pending.length || !branch) return;
+    const resolved = gitProbe(root, ["cat-file", "--batch-check=%(objectname)"], pending.map((commit) => `${commit}^{commit}\n`).join(""));
+    if (!resolved.available) {
+      for (const commit of pending) primed.set(commit, "unknown");
+      return;
+    }
+    const lines = resolved.stdout.split(/\r?\n/);
+    if (resolved.status !== 0 || lines.length !== pending.length) return;
+    const shas = new Map<string, string>();
+    for (const [i, commit] of pending.entries()) {
+      const line = lines[i]!;
+      if (/^[0-9a-f]{40,64}$/i.test(line)) shas.set(commit, line);
+      // A missing object is not memoized, as on the per-commit path.
+      else if (line === `${commit}^{commit} missing` || line === `${commit}^{commit} ambiguous`) primed.set(commit, "unreachable");
+      else return;
+    }
+    if (!shas.size) return;
+    // `rev-list <shas> ^<tip>` lists exactly the commits NOT reachable from the tip.
+    // It prints the whole history behind an unreachable capture commit (e.g.
+    // orphaned by a rewrite), so this probe costs O(|unreachable history|); a
+    // history big enough to time out primes "unknown" below.
+    const listed = gitProbe(root, ["rev-list", "--stdin"], `${[...new Set(shas.values())].join("\n")}\n^${tip ?? branch}\n`);
+    // A failed spawn or a nonzero exit is a merge-base answer outside 0/1: "unknown", never memoized.
+    if (!listed.available || listed.status !== 0) {
+      for (const commit of shas.keys()) primed.set(commit, "unknown");
+      return;
+    }
+    const unreachable = new Set(listed.stdout.split(/\r?\n/).filter(Boolean));
+    for (const [commit, sha] of shas) {
+      const verdict: CommitReachability = unreachable.has(sha) ? "unreachable" : "reachable";
+      primed.set(commit, tip ? memoizeReachability(`${root}\0${tip}\0${commit}`, verdict) : verdict);
+    }
+  };
+  const lookup = (commit: string): CommitReachability => {
     if (!initialized) {
       // The default ref is looked up every build (origin/HEAD can be retargeted
       // while the old ref still exists); only verdicts are shared across builds.
@@ -556,6 +610,13 @@ export function localCommitReachability(root: string): (commit: string) => Commi
     const key = tip ? `${root}\0${tip}\0${commit}` : null;
     const memo = key ? reachabilityMemo.get(key) : undefined;
     if (memo) return memo;
+    if (expected.length && !primed.has(commit)) {
+      const commits = [...expected, commit];
+      expected = [];
+      batch(commits);
+    }
+    const batched = primed.get(commit);
+    if (batched) return batched;
     const remember = (verdict: CommitReachability): CommitReachability =>
       key ? memoizeReachability(key, verdict) : verdict;
     const exact = gitProbe(root, ["rev-parse", "--verify", "--quiet", `${commit}^{commit}`]);
@@ -568,6 +629,7 @@ export function localCommitReachability(root: string): (commit: string) => Commi
     if (ancestry.status === 1) return remember("unreachable");
     return "unknown";
   };
+  return Object.assign(lookup, { prime: (commits: readonly string[]) => { expected.push(...commits); } });
 }
 
 function validationState(
@@ -732,8 +794,10 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
   const profile = options.profile ?? "builder";
   const budget = Number.isFinite(ctx.budget_tokens) ? Math.max(0, Math.floor(ctx.budget_tokens)) : 1500;
   const cap = budget * 4;
-  const reachability = options.commitReachability
-    ?? (options.root ? localCommitReachability(options.root) : (() => "unknown" as const));
+  const local = !options.commitReachability && options.root ? localCommitReachability(options.root) : null;
+  // Only decisions carry a capture commit; register them so the first lookup batches them all (#485).
+  local?.prime(ctx.decisions.flatMap((decision) => decision.commit ? [decision.commit] : []));
+  const reachability = options.commitReachability ?? local ?? (() => "unknown" as const);
   const canValidateAnchors = options.root !== undefined || options.symbols !== undefined || options.components !== undefined;
   const candidates: Candidate[] = [];
   const query = queryProfile(ctx.target, options);
