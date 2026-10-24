@@ -249,15 +249,30 @@ function explicitToolOutcome(response: unknown): HunchToolOutcome["status"] {
   return "unknown";
 }
 
-function normalizeToolOutcome(input: JsonObject, event: HunchHookEvent): HunchToolOutcome | undefined {
+/** Cursor's postToolUse carries `tool_output` as a JSON-stringified result
+ * payload, e.g. `{"exitCode":0,"stdout":"..."}` (cursor.com/docs/agent/hooks, #496).
+ * Parsed, its exit code reaches the probe gate; text that is not a JSON object
+ * stays a bare string, which carries no status. */
+function cursorToolOutput(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return obj(parsed) ?? value;
+  } catch {
+    return value;
+  }
+}
+
+function normalizeToolOutcome(input: JsonObject, event: HunchHookEvent, provider?: HookProvider): HunchToolOutcome | undefined {
   if (event !== "PostToolUse" && event !== "PostToolUseFailure") return undefined;
-  const response = input.tool_response ?? input.toolResponse ?? input.tool_result ?? input.toolResult;
+  const response = input.tool_response ?? input.toolResponse ?? input.tool_result ?? input.toolResult
+    ?? (provider === "cursor" ? cursorToolOutput(input.tool_output) ?? input.output : undefined);
   return {
     // Claude Code splits successful and failed calls into separate lifecycle
     // events. Providers without that split may expose an explicit result flag.
     status: event === "PostToolUseFailure" ? "failure" : explicitToolOutcome(response),
     output: event === "PostToolUseFailure"
-      ? toolOutput(input.error ?? response)
+      ? toolOutput(input.error ?? (provider === "cursor" ? input.error_message : undefined) ?? response)
       : toolOutput(response),
   };
 }
@@ -363,10 +378,14 @@ export function normalizeHookEvent(raw: unknown, provider: HookProvider): HunchH
 
   const event = eventName(input.hook_event_name ?? input.hookEventName ?? input.event, provider);
   if (!event) return null;
-  const rawToolName = stringAt(input, "tool_name", "toolName");
-  const toolInput = normalizeToolInput(input.tool_input ?? input.toolInput,
+  // Cursor's before/afterShellExecution carry the command at top level and no
+  // tool name. afterShellExecution has no exit status (only `output`), so its
+  // outcome stays unknown; the installed postToolUse hook delivers the status.
+  const cursorShell = provider === "cursor" && input.tool_name === undefined && input.tool_input === undefined && typeof input.command === "string";
+  const rawToolName = cursorShell ? "Shell" : stringAt(input, "tool_name", "toolName");
+  const toolInput = normalizeToolInput(cursorShell ? { command: input.command } : input.tool_input ?? input.toolInput,
     provider === "codex" && /^(?:apply_patch|patch)$/i.test(rawToolName ?? ""));
-  const toolOutcome = normalizeToolOutcome(input, event);
+  const toolOutcome = normalizeToolOutcome(input, event, provider);
   return {
     hook_event_name: event,
     session_id: stringAt(input, "session_id", "sessionId", "conversation_id", "conversationId"),

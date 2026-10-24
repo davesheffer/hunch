@@ -426,9 +426,27 @@ function publishedPinEvents(file: string): Set<string> | null {
 
 /** Windsurf's documented workspace hooks. It only supports deterministic
  * pre-hook blocking via exit code 2, so Hunch uses rules + MCP for context and
- * reserves the hook for strict edit protection and pipeline observation. */
-export function writeWindsurfHooks(root: string, inv: Invocation): string {
-  const file = join(root, ".windsurf", "hooks.json");
+ * reserves the hook for strict edit protection and pipeline observation.
+ * Devin Desktop (formerly Windsurf) reads .devin/hooks.json and ignores the
+ * legacy .windsurf/hooks.json whenever the former defines any hook, so Hunch
+ * merges into both (docs.devin.ai/desktop/cascade/hooks, #494). Both files are
+ * parsed before either is written: an unparseable one refuses the whole write. */
+export function writeWindsurfHooks(root: string, inv: Invocation): string[] {
+  const files = [join(root, ".windsurf", "hooks.json"), join(root, ".devin", "hooks.json")];
+  // Same shape checks writeHookConfig applies at write time, so neither file is
+  // written when the other would refuse.
+  for (const file of files) {
+    const hooks = objectField(readJsonObj(file), "hooks", file);
+    for (const event of WINDSURF_EVENTS) {
+      if (hooks[event] !== undefined && !Array.isArray(hooks[event])) {
+        throw new Error(`refusing to edit ${file}: hooks.${event} must be an array when present; fix it, then re-run.`);
+      }
+    }
+  }
+  return files.map((file) => writeWindsurfHookFile(file, inv));
+}
+
+function writeWindsurfHookFile(file: string, inv: Invocation): string {
   const published = hookCommand(publishedMcpInvocation(), "windsurf");
   let command = hookCommand(inv, "windsurf");
   // A source-checkout run (tsx / local dist) must never replace a tracked

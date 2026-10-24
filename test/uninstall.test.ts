@@ -4,6 +4,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { cleanupDir, isolatedCliEnv, tempDir } from "./fixtures.js";
+import { writeWindsurfHooks } from "../src/integrations/providers.js";
 import { hunchCliArgs } from "./cli-invocation.js";
 import { applyUninstall, formatUninstallPlan, OPT_OUT_FILE, planUninstall, type UninstallPlan } from "../src/integrations/uninstall.js";
 import { HUNCH_END, HUNCH_START } from "../src/integrations/claudemd.js";
@@ -212,6 +213,25 @@ test("every command but uninstall/doctor/help refuses in an opted-out repo, and 
     }
     assert.equal(git("status", "--porcelain", "--untracked-files=all").trim(), `?? .hunch-removed`, "no command wrote anything (hunch ci included)");
   } finally { cleanupDir(base); }
+});
+
+test("uninstall strips Hunch from .devin/hooks.json, keeps a user hook, and prunes an emptied .devin/", () => {
+  const root = tempDir("hunch-uninstall-devin-");
+  try {
+    const inv = { command: "npx", args: ["-y", "@davesheffer/hunch"] };
+    writeWindsurfHooks(root, inv);
+    applyUninstall(planUninstall(root));
+    assert.equal(existsSync(join(root, ".devin")), false, "Hunch-only .devin/ is removed");
+
+    mkdirSync(join(root, ".devin"), { recursive: true });
+    writeFileSync(join(root, ".devin", "hooks.json"), JSON.stringify({ hooks: { pre_write_code: [{ command: "./lint.sh" }] } }));
+    writeWindsurfHooks(root, inv);
+    rmSync(join(root, ".hunch-removed"), { force: true });
+    applyUninstall(planUninstall(root));
+    const hooks = JSON.parse(readFileSync(join(root, ".devin", "hooks.json"), "utf8")).hooks;
+    assert.deepEqual(hooks.pre_write_code, [{ command: "./lint.sh" }]);
+    assert.doesNotMatch(JSON.stringify(hooks), /hunch/i);
+  } finally { cleanupDir(root); }
 });
 
 test("applyUninstall keeps going past a failed step and reports it; a failed opt-out marker stops everything", () => {

@@ -425,7 +425,7 @@ test("a source-checkout run keeps the published Windsurf hook pin (issue #466)",
 
     // a: published pin + machine-local invocation -> byte-for-byte unchanged.
     writeFileSync(file, withCommand(pinned));
-    assert.equal(writeWindsurfHooks(root, local), file);
+    assert.equal(writeWindsurfHooks(root, local)[0], file);
     assert.equal(readFileSync(file, "utf8"), withCommand(pinned));
 
     // b: an already machine-local Hunch command is refreshed to the new one.
@@ -468,6 +468,48 @@ test("a source-checkout run keeps the published Windsurf hook pin (issue #466)",
       assert.deepEqual(hooks[event].map((e: { command: string }) => e.command), event === "pre_user_prompt" ? ["./lint.sh", publishedCommand] : [publishedCommand]);
     }
     assert.ok(!partial.includes("tsx") && !partial.includes("index.ts"), partial);
+  } finally {
+    cleanup();
+  }
+});
+
+test("Windsurf hooks are merged into .devin/hooks.json too (issue #494)", () => {
+  const { root, cleanup } = tempStore();
+  const inv = { command: "npx", args: ["-y", "@davesheffer/hunch"] };
+  const devin = join(root, ".devin/hooks.json");
+  const legacy = join(root, ".windsurf/hooks.json");
+  try {
+    // Existing user hooks in .devin/hooks.json are preserved; Hunch is appended.
+    mkdirSync(join(root, ".devin"), { recursive: true });
+    writeFileSync(devin, JSON.stringify({ hooks: { pre_write_code: [{ command: "./lint.sh" }] } }, null, 2));
+    writeWindsurfHooks(root, inv);
+    const hooks = JSON.parse(readFileSync(devin, "utf8")).hooks;
+    assert.equal(hooks.pre_write_code[0].command, "./lint.sh");
+    for (const event of ["pre_user_prompt", "pre_write_code", "post_write_code", "post_run_command"]) {
+      assert.match(hooks[event].at(-1).command, /hook --provider windsurf$/, event);
+    }
+    assert.match(JSON.parse(readFileSync(legacy, "utf8")).hooks.pre_write_code[0].command, /hook --provider windsurf$/);
+
+    // Re-running is a byte-for-byte no-op on both files.
+    const before = [readFileSync(devin, "utf8"), readFileSync(legacy, "utf8")];
+    writeWindsurfHooks(root, inv);
+    assert.deepEqual([readFileSync(devin, "utf8"), readFileSync(legacy, "utf8")], before);
+
+    // An unparseable .devin/hooks.json is refused untouched, and the legacy file
+    // is not written either.
+    writeFileSync(devin, "{ not json");
+    writeFileSync(legacy, "{}\n");
+    assert.throws(() => writeWindsurfHooks(root, inv), /refusing to overwrite .*\.devin/);
+    assert.equal(readFileSync(devin, "utf8"), "{ not json");
+    assert.equal(readFileSync(legacy, "utf8"), "{}\n");
+
+    // A non-array event in .devin/hooks.json is refused before .windsurf is written.
+    const bad = JSON.stringify({ hooks: { pre_write_code: "x" } });
+    writeFileSync(devin, bad);
+    rmSync(legacy);
+    assert.throws(() => writeWindsurfHooks(root, inv), /hooks\.pre_write_code must be an array/);
+    assert.equal(readFileSync(devin, "utf8"), bad);
+    assert.equal(existsSync(legacy), false, "the legacy file is not written");
   } finally {
     cleanup();
   }
