@@ -80,19 +80,12 @@ test("liveFindingsFor sorts worst-severity first", () => {
   cleanup();
 });
 
-test("liveFindingsFor rewrites an absolute target to repo-relative and never suffix-leaks an unrelated same-basename file (issue #299)", () => {
+test("liveFindingsFor rewrites an absolute target to repo-relative and never suffix-matches an unrelated same-basename file (issue #299)", () => {
   const { store, root, cleanup } = tempStore();
-  // A real indexed symbol at the target file — the same "is this path known to
-  // the index" question liveFindingsFor now answers the same way why() does.
-  store.json.put("symbols", mkSymbol("sym_auth", "src/auth/session.ts", "verifySession") as never);
+  store.json.replaceAll("symbols", [mkSymbol("sym_auth", "src/auth/session.ts", "verifySession")]);
   store.json.put("findings", finding({ title: "root-level unrelated", affected_files: ["session.ts"] }));
   store.json.put("findings", finding({ title: "the real target", affected_files: ["src/auth/session.ts"] }));
-  const abs = join(root, "src", "auth", "session.ts");
-  assert.deepEqual(
-    store.liveFindingsFor(abs).map((f) => f.title),
-    ["the real target"],
-    "must resolve the absolute target's own finding, never the unrelated root-level same-basename file",
-  );
+  assert.deepEqual(store.liveFindingsFor(join(root, "src", "auth", "session.ts")).map((f) => f.title), ["the real target"]);
   cleanup();
 });
 

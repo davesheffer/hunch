@@ -94,21 +94,20 @@ export const TESTIMONY_CORRECTION_RATIONALE =
  *  Returns "" when the hint cannot be made repo-relative (no root, or a path outside the
  *  repo). The caller then falls back to "**", where the existing severity guard
  *  down-ranks a non-explicit blocking rule to a warning — fail-safe and honest, rather
- *  than a blocking rule enforced nowhere.
+ *  than a blocking rule that is enforced nowhere.
  *
- *  Thin adapter over the shared `repoRelativeTarget` (core/paths.ts): that function
- *  passes an unresolvable absolute hint through UNCHANGED (still absolute) rather
- *  than signaling failure directly, since other callers (checkConstraints, why())
- *  want the original target back to fail their own match safely. This adapter
- *  converts that "still absolute" signal to "" — the fail-safe this caller needs. */
+ *  This is a thin adapter over the shared `repoRelativeTarget`, which hands an
+ *  unresolvable absolute hint back unchanged instead of signalling failure (other
+ *  callers want the original target back). Here a result that is still absolute is
+ *  turned into the empty string. */
 function repoRelativeHint(rawHint: string, root?: string): string {
   if (!rawHint) return "";
   const looksAbsolute = isAbsolute(rawHint) || /^[a-zA-Z]:/.test(rawHint);
   if (!looksAbsolute) return rawHint;
   if (!root) return "";
-  const rewritten = repoRelativeTarget(rawHint, root);
-  const stillAbsolute = isAbsolute(rewritten) || /^[a-zA-Z]:/.test(rewritten);
-  return stillAbsolute ? "" : rewritten;
+  const rel = repoRelativeTarget(rawHint, root);
+  if (isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) return "";
+  return rel;
 }
 
 /**

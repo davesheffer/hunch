@@ -832,10 +832,6 @@
       {
         "file": "test/change-proof.test.ts",
         "title": "native change proof deterministically binds exact revisions, DNA, memory, blast radius, and conformance"
-      },
-      {
-        "file": "test/escalations.test.ts",
-        "title": "relevantEscalations keeps only entries the prompt's task touches (dec_12ba37db1c)"
       }
     ]
   },
@@ -1348,10 +1344,6 @@
   },
   "update": {
     "tests": [
-      {
-        "file": "test/escalations.test.ts",
-        "title": "relevantEscalations anchors policies by scope, matches globs, and ignores path tokens for the keyword"
-      },
       {
         "file": "test/task-selection.test.ts",
         "title": "file names, versions and capitalized prose never become identifier terms"
