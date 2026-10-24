@@ -424,34 +424,7 @@ for (const source of ["staged", "working"] as const) {
   });
 }
 
-for (const source of ["staged", "working"] as const) {
-  test(`strict ${source} semantic scan does NOT fail closed on a Helm-templated YAML file (issue #33)`, () => {
-    const f = fixture();
-    try {
-      git(f.root, "add", "-A");
-      git(f.root, "commit", "-qm", "fixture: layered baseline and memory");
-      mkdirSync(join(f.root, "charts/app/templates"), { recursive: true });
-      writeFileSync(join(f.root, "charts/app/templates/configmap.yaml"), [
-        "data:",
-        "{{- range $k, $v := .Values.data }}",
-        "  {{ $k }}: {{ $v | quote }}",
-        "{{- end }}",
-        "",
-      ].join("\n"));
-      if (source === "staged") git(f.root, "add", "charts/app/templates/configmap.yaml");
-
-      const before = repositoryState(f.root);
-      const run = runCheck(f.root, ...(source === "working" ? ["--working"] : []), "--strict", "--public-only");
-
-      assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
-      assert.doesNotMatch(run.stdout as string, /Incomplete semantic source scan/i);
-      assertRepositoryState(f.root, before);
-    } finally {
-      f.cleanup();
-    }
-  });
-}
-
+@@CLEANROOM_HOLE_1@@
 for (const source of ["staged", "working"] as const) {
   test(`strict ${source} semantic scan rejects non-UTF-8 source bytes losslessly`, () => {
     const f = fixture();

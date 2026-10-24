@@ -25,56 +25,7 @@ test("analyzeDiff extracts added/removed/changed symbols and deps", () => {
   assert.ok(sum.includes("verifySession") && sum.includes("redis"));
 });
 
-test("analyzeDiff recognizes Python def/class declarations and import/from-import deps", () => {
-  const diff = [
-    "diff --git a/src/auth.py b/src/auth.py",
-    "--- a/src/auth.py",
-    "+++ b/src/auth.py",
-    "@@ -1,3 +1,5 @@",
-    "+import redis",
-    "+from .jwt import decode_token",
-    "-def login():",
-    "+def verify_session(t):",
-    "+    return decode_token(t)",
-    "+class SessionError(Exception):",
-    "-from legacy import old_helper",
-  ].join("\n");
-  const a = analyzeDiff(diff);
-  assert.deepEqual(a.addedSymbols.map((s) => s.name).sort(), ["SessionError", "verify_session"]);
-  assert.deepEqual(a.removedSymbols.map((s) => s.name), ["login"]);
-  assert.deepEqual(a.addedDeps, ["redis"]);
-  assert.deepEqual(a.removedDeps, ["legacy"]);
-  // relative import (leading '.') is NOT counted as an external dep, same convention as JS
-  assert.ok(!a.addedDeps.includes(".jwt") && !a.addedDeps.includes("jwt"));
-  const sum = summarizeDiff(a);
-  assert.ok(sum.includes("verify_session") && sum.includes("redis"));
-});
-
-test("analyzeDiff does not treat TS import-equals syntax as a Python import (PY_IMPORT_RE false-positive fix)", () => {
-  const diff = [
-    "diff --git a/src/ns.ts b/src/ns.ts",
-    "--- a/src/ns.ts",
-    "+++ b/src/ns.ts",
-    "@@ -1 +1 @@",
-    "+import Foo = Bar.Baz;",
-  ].join("\n");
-  const a = analyzeDiff(diff);
-  assert.deepEqual(a.addedDeps, [], "import-equals is not a Python import and not a JS module-string import");
-});
-
-test("analyzeDiff ignores .py files just like other code files pre-registry (sanity: extension gate wired)", () => {
-  const diff = [
-    "diff --git a/notes.txt b/notes.txt",
-    "--- a/notes.txt",
-    "+++ b/notes.txt",
-    "@@ -1 +1 @@",
-    "+def not_code():",
-  ].join("\n");
-  const a = analyzeDiff(diff);
-  assert.deepEqual(a.addedSymbols, [], "non-code extension is still ignored");
-});
-
-test("analyzeDiff detects a changed (both-sides) symbol as 'changed', and tracks the accompanying markdown edit as substantive churn (not a declaration)", () => {
+@@CLEANROOM_HOLE_1@@
   const diff = [
     "diff --git a/README.md b/README.md",
     "--- a/README.md",
@@ -91,12 +42,7 @@ test("analyzeDiff detects a changed (both-sides) symbol as 'changed', and tracks
   const a = analyzeDiff(diff);
   assert.deepEqual(a.changedSymbols.map((s) => s.name), ["f"]);
   assert.equal(a.addedSymbols.length, 0);
-  assert.equal(a.filesAdded.length, 0); // both files are MODIFIES, not adds — no "new file mode"
-  // README.md is a modify, not an add, so it was never going to land in filesAdded
-  // regardless of isCode/isSubstantive — but its churn IS now tracked (issue #12):
-  // filesModified and addedLines include it, while it contributes no declaration.
-  assert.deepEqual(a.filesModified.sort(), ["README.md", "src/x.ts"]);
-  assert.equal(a.addedLines, 2, "one added line each for README.md and src/x.ts");
+@@CLEANROOM_HOLE_2@@
 });
 
 test("content lines starting with ++/-- are NOT mistaken for file headers (regression: header collision)", () => {
