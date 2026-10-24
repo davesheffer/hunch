@@ -1,3 +1,12 @@
 {
-  "signedContributors": []
+  "signedContributors": [
+    {
+      "name": "davesheffer",
+      "id": 26892525,
+      "comment_id": 6386344940,
+      "created_at": "2026-10-24T15:59:25Z",
+      "repoId": 1269754384,
+      "pullRequestNo": 547
+    }
+  ]
 }
