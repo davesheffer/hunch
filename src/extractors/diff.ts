@@ -329,14 +329,22 @@ export function analyzeDiff(diff: string): DiffAnalysis {
       addedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
       if (isCode(curFile)) {
-@@CLEANROOM_HOLE_R1@@
+        const decl = declOf(body);
+        if (decl) declsFor(curFile)!.added.set(decl.name, decl);
+        const spec = importOf(body);
+        if (spec && !spec.startsWith(".")) addedImports.add(spec);
       }
     } else if (raw.startsWith("-")) {
       if (!isSubstantive(curFile)) continue;
       removedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
       if (isCode(curFile)) {
-@@CLEANROOM_HOLE_R2@@
+        const body = raw.slice(1);
+        const decl = declOf(body);
+        if (decl) declsFor(curFile)!.removed.set(decl.name, decl);
+        const spec = importOf(body);
+        if (spec && !spec.startsWith(".")) removedImports.add(spec);
+      }
     }
   }
 
