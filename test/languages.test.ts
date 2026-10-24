@@ -69,7 +69,7 @@ test("isSubstantive accepts prose that is not parseable code", () => {
 test("isSubstantive rejects non-code, non-prose files", () => {
   assert.equal(isSubstantive("assets/logo.svg"), false);
 });
-
+@@CLEANROOM_HOLE_R3@@
 test("native grammar versions stay on the tree-sitter 0.21 peer family", () => {
   assert.equal(packageJson.dependencies["tree-sitter"], "0.21.1");
   assert.equal(packageJson.dependencies["tree-sitter-python"], "0.23.4",
