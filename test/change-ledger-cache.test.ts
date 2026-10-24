@@ -9,6 +9,8 @@ import { appendChanges, emptyLedger, ledgerFile, LedgerSchema, readLedger, write
 import { stateHash } from '../src/core/stateContract.js';
 
 const scope = { kind: 'user' as const, id: 'cache-test' };
+// zod >=4.6.7 defines `parse` as a lazy prototype getter; touch it so mock.method finds an own method.
+function mockParse() { void LedgerSchema.parse; return mock.method(LedgerSchema, 'parse'); }
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'hunch-ledger-cache-'));
   appendChanges(dir, scope, [{ facet: 'derived', record_id: 'nds_fixture', record_hash: stateHash('one'), change: 'created', invalidates: ['subject:one'] }],
@@ -17,7 +19,7 @@ function fixture() {
 }
 
 test('unchanged ledger validates once; returned nested objects cannot poison later reads', () => {
-  const f = fixture(), parse = mock.method(LedgerSchema, 'parse');
+  const f = fixture(), parse = mockParse();
   try {
     const first = readLedger(f.dir, scope), expected = structuredClone(first);
     first.events[0]!.invalidates.push('forged'); first.idempotency.first!.record_hash = stateHash('forged'); first.scope.id = 'forged';
@@ -58,7 +60,7 @@ test('changed corruption, scope mismatch and sequence gaps never fall back to a 
 });
 
 test('cache evicts old partitions and does not retain oversized source snapshots', () => {
-  const fixtures = Array.from({ length: 5 }, fixture), parse = mock.method(LedgerSchema, 'parse');
+  const fixtures = Array.from({ length: 5 }, fixture), parse = mockParse();
   try {
     for (const f of fixtures) readLedger(f.dir, scope);
     assert.equal(parse.mock.callCount(), 5);

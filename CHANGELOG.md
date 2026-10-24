@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.46.0 — 2026-10-24
+
+- **`hunch verify` runs only the tests a change needs.** It selects the tests that import a changed file or that the impact map (`hunch verify --refresh-map`) shows ran it, from the working tree, `--staged` or `--base <ref>`. Doubt always means more tests: a change it can't trace runs the full suite, and `--full`/`--ci` keep the whole suite for CI (#497).
+- **Blast radius covers Helm, Kustomize and YAML.** `hunch_get_dependents`, `hunch_blast_radius`, `hunch impact` and `check --blast` now follow `references` edges, so a Helm helper lists the templates that include it. TS, Python and Go results are unchanged (#486).
+- **More TS/TSX/JS dependency edges.** The indexer resolves namespace imports (`ns.fn()`, `<ns.Comp/>`), CommonJS `require` and literal dynamic `import()`. A call is linked only when exactly one symbol in the bound module matches (#504).
+- **Timeouts kill the whole process tree.** A bounded child that times out now takes its own children with it, and `hunch push` has a 5-minute bound of its own (#489, #498).
+- **`hunch migrate` never half-migrates a record.** A record that fails is kept on disk in its old shape, and the schema version is held back only while a rerun could still fix it (#509).
+- **The opt-out gate checks the repository a command writes to**: `--root`, `serve --config`, partitions, the private/shared overlay, and `hunch init` from a linked worktree whose main checkout opted out. A bad DNA ref now reports `Git revision "<ref>" does not name a commit` (#488, #493).
+- **Behaviour change: optimistic writes check the right version.** `nuryel_write` and the `hunch_record_*` tools refuse a non-null `expected_version` when no record exists yet (`0` asserts the id was never written), and on a supersede it is always checked against the record being superseded (#510).
+- **Behaviour change: `serve init --grant` needs the partition to be served.** Granting a partition the config doesn't serve is refused before anything is written (#511).
+- **Team memory:** `hunch_findings`, `hunch_policy_upgrade_correction`, `hunch_review_imported_adr` and `hunch_why` confirm a miss against a fresh pull before answering "not found" (#487, #493).
+- **Devin Desktop and Cursor hooks.** Hunch writes `.devin/hooks.json`, the file Devin reads first, alongside `.windsurf/hooks.json`, and Cursor shell results reach the probe gate (#494, #496).
+- **A faster pre-edit hook.** Commit reachability is checked in two batched git calls instead of two per capture commit, which brings it from 84 to 6 git processes at 40 capture commits (#485).
+- **Better prompt memory selection.** Words from a pasted stack trace no longer pick records, and a common brand compound such as PowerShell counts once instead of once per part (#490).
+- `hunch serve` no longer takes a write lock held by a live owner whose record has no nonce, and answers every 405 with an `Allow` header (#491, #503).
+- Merge drivers set up from a source checkout run that checkout's own `tsx` instead of `npx tsx` (#492).
+- `HUNCH_SIG_MIN_LINES` falls back to 12 when it isn't positive, and the VS Code extension opens `cmp_` component records (#507, #506).
+- Dependency updates for security advisories in `zod` (now `^4.6.6`), `body-parser`, `fast-uri` and `ip-address` (#502).
+- Test and CI: a test foundation with gates that fail CI when a new CLI command, MCP tool, hook cell or integration edge has no test, coverage gates, longer CI job limits, and argv checks in `tooling/verify-state-upgrade` (#500, #515, #522, #505).
+
 ## 1.45.2 — 2026-10-22
 
 - **Faster pre-edit hook.** The hook no longer repeats the same git reachability checks for every capture commit; verdicts are remembered per process, cutting most of its time on large memories.
