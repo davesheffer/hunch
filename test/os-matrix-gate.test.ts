@@ -19,6 +19,7 @@ const MAPPING: Record<string, { tests: string[]; via?: RegExp }> = {
   "src/cli/update.ts": { tests: ["test/update.test.ts"] },
   "src/cli/verify.ts": { tests: ["test/test-selection.test.ts"], via: /hunchCliArgs\("verify"/ },
   "src/constitution/g2BehaviorDependencies.ts": { tests: ["test/dependency-snapshot-isolation.test.ts"] },
+  "src/core/boundedSpawn.ts": { tests: ["test/bounded-spawn.test.ts"] },
   "src/core/machine.ts": { tests: ["test/workspaces.test.ts"] },
   "src/core/procstart.ts": { tests: ["test/procstart.test.ts", "test/lock-parity.test.ts"] },
   "src/core/spawnCommand.ts": { tests: ["test/spawn-command.test.ts"] },

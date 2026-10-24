@@ -8,6 +8,7 @@
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { boundedSpawnSync } from "../core/boundedSpawn.js";
 import { writeFileAtomic } from "../core/io.js";
 import { machineFile } from "../core/machine.js";
 import { hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
@@ -700,13 +701,14 @@ export function cloneValidatedTeamOverlay(
 
     const cloneEnv = boundedTeamGitEnv();
     stage = "clone";
-    const cloned = spawnSync("git", [
+    // Bounded so a timeout kills git's whole tree, not just the root (#498).
+    const cloned = boundedSpawnSync("git", [
       "-c", "protocol.ext.allow=never",
       "-c", `core.hooksPath=${emptyHooks}`,
       "clone", "--no-checkout", `--template=${emptyTemplate}`,
       "--", repo, stagedDest,
     ], {
-      stdio: "ignore",
+      stdout: "ignore",
       env: cloneEnv,
       timeout: timeoutMs,
     });
