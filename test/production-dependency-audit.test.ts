@@ -7,78 +7,43 @@ import {
   evaluateProductionAudit,
 } from "../tooling/production-dependency-audit.mjs";
 
-// Synthetic fixture, not a real advisory: the reviewed-exception mechanism (accept an
-// exact match, fail closed on any drift) is tested here independent of whatever npm
-// audit currently reports for real dependencies. Coupling this to live CVE data was
-// exactly the trap that made the real REVIEWED_AUDIT_VULNERABILITIES allowlist go stale
-// out from under this test file — an upstream fix changed the real advisory's shape
-// without touching this file's assertions, and both had to be diagnosed together.
-const FAKE_REVIEWED = Object.freeze({
-  "fake-vulnerable-package": Object.freeze({
-    severity: "moderate",
-    isDirect: false,
-    range: "<2.0.5",
-    effects: Object.freeze(["fake-parent-package"]),
-    nodes: Object.freeze(["node_modules/fake-parent-package/node_modules/fake-vulnerable-package"]),
-    via: Object.freeze([Object.freeze({
-      source: 9999999,
-      name: "fake-vulnerable-package",
-      dependency: "fake-vulnerable-package",
-      title: "Fake advisory for test purposes only",
-      url: "https://github.com/advisories/GHSA-0000-0000-0000",
-      severity: "moderate",
-      cwe: Object.freeze(["CWE-22"]),
-      cvss: Object.freeze({ score: 5.9, vectorString: "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N" }),
-      range: "<2.0.5",
-    })]),
-    fixAvailable: Object.freeze({ name: "fake-parent-package", version: "1.24.3", isSemVerMajor: true }),
-  }),
-});
-
+@@CLEANROOM_HOLE_1@@
 function reviewedReport() {
   return {
     auditReportVersion: 2,
     vulnerabilities: {
-      "fake-vulnerable-package": {
-        name: "fake-vulnerable-package",
+@@CLEANROOM_HOLE_2@@
         severity: "moderate",
         isDirect: false,
         via: [{
-          source: 9999999,
-          name: "fake-vulnerable-package",
-          dependency: "fake-vulnerable-package",
-          title: "Fake advisory for test purposes only",
-          url: "https://github.com/advisories/GHSA-0000-0000-0000",
+@@CLEANROOM_HOLE_3@@
           severity: "moderate",
           cwe: ["CWE-22"],
-          cvss: { score: 5.9, vectorString: "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N" },
+@@CLEANROOM_HOLE_4@@
           range: "<2.0.5",
         }],
-        effects: ["fake-parent-package"],
+@@CLEANROOM_HOLE_5@@
         range: "<2.0.5",
-        nodes: ["node_modules/fake-parent-package/node_modules/fake-vulnerable-package"],
-        fixAvailable: { name: "fake-parent-package", version: "1.24.3", isSemVerMajor: true },
+@@CLEANROOM_HOLE_6@@
       },
     },
     metadata: {
-      vulnerabilities: { info: 0, low: 0, moderate: 1, high: 0, critical: 0, total: 1 },
+@@CLEANROOM_HOLE_7@@
     },
   };
 }
 
-test("production audit accepts only an exact reviewed exception", () => {
-  const result = evaluateProductionAudit(reviewedReport(), [], FAKE_REVIEWED);
+@@CLEANROOM_HOLE_8@@
   assert.deepEqual(result, {
     status: "passed",
-    reviewed_vulnerable_packages: ["fake-vulnerable-package"],
-    reviewed_advisory_sources: [9999999],
+@@CLEANROOM_HOLE_9@@
     unreviewed_vulnerabilities: 0,
   });
   assert.deepEqual(evaluateProductionAudit({
     auditReportVersion: 2,
     vulnerabilities: {},
     metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
-  }, [], FAKE_REVIEWED), {
+@@CLEANROOM_HOLE_10@@
     status: "passed",
     reviewed_vulnerable_packages: [],
     reviewed_advisory_sources: [],
@@ -88,10 +53,9 @@ test("production audit accepts only an exact reviewed exception", () => {
 
 test("production audit fails closed on advisory drift, new findings, and HTTP/Hono reachability", () => {
   const changed = reviewedReport();
-  changed.vulnerabilities["fake-vulnerable-package"].severity = "high";
-  changed.metadata.vulnerabilities.moderate = 0;
+@@CLEANROOM_HOLE_11@@
   changed.metadata.vulnerabilities.high = 1;
-  assert.throws(() => evaluateProductionAudit(changed, [], FAKE_REVIEWED), /changed identity/);
+@@CLEANROOM_HOLE_12@@
 
   const unexpected = reviewedReport();
   unexpected.vulnerabilities["new-package"] = {
@@ -104,13 +68,7 @@ test("production audit fails closed on advisory drift, new findings, and HTTP/Ho
     nodes: ["node_modules/new-package"],
   };
   unexpected.metadata.vulnerabilities.critical = 1;
-  unexpected.metadata.vulnerabilities.total = 2;
-  assert.throws(() => evaluateProductionAudit(unexpected, [], FAKE_REVIEWED), /unreviewed production vulnerability/);
-
-  // the real (non-fake) REVIEWED_AUDIT_VULNERABILITIES allowlist is currently empty (no
-  // live exception) — the old Hono finding shape must now be rejected as unreviewed,
-  // proving the stale allowlist cleanup actually took effect.
-  assert.throws(() => evaluateProductionAudit(reviewedReport()), /unreviewed production vulnerability/);
+@@CLEANROOM_HOLE_13@@
 
   for (const specifier of [
     "@hono/node-server/serve-static",
@@ -120,7 +78,7 @@ test("production audit fails closed on advisory drift, new findings, and HTTP/Ho
     "@modelcontextprotocol/sdk/server/auth/router.js",
   ]) {
     assert.throws(() => assertReviewedProductionImports([specifier]), /became reachable/,
-      `${specifier} must stay disallowed regardless of the current reviewed-exception allowlist`);
+@@CLEANROOM_HOLE_14@@
   }
 });
 

@@ -94,7 +94,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "@tree-sitter-grammars/tree-sitter-yaml": "^0.6.1",
+@@CLEANROOM_HOLE_1@@
     "commander": "^15.0.0",
     "cross-spawn": "^7.0.6",
     "smol-toml": "1.9.0",

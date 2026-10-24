@@ -73,11 +73,7 @@ export interface EscalationEntry {
   question: string;
   detail: string;
   resolution: string;
-  /** false ONLY for an entry whose own resolution requires acting on a
-   *  DIFFERENT entry first (a duplicate-id commit-repair follower) — it still
-   *  surfaces below for transparency, but must not count toward the group
-   *  label's "needs your decision" tally (#61). Omitted means true. */
-  actionable?: boolean;
+@@CLEANROOM_HOLE_1@@
 }
 
 /** One Constitution policy — mirrors `hunch policy list --json` (JSON consumer). */
@@ -94,16 +90,9 @@ export interface PolicyEntry {
 export class EscalationNode extends vscode.TreeItem {
   constructor(public readonly entry: EscalationEntry, public readonly root: string) {
     super(entry.question, vscode.TreeItemCollapsibleState.None);
-    // A non-actionable row (a duplicate-id commit-repair follower) still
-    // surfaces for transparency, but must not read like its own question —
-    // a distinct icon/description keeps a skim from mistaking it for one of
-    // the group label's tally (#61).
-    if (entry.actionable === false) {
-      this.iconPath = new vscode.ThemeIcon("info");
-      this.description = "context only";
-    } else {
+@@CLEANROOM_HOLE_2@@
       this.iconPath = new vscode.ThemeIcon("question", new vscode.ThemeColor("notificationsWarningIcon.foreground"));
-    }
+@@CLEANROOM_HOLE_3@@
     this.contextValue = "hunchEscalation";
     this.tooltip = new vscode.MarkdownString([`**${entry.kind}**`, "", entry.detail, "", `→ ${entry.resolution}`].join("\n"));
     this.command = { command: "hunch.openEscalation", title: "Open escalation", arguments: [this] };
@@ -185,9 +174,7 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
     ]);
     if (!this.loadFence.isCurrent(ticket, this.currentRoot())) return false;
     try { this.moves = log.ok ? JSON.parse(log.stdout) as MemoryMove[] : []; } catch { this.moves = []; }
-    // escalations exits non-zero when ACTIONABLE entries exist (#61) — the raw
-    // JSON array can still carry non-actionable ones alongside a zero exit, so
-    // parse regardless of `esc.ok`.
+@@CLEANROOM_HOLE_4@@
     try { this.escalations = JSON.parse(esc.stdout) as EscalationEntry[]; } catch { this.escalations = []; }
     try { this.policies = pol.ok ? JSON.parse(pol.stdout) as PolicyEntry[] : []; } catch { this.policies = []; }
     this.loadedRoot = root;
@@ -205,15 +192,9 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
       const root = this.loadedRoot;
       if (!root) return [];
       const roots: Node[] = [];
-      if (this.escalations.length) {
-        // Tally only the ACTIONABLE entries — a duplicate-id commit-repair
-        // follower whose own resolution says "act on a different entry
-        // first" still appears in the group's children for transparency, but
-        // must not inflate the "needs your decision" count (#61).
-        const actionableCount = this.escalations.filter((e) => e.actionable !== false).length;
-        const context = this.escalations.length - actionableCount;
+@@CLEANROOM_HOLE_5@@
         roots.push(new GroupNode(`⚖ Needs your decision (${actionableCount}${context ? `, +${context} for context` : ""})`, "issues", "escalations", root));
-      }
+@@CLEANROOM_HOLE_6@@
       if (this.policies.length) roots.push(new GroupNode(`🏛 Constitution (${this.policies.length})`, "law", "policies", root));
       return [...roots, ...this.moves.map((m) => new MoveNode(m, root))];
     }
