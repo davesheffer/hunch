@@ -5,14 +5,15 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, appendFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-@@CLEANROOM_HOLE_1@@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { hunchPaths, findRoot } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { syncCommit } from "../src/synthesis/synthesize.js";
 import { withInitiator } from "../src/synthesis/initiator.js";
 import { decisionId } from "../src/core/ids.js";
 import { headSha, revParse } from "../src/extractors/git.js";
-@@CLEANROOM_HOLE_2@@
+import { __resetAvailabilityCacheForTests } from "../src/synthesis/provider.js";
 
 process.env.HUNCH_SYNTH_PROVIDER = "deterministic";
 
@@ -131,7 +132,8 @@ test("post-commit code change captures a decision linked to the changed file", a
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
-@@CLEANROOM_HOLE_3@@
+  // Stage only src/a.ts: `-A` would sweep in the .hunch/ manifest ensureDirs() wrote and trip the .hunch/** guard.
+  execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
 
   const r = await syncCommit(store, root);
@@ -140,36 +142,262 @@ test("post-commit code change captures a decision linked to the changed file", a
   store.close();
   cleanupDir(root);
 });
-@@CLEANROOM_HOLE_4@@
-  cleanupDir(root);
-@@CLEANROOM_HOLE_5@@
-  cleanupDir(root);
-@@CLEANROOM_HOLE_6@@
-  cleanupDir(root);
-@@CLEANROOM_HOLE_7@@
 
-@@CLEANROOM_HOLE_8@@
+test("syncCommit does not skip a SKIP_SUBJECT commit whose body is substantive", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  appendFileSync(join(root, "src/a.ts"), "export function login(){ return 'jwt'; }\n");
+  execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "Merge branch 'feature' into main", "-m", "Adds OAuth2/JWT login, replacing the session cookies so that API clients can authenticate statelessly."], { cwd: root, stdio: "ignore" });
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "written", r.reason);
+  assert.ok(r.decision, "a decision exists");
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_9@@
+});
+
+test("syncCommit still skips a SKIP_SUBJECT commit with an empty body", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  appendFileSync(join(root, "src/a.ts"), "export function merged(){ return 3; }\n");
+  execFileSync("git", ["add", "-A", "src"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "Merge branch 'main' into feature"], { cwd: root, stdio: "ignore" });
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "skipped");
+  assert.match(r.reason!, /trivial subject/);
+  assert.equal(store.json.loadAll("decisions").length, 0);
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_10@@
+});
+
+test("syncCommit skips a dependency-bump commit with an empty body", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  appendFileSync(join(root, "src/a.ts"), "export function bumped(){ return 4; }\n");
+  execFileSync("git", ["add", "-A", "src"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "chore(deps): bump lodash from 4.1.0 to 4.2.0"], { cwd: root, stdio: "ignore" });
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "skipped", r.decision?.title);
+  assert.match(r.reason!, /trivial subject/);
+  assert.equal(store.json.loadAll("decisions").length, 0);
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_11@@
+});
+
+function pythonGitRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-int-py-"));
+  const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
+  g("init");
+  g("config", "user.email", "t@t.co");
+  g("config", "user.name", "t");
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src/a.py"), "def a():\n    return 1\n");
+  g("add", "-A");
+  g("commit", "-m", "feat: add a");
+  return root;
+}
+
+test("a Python commit synthesizes a decision", async () => {
+  const root = pythonGitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  writeFileSync(join(root, "src/a.py"), "def a():\n    return 1\n\n\ndef b(x):\n    return a() + x\n");
+  execFileSync("git", ["add", "src/a.py"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
+
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "written", r.reason);
+  assert.ok(r.decision, "a decision exists");
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_12@@
+});
+
+function markdownGitRepo(): string {
+  const root = mkdtempSync(join(tmpdir(), "hunch-int-md-"));
+  const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
+  g("init");
+  g("config", "user.email", "t@t.co");
+  g("config", "user.name", "t");
+  mkdirSync(join(root, "docs/adr"), { recursive: true });
+  writeFileSync(join(root, "docs/adr/0001-use-postgres.md"), [
+    "# 1. Use Postgres",
+    "",
+    "## Decision",
+    "We will use Postgres as the primary datastore.",
+    "",
+    "## Why",
+    "Transactional guarantees, mature tooling and JSONB support.",
+    "",
+    "## Rejected",
+    "MySQL: weaker JSON support and fewer extensions for our needs.",
+    "",
+  ].join("\n"));
+  g("add", "-A");
+  g("commit", "-m", "docs: add ADR 0001 use postgres");
+  return root;
+}
+
+test("a markdown-only commit synthesizes a decision", async () => {
+  const root = markdownGitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "written", r.reason);
+  assert.ok(r.decision, "a decision exists");
+  assert.deepEqual(r.decision!.related_files, ["docs/adr/0001-use-postgres.md"]);
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_13@@
+});
+
+test("the deterministic fallback describes a markdown-only edit as content, not code", async () => {
+  const root = markdownGitRepo();
+  appendFileSync(join(root, "docs/adr/0001-use-postgres.md"), "\n## Revisited\nWe revisited this and still prefer Postgres for its extension ecosystem.\n");
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "docs: revisit ADR 0001"], { cwd: root, stdio: "ignore" });
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "written", r.reason);
+  assert.doesNotMatch(r.decision!.decision, /\bcode\b/i);
+  store.close();
+  cleanupDir(root);
+});
+
+test("a commit touching .hunch/** is skipped even though it also touches markdown", async () => {
+  const root = gitRepo();
+  mkdirSync(join(root, ".hunch/decisions"), { recursive: true });
+  writeFileSync(join(root, ".hunch/decisions/dec_abc123.json"), JSON.stringify({ id: "dec_abc123" }) + "\n");
+  writeFileSync(join(root, "AGENTS.md"), "# Agents\nregenerated\n");
+  writeFileSync(join(root, "CLAUDE.md"), "# Claude\nregenerated\n");
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  // A non-"hunch:" subject proves the guard is structural, not subject-based.
+  execFileSync("git", ["commit", "-m", "chore: sync memory"], { cwd: root, stdio: "ignore" });
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "skipped");
+  assert.match(r.reason!, /\.hunch\/\*\*/);
+  store.close();
+  cleanupDir(root);
+});
+
+test("an SVG-only commit is skipped", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-int-svg-"));
+  const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
+  g("init");
+  g("config", "user.email", "t@t.co");
+  g("config", "user.name", "t");
+  mkdirSync(join(root, "assets"), { recursive: true });
+  writeFileSync(join(root, "assets/logo.svg"), '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n');
+  g("add", "-A");
+  g("commit", "-m", "feat: add logo");
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const r = await syncCommit(store, root);
+  assert.equal(r.status, "skipped");
+  assert.equal(r.reason, "no code or markdown files changed");
+  store.close();
+  cleanupDir(root);
+});
+
+test("syncCommit drafts via an openai-compat endpoint end to end", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  // Stage only src/a.ts: `-A` would sweep in the .hunch/ manifest and trip the .hunch/** guard.
+  execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
+  const server = createServer((req, res) => {
+    req.on("data", () => {});
+    req.on("end", () => {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              title: "Add b()",
+              context: "a.ts needed a second helper",
+              decision: "Added function b to a.ts",
+              consequences: [],
+              alternatives_rejected: [],
+              nontrivial: true,
+            }),
+          },
+        }],
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const savedProvider = process.env.HUNCH_SYNTH_PROVIDER;
+  process.env.HUNCH_SYNTH_PROVIDER = "openai-compat";
+  process.env.HUNCH_SYNTH_BASE_URL = `http://127.0.0.1:${port}`;
+  process.env.HUNCH_SYNTH_MODEL = "test-model";
+  __resetAvailabilityCacheForTests();
+  try {
     const r = await withInitiator(
       { provider: "openai-compat", source: "explicit" },
       () => syncCommit(store, root),
     );
-@@CLEANROOM_HOLE_14@@
+    assert.equal(r.status, "written");
+    assert.equal(r.provider, "openai-compat", "backfill's via-LLM count keys off this");
+    assert.equal(r.decision!.decision, "Added function b to a.ts");
+  } finally {
+    process.env.HUNCH_SYNTH_PROVIDER = savedProvider ?? "deterministic";
+    delete process.env.HUNCH_SYNTH_BASE_URL;
+    delete process.env.HUNCH_SYNTH_MODEL;
+    __resetAvailabilityCacheForTests();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    store.close();
     cleanupDir(root);
-@@CLEANROOM_HOLE_15@@
+  }
+});
+
+test("syncCommit reports the deterministic fallback when the endpoint fails", async () => {
+  const root = gitRepo();
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  // Stage only src/a.ts: `-A` would sweep in the .hunch/ manifest and trip the .hunch/** guard.
+  execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
+  const server = createServer((req, res) => {
+    req.on("data", () => {});
+    req.on("end", () => {
+      res.statusCode = 500;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ error: { message: "boom" } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const savedProvider = process.env.HUNCH_SYNTH_PROVIDER;
+  process.env.HUNCH_SYNTH_PROVIDER = "openai-compat";
+  process.env.HUNCH_SYNTH_BASE_URL = `http://127.0.0.1:${port}`;
+  process.env.HUNCH_SYNTH_MODEL = "test-model";
+  __resetAvailabilityCacheForTests();
+  try {
     const r = await withInitiator(
       { provider: "openai-compat", source: "explicit" },
       () => syncCommit(store, root),
     );
-@@CLEANROOM_HOLE_16@@
+    assert.equal(r.status, "written");
+    assert.equal(r.provider, "deterministic", "the ACTUAL fallback provider, not the selected one");
+    assert.equal(r.decision!.provenance.source, "inferred");
+  } finally {
+    process.env.HUNCH_SYNTH_PROVIDER = savedProvider ?? "deterministic";
+    delete process.env.HUNCH_SYNTH_BASE_URL;
+    delete process.env.HUNCH_SYNTH_MODEL;
+    __resetAvailabilityCacheForTests();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    store.close();
     cleanupDir(root);
-@@CLEANROOM_HOLE_17@@
+  }
+});

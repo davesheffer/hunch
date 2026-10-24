@@ -1,7 +1,14 @@
-@@CLEANROOM_HOLE_1@@
+/**
+ * Shared CLI logic that is free of import-time side effects, so any module
+ * (tests included) can import it safely, unlike src/cli/index.ts which runs the
+ * program as soon as it loads. It holds how to re-invoke this CLI from a git hook
+ * or `.mcp.json` (from a built dist and in dev via tsx), plus small formatting
+ * helpers (`dim()`, doctor's `synthesisStatusLines()`) that need the same import
+ * safety to be unit-testable.
+ */
 import { fileURLToPath } from "node:url";
 import type { Invocation } from "../integrations/scaffold.js";
-@@CLEANROOM_HOLE_2@@
+import { probeOllamaNumCtx, type ProviderResolution } from "../synthesis/provider.js";
 import { HUNCH_NPX_PACKAGE_SPEC } from "../core/version.js";
 
 export interface ResolvedInvocation {
@@ -16,7 +23,11 @@ export interface ResolvedInvocation {
   installed: boolean;
 }
 
-@@CLEANROOM_HOLE_3@@
+/** Faint (dim) ANSI styling. */
+export function dim(s: string): string {
+  return `\x1b[2m${s}\x1b[0m`;
+}
+
 /** Portable invocation written into committed MCP/provider configuration.
  * Keep it independently testable so the distribution pin cannot silently
  * regress to npm's moving latest tag. */
@@ -32,7 +43,12 @@ export function shellInvocation(inv: Invocation): string {
   return [inv.command, ...inv.args].map(token).join(" ");
 }
 
-@@CLEANROOM_HOLE_4@@
+/** Render doctor's synthesis status lines. Exported for testing: an earlier,
+ *  untested version reported openai-compat as "no assistant CLI found". Statuses
+ *  carry a `subscription` for CLI providers but openai-compat's is null, so it is
+ *  special-cased explicitly. */
+export function synthesisStatusLines(resolution: ProviderResolution, env: NodeJS.ProcessEnv): string[] {
+  const provider = resolution.provider;
   if (resolution.source === "unavailable-initiator") {
     return [dim(`            ↳ initiating provider ${resolution.initiator} is unavailable; using local analysis, never another account.`)];
   }
@@ -42,9 +58,40 @@ export function shellInvocation(inv: Invocation): string {
   if (resolution.source === "initiator") {
     return [`            ↳ agent calls remain with ${resolution.initiator}, using that CLI's configured authentication.`];
   }
-@@CLEANROOM_HOLE_5@@
+  const status = resolution.statuses.find((s) => s.name === provider.name);
+  if (status?.subscription) {
+    return [`            ↳ LLM synthesis uses your ${status.subscription}; provider API credentials are not used.`];
+  }
+  if (provider.name === "openai-compat") {
+    const base = env.HUNCH_SYNTH_BASE_URL || "(unset)";
+    const model = env.HUNCH_SYNTH_MODEL || "(unset)";
+    const keyNote = env.HUNCH_SYNTH_API_KEY ? " (HUNCH_SYNTH_API_KEY set)" : " (no API key)";
+    return [`            ↳ LLM synthesis via local/self-hosted endpoint ${base} (model: ${model})${keyNote}`];
+  }
+  if (resolution.source === "ambiguous") {
+    const names = resolution.statuses.filter((s) => s.available && s.name !== "deterministic").map((s) => s.name);
+    return [
       dim(`            ↳ ${names.join(", ")} are available; Hunch will not guess which provider to use.`),
-@@CLEANROOM_HOLE_6@@
+      dim(`              choose one locally: ${names.map((n) => `hunch provider ${n}`).join("  or  ")}`),
+    ];
+  }
+  if (resolution.source === "unavailable-preference") {
+    return [dim(`            ↳ ${resolution.preference} was selected but is unavailable; using the offline heuristic.`)];
+  }
+  return [
+    dim("            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence)."),
+    dim("              install or log into Claude Code, Codex, or Cursor; then select one with `hunch provider <name>`."),
+  ];
+}
+
+/** Gate + fetch the Ollama context-window advisory. Only openai-compat is
+ *  relevant; kept apart from the sync status lines because it makes a
+ *  best-effort network call. */
+export async function maybeWarnOllamaContext(providerName: string, env: NodeJS.ProcessEnv): Promise<string | null> {
+  if (providerName !== "openai-compat") return null;
+  return probeOllamaNumCtx(env.HUNCH_SYNTH_BASE_URL || "", env.HUNCH_SYNTH_MODEL || "");
+}
+
 /** Classify the entry path without faking import.meta.url in tests. */
 export function classifyEntry(entry: string): { isDev: boolean; installed: boolean } {
   const isDev = entry.endsWith(".ts");

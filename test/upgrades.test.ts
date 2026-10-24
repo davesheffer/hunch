@@ -25,7 +25,52 @@ test("analyzeDiff extracts added/removed/changed symbols and deps", () => {
   assert.ok(sum.includes("verifySession") && sum.includes("redis"));
 });
 
-@@CLEANROOM_HOLE_1@@
+test("analyzeDiff reads Python declarations and imports", () => {
+  const diff = [
+    "diff --git a/src/auth.py b/src/auth.py",
+    "--- a/src/auth.py",
+    "+++ b/src/auth.py",
+    "@@ -1,3 +1,5 @@",
+    "+import redis",
+    "+from .jwt import encode",
+    "-def login():",
+    "+def verify_session(token):",
+    "+class SessionError(Exception):",
+    "-from legacy import old",
+  ].join("\n");
+  const a = analyzeDiff(diff);
+  assert.deepEqual(a.addedSymbols.map((s) => s.name).sort(), ["SessionError", "verify_session"]);
+  assert.deepEqual(a.removedSymbols.map((s) => s.name), ["login"]);
+  assert.deepEqual(a.addedDeps, ["redis"]);
+  assert.deepEqual(a.removedDeps, ["legacy"]);
+  assert.ok(!a.addedDeps.includes(".jwt") && !a.addedDeps.includes("jwt"), "relative import is not a dependency");
+  const sum = summarizeDiff(a);
+  assert.ok(sum.includes("verify_session") && sum.includes("redis"));
+});
+
+test("analyzeDiff does not read a TS import-equals as a dependency", () => {
+  const diff = [
+    "diff --git a/src/x.ts b/src/x.ts",
+    "--- a/src/x.ts",
+    "+++ b/src/x.ts",
+    "@@ -1 +1 @@",
+    "+import Foo = Bar.Baz;",
+  ].join("\n");
+  assert.deepEqual(analyzeDiff(diff).addedDeps, []);
+});
+
+test("analyzeDiff ignores declarations in non-code files (extension gate)", () => {
+  const diff = [
+    "diff --git a/notes.txt b/notes.txt",
+    "--- a/notes.txt",
+    "+++ b/notes.txt",
+    "@@ -1 +1 @@",
+    "+def not_really_code(x):",
+  ].join("\n");
+  assert.equal(analyzeDiff(diff).addedSymbols.length, 0);
+});
+
+test("analyzeDiff detects a changed (both-sides) symbol as 'changed', and tracks the accompanying markdown edit as substantive churn (not a declaration)", () => {
   const diff = [
     "diff --git a/README.md b/README.md",
     "--- a/README.md",
@@ -42,7 +87,10 @@ test("analyzeDiff extracts added/removed/changed symbols and deps", () => {
   const a = analyzeDiff(diff);
   assert.deepEqual(a.changedSymbols.map((s) => s.name), ["f"]);
   assert.equal(a.addedSymbols.length, 0);
-@@CLEANROOM_HOLE_2@@
+  assert.equal(a.filesAdded.length, 0, "both files are modifies");
+  assert.deepEqual([...a.filesModified].sort(), ["README.md", "src/x.ts"]);
+  // README churn is tracked but contributes no declaration.
+  assert.equal(a.addedLines, 2);
 });
 
 test("content lines starting with ++/-- are NOT mistaken for file headers (regression: header collision)", () => {
