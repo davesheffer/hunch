@@ -189,14 +189,33 @@ export function executeReleasePlan(plan, runner) {
 export function executeGuardedReleasePlan(plan, runner, expectedSource, observeSource, onSourceError = () => {}) {
   return executeReleasePlan(plan, (gate) => {
     const outcome = runner(gate);
-@@CLEANROOM_HOLE_1@@
+    const observed = observeSource();
+    const sourceError = releaseSourceStateError(expectedSource, observed);
     if (!sourceError) return outcome;
-@@CLEANROOM_HOLE_2@@
+    onSourceError(gate, sourceError, observed);
     return { exitCode: 1 };
   });
 }
 
-@@CLEANROOM_HOLE_3@@
+/** Per-line symmetric difference of two `git status --porcelain` blobs: the
+ *  evidence of which paths became dirty (added) or clean (removed). */
+export function statusDiffLines(before, after) {
+  const lines = (blob) => {
+    if (blob == null) return [];
+    if (Buffer.isBuffer(blob)) blob = blob.toString("utf8");
+    if (typeof blob !== "string") throw new TypeError(`statusDiffLines expects a porcelain string, got ${Array.isArray(blob) ? "array" : typeof blob}`);
+    return blob.split("\n").filter((line) => line !== "");
+  };
+  const beforeLines = lines(before);
+  const afterLines = lines(after);
+  const beforeSet = new Set(beforeLines);
+  const afterSet = new Set(afterLines);
+  return {
+    added: afterLines.filter((line) => !beforeSet.has(line)),
+    removed: beforeLines.filter((line) => !afterSet.has(line)),
+  };
+}
+
 export function guardedReceiptWrite({ expectedSource, observeSource, writeReceipt, removeReceipt }) {
   const beforeError = releaseSourceStateError(expectedSource, observeSource(null));
   if (beforeError) throw new Error(`source changed before receipt write: ${beforeError}`);
@@ -358,9 +377,14 @@ function run(command, args, options = {}) {
   return { exitCode: child.status ?? 1 };
 }
 
-@@CLEANROOM_HOLE_4@@
+// Keep leading whitespace: porcelain lines for unstaged-only changes start with
+// a space, and trimming both ends would shift the fixed-column path extraction in
+// statusWithoutMemoryChurn for the first line, so a `.hunch/` churn path was
+// misread as a real source change (an intermittent CI flake).
+export function git(args, cwd = projectRoot) {
+  const child = spawnSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (child.status !== 0) throw new Error(child.stderr.trim() || `git ${args.join(" ")} failed`);
-@@CLEANROOM_HOLE_5@@
+  return child.stdout.trimEnd();
 }
 
 function tagPointsToCommit(tag, commit) {
@@ -660,11 +684,25 @@ async function main() {
         ? [...baseArgs, "--allow-dirty"]
         : baseArgs;
       return run(command, args, { env: gateEnvironment(gate.id, process.env, emptyPrivateHome) });
-@@CLEANROOM_HOLE_6@@
+    }, sourceBefore, () => observeNormalizedSource(), (gate, sourceError, observed) => {
       const detail = `${gate.id}: ${sourceError}`;
       sourceMutationErrors.push(detail);
       process.stderr.write(`Release gate source-integrity failure: ${detail}\n`);
-@@CLEANROOM_HOLE_7@@
+      // The bare reason never names a path; this evidence makes the next
+      // occurrence diagnosable from the uploaded receipt.
+      if (observed.status !== sourceBefore.status) {
+        const { added, removed } = statusDiffLines(sourceBefore.status, observed.status);
+        if (added.length) sourceMutationErrors.push(`${gate.id}: newly dirty — ${added.join(" | ")}`);
+        if (removed.length) sourceMutationErrors.push(`${gate.id}: no longer dirty — ${removed.join(" | ")}`);
+      }
+      if (observed.commit !== sourceBefore.commit) {
+        try {
+          const touched = git(["diff", "--name-only", `${sourceBefore.commit}..${observed.commit}`]).split("\n").filter(Boolean);
+          if (touched.length) sourceMutationErrors.push(`${gate.id}: HEAD-move touched — ${touched.join(" | ")}`);
+        } catch {
+          // diagnosis only; never mask the primary source error
+        }
+      }
     });
     const contextErrors = [...sourceMutationErrors];
     const rawRehearsal = readGateEvidence(rehearsalOutput, "clean-install-rehearsal", gates, contextErrors);

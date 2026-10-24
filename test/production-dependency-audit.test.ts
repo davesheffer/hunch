@@ -7,43 +7,74 @@ import {
   evaluateProductionAudit,
 } from "../tooling/production-dependency-audit.mjs";
 
-@@CLEANROOM_HOLE_1@@
+// Synthetic fixture, not a real advisory: it exercises the exact-match and
+// fail-closed mechanism independently of live CVE data.
+const FAKE_REVIEWED = Object.freeze({
+  "fake-vulnerable-pkg": Object.freeze({
+    severity: "moderate",
+    isDirect: false,
+    range: "<2.0.5",
+    effects: Object.freeze(["fake-parent-pkg"]),
+    nodes: Object.freeze(["node_modules/fake-parent-pkg/node_modules/fake-vulnerable-pkg"]),
+    via: Object.freeze([Object.freeze({
+      source: 9900001,
+      name: "fake-vulnerable-pkg",
+      dependency: "fake-vulnerable-pkg",
+      title: "Test-only fake advisory, not a real vulnerability",
+      url: "https://github.com/advisories/GHSA-xxxx-xxxx-xxxx",
+      severity: "moderate",
+      cwe: Object.freeze(["CWE-22"]),
+      cvss: Object.freeze({ score: 5.3, vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N" }),
+      range: "<2.0.5",
+    })]),
+    fixAvailable: Object.freeze({ name: "fake-parent-pkg", version: "9.9.9", isSemVerMajor: true }),
+  }),
+});
+
 function reviewedReport() {
   return {
     auditReportVersion: 2,
     vulnerabilities: {
-@@CLEANROOM_HOLE_2@@
+      "fake-vulnerable-pkg": {
+        name: "fake-vulnerable-pkg",
         severity: "moderate",
         isDirect: false,
         via: [{
-@@CLEANROOM_HOLE_3@@
+          source: 9900001,
+          name: "fake-vulnerable-pkg",
+          dependency: "fake-vulnerable-pkg",
+          title: "Test-only fake advisory, not a real vulnerability",
+          url: "https://github.com/advisories/GHSA-xxxx-xxxx-xxxx",
           severity: "moderate",
           cwe: ["CWE-22"],
-@@CLEANROOM_HOLE_4@@
+          cvss: { score: 5.3, vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N" },
           range: "<2.0.5",
         }],
-@@CLEANROOM_HOLE_5@@
+        effects: ["fake-parent-pkg"],
         range: "<2.0.5",
-@@CLEANROOM_HOLE_6@@
+        nodes: ["node_modules/fake-parent-pkg/node_modules/fake-vulnerable-pkg"],
+        fixAvailable: { name: "fake-parent-pkg", version: "9.9.9", isSemVerMajor: true },
       },
     },
     metadata: {
-@@CLEANROOM_HOLE_7@@
+      vulnerabilities: { info: 0, low: 0, moderate: 1, high: 0, critical: 0, total: 1 },
     },
   };
 }
 
-@@CLEANROOM_HOLE_8@@
+test("production audit accepts only an exact reviewed exception", () => {
+  const result = evaluateProductionAudit(reviewedReport(), [], FAKE_REVIEWED);
   assert.deepEqual(result, {
     status: "passed",
-@@CLEANROOM_HOLE_9@@
+    reviewed_vulnerable_packages: ["fake-vulnerable-pkg"],
+    reviewed_advisory_sources: [9900001],
     unreviewed_vulnerabilities: 0,
   });
   assert.deepEqual(evaluateProductionAudit({
     auditReportVersion: 2,
     vulnerabilities: {},
     metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
-@@CLEANROOM_HOLE_10@@
+  }, [], FAKE_REVIEWED), {
     status: "passed",
     reviewed_vulnerable_packages: [],
     reviewed_advisory_sources: [],
@@ -53,9 +84,10 @@ function reviewedReport() {
 
 test("production audit fails closed on advisory drift, new findings, and HTTP/Hono reachability", () => {
   const changed = reviewedReport();
-@@CLEANROOM_HOLE_11@@
+  changed.vulnerabilities["fake-vulnerable-pkg"].severity = "high";
+  changed.metadata.vulnerabilities.moderate = 0;
   changed.metadata.vulnerabilities.high = 1;
-@@CLEANROOM_HOLE_12@@
+  assert.throws(() => evaluateProductionAudit(changed, [], FAKE_REVIEWED), /changed identity/);
 
   const unexpected = reviewedReport();
   unexpected.vulnerabilities["new-package"] = {
@@ -68,7 +100,10 @@ test("production audit fails closed on advisory drift, new findings, and HTTP/Ho
     nodes: ["node_modules/new-package"],
   };
   unexpected.metadata.vulnerabilities.critical = 1;
-@@CLEANROOM_HOLE_13@@
+  unexpected.metadata.vulnerabilities.total = 2;
+  assert.throws(() => evaluateProductionAudit(unexpected, [], FAKE_REVIEWED), /unreviewed production vulnerability/);
+  // The real allowlist is empty, so the old finding shape is no longer accepted.
+  assert.throws(() => evaluateProductionAudit(reviewedReport()), /unreviewed production vulnerability/);
 
   for (const specifier of [
     "@hono/node-server/serve-static",
@@ -78,7 +113,7 @@ test("production audit fails closed on advisory drift, new findings, and HTTP/Ho
     "@modelcontextprotocol/sdk/server/auth/router.js",
   ]) {
     assert.throws(() => assertReviewedProductionImports([specifier]), /became reachable/,
-@@CLEANROOM_HOLE_14@@
+      `${specifier} must stay disallowed regardless of the current reviewed-exception allowlist`);
   }
 });
 

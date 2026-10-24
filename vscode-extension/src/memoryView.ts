@@ -73,7 +73,11 @@ export interface EscalationEntry {
   question: string;
   detail: string;
   resolution: string;
-@@CLEANROOM_HOLE_1@@
+  /** False only for an entry whose resolution requires acting on a different
+   *  entry first (a duplicate-id commit-repair follower). It is still shown for
+   *  transparency but does not count toward the group's "needs your decision"
+   *  tally (#61). Omitted means true. */
+  actionable?: boolean;
 }
 
 /** One Constitution policy — mirrors `hunch policy list --json` (JSON consumer). */
@@ -90,9 +94,13 @@ export interface PolicyEntry {
 export class EscalationNode extends vscode.TreeItem {
   constructor(public readonly entry: EscalationEntry, public readonly root: string) {
     super(entry.question, vscode.TreeItemCollapsibleState.None);
-@@CLEANROOM_HOLE_2@@
+    // Context-only entries look distinct from real decisions (#61).
+    if (entry.actionable === false) {
+      this.iconPath = new vscode.ThemeIcon("info");
+      this.description = "context only";
+    } else {
       this.iconPath = new vscode.ThemeIcon("question", new vscode.ThemeColor("notificationsWarningIcon.foreground"));
-@@CLEANROOM_HOLE_3@@
+    }
     this.contextValue = "hunchEscalation";
     this.tooltip = new vscode.MarkdownString([`**${entry.kind}**`, "", entry.detail, "", `→ ${entry.resolution}`].join("\n"));
     this.command = { command: "hunch.openEscalation", title: "Open escalation", arguments: [this] };
@@ -174,7 +182,8 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
     ]);
     if (!this.loadFence.isCurrent(ticket, this.currentRoot())) return false;
     try { this.moves = log.ok ? JSON.parse(log.stdout) as MemoryMove[] : []; } catch { this.moves = []; }
-@@CLEANROOM_HOLE_4@@
+    // `hunch escalations --json` exits non-zero when actionable entries exist,
+    // so the JSON must be parsed whatever the exit status.
     try { this.escalations = JSON.parse(esc.stdout) as EscalationEntry[]; } catch { this.escalations = []; }
     try { this.policies = pol.ok ? JSON.parse(pol.stdout) as PolicyEntry[] : []; } catch { this.policies = []; }
     this.loadedRoot = root;
@@ -192,9 +201,12 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
       const root = this.loadedRoot;
       if (!root) return [];
       const roots: Node[] = [];
-@@CLEANROOM_HOLE_5@@
+      if (this.escalations.length) {
+        // The tally counts only actionable entries (#61).
+        const actionableCount = this.escalations.filter((e) => e.actionable !== false).length;
+        const context = this.escalations.length - actionableCount;
         roots.push(new GroupNode(`⚖ Needs your decision (${actionableCount}${context ? `, +${context} for context` : ""})`, "issues", "escalations", root));
-@@CLEANROOM_HOLE_6@@
+      }
       if (this.policies.length) roots.push(new GroupNode(`🏛 Constitution (${this.policies.length})`, "law", "policies", root));
       return [...roots, ...this.moves.map((m) => new MoveNode(m, root))];
     }

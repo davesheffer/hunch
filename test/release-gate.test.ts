@@ -1,8 +1,10 @@
 import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
-@@CLEANROOM_HOLE_1@@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-@@CLEANROOM_HOLE_2@@
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -24,13 +26,13 @@ import {
   executeGuardedReleasePlan,
   executeReleasePlan,
   gateEnvironment,
-@@CLEANROOM_HOLE_3@@
+  git,
   guardedReceiptWrite,
   npmDistTagForVersion,
   releaseSourceStateError,
   releaseTestManifest,
   selectPreviousVersion,
-@@CLEANROOM_HOLE_4@@
+  statusDiffLines,
   validateReleaseContext,
   verifyReleaseReceipt,
 } from "../tooling/release-gate.mjs";
@@ -303,20 +305,40 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   let observedSource = { ...expectedSource };
   const guardedCalls: string[] = [];
   const guardedErrors: string[] = [];
-@@CLEANROOM_HOLE_5@@
+  let observedByCallback: unknown;
   const guardedResults = executeGuardedReleasePlan(RELEASE_GATES, (gate) => {
     guardedCalls.push(gate.id);
     if (gate.id === "test") observedSource = { ...observedSource, commit: "b".repeat(40) };
     return { exitCode: 0 };
-@@CLEANROOM_HOLE_6@@
+  }, expectedSource, () => observedSource, (gate, error, observed) => {
+    guardedErrors.push(`${gate.id}: ${error}`);
+    observedByCallback = observed;
+  });
   assert.deepEqual(guardedCalls, ["typecheck", "test"], "HEAD movement stops the plan at the responsible gate");
   assert.deepEqual(guardedResults.map((result) => result.status), ["passed", "failed"]);
   assert.match(guardedErrors[0] ?? "", /^test: HEAD moved/);
-@@CLEANROOM_HOLE_7@@
+  assert.deepEqual(observedByCallback, observedSource, "the error callback receives the observed source, not only the reason string");
   assert.match(releaseSourceStateError(expectedSource, observedSource) ?? "", /HEAD moved/);
   assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, status: " M package.json" }) ?? "", /working tree changed/);
   assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, tag_commit_matches: false }) ?? "", /release tag stopped/);
-@@CLEANROOM_HOLE_8@@
+  const cleanToDirty = statusDiffLines("", " M src/a.ts\n?? notes.txt");
+  assert.deepEqual(cleanToDirty.added, [" M src/a.ts", "?? notes.txt"], "every newly dirty line is added, in order, leading space kept");
+  assert.deepEqual(cleanToDirty.removed, []);
+  assert.deepEqual(cleanToDirty, { added: [" M src/a.ts", "?? notes.txt"], removed: [] });
+  assert.deepEqual(
+    statusDiffLines([" M shared.ts", " M gone.ts"].join("\n"), ["?? fresh.ts", " M shared.ts"].join("\n")),
+    { added: ["?? fresh.ts"], removed: [" M gone.ts"] },
+    "only the symmetric difference is reported, regardless of order",
+  );
+  assert.deepEqual(statusDiffLines("", ""), { added: [], removed: [] });
+  assert.deepEqual(statusDiffLines(null, undefined), { added: [], removed: [] }, "null/undefined count as empty");
+  assert.deepEqual(
+    statusDiffLines(Buffer.from(" M gone.ts\n"), Buffer.from("?? fresh.ts\n")),
+    { added: ["?? fresh.ts"], removed: [" M gone.ts"] },
+    "Buffer output from git is coerced to a string",
+  );
+  assert.throws(() => statusDiffLines([" M src/a.ts"] as unknown as string, ""), TypeError);
+  assert.throws(() => statusDiffLines("", 42 as unknown as string), TypeError);
 });
 
 test("memory churn never reads as source mutation: paths, status filtering, and what stays fatal", () => {
@@ -345,9 +367,28 @@ test("memory churn never reads as source mutation: paths, status filtering, and 
   assert.equal(statusWithoutMemoryChurn(""), "", "clean stays clean");
 });
 
-@@CLEANROOM_HOLE_9@@
+test("git() preserves the leading space of an unstaged-only porcelain line", () => {
+  // `.hunch/evidence` sorts first, so the porcelain blob starts with " M": trimming
+  // both ends would shift statusWithoutMemoryChurn's fixed-column path extraction.
+  const repo = mkdtempSync(join(tmpdir(), "hunch-release-gate-git-"));
+  try {
+    execFileSync("git", ["init", "-q"], { cwd: repo });
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repo });
+    execFileSync("git", ["config", "user.name", "Test"], { cwd: repo });
+    mkdirSync(join(repo, ".hunch", "evidence"), { recursive: true });
+    const evidence = join(repo, ".hunch", "evidence", "ev_0123456789.json");
+    writeFileSync(evidence, '{"v":1}\n');
+    execFileSync("git", ["add", "-A"], { cwd: repo });
+    execFileSync("git", ["commit", "-q", "-m", "init"], { cwd: repo });
+    writeFileSync(evidence, '{"v":2}\n');
+    const status = git(RELEASE_CLEAN_STATUS_ARGS, repo);
+    assert.equal(status[0], " ", "the first porcelain line keeps its leading space");
+    assert.equal(statusWithoutMemoryChurn(status), "", "an unstaged memory-churn edit is still recognised as churn");
+  } finally {
     cleanupDir(repo);
-@@CLEANROOM_HOLE_10@@
+  }
+});
+
 test("guarded receipt write and gate environment isolation", () => {
   const expectedSource = { commit: "a".repeat(40), status: "", tag_commit_matches: true };
   let receiptWritten = false;

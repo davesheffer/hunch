@@ -3,7 +3,17 @@ dist/
 *.log
 .vercel/
 
-@@CLEANROOM_HOLE_1@@
+# Local git worktrees used for isolated feature-branch work.
+.worktrees/
+
+# Subagent-driven-development workspace (per-plan ledgers, task briefs, review
+# packages): local orchestration scratch, regenerated per run and never shipped.
+.superpowers/
+
+# Local brainstorm, spec and plan documents: planning artifacts kept out of the
+# public tree, since design rationale lives in the private overlay.
+docs/superpowers/
+
 # VS Code extension build artifact — distribute via GitHub Releases / registries, not git.
 *.vsix
 

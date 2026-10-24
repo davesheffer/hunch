@@ -7,7 +7,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-@@CLEANROOM_HOLE_1@@
+// Empty on purpose: production `npm audit` currently reports nothing. It once
+// held a reviewed exception for a Hono serve-static advisory that the stdio-only
+// MCP server could not reach; bumping @modelcontextprotocol/sdk resolved it. A
+// future exception must record the exact reported shape (severity, isDirect,
+// range, effects, nodes, via, fixAvailable); any drift fails closed.
+export const REVIEWED_AUDIT_VULNERABILITIES = Object.freeze({});
 
 const DISALLOWED_PRODUCTION_IMPORTS = Object.freeze([
   /^@hono\/node-server(?:\/|$)/,
@@ -75,7 +80,7 @@ export function assertReviewedProductionImports(imports) {
   return true;
 }
 
-@@CLEANROOM_HOLE_2@@
+export function evaluateProductionAudit(report, productionImports = [], reviewedVulnerabilities = REVIEWED_AUDIT_VULNERABILITIES) {
   if (!report || report.auditReportVersion !== 2 || !report.vulnerabilities
     || typeof report.vulnerabilities !== "object") {
     throw new Error("npm audit returned an unsupported or malformed JSON report");
@@ -85,7 +90,7 @@ export function assertReviewedProductionImports(imports) {
   const names = Object.keys(report.vulnerabilities).sort();
   for (const name of names) {
     const actual = report.vulnerabilities[name];
-@@CLEANROOM_HOLE_3@@
+    const reviewed = reviewedVulnerabilities[name];
     if (!reviewed) throw new Error(`unreviewed production vulnerability: ${name}`);
     if (actual?.name !== name
       || actual.severity !== reviewed.severity
