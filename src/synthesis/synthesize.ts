@@ -19,10 +19,11 @@ import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types
 import type { TestReport } from "../extractors/testreport.js";
 import { isSubstantive } from "../extractors/languages.js";
 
-// "chore(deps):" is anchored separately (not via \b) because \b requires a
-// word/non-word transition, and the character after the closing ")" is ":" or a
-// space — both non-word — so no boundary ever fires there.
-const SKIP_SUBJECT = /^(merge|revert|bump|format|lint|wip)\b|^chore\(deps\):/i;
+// Subjects that signal mechanical churn. `chore(deps):` is matched as a literal
+// prefix on its own: a word-boundary check after the closing parenthesis would
+// never fire (both ")" and ":" are non-word characters), so it cannot share the
+// `\b` alternative.
+const SKIP_SUBJECT = /^(?:(?:merge|revert|bump|format|lint|wip)\b|chore\(deps\):)/i;
 
 export interface SyncResult {
   status: "written" | "skipped";
@@ -36,11 +37,11 @@ export interface SyncResult {
 const SIG_MIN_LINES = ((raw) => Number.isFinite(raw) && raw > 0 ? raw : 12)(Number(process.env.HUNCH_SIG_MIN_LINES));
 const SIG_MIN_BODY = 40;
 
-/** Trivial-subject commits (merge/revert/bump/format/...) are noise UNLESS the body
- *  carries real content — a squash/PR description often lands there, not on the
- *  subject. Gated on body length ALONE (not the full isSignificant() heuristic): a
- *  large auto-generated reformat or dependency-bump diff with no narrative must stay
- *  skipped even though it would trip isSignificant()'s line/file/structural checks. */
+/** Is this commit mechanical noise (merge/revert/bump/format/lint/wip, dependency
+ *  chores) with no narrative? Gates on body length alone, not the full significance
+ *  heuristic, so a large auto-generated reformat or dependency bump with no
+ *  narrative stays skipped, while a squash/PR description (a substantive body)
+ *  keeps a trivial-looking subject eligible. */
 export function isTrivialSubject(meta: { subject: string; body: string }): boolean {
   return SKIP_SUBJECT.test(meta.subject) && meta.body.trim().length < SIG_MIN_BODY;
 }
@@ -49,9 +50,9 @@ export function isTrivialSubject(meta: { subject: string; body: string }): boole
  *  deterministic. Any structural change (symbol/dependency delta), non-trivial
  *  churn, several files, OR an explanatory commit body signals a real decision
  *  worth the model. Everything below (typo/tweak/one-liner with no message) falls
- *  to the free deterministic draft — shallower but honestly low-confidence.
- *  `files` is whatever the caller is synthesizing from (code and/or markdown, per
- *  isSubstantive) — the line/file-count checks are format-agnostic. */
+ *  to the free deterministic draft. The line and file-count checks don't depend on
+ *  the file format; `files` is the explicit list being synthesized (code and/or
+ *  markdown). */
 export function isSignificant(meta: { body: string }, a: DiffAnalysis, files: string[]): boolean {
   const structural =
     a.addedSymbols.length + a.removedSymbols.length + a.changedSymbols.length + a.addedDeps.length + a.removedDeps.length;
@@ -76,27 +77,14 @@ export async function syncCommit(
   if (!meta) return { status: "skipped", reason: "commit not found" };
 
   if (isTrivialSubject(meta)) return { status: "skipped", reason: `trivial subject: ${meta.subject}` };
-  // .hunch/** is Hunch's OWN store — commitDiff already excludes it from the diff
-  // CONTENT via DIFF_NOISE ("circular noise": re-synthesizing a commit that wrote
-  // it would draft a decision about Hunch's own bookkeeping). That guard never
-  // covered this file-LIST gate, and before #12 it didn't need to: languageFor()
-  // already returned null for .hunch/**'s JSON and for the .md grounding docs
-  // flushCapture regenerates alongside it (AGENTS.md/CLAUDE.md/copilot-instructions.md),
-  // so such a commit failed "no code files changed" by coincidence. Once markdown
-  // became substantive input those grounding docs alone made the commit eligible.
-  // Checked by PATH, not commit-message convention (flushCapture's exact subject
-  // wording lives as separate literals in mcp/server.ts/cli/index.ts and could
-  // drift independently of any subject regex here) — a human editing AGENTS.md on
-  // its own, with no .hunch/** change alongside it, stays fully synthesis-eligible.
+  // Hunch's own store is circular input. This checks the PATH, not the commit-message
+  // wording, and the decision is per path: a human editing AGENTS.md alone, with no
+  // .hunch change, stays eligible.
   if (meta.files.some((f) => pathMatchesGlob(f, "**/.hunch/**"))) {
-    return { status: "skipped", reason: "touches Hunch's own store (.hunch/**) — circular, never synthesis input" };
+    return { status: "skipped", reason: "commit touches Hunch's own store (.hunch/**), which is circular and never synthesis input" };
   }
-  // Substantive, not just parseable: markdown carries the *why* in a docs/ADR repo
-  // just as legitimately as a .ts diff does, even though it has no symbol graph
-  // (issue #12). languageFor() stays the parseability question for the symbol/dep
-  // extraction inside analyzeDiff below.
-  const substantiveFiles = meta.files.filter((f) => isSubstantive(f));
-  if (substantiveFiles.length === 0) return { status: "skipped", reason: "no code or markdown files changed" };
+  const substantiveFiles = meta.files.filter(isSubstantive);
+  if (!substantiveFiles.length) return { status: "skipped", reason: "no code or markdown files changed" };
 
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
   // (which varies) — so re-syncing a commit updates rather than dupes.
@@ -158,7 +146,7 @@ export async function syncCommit(
     ? new DeterministicProvider()
     : opts.deep
     ? (await selectEnsemble({ root, samples: opts.samples })) ?? await selectProvider({ root })
-    : opts.force || opts.verify || isSignificant(meta, analysis, substantiveFiles)
+    : opts.force || wantVerify || isSignificant(meta, analysis, substantiveFiles)
       ? await selectProvider({ root })
       : new DeterministicProvider();
   const input: CommitInput = { subject: meta.subject, body: meta.body, files: substantiveFiles, diff, analysis };
@@ -168,16 +156,14 @@ export async function syncCommit(
   // grounding. No-ops when no assistant CLI is available; never raises trust (dec_9a2f2fe72a).
   if (wantVerify) draft = await verifyDecisionSafe(await selectVerifier({ root }), input, draft);
 
-  // The draft's own drafter, not merely the one selected — draftDecisionSafe sets
-  // fellBackTo when the selected provider threw and it silently substituted the
-  // deterministic heuristic. Every telemetry/return below must report THIS, since
-  // backfill's LLM-vs-heuristic tally reads it directly off the return value.
+  // Every telemetry/return value below must report the provider that ACTUALLY drafted
+  // the record (backfill's LLM-vs-heuristic tally reads it from the return value).
   const actualProvider = draft.fellBackTo ?? provider.name;
 
   // Advisory synthesis telemetry for `hunch review` — which provider ran, how many drafts
   // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
   // (no schema change → respects forward-migration invariant con_947c578b2c).
-  const synthBits = [`provider=${actualProvider}`];
+  const synthBits: string[] = [`provider=${actualProvider}`];
   if (draft.samples) synthBits.push(`samples=${draft.samples}`);
   if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
   if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
@@ -194,7 +180,7 @@ export async function syncCommit(
 
   const components = store.json.loadAll("components");
   const relatedComponents = components
-    .filter((c: Component) => substantiveFiles.some((f) => c.paths.some((g) => pathMatchesGlob(f, g))))
+    .filter((c) => substantiveFiles.some((f) => c.paths.some((g) => pathMatchesGlob(f, g))))
     .map((c) => c.id);
 
   // Surface any do-not-break constraints this commit's files touch (DESIGN §4
@@ -312,8 +298,7 @@ export async function recordFailure(
     suspects: suspects.map((s) => `${s.name} @ ${s.file}`),
   };
   const draft = await draftBugSafe(provider, input);
-  // The draft's own drafter, not merely the one selected — see the identical
-  // comment in syncCommit above.
+  // Report the provider that actually drafted the bug (see syncCommit).
   const actualProvider = draft.fellBackTo ?? provider.name;
 
   // Seed the id from the test id (stable), not the LLM title — one bug per test.
@@ -600,25 +585,23 @@ function recentDiffFor(root: string): string {
 export async function draftDecisionSafe(provider: SynthProvider, input: CommitInput): Promise<DecisionDraft> {
   try {
     return await provider.draftDecision(input);
-  } catch (error) {
+  } catch (err) {
     // A provider failure (network, bad creds, CLI crash, unparseable output) must
     // never abort the learning loop — fall back to the deterministic heuristic
     // draft, which is honestly labeled ("inferred") rather than a hollow llm_draft.
-    // fellBackTo/fallbackReason tell the caller what ACTUALLY drafted this, not
-    // merely what was selected — see syncCommit, which must report this instead
-    // of the originally-selected provider's name.
-    const draft = await new DeterministicProvider().draftDecision(input);
-    return { ...draft, fellBackTo: "deterministic", fallbackReason: error instanceof Error ? error.message : String(error) };
+    // Tell the caller a fallback happened (and why) so it reports the provider that
+    // actually drafted the record rather than the one that was selected.
+    const fallback = await new DeterministicProvider().draftDecision(input);
+    return { ...fallback, fellBackTo: "deterministic", fallbackReason: err instanceof Error ? err.message : String(err) };
   }
 }
 
 export async function draftBugSafe(provider: SynthProvider, input: FailureInput): Promise<BugDraft> {
   try {
     return await provider.draftBug(input);
-  } catch (error) {
-    // See draftDecisionSafe above — the same fallback contract applies to bugs,
-    // and recordFailure must report the actual (fallback) provider likewise.
-    const draft = await new DeterministicProvider().draftBug(input);
-    return { ...draft, fellBackTo: "deterministic", fallbackReason: error instanceof Error ? error.message : String(error) };
+  } catch (err) {
+    // Same contract as draftDecisionSafe: surface the fallback and its cause.
+    const fallback = await new DeterministicProvider().draftBug(input);
+    return { ...fallback, fellBackTo: "deterministic", fallbackReason: err instanceof Error ? err.message : String(err) };
   }
 }

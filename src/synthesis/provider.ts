@@ -13,9 +13,9 @@
  * child env wherever the CLI would otherwise prefer them. There is intentionally
  * NO direct API-key provider.
  *
- * A fourth, OPT-IN provider (name "openai-compat", alias "ollama") speaks the
- * OpenAI chat-completions format over HTTP to a self-hosted endpoint instead of a
- * subscription CLI. It stays off unless HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL
+ * Provider D (opt-in): "openai-compat" (alias "ollama") speaks the OpenAI
+ * chat-completions format over HTTP to a self-hosted endpoint instead of running
+ * a subscription CLI. It stays off unless HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL
  * are both explicitly set. Local/LAN endpoints work directly; every public remote
  * requires HUNCH_SYNTH_ALLOW_METERED=1 because billing cannot be inferred safely
  * from a hostname — con_2ce3f2a547's spirit is "never silently bill."
@@ -103,10 +103,10 @@ export interface DecisionDraft {
   // call errored after a retry. Lets telemetry distinguish "verified, nothing to
   // flag" from "verification was skipped" instead of degrading silently.
   verifyOutcome?: "applied" | "unavailable" | "failed";
-  // Set only when the requested provider failed and draftDecisionSafe silently
-  // substituted the deterministic fallback. The caller must report the ACTUAL
-  // drafting provider using this field, never the one that was merely selected —
-  // see draftDecisionSafe in synthesize.ts.
+  // Set ONLY when the requested provider failed and the safe wrapper
+  // (`draftDecisionSafe`) substituted the deterministic draft: the provider that
+  // actually drafted this record, and the error that caused the fallback. Callers
+  // must report the actual drafting provider from these fields.
   fellBackTo?: string;
   fallbackReason?: string;
 }
@@ -129,10 +129,7 @@ export interface BugDraft {
   severity: "low" | "medium" | "high" | "critical";
   confidence: number;
   source: string;
-  // Set only when the requested provider failed and draftBugSafe silently
-  // substituted the deterministic fallback. The caller must report the ACTUAL
-  // drafting provider using this field, never the one that was merely selected —
-  // see draftBugSafe in synthesize.ts.
+  // Same contract as DecisionDraft: set by `draftBugSafe` on a provider failure.
   fellBackTo?: string;
   fallbackReason?: string;
 }
@@ -197,8 +194,9 @@ export interface SynthProvider {
 
 /** Every selectable synthesis mode. `auto` is a preference value rather than a
  * provider: it resolves the invocation's origin without choosing by availability.
- * "openai-compat" is the opt-in local/self-hosted HTTP provider (Ollama, vLLM,
- * LM Studio, ...) — not a subscription, but explicitly selectable like one. */
+ * "openai-compat" is the opt-in local or self-hosted HTTP provider (Ollama, vLLM,
+ * LM Studio and so on). It is not a subscription, but it can be selected
+ * explicitly like one. */
 export const SYNTH_PROVIDER_NAMES = ["claude-cli", "codex-cli", "cursor-agent", "kimi-cli", "openai-compat", "deterministic"] as const;
 export const SYNTH_PREFERENCES = ["auto", ...SYNTH_PROVIDER_NAMES] as const;
 export type SynthProviderName = (typeof SYNTH_PROVIDER_NAMES)[number];
@@ -236,7 +234,7 @@ const PROVIDER_INFO: Record<SynthProviderName, { label: string; subscription: st
   "codex-cli": { label: "Codex", subscription: "ChatGPT subscription" },
   "cursor-agent": { label: "Cursor Agent", subscription: "Cursor subscription" },
   "kimi-cli": { label: "Kimi CLI", subscription: null },
-  "openai-compat": { label: "Self-hosted / local model (Ollama, vLLM, LM Studio, ...)", subscription: null },
+  "openai-compat": { label: "Self-hosted / local model (Ollama, vLLM, LM Studio)", subscription: null },
   deterministic: { label: "Deterministic local fallback", subscription: null },
 };
 
@@ -316,15 +314,14 @@ const VERIFY_TOOL = {
 };
 
 // --------------------------------------------------------------------------
-// Base for any provider whose interface reduces to "turn one prompt string into
-// text" — the three headless-CLI SUBSCRIPTION providers below (spawn, stdin,
-// billed to the user's own subscription, never a pay-per-token API key — see
-// dec_65b058de66) AND the opt-in local/self-hosted HTTP provider further down
-// (OpenAICompatProvider). Neither transport nor billing model is part of the
-// contract; only run()'s shape is. The prompt always goes over STDIN for the CLI
-// providers (never argv — keeps untrusted diff content out of any shell pexecIn
-// uses on Windows). Every implementation's text output is handed to the SAME
-// mappers, so the rest of the system stays provider-agnostic.
+// Shared base for any provider whose interface reduces to "turn one prompt string
+// into text". That covers the three headless subscription CLI providers (they
+// spawn a process, send the prompt on stdin, and bill the user's own
+// subscription, never a pay-per-token key) and also the opt-in HTTP provider.
+// Transport and billing model are not part of the contract; only the shape of
+// `run` is. CLI providers always send the prompt via stdin, never argv. All
+// outputs go through the same mappers, which keeps the rest of the system
+// provider-agnostic.
 // --------------------------------------------------------------------------
 type PromptOutput = "json" | "text";
 
@@ -430,24 +427,23 @@ export function codexExecArgs(model?: string): string[] {
   return ["exec", "--json", "--skip-git-repo-check", ...(model ? ["-m", model] : []), "-"];
 }
 
-// A timeout comes from a HUNCH_*_TIMEOUT_MS env var and feeds AbortController's
-// delay directly (never a shell argv token, unlike safeModel's model id) — but a
-// non-numeric or nonsensical value (negative, zero, NaN, Infinity) would either
-// abort immediately or never abort at all, so validate the same way: fall back to
-// the provider's default rather than propagate garbage.
-export function safeTimeout(v: string | undefined, fallback: number): number {
+// The timeout drives an abort delay and max_tokens caps output length; neither is
+// a shell argv token. A garbage value would abort at once, never abort, or corrupt
+// the request body, so anything but a finite number > 0 falls back to the default.
+function positiveNumber(v: string | undefined, fallback: number): number {
+  if (typeof v !== "string" || v.trim() === "") return fallback;
   const n = Number(v);
-  return v && Number.isFinite(n) && n > 0 ? n : fallback;
+  return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-// max_tokens caps OUTPUT length (never a shell argv token, unlike safeModel's
-// model id) — same failure modes as a timeout, so validate the same way: fall
-// back to a safe default rather than propagate garbage into the request body
-// (issue #11; orthogonal to the context-window/truncation problem that issue
-// is mainly about — this only bounds how much the model is allowed to WRITE).
+/** Sanitize HUNCH_SYNTH_TIMEOUT_MS: a finite number > 0, else `fallback`. */
+export function safeTimeout(v: string | undefined, fallback: number): number {
+  return positiveNumber(v, fallback);
+}
+
+/** Sanitize HUNCH_SYNTH_MAX_TOKENS: a finite number > 0, else `fallback`. */
 export function safeMaxTokens(v: string | undefined, fallback: number): number {
-  const n = Number(v);
-  return v && Number.isFinite(n) && n > 0 ? n : fallback;
+  return positiveNumber(v, fallback);
 }
 
 // --------------------------------------------------------------------------
@@ -580,21 +576,15 @@ class CursorCliProvider extends PromptSynthProvider {
 }
 
 // --------------------------------------------------------------------------
-// Provider D: OpenAI-compatible / local model endpoint (Ollama, vLLM, LM
-// Studio, llama.cpp server, ...) — opt-in, NOT a subscription CLI. Speaks the
-// OpenAI chat-completions wire format over HTTP, so ONE implementation covers
-// any self-hosted server that implements it (Ollama's /v1 compatibility layer
-// included — no separate native /api/chat client). Off by default: available()
-// requires BOTH HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL, so an installation
-// with neither set behaves exactly as it did before this provider existed.
-//
-// Exported (unlike the CLI providers) so tests can construct fresh instances and
-// read process.env at CALL time — see run()/available() below, which read env
-// vars directly rather than caching them in constructor fields. That mirrors
-// selectProvider()'s own style (it re-reads HUNCH_SYNTH_PROVIDER on every call)
-// and avoids a stale-field trap: a module-level PROVIDERS singleton constructed
-// once at import time would otherwise never see env vars a test (or a long-lived
-// process) sets afterward.
+// Provider D: OpenAI-compatible / local model endpoint (opt-in, NOT a subscription CLI)
+// One implementation covers any server that implements the chat-completions
+// format, including Ollama's /v1 compatibility layer; there is no separate native
+// Ollama client. It is off by default: availability needs both HUNCH_SYNTH_BASE_URL
+// and HUNCH_SYNTH_MODEL, so an install with neither set behaves as if the provider
+// did not exist. Unlike the CLI providers the class is exported, so tests can
+// build fresh instances. It reads env vars at call time instead of caching them in
+// fields, avoiding a stale value in the module-level registry singleton, which is
+// created once at import time.
 // --------------------------------------------------------------------------
 // con_2ce3f2a547's boundary is "never silently bill." A denylist cannot enforce
 // that boundary: new OpenAI-compatible paid providers appear continually, and a
@@ -656,6 +646,7 @@ function requiresMeteredOptIn(url: URL): boolean {
   return !isLocalOrPrivateHost(normalizedHostname(url));
 }
 
+/** True only when the user explicitly opted in to public (possibly metered) hosts. */
 export function meteredHostsAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.HUNCH_SYNTH_ALLOW_METERED === "1";
 }
@@ -673,7 +664,9 @@ export class OpenAICompatProvider extends PromptSynthProvider {
   protected async run(prompt: string, output: PromptOutput = "json"): Promise<string> {
     const baseUrl = process.env.HUNCH_SYNTH_BASE_URL;
     const model = safeModel(process.env.HUNCH_SYNTH_MODEL, undefined);
-    if (!baseUrl || !model) throw new Error("openai-compat: HUNCH_SYNTH_BASE_URL/HUNCH_SYNTH_MODEL not set");
+    if (!baseUrl || !model) {
+      throw new Error("openai-compat: HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL are not set");
+    }
     const endpoint = parseOpenAICompatBaseUrl(baseUrl);
     if (!endpoint) {
       throw new Error("openai-compat: HUNCH_SYNTH_BASE_URL must be an http(s) base URL without credentials, a query, or a fragment");
@@ -685,8 +678,7 @@ export class OpenAICompatProvider extends PromptSynthProvider {
     }
     endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/chat/completions`;
     const apiKey = process.env.HUNCH_SYNTH_API_KEY;
-    const timeoutMs = safeTimeout(process.env.HUNCH_SYNTH_TIMEOUT_MS, 300_000);
-
+    const timeoutMs = safeTimeout(process.env.HUNCH_SYNTH_TIMEOUT_MS, 300000);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -706,11 +698,14 @@ export class OpenAICompatProvider extends PromptSynthProvider {
         signal: controller.signal,
       });
       if (!res.ok) {
-        throw new Error(`openai-compat endpoint returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
+        const text = await res.text().catch(() => "");
+        throw new Error(`openai-compat: ${endpoint.origin}${endpoint.pathname} returned HTTP ${res.status}: ${text.slice(0, 300)}`);
       }
-      const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-      const content = body.choices?.[0]?.message?.content;
-      if (!content) throw new Error("openai-compat endpoint returned no message content");
+      const json = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
+      const content = json.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content) {
+        throw new Error("openai-compat: endpoint returned no message content");
+      }
       return content;
     } finally {
       clearTimeout(timer);
@@ -720,9 +715,10 @@ export class OpenAICompatProvider extends PromptSynthProvider {
 
 /** Best-effort: does the configured openai-compat endpoint look like Ollama with
  *  an UNSET num_ctx? Returns
- *  an advisory warning string when so, or null when the endpoint isn't reachable,
- *  doesn't look like Ollama's /api/show shape, or already has num_ctx set — this
- *  is diagnostics only, never thrown, never blocking. Deliberately does NOT try to
+ *  a warning string when the model does not pin num_ctx, or null when the
+ *  endpoint is unreachable, does not look like Ollama's /api/show response shape,
+ *  or already has num_ctx set. Diagnostics only: it never throws and never blocks.
+ *  Deliberately does NOT try to
  *  report the model's effective context length: modern Ollama defaults may come
  *  from server configuration or VRAM tiers, and model_info keys are not a stable
  *  parse target. We therefore report only the observed fact — whether num_ctx is
@@ -734,15 +730,15 @@ export async function probeOllamaNumCtx(baseUrl: string, model: string): Promise
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: model }),
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { parameters?: unknown };
-    if (typeof body.parameters !== "string") return null;
-    if (/^num_ctx\s+\d+/m.test(body.parameters)) return null; // already configured — nothing to warn about
+    const json = (await res.json()) as { parameters?: unknown };
+    if (typeof json.parameters !== "string") return null;
+    if (/^num_ctx\s+\d+/m.test(json.parameters)) return null;
     return "⚠ This Ollama model does not pin num_ctx; its effective context depends on server/VRAM defaults. For stable large-diff synthesis, see https://www.hunchmemory.com/cookbook and pin num_ctx via a custom Modelfile.";
   } catch {
-    return null; // not Ollama, unreachable, or an unexpected response shape — advisory only, never throw
+    return null;
   }
 }
 
@@ -760,8 +756,7 @@ export class DeterministicProvider implements SynthProvider {
     const dirs = topDirs(input.files);
     const a = input.analysis;
     const summary = a ? summarizeDiff(a) : "";
-    // input.files can be markdown-only (issue #12) — don't claim "code" for a
-    // commit that touched none.
+    // A commit touching no code (issue #12) must not be described as "code".
     const noun = input.files.some((f) => languageFor(f) !== null) ? "code" : "content";
     const verb = /^(add|introduce|create|feat)/i.test(input.subject) ? "introduced"
       : /^(remove|delete|drop)/i.test(input.subject) ? "removed"
@@ -859,9 +854,8 @@ const PROVIDERS: SynthProvider[] = [
 // Availability rarely changes within a process (a CLI doesn't get installed mid-run),
 // and selection runs on every sync/recordFailure. Cache by object identity rather than
 // name so injected test registries never inherit a stale result from another provider.
-// A plain Map (not WeakMap): __resetAvailabilityCacheForTests below needs .clear(),
-// which WeakMap doesn't support — the module's singleton PROVIDERS array is the only
-// thing that ever populates this in production, so there's no unbounded-growth risk.
+// A plain Map (not a WeakMap) so the test-only reset below can clear it. Only the
+// singleton registry fills it in production, so it cannot grow without bound.
 const availCache = new Map<SynthProvider, Promise<boolean>>();
 function isAvailable(p: SynthProvider): Promise<boolean> {
   let v = availCache.get(p);
@@ -872,22 +866,15 @@ function isAvailable(p: SynthProvider): Promise<boolean> {
   return v;
 }
 
-/** Test-only: clears the availability memoization cache so a test that toggles
- *  env vars mid-process (e.g. HUNCH_SYNTH_BASE_URL) isn't served a stale result
- *  cached by an earlier call in the same process. Never call from production code. */
+/** Test-only: empty the availability cache so a test that changes env vars
+ *  mid-process is not served a stale cached result. */
 export function __resetAvailabilityCacheForTests(): void {
   availCache.clear();
 }
 
-/** "ollama" is accepted as an alias for "openai-compat" — the provider is not
- *  Ollama-specific (it speaks the OpenAI chat-completions format any self-hosted
- *  server can implement), but Ollama is the most common self-hosted target and
- *  users reach for that name first. Applied to the HUNCH_SYNTH_PROVIDER env var in
- *  resolveSynthesisProvider below, and exported so the `hunch provider <name>` CLI
- *  command (index.ts) normalizes it the same way before validating/persisting a
- *  local preference — the two paths must agree, or a user who sets one and reads
- *  the other back gets a confusing "unknown provider" message for a name that
- *  actually works. */
+/** The provider is not Ollama-specific, but Ollama is the name users try first, so
+ *  "ollama" is an alias for "openai-compat". The env var and `hunch provider <name>`
+ *  both normalize through here so the two paths agree. */
 export function normalizeProviderName(v: string | undefined): string | undefined {
   return v === "ollama" ? "openai-compat" : v;
 }
@@ -913,8 +900,8 @@ export function readSynthesisPreference(root: string): SynthPreference {
     const file = localPreferencePath(root);
     if (!existsSync(file)) return "auto";
     const parsed = JSON.parse(readFileSync(file, "utf8")) as { synthProvider?: unknown };
-    const normalized = typeof parsed.synthProvider === "string" ? normalizeProviderName(parsed.synthProvider) : undefined;
-    return isSynthPreference(normalized) ? normalized : "auto";
+    const stored = typeof parsed.synthProvider === "string" ? normalizeProviderName(parsed.synthProvider) : undefined;
+    return isSynthPreference(stored) ? stored : "auto";
   } catch {
     return "auto";
   }
@@ -966,7 +953,8 @@ export async function resolveSynthesisProvider(opts: ProviderSelectionOptions = 
     const provider = find(name);
     return provider && await isAvailable(provider) ? provider : undefined;
   };
-  const environment = normalizeProviderName(env.HUNCH_SYNTH_PROVIDER?.trim());
+  const rawEnvironment = env.HUNCH_SYNTH_PROVIDER?.trim();
+  const environment = rawEnvironment ? normalizeProviderName(rawEnvironment) : undefined;
   // Explicit offline/privacy mode always wins: origin binding must never turn it into a model call.
   if (environment === "deterministic") return { provider: fallback, source: "environment", preference: "deterministic", statuses };
   if ((!environment || environment === "auto") && opts.root && readSynthesisPreference(opts.root) === "deterministic") {
@@ -1126,10 +1114,10 @@ export async function selectEnsemble(opts: ProviderSelectionOptions & { samples?
   return workers.length ? new EnsembleProvider(workers, { samples: opts.samples ?? DEFAULT_SAMPLES }) : null;
 }
 
-/** Pick a provider to run the Critic pass — the same resolved provider normal
- *  synthesis would use (subscription CLI or the opt-in openai-compat endpoint),
- *  honoring the same env/local-preference/auto policy. Returns null when that
- *  resolves to the deterministic fallback — verification then no-ops and the
+/** Pick the provider for the Critic pass: the same resolved provider normal
+ *  synthesis would use (a subscription CLI or the opt-in openai-compat endpoint),
+ *  under the same env / local-preference / auto policy. Returns null when that
+ *  resolves to the deterministic fallback, in which case verification does nothing. The
  *  un-audited draft stands (graceful degradation; dec_18a81c8291). */
 export async function selectVerifier(opts: ProviderSelectionOptions = {}): Promise<SynthProvider | null> {
   const { provider } = await resolveSynthesisProvider(opts);

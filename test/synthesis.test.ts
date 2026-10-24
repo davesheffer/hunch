@@ -33,46 +33,28 @@ test("isSignificant gates the paid LLM: trivia â†’ deterministic; real signal â†
 });
 
 test("isTrivialSubject: SKIP_SUBJECT match is skipped UNLESS the body is substantive (regression #4)", () => {
-  // trivial subject, no body -> trivial (today's behavior, preserved)
   assert.equal(isTrivialSubject({ subject: "Merge branch 'main' into feature", body: "" }), true);
   assert.equal(isTrivialSubject({ subject: "bump: lodash to 4.2.0", body: "" }), true);
-  // trivial subject, short/whitespace-only body -> still trivial
-  assert.equal(isTrivialSubject({ subject: "wip", body: "   " }), true);
+  assert.equal(isTrivialSubject({ subject: "wip", body: "   \n  " }), true);
   assert.equal(isTrivialSubject({ subject: "format: prettier", body: "x".repeat(39) }), true);
-  // trivial subject, substantive body (>= SIG_MIN_BODY chars) -> NOT trivial anymore
-  assert.equal(isTrivialSubject({ subject: "Merge branch 'feature' into main", body: "x".repeat(40) }), false);
+  assert.equal(isTrivialSubject({ subject: "Merge branch 'main' into feature", body: "x".repeat(40) }), false);
   assert.equal(
-    isTrivialSubject({
-      subject: "Merge pull request #42 from org/feature-branch",
-      body: "Adds OAuth2 login support with JWT tokens, replacing the old session-cookie flow.",
-    }),
+    isTrivialSubject({ subject: "Merge pull request #42 from a/b", body: "Moves session storage to Redis so replicas share state across restarts." }),
     false,
   );
-  // non-trivial subject -> never trivial, regardless of body
   assert.equal(isTrivialSubject({ subject: "feat: add x", body: "" }), false);
-  assert.equal(isTrivialSubject({ subject: "feat: add x", body: "x".repeat(100) }), false);
+  assert.equal(isTrivialSubject({ subject: "feat: add x", body: "y".repeat(100) }), false);
 });
 
 test("isTrivialSubject: chore(deps) subjects are recognized as SKIP_SUBJECT (regex fix, regression #4)", () => {
-  // chore(deps) with no body -> trivial. Regression guard for a pre-existing bug where
-  // the SKIP_SUBJECT regex's `\b` after "chore(deps)" never fires (no word/non-word
-  // transition before ":" or a space), so these commits silently fell through to the
-  // isSignificant() gate instead of being treated as SKIP_SUBJECT.
+  // A word boundary after the closing parenthesis can never match (")" and ":" are
+  // both non-word characters), so chore(deps): was silently never skipped.
   assert.equal(isTrivialSubject({ subject: "chore(deps): bump lodash from 4.1.0 to 4.2.0", body: "" }), true);
-  // substantive body still overrides, same as every other SKIP_SUBJECT alternative
-  assert.equal(
-    isTrivialSubject({ subject: "chore(deps): bump lodash from 4.1.0 to 4.2.0", body: "x".repeat(40) }),
-    false,
-  );
-  // the other SKIP_SUBJECT alternatives are unaffected by the chore(deps) fix
-  assert.equal(isTrivialSubject({ subject: "Merge branch 'main' into feature", body: "" }), true);
-  assert.equal(isTrivialSubject({ subject: "revert: bad change", body: "" }), true);
-  assert.equal(isTrivialSubject({ subject: "bump: lodash to 4.2.0", body: "" }), true);
-  assert.equal(isTrivialSubject({ subject: "format: prettier", body: "" }), true);
-  assert.equal(isTrivialSubject({ subject: "lint: eslint fixes", body: "" }), true);
-  assert.equal(isTrivialSubject({ subject: "wip", body: "" }), true);
+  assert.equal(isTrivialSubject({ subject: "chore(deps): bump lodash from 4.1.0 to 4.2.0", body: "z".repeat(40) }), false);
+  for (const subject of ["Merge branch 'main'", "revert: bad change", "bump: lodash to 4.2.0", "format: prettier", "lint: eslint fixes", "wip"]) {
+    assert.equal(isTrivialSubject({ subject, body: "" }), true, subject);
+  }
 });
-
 
 test("deterministic provider is always available and drafts a low-confidence decision", async () => {
   const p = await selectProvider();
@@ -85,7 +67,7 @@ test("deterministic provider is always available and drafts a low-confidence dec
 test("deterministic provider's empty-subject title fallback doesn't claim \"Code\" for a markdown-only commit (issue #12)", async () => {
   const p = await selectProvider();
   const d = await p.draftDecision({ subject: "", body: "", files: ["docs/adr/0001-x.md"], diff: "" });
-  assert.doesNotMatch(d.title, /\bcode\b/i, `must not claim "code": ${d.title}`);
+  assert.doesNotMatch(d.title, /\bcode\b/i);
 });
 
 test("recordFailure ranks suspects, writes a bug, and promotes a constraint on recurrence", async () => {
