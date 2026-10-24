@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "שכתוב נקי מאפס",
       "בדיקות לפי השינוי, טווח השפעה רחב יותר וכתיבות בטוחות יותר",
       "הוק מהיר יותר, איתור טוב יותר, נעילות בטוחות יותר",
       "תיקונים להתקנה ולהסרה",
@@ -96,6 +97,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Код переписан с нуля",
       "Тесты по изменению, более широкий радиус влияния и более надёжная запись",
       "Быстрее хук, точнее поиск, надёжнее блокировки",
       "Исправления установки и удаления",
@@ -184,6 +186,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "إعادة كتابة نظيفة من الصفر",
       "اختبارات بحسب التغيير، ونطاق تأثير أوسع، وكتابة أكثر أمانًا",
       "خطاف أسرع، استرجاع أدق، أقفال أكثر أمانًا",
       "إصلاحات للتثبيت والإزالة",
@@ -272,6 +275,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Una reescritura desde cero",
       "Pruebas según el cambio, mayor radio de impacto y escrituras más seguras",
       "Hook más rápido, mejor recuperación, bloqueos más seguros",
       "Correcciones de instalación y desinstalación",

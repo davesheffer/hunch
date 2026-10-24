@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.47.0 — 2026-10-24
+
+- **Clean-room rewrite.** The indexer, parser and language specs, the Helm and Kubernetes manifest extractors, CLI command wiring, MCP tool routing and root resolution, synthesis provider detection, the git hook, `.gitignore` and `CLAUDE.md` writers, grounding merge, escalations and human corrections, provenance repair, core helpers and the release tooling were rewritten from scratch. Behaviour is unchanged apart from the fixes below: the existing test suite and release matrix pass unchanged against the new code (#533–#545).
+- **YAML grammar under an npm alias.** The YAML grammar now installs as `@tree-sitter-grammars/tree-sitter-yaml` under the name `tree-sitter-yaml`, like the other grammars, and native prebuild redirects are keyed on each package's own name, so the per-user grammar cache stays isolated for aliased packages too. A YAML grammar copy left in that cache by an earlier version is unused and harmless (#545).
+- **Kubernetes and Helm extraction fails closed in two more cases.** A selector or labels line indented with non-ASCII whitespace now makes that map unknown instead of being silently dropped, and a Helm `define` whose quoted name is unterminated no longer produces a symbol (#533).
+- Looking up a file's Helm chart root no longer recurses forever when it reaches the filesystem root (#538).
+- Contributions now need a signed Contributor Assignment Agreement ([CLA.md](CLA.md)), checked on every pull request (#532).
+- The Python grammar's lockfile entry is regenerated (#546).
+
 ## 1.46.0 — 2026-10-24
 
 - **`hunch verify` runs only the tests a change needs.** It selects the tests that import a changed file or that the impact map (`hunch verify --refresh-map`) shows ran it, from the working tree, `--staged` or `--base <ref>`. Doubt always means more tests: a change it can't trace runs the full suite, and `--full`/`--ci` keep the whole suite for CI (#497).
