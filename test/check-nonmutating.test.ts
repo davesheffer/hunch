@@ -425,20 +425,23 @@ for (const source of ["staged", "working"] as const) {
 }
 
 for (const source of ["staged", "working"] as const) {
-  test(`strict ${source} semantic scan does NOT fail closed on a Helm-templated YAML file (issue #33)`, () => {
+  test(`strict ${source} semantic scan does NOT fail closed on a Helm-templated YAML file`, () => {
     const f = fixture();
     try {
       git(f.root, "add", "-A");
       git(f.root, "commit", "-qm", "fixture: layered baseline and memory");
+      const path = "charts/app/templates/configmap.yaml";
       mkdirSync(join(f.root, "charts/app/templates"), { recursive: true });
-      writeFileSync(join(f.root, "charts/app/templates/configmap.yaml"), [
+      writeFileSync(join(f.root, path), [
+        "apiVersion: v1",
+        "kind: ConfigMap",
         "data:",
-        "{{- range $k, $v := .Values.data }}",
+        "  {{- range $k, $v := .Values.config }}",
         "  {{ $k }}: {{ $v | quote }}",
-        "{{- end }}",
+        "  {{- end }}",
         "",
       ].join("\n"));
-      if (source === "staged") git(f.root, "add", "charts/app/templates/configmap.yaml");
+      if (source === "staged") git(f.root, "add", path);
 
       const before = repositoryState(f.root);
       const run = runCheck(f.root, ...(source === "working" ? ["--working"] : []), "--strict", "--public-only");

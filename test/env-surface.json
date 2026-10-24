@@ -470,7 +470,7 @@
       },
       {
         "file": "test/doctor.test.ts",
-        "title": "synthesisStatusLines: openai-compat notes when HUNCH_SYNTH_API_KEY is set"
+        "title": "synthesisStatusLines: openai-compat notes a configured API key"
       }
     ]
   },
@@ -484,7 +484,7 @@
       },
       {
         "file": "test/doctor.test.ts",
-        "title": "synthesisStatusLines: openai-compat reports the configured endpoint/model, not 'no assistant CLI found'"
+        "title": "synthesisStatusLines: openai-compat is not reported as 'no assistant CLI found'"
       }
     ]
   },
@@ -508,7 +508,7 @@
       },
       {
         "file": "test/doctor.test.ts",
-        "title": "synthesisStatusLines: openai-compat reports the configured endpoint/model, not 'no assistant CLI found'"
+        "title": "synthesisStatusLines: openai-compat is not reported as 'no assistant CLI found'"
       }
     ]
   },

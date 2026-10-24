@@ -113,22 +113,21 @@ test("the pump still REFUSES a genuine topology violation (no over-permissive re
 test("the post-merge hook's pending-commit-repairs queue is never committed, even on a pre-existing gitignore", () => {
   const { root, hunch, cleanup } = repo();
   try {
-    // Deliberately mirrors the existing installation this queue file threatens most:
-    // repo() seeds a .gitignore that predates the pending-commit-repairs.json entry
+    // This fixture deliberately mirrors an existing install whose .gitignore predates
+    // the queue entry
     // (a repo whose .gitignore has no Hunch-managed block never gets the entry until
     // setup runs ensureGitignore) — so this file is exercising
-    // exactly the "gitignore is stale" case, not relying on it being ignored.
-    writeDec(hunch, "dec_before");
+    // the stale-gitignore case rather than leaning on ignore rules.
+    writeDec(hunch, "dec_one");
     assert.equal(commitAndPushHunch(hunch, "capture 1", { push: false, protectedRepoRoot: root }), "committed");
 
-    writeFileSync(join(hunch, "pending-commit-repairs.json"), JSON.stringify([{ id: "dec_x", from: "a", to: "b" }]) + "\n");
-    writeDec(hunch, "dec_after");
-    const result = commitAndPushHunch(hunch, "capture 2", { push: false, protectedRepoRoot: root });
-    assert.equal(result, "committed");
-    assert.ok(committedDecisions(root).includes(".hunch/decisions/dec_after.json"));
+    writeFileSync(join(hunch, "pending-commit-repairs.json"), JSON.stringify([{ id: "dec_one", from: "aaa111", to: "bbb222" }]) + "\n");
+    writeDec(hunch, "dec_two");
+    assert.equal(commitAndPushHunch(hunch, "capture 2", { push: false, protectedRepoRoot: root }), "committed");
 
+    assert.ok(committedDecisions(root).includes(".hunch/decisions/dec_two.json"), "the new decision was committed");
     const tracked = execFileSync("git", ["-C", root, "ls-files"], { encoding: "utf8" });
-    assert.ok(!tracked.includes("pending-commit-repairs.json"), "the local-only repair queue is never committed into shared memory");
+    assert.ok(!tracked.includes("pending-commit-repairs.json"), "the repair queue is never committed");
     const staged = execFileSync("git", ["-C", root, "diff", "--cached", "--name-only"], { encoding: "utf8" }).trim();
     assert.equal(staged, "", "nothing is left staged behind");
   } finally {
@@ -136,20 +135,19 @@ test("the post-merge hook's pending-commit-repairs queue is never committed, eve
   }
 });
 
-test("the post-merge hook's dropped-commit-repairs tombstone file is never committed, even on a pre-existing gitignore", () => {
+test("the post-merge hook's dropped-commit-repairs tombstones are never committed, even on a pre-existing gitignore", () => {
   const { root, hunch, cleanup } = repo();
   try {
-    writeDec(hunch, "dec_before");
+    writeDec(hunch, "dec_one");
     assert.equal(commitAndPushHunch(hunch, "capture 1", { push: false, protectedRepoRoot: root }), "committed");
 
-    writeFileSync(join(hunch, "dropped-commit-repairs.json"), JSON.stringify([{ id: "dec_x", from: "a" }]) + "\n");
-    writeDec(hunch, "dec_after");
-    const result = commitAndPushHunch(hunch, "capture 2", { push: false, protectedRepoRoot: root });
-    assert.equal(result, "committed");
-    assert.ok(committedDecisions(root).includes(".hunch/decisions/dec_after.json"));
+    writeFileSync(join(hunch, "dropped-commit-repairs.json"), JSON.stringify([{ id: "dec_one", from: "aaa111", to: "bbb222" }]) + "\n");
+    writeDec(hunch, "dec_two");
+    assert.equal(commitAndPushHunch(hunch, "capture 2", { push: false, protectedRepoRoot: root }), "committed");
 
+    assert.ok(committedDecisions(root).includes(".hunch/decisions/dec_two.json"), "the new decision was committed");
     const tracked = execFileSync("git", ["-C", root, "ls-files"], { encoding: "utf8" });
-    assert.ok(!tracked.includes("dropped-commit-repairs.json"), "the local-only tombstone file is never committed into shared memory");
+    assert.ok(!tracked.includes("dropped-commit-repairs.json"), "the tombstone file is never tracked");
     const staged = execFileSync("git", ["-C", root, "diff", "--cached", "--name-only"], { encoding: "utf8" }).trim();
     assert.equal(staged, "", "nothing is left staged behind");
   } finally {

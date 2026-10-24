@@ -752,12 +752,11 @@ program
     // never rewrites an existing one: `index` runs in CI/release gates on a clean
     // checkout. Older blocks are upgraded by `hunch update` / init / private setup.
     ensureGitignore(root, { upgradeExisting: false });
-    // The post-merge hook only ever got installed by `hunch init`/`hunch
-    // private`/`hunch shared` — a repo that already ran init before this hook
-    // existed never receives it. `hunch index` already self-heals gitignore
-    // the same way; do the same for the hook so an upgrade doesn't require
-    // re-running init by hand. Gated on already having post-commit: `index`
-    // is not a setup command (it runs in CI, on any git repo), so it must
+    // The post-merge hook used to be installed only by init / private / shared, so a
+    // repo initialized before it existed never got it. `index` already self-heals the
+    // gitignore and does the same for the hooks, so upgrading needs no re-init. The
+    // heal is gated on post-commit already being present: `index` is not a setup
+    // command (it runs in CI on arbitrary repos) and so it must
     // never be what FIRST hooks a repo that never ran init at all. A STALE
     // post-commit block counts too (issue #315): it proves init ran, so the
     // missing post-merge/post-checkout hooks are still this repo's to heal.
@@ -832,9 +831,9 @@ program
     const commits = logSince(opts.since, root, Number(opts.max));
     const conc = Math.max(1, Math.min(16, Number(opts.concurrency) || 4));
     console.log(`Backfilling from ${commits.length} commit(s) since ${opts.since} (concurrency ${conc})…`);
-    // Best-effort context-window advisory (issue #11): printed ONCE, before any
-    // commit is drafted — not per-commit, and not under --deep (an ensemble may
-    // fan out to several distinct workers, each with its own configuration).
+    // One-time, best-effort context-window advisory: printed once before any commit is
+    // drafted (never per commit), and skipped under --deep since an ensemble may fan out
+    // to several workers with differing configurations.
     if (!opts.deep && commits.length > 0) {
       // { root }: the advisory must resolve the SAME provider the synthesis
       // inside syncCommit resolves (persisted local.json preference included) —
@@ -842,7 +841,7 @@ program
       // num_ctx warning for an actual Ollama run (issue #46).
       const ctxProvider = await selectProvider({ root });
       const ctxWarning = await maybeWarnOllamaContext(ctxProvider.name, process.env);
-      if (ctxWarning) console.log(ctxWarning);
+      if (ctxWarning !== null) console.log(ctxWarning);
     }
     let written = 0, skipped = 0, llm = 0, heuristic = 0;
     const home = store.captureHome(false);
@@ -1263,9 +1262,8 @@ function beginFreshOverlaySetup(
   const backLink = commonDir ? separateGitDirLink(commonDir) : "";
   const configuredHooks = includeHook ? hooksDir(root) : "";
   const hookDir = configuredHooks ? (isAbsolute(configuredHooks) ? configuredHooks : join(root, configuredHooks)) : "";
-  // Setup installs post-commit AND post-merge together, so both must be in the
-  // ledger — restoring one while leaving the other pointing at a just-deleted
-  // overlay is not a rollback.
+  // Setup installs both hooks together, so both must be snapshotted: restoring only one
+  // while the other still points at a deleted overlay is not a rollback.
   const hookFiles = hookDir ? [join(hookDir, "post-commit"), join(hookDir, "post-merge")] : [];
   const paths = [localFile, codeGitignore, teamFile, ...(sharedPointer ? [sharedPointer, backLink] : []), ...hookFiles];
   const snapshots = new Map(paths.map((path) => [path, setupPathSnapshot(path)] as const));
@@ -1286,7 +1284,7 @@ function beginFreshOverlaySetup(
     markGitignoreWrite: () => mark(codeGitignore),
     markTeamWrite: () => mark(teamFile),
     markSharedPointerWrite: () => { mark(backLink); mark(sharedPointer); },
-    markHookWrite: () => hookFiles.forEach(mark),
+    markHookWrite: () => { for (const f of hookFiles) mark(f); },
     // Migration is a one-way ownership handoff. Once public records have been
     // durably copied into this clone, a later setup failure may restore routing
     // files but must not delete the clone that now holds their surviving copy.
@@ -4649,15 +4647,25 @@ program
   .requiredOption("--by <new>", "decision id that supersedes it")
   .action((oldId: string, opts: { by: string }) => {
     const { store, root } = storeFor();
-    // `old`'s home decides which store the close is written to; `--by` must resolve in
-    // that SAME store, or a private `by` linked against a public `old` would write the
-    // private id straight into the committed public store.
+    // The old decision's own memory home decides which store both ids must live in.
     const home = decisionMemoryHome(store, oldId);
-    if (!store.decisionInStore(oldId, home === "private")) { store.close(); return fail(`decision "${oldId}" not found`); }
-    const by = store.decisionInStore(opts.by, home === "private");
-    if (!by) { store.close(); return fail(`--by decision "${opts.by}" not found in the ${home} store that holds "${oldId}"`); }
-    const closed = home === "private" ? store.supersedePrivate(oldId, by) : store.supersede(oldId, by);
-    if (!closed) { store.close(); return fail(`decision "${oldId}" cannot supersede itself`); }
+    const priv = home === "private";
+    // Check the old id first so a missing old decision is never blamed on --by.
+    if (!store.decisionInStore(oldId, priv)) {
+      store.close();
+      return fail(`decision "${oldId}" not found`);
+    }
+    // Resolve --by in the SAME store: a private --by must never be linked into a committed public record.
+    const by = store.decisionInStore(opts.by, priv);
+    if (!by) {
+      store.close();
+      return fail(`--by decision "${opts.by}" not found in the ${home} store that holds "${oldId}"`);
+    }
+    const closed = priv ? store.supersedePrivate(oldId, by) : store.supersede(oldId, by);
+    if (!closed) {
+      store.close();
+      return fail(`decision "${oldId}" cannot supersede itself`);
+    }
     store.reindex();
     pumpMemoryHome(store, root, home, `hunch: supersede ${oldId} by ${opts.by}`);
     console.log(`✓ ${oldId} superseded by ${opts.by} — window closed at ${closed.valid_to?.slice(0, 10)}.`);
@@ -4732,7 +4740,8 @@ program
   .action(async (value: string | undefined) => {
     const root = findRoot();
     if (value != null) {
-      const preference = normalizeProviderName(value.trim()) ?? value.trim();
+      const trimmed = value.trim();
+      const preference = normalizeProviderName(trimmed) || trimmed;
       if (!(SYNTH_PREFERENCES as readonly string[]).includes(preference)) {
         return fail(`provider must be one of: ${SYNTH_PREFERENCES.join(", ")}`);
       }
@@ -4745,7 +4754,7 @@ program
     }
 
     const resolution = await resolveSynthesisProvider({ root });
-    const envValue = normalizeProviderName(process.env.HUNCH_SYNTH_PROVIDER?.trim());
+    const envValue = normalizeProviderName((process.env.HUNCH_SYNTH_PROVIDER ?? "").trim()) || undefined;
     const local = readSynthesisPreference(root);
     const hasValidEnv = !!envValue && (SYNTH_PREFERENCES as readonly string[]).includes(envValue);
     console.log(`selected:    ${resolution.provider.name} (${resolution.source})`);
@@ -5211,8 +5220,8 @@ program
           // so its orientation event keeps asking every actionable entry.
           const actionableEsc = deliversPromptEvent(provider) ? [] : (await actionableEscalationsWithAnchors(paths.root, s)).actionable;
           if (!decisions.length && !actionableEsc.length) {
-            // Fresh graph and nothing else to raise: nothing to orient on, but
-            // the operating loop still ships. A queued commit-repair escalation
+            // A fresh graph with nothing to raise has nothing to orient on, but the
+            // operating loop is still delivered. A queued commit-repair escalation
             // (checked against the full store) is enough reason NOT to bail here
             // even when the visible decisions list is empty.
             if (pipelineEnabled()) emitContext(provider, "SessionStart", [PIPELINE_LOOP, controllerBrief].filter(Boolean).join("\n\n"));
@@ -5827,7 +5836,7 @@ program
 // ---- escalations (the inline "ask the human" surface) ---------------------
 program
   .command("escalations")
-  .description("The decisions a human must make NOW — surfaced to be asked INLINE (in the prompt), never a background queue. Captured memory auto-trusts on landing; this lists only what the graph genuinely can't resolve itself: topic conflicts, premise-stale decisions, one exact imported ADR at a time, a queued commit-provenance repair awaiting `--apply`, Constitution candidates awaiting review, and proposed policies whose activation is a human call. Normally empty. Exits non-zero when any are open, so an assistant/CI knows to raise them.")
+  .description("The decisions a human must make now — ask them inline in the prompt, never queued in the background. Captured memory auto-trusts on landing, so this lists only what the graph cannot resolve itself: topic conflicts, premise-stale decisions, one exact imported ADR at a time, a queued commit-provenance repair awaiting `--apply`, Constitution candidates awaiting review, and proposed policies whose activation is a human call. Normally empty; exits non-zero when any are open so an assistant or CI knows to raise them.")
   .option("--json", "emit the escalation entries as JSON (the VS Code panel's data source)")
   .action(async (opts: { json?: boolean }) => {
     const { store, root } = storeFor();
@@ -5837,36 +5846,34 @@ program
       // Premise decay rides the same inline surface: a decision whose recorded
       // reason died is a QUESTION for the human — authority never changes here.
       items.push(...premiseEscalations(decisionsForEsc, { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) }));
-      const escalationsQueue = readActivePendingRepairs(root);
-      items.push(...commitRepairEscalations(escalationsQueue, decisionsForEsc, decisionsForEsc, withheldRewrites(root, escalationsQueue)));
+      const queuedRepairs = readActivePendingRepairs(root);
+      items.push(...commitRepairEscalations(queuedRepairs, decisionsForEsc, decisionsForEsc, withheldRewrites(root, queuedRepairs)));
       // Constitution moments ride the same inline surface (§59.5.3) — never a queue.
       // Fail open: a broken policy store must not take the memory escalations down.
       try {
         const { ConstitutionService: CS } = await import("../constitution/service.js");
         items.push(...policyEscalations(new CS(store, root).list().map((p) => ({ ...p, last_action: p.audit.at(-1)?.action ?? null }))));
       } catch { /* constitution unavailable — memory escalations still surface */ }
-      // Gate (exit code + tallies) on the ACTIONABLE subset only — a duplicate-id
-      // commit-repair follower whose own resolution says "act on a different
-      // entry first" still surfaces below for transparency, but must not count
-      // as its own thing needing a decision (#61). --json keeps the full list.
+      // The exit code and tallies gate only on the actionable subset: a duplicate-id
+      // commit-repair follower whose own resolution says to act on a different entry
+      // first still surfaces for transparency, but is not its own decision. --json
+      // keeps the full list.
       const actionable = actionableEscalations(items);
-      if (opts.json) { console.log(JSON.stringify(items)); if (actionable.length) process.exitCode = 1; return; }
+      if (opts.json) {
+        console.log(JSON.stringify(items));
+        if (actionable.length) process.exitCode = 1;
+        return;
+      }
       if (!items.length) {
         console.log("✓ Nothing needs your decision — memory is auto-trusted and self-consistent.");
         return;
       }
-      // escalationHeadline's own "nothing actionable, N shown for context"
-      // fallback is currently unreachable here: every escalation-producing
-      // function today guarantees at least one actionable entry whenever it
-      // emits anything at all — see commitRepairEscalations' own docstring on
-      // `firstFor`/dropTarget. Kept anyway (not assumed away) because that
-      // guarantee lives in the PRODUCERS, not in `Escalation.actionable`'s own
-      // contract, which a future producer could legitimately violate.
-      console.log(escalationHeadline(items, "cli") + "\n");
+      // The headline's "nothing actionable, N shown for context" fallback is currently
+      // unreachable (every producer guarantees at least one actionable entry), but that
+      // guarantee lives in the producers, not in Escalation.actionable's contract.
+      console.log(`${escalationHeadline(items, "cli")}\n`);
       for (const e of items) {
-        // A non-actionable row (a duplicate-id follower) still surfaces for
-        // transparency, but must not read like its own question — marked
-        // distinctly so a skim doesn't mistake it for one of the tally above.
+        // A non-actionable follower is shown for context only, so it gets a quieter marker.
         console.log(`  ${e.actionable === false ? "·" : "⚖"} ${e.question}`);
         console.log(`      ${dim(e.detail)}`);
         console.log(`      ${dim("→ " + e.resolution)}\n`);
@@ -5993,65 +6000,56 @@ program
     }
   });
 
-// ---- repair-provenance (squash-merge commit provenance repair) ------------
+// ---- repair-provenance (squash-merge commit-provenance self-repair) -------
 program
   .command("repair-provenance")
   .description("Self-repair: detect a decision's commit provenance going orphaned by a squash-merge, matched by exact related_files overlap against the newly merged commit range — zero guessing beyond that. A fresh match not already rejected via --drop is queued (.hunch/pending-commit-repairs.json, local-only); --apply/--drop require the --expect hash printed by the preview or escalation; --only <dec_id> limits approval to one decision. Approval never scans for fresh matches. The post-merge hook runs detection automatically in the background but never passes --apply — the match signal isn't strong enough to trust an unattended write into shared team memory.")
   .option("--apply", "apply the reviewed queued candidates (requires --expect; does not scan for new matches)")
   .option("--expect <hash>", "exact queue review hash printed by the preview or escalation; required for --apply/--drop")
-  .option("--only <dec_id>", "with --apply, rewrite only this decision id — everything else stays queued untouched")
-  .option("--drop <dec_id>", "reject the queued match for this decision id, without applying it — tombstoned durably, so an identical future match for the same still-orphaned commit won't resurface (a genuinely different candidate still can)")
+  .option("--only <dec_id>", "with --apply, rewrite only this decision id; everything else stays queued untouched")
+  .option("--drop <dec_id>", "reject the queued match for this decision id without applying it; tombstoned so an identical future match for the same still-orphaned commit does not resurface (a genuinely different candidate still can)")
   .option("--from-hook", "invoked by the git post-merge hook")
   .option("--quiet", "minimal output")
-  .option("--range <old..new>", "commit range to scan for replacement commits (default: ORIG_HEAD..HEAD)")
+  .option("--range <old..new>", "commit range to scan for replacement commits (default ORIG_HEAD..HEAD)")
   .action((opts: { apply?: boolean; only?: string; drop?: string; expect?: string; fromHook?: boolean; quiet?: boolean; range?: string }) => {
     const { store, root } = storeFor();
     try {
-      if (!isGitRepo(root)) { if (!opts.fromHook) fail("repair-provenance needs a git repo."); return; }
-
+      if (!isGitRepo(root)) {
+        if (!opts.fromHook) fail("repair-provenance needs a git repo.");
+        return;
+      }
       let oldRef = "ORIG_HEAD";
       let newRef = "HEAD";
       if (opts.range) {
         const parts = opts.range.split("..");
-        if (parts.length !== 2 || !parts[0] || !parts[1]) { if (!opts.fromHook) fail('--range must look like "old..new"'); return; }
-        [oldRef, newRef] = parts as [string, string];
+        if (parts.length !== 2 || !parts[0] || !parts[1]) {
+          if (!opts.fromHook) fail(`--range must look like "old..new"`);
+          return;
+        }
+        oldRef = parts[0];
+        newRef = parts[1];
       }
-
       const rangeResolves = revExists(oldRef, root) && revExists(newRef, root);
       if (!rangeResolves && opts.range) {
-        // An explicitly-given range that doesn't resolve is a usage mistake, not
-        // "no merge happened yet" — surface it. (The installed hook never passes
-        // --range, so --from-hook never reaches this branch in practice.)
         if (!opts.fromHook) fail(`range "${oldRef}..${newRef}" does not resolve in this repository`);
         return;
       }
-
+      // An unresolvable DEFAULT range just means no merge happened: detection is skipped below.
       const decisions = store.recs("decisions");
-
-      // One save path for every queue mutation below — a future change to
-      // queue semantics has exactly one write call to touch, not several
-      // independently-reasoned ones. This file has twice shipped the same
-      // failure class from that fragmentation: one write site's "is this
-      // entry resolved" logic gets fixed while a sibling write site quietly
-      // keeps reasoning about the queue differently, deleting an entry the
-      // fixed site would have left alone.
+      // One save path per file, so queue semantics cannot drift across write sites.
       let queue = readPendingRepairs(root);
-      const save = (next: readonly CommitRewrite[]): void => {
-        queue = [...next];
+      const saveQueue = (next: CommitRewrite[]): void => {
+        queue = next;
         writePendingRepairs(root, queue);
       };
-
-      // Tombstones for exact {id, from, to} triples a human already rejected
-      // via --drop — durable across runs so detection re-deriving the
-      // identical match on a later merge doesn't re-queue what was already
-      // rejected. A genuinely different `to` for the same {id, from} is a new
-      // proposal and is unaffected.
+      // Tombstones hold the exact {id, from, to} triples a human rejected, so a later
+      // merge re-deriving the identical match does not re-queue it; a different `to`
+      // is a new proposal.
       let dropped = readDroppedRepairs(root);
-      const saveDropped = (next: readonly DroppedRewrite[]): void => {
-        dropped = [...next];
+      const saveDropped = (next: DroppedRewrite[]): void => {
+        dropped = next;
         writeDroppedRepairs(root, dropped);
       };
-
       // Review commands act only on the queue that was presented. Validate
       // before pruning or writing either queue file; stale approval is inert.
       if (opts.apply || opts.drop) {
@@ -6063,62 +6061,25 @@ program
         if (opts.fromHook) return fail("the post-merge hook may only detect repairs, never approve them.");
       }
 
-      // The queue file itself must never carry a tombstoned entry, regardless
-      // of how it got there — the fresh-match filtering further down only
-      // covers the merge this run performs. A concurrently-racing writer (the
-      // post-merge hook's backgrounded detection can read the queue/dropped
-      // files independently of a human's --drop landing in between) could
-      // still leave a tombstoned entry sitting in the queue file; sweeping on
-      // every load makes "never contains a rejected triple" a property of the
-      // queue file itself, not of one write site. Same fragmentation lesson
-      // as the comment on `save` above. Every OTHER reader of the queue
-      // (escalations, SessionStart, the MCP tools) calls
-      // readActivePendingRepairs instead of reading the raw file, so a
-      // tombstoned entry can never surface as a question even before this
-      // sweep next runs.
-      //
-      // Deletes unconditionally, without the prune's visibility caveats below
-      // — safe here because the swept entry's exact triple is preserved in
-      // dropped-commit-repairs.json, so nothing about it is unrecoverable
-      // (unlike the prune, which could otherwise destroy the queue's only
-      // durable record of a match).
-      const activeInQueue = withoutDropped(queue, dropped);
-      const swept = queue.filter((r) => !activeInQueue.includes(r));
-      // Remembered for --only below, same reasoning as onlyWasPruned: targeting
-      // an id whose only queued entry was just swept as already-rejected is not
-      // the same usage error as targeting an id that never existed.
-      const onlyWasSwept = !!opts.only && swept.some((r) => r.id === opts.only);
+      // Sweep: entries whose exact triple is tombstoned. Deleted unconditionally since
+      // the triple survives in the tombstone file.
+      const activeQueue = withoutDropped(queue, dropped);
+      const activeSet = new Set(activeQueue);
+      const swept = queue.filter((r) => !activeSet.has(r));
+      const onlySwept = !!opts.only && swept.some((r) => r.id === opts.only);
       if (swept.length) {
-        save(activeInQueue);
+        saveQueue(activeQueue);
         if (!opts.quiet) console.log(`Swept ${swept.length} already-rejected match${swept.length === 1 ? "" : "es"} from the queue: ${swept.map((r) => r.id).join(", ")}`);
       }
-
-      // Prune only PROVEN-dead entries (deadRewrites: the decision is present
-      // and demonstrably moved on/superseded/rejected) — never an id merely
-      // absent from `decisions` right now, which can just mean this run
-      // checked out a branch that predates the decision, or a private
-      // overlay isn't mounted. That's the reader's transient view, not proof
-      // the match is stale, and the queue file is the one durable record of
-      // it (see repairqueue.ts) — deleting on absence would destroy it
-      // unrecoverably. This keeps the queue from accumulating an
-      // actually-dead entry that outlives any number of --only runs
-      // targeting other ids, without risking a false prune. Deferred until
-      // after --range validation so a pure usage error changes nothing.
-      const deadEntries = deadRewrites(queue, decisions);
-      // Remembered for --only below: targeting an id that was pruned THIS
-      // run is not the same usage error as targeting an id that never
-      // existed — the human's target was real and is now resolved, not
-      // unrecognized.
-      const onlyWasPruned = !!opts.only && deadEntries.some((r) => r.id === opts.only);
-      if (deadEntries.length) {
-        // Object identity, not id — a corrupted queue file can carry a dead
-        // entry and a still-live one sharing an id (#53); deadRewrites
-        // already preserves identity via a plain filter, so pruning by id
-        // here would destroy the live sibling right alongside its dead
-        // namesake instead of leaving it for repairDecisionCommit to apply.
-        const deadSet = new Set(deadEntries);
-        save(queue.filter((r) => !deadSet.has(r)));
-        if (!opts.quiet) console.log(`Pruned ${deadEntries.length} dead queue entr${deadEntries.length === 1 ? "y" : "ies"} (decision moved on, has no commit on record, or was superseded/rejected): ${deadEntries.map((r) => r.id).join(", ")}`);
+      // Prune: proven-dead entries only (never ones whose decision is merely absent this run).
+      // Removed by object identity, not id: a corrupted queue may hold a dead and a live
+      // entry sharing an id, and the live sibling must survive.
+      const dead = deadRewrites(queue, decisions);
+      const onlyPruned = !!opts.only && dead.some((r) => r.id === opts.only);
+      if (dead.length) {
+        const deadSet = new Set(dead);
+        saveQueue(queue.filter((r) => !deadSet.has(r)));
+        if (!opts.quiet) console.log(`Pruned ${dead.length} dead queue ${dead.length === 1 ? "entry" : "entries"} (decision moved on, has no commit on record, or was superseded/rejected): ${dead.map((r) => r.id).join(", ")}`);
       }
 
       const candidates = rangeResolves && !opts.apply && !opts.drop ? mergeRangeChanges(oldRef, newRef, root) : [];
@@ -6127,82 +6088,39 @@ program
       const orphaned = candidates.length ? orphanedCommitDecisions(decisions, (sha) => commitRepairStatusAgainst(sha, [newRef, "HEAD"], root)) : [];
       const patchIds = orphaned.length ? commitPatchIds([...orphaned.map((d) => d.commit!), ...candidates.map((c) => c.sha)], root) : new Map<string, string>();
       const freshPlan = candidates.length ? planCommitRepair(orphaned, candidates, (sha) => patchIds.get(sha) ?? null) : { rewrites: [], records: [] };
-
-      // Detection always queues a fresh match — local-only, never committed, so
-      // it's safe to persist unconditionally. This is what makes running
-      // opportunistically (from the hook) worth anything: the match survives
-      // past this process exiting and past ORIG_HEAD getting overwritten by the
-      // next merge, so a human can confirm it later with `--apply` alone.
-      // A match whose exact {id, from, to} triple was already tombstoned by
-      // an earlier --drop is filtered out first — the human already rejected
-      // exactly this proposed replacement, and a later merge re-deriving it
-      // independently isn't a reason to ask again. A different `to` for the
-      // same still-orphaned commit is a new proposal and passes through.
-      const freshRewrites = withoutDropped(freshPlan.rewrites, dropped);
-      if (freshRewrites.length) save(mergeRewrites(freshRewrites, queue));
+      // Always persisted (local-only file): a hook-time detection survives for a later human --apply.
+      const freshMatches = withoutDropped(freshPlan.rewrites, dropped);
+      if (freshMatches.length) saveQueue(mergeRewrites(freshMatches, queue));
 
       if (opts.drop) {
         const before = queue.length;
-        // firstFor is the single first-match-by-id rule — the same one
-        // pickRewrite and mergeRewrites go through (#53, #56, #58) — to
-        // decide which same-id entry would actually apply. A corrupted
-        // queue file can carry two entries sharing an id, and dropping by
-        // id would destroy the untargeted sibling too, with no tombstone
-        // recording what it was. Filtering by object identity (not
-        // `r.id !== opts.drop`) removes only the one entry actually
-        // dropped; any other entry sharing the id is untouched and stays
-        // queued.
         const target = firstFor(queue, opts.drop);
-        save(queue.filter((r) => r !== target));
-        // Tombstone only when something real was actually queued for this id —
-        // an id that was never queued has no {from, to} to record, and
-        // "nothing queued" is a usage-mistake signal that shouldn't quietly
-        // create a tombstone file.
+        saveQueue(queue.filter((r) => r !== target));
         if (target) {
           saveDropped(addDropped([{ id: target.id, from: target.from, to: target.to }], dropped));
-          // An identical {id, from, to} sibling (a corrupted queue file, a
-          // hand edit) is now tombstoned but still sitting in the queue this
-          // run just saved above — the load-time sweep near the top of this
-          // action already promises the queue file can never carry a
-          // tombstoned entry, so re-run it here. Without this, --apply later
-          // in this same invocation would happily write the exact rewrite
-          // the human just rejected (#53 follow-up).
-          save(withoutDropped(queue, dropped));
+          // Re-sweep so an identical sibling cannot be applied later in this invocation.
+          saveQueue(withoutDropped(queue, dropped));
         }
         if (!opts.quiet) {
-          console.log(queue.length === before
-            ? `Nothing queued or matched for "${opts.drop}" to drop.`
-            : `Dropped "${opts.drop}" from the queue — the same match won't resurface on its own; a genuinely different candidate for this decision still can.`);
+          if (queue.length === before && !target) console.log(`Nothing queued or matched for "${opts.drop}" to drop.`);
+          else console.log(`Dropped "${opts.drop}" from the queue — the same match won't resurface on its own; a genuinely different candidate for this decision still can.`);
         }
         if (!opts.apply) return;
       }
 
-      // Deliberately checked before --only ever gets a chance to consult
-      // onlyWasPruned/onlyWasSwept below: when the prune or the sweep just
-      // emptied the queue entirely, --only's own explanatory messages never
-      // get a chance to fire — this generic message covers that case too,
-      // and still exits 0 either way, so no usage-error bug survives here.
+      // Deliberately before the --only messages.
       if (!queue.length) {
         if (!opts.quiet) console.log("✓ Nothing to repair — no orphaned commit reference matched unambiguously, and nothing queued from an earlier run.");
         return;
       }
 
-      // --only restricts the apply (or dry-run preview) to one decision id,
-      // leaving every other queued/matched candidate exactly as it was — the
-      // escalation asks a per-decision question, so the answer surface should
-      // let a human accept one without also accepting everything else queued.
       const toApply = opts.only ? queue.filter((r) => r.id === opts.only) : queue;
       if (opts.only && !toApply.length) {
-        if (onlyWasSwept) {
-          // Not a usage error either: the human already rejected exactly this
-          // match via an earlier --drop, and this run's sweep just confirmed
-          // the rejection still holds — nothing left to apply.
+        if (onlySwept) {
           if (!opts.quiet) console.log(`"${opts.only}" was already rejected via --drop — nothing left to do.`);
           return;
         }
-        if (onlyWasPruned) {
-          // Not a usage error: the human's target was real, and this run
-          // already resolved it above (see the prune's own message for why).
+        if (onlyPruned) {
           if (!opts.quiet) console.log(`"${opts.only}" was pruned earlier in this run — nothing left to do.`);
           return;
         }
@@ -6210,81 +6128,35 @@ program
         return;
       }
 
-      // Whether a listed entry's decision is visible at all this run — a row
-      // that isn't can't actually be resolved by --apply (see
-      // resolvedRewriteIds below), so dry-run/apply output must say so
-      // instead of listing it as though --apply would act on it. Same
-      // reasoning applies to a `to` that doesn't resolve to a real commit
-      // here (issue #48): never write an unverified `to` into a decision's
-      // commit field, and never claim --apply would either. Computed before
-      // the dry-run branch below so the preview and the real run agree on
-      // what --apply can actually do. `null` from commitsExist means the
-      // check itself failed to run (not a git repo, git missing, timeout)
-      // and is treated as fail-open — same discipline as drift.ts's own use
-      // of commitsExist, though the asymmetry is worth naming: drift.ts only
-      // decides what to REPORT on a `null`, while this gates a WRITE that
-      // gets auto-committed into shared team memory. Fail-open is still the
-      // right call here: `isGitRepo(root)` already passed above, so `null`
-      // in practice means the batched `cat-file` call itself timed out —
-      // rare, and a corrupted `to` that slips through is fully recoverable
-      // (the entry survives durably in the queue either way; a bad write
-      // is a revert). Fail-closed's cost — treating every entry as withheld
-      // on a transient git error, indefinitely, on every run until the
-      // error clears — is the worse failure mode to default to.
+      // Apply-ability is computed before the dry-run branch so preview and apply agree.
       const visibleIds = new Set(decisions.map((d) => d.id));
-      const existingTargets = commitsExist(toApply.map((r) => r.to), root);
-      const { applicable, withheld } = withheldForUnresolvableTo(toApply, existingTargets);
-      const withheldSet = new Set(withheld);
-      // The plan --apply would act on if it ran right now — built here, before
-      // the dry-run branch, so the preview reasons about the exact same plan
-      // repairDecisionCommit would. `pickRewrite` (src/core/commitrepair.ts, a
-      // plan-scoped `firstFor`) decides which entry wins when `applicable`
-      // carries two sharing a decision id (a corrupted queue file, a hand
-      // edit): first match, by construction. `wasChosen` asks that same
-      // question by object identity rather than re-deriving it, so this file
-      // and commitrepair.ts can never independently drift on which entry
-      // "won" (#51, #58).
-      const plan = { rewrites: applicable, records: [...new Set(applicable.map((r) => r.id))] };
+      // A null existence result is fail-open (treated as existing): isGitRepo already
+      // passed, so null is a rare timeout, and a bad write is recoverable whereas
+      // failing closed would withhold every entry indefinitely.
+      const { applicable, withheld } = withheldForUnresolvableTo(toApply, commitsExist(toApply.map((r) => r.to), root));
       const applicableSet = new Set(applicable);
-      const wasChosen = (r: CommitRewrite): boolean => pickRewrite(plan, r.id) === r;
-      // Whether an entry will still be sitting in the queue after this run,
-      // and why — computed ONCE and shared by the dry-run preview, the queue
-      // sweep, and the post-apply "left queued" report, so the three can
-      // never independently drift out of sync about the same entry (they
-      // did, twice, across two review rounds, before this was unified). The
-      // sweep walks the FULL `queue`, not just `toApply` — under --only, an
-      // untargeted id's entries never entered `applicable` at all, so
-      // `wasChosen` would read "not chosen" for them too. Gating "duplicate"
-      // on `applicableSet.has(r)` keeps the label meaning what it says: a
-      // SIBLING actually competed for this exact id and lost, not merely
-      // "this id wasn't this run's `applicable` set for some other reason."
-      //
-      // Precedence, most to least eclipsing: invisible, then withheld, then
-      // duplicate. Invisible and withheld can each resolve on their own (a
-      // later run sees the decision, or its `to` starts existing) or never
-      // will (withheld, permanently, unless dropped) — "duplicate" is neither:
-      // it means a SIBLING entry for the same id already won and got applied,
-      // which repairDecisionCommit's own from-mismatch bail already makes true
-      // by the time anything downstream would check it, so it's only worth
-      // naming for entries that are otherwise resolvable.
-      const reasonQueued = (r: CommitRewrite): "invisible" | "withheld" | "duplicate" | null =>
+      const withheldSet = new Set(withheld);
+      const plan = { rewrites: applicable, records: [...new Set(applicable.map((r) => r.id))] };
+      const isChosen = (r: CommitRewrite): boolean => pickRewrite(plan, r.id) === r;
+      type StayReason = "invisible" | "withheld" | "duplicate";
+      const stayReason = (r: CommitRewrite): StayReason | null =>
         !visibleIds.has(r.id) ? "invisible"
-          : withheldSet.has(r) ? "withheld"
-          : applicableSet.has(r) && !wasChosen(r) ? "duplicate"
-          : null;
-      const staysQueued = (r: CommitRewrite): boolean => reasonQueued(r) !== null;
+        : withheldSet.has(r) ? "withheld"
+        : applicableSet.has(r) && !isChosen(r) ? "duplicate"
+        : null;
+      const staysQueued = (r: CommitRewrite): boolean => stayReason(r) !== null;
 
       if (!opts.apply) {
         if (!opts.quiet) {
-          const unresolvedCount = toApply.filter(staysQueued).length;
-          console.log(unresolvedCount
-            ? `Would repair ${toApply.length - unresolvedCount} of ${toApply.length} listed:`
+          const stayingCount = toApply.filter(staysQueued).length;
+          console.log(stayingCount > 0
+            ? `Would repair ${toApply.length - stayingCount} of ${toApply.length} listed:`
             : `Would repair ${toApply.length} commit reference(s):`);
           // Match strength, so a reviewer can tell an identical change from a
           // file-overlap guess before applying it into shared memory (#450).
           const previewPatchIds = commitPatchIds(toApply.flatMap((r) => [r.from, r.to]), root);
           for (const r of toApply) {
-            const reason = reasonQueued(r);
+            const reason = stayReason(r);
             const samePatch = !!previewPatchIds.get(r.from) && previewPatchIds.get(r.from) === previewPatchIds.get(r.to);
             const label = reason === "invisible" ? "not visible this run — --apply would leave it queued"
               : reason === "withheld" ? "proposed replacement commit doesn't resolve in this repository — --apply would leave it queued"
@@ -6303,90 +6175,64 @@ program
         return;
       }
 
-      const touchedHomes = new Set<MemoryHome>();
+      const homes = new Set<MemoryHome>();
       const appliedIds = new Set<string>();
       for (const d of decisions) {
         const healed = repairDecisionCommit(d, plan);
         if (healed === d) continue;
         const home = decisionMemoryHome(store, d.id);
         store.putWhereItLives("decisions", healed);
-        touchedHomes.add(home);
+        homes.add(home);
         appliedIds.add(d.id);
       }
-      // Only a candidate whose decision was actually VISIBLE this run AND
-      // whose `to` resolved in this repository AND wasn't beaten out by a
-      // same-id sibling is resolved (applied, or found stale by
-      // repairDecisionCommit's own from-mismatch bail) — resolvedRewriteIds
-      // shares deadRewrites' own reasoning: an id we could not see this run,
-      // or whose replacement doesn't exist, is not proof of anything, so it
-      // stays queued rather than being swept up just because it was in
-      // `toApply`. This also covers --only: toApply is just the one targeted
-      // id, so an invisible, unresolvable, or beaten-out target is left
-      // queued instead of deleted unresolved.
-      //
-      // `staysQueued` (OBJECT identity for both the withheld half, via
-      // `withheldSet.has(r)`, and the duplicate half, via `wasChosen`) is
-      // OR'd in ahead of the id-keyed `!resolvedIds.has(r.id)`: a corrupted
-      // queue file could carry two entries sharing an id — one resolvable,
-      // one not, or both resolvable — and an id-keyed check alone would treat
-      // the pair as one unit, deleting/misreporting whichever entry didn't
-      // actually get applied (#48, #51).
-      const resolvedIds = resolvedRewriteIds(applicable, decisions);
-      save(queue.filter((r) => staysQueued(r) || !resolvedIds.has(r.id)));
+
+      // Invisible / unresolvable / beaten-out entries are never deleted just because they
+      // were targeted. Identity-keyed checks come first so same-id pairs are handled per entry.
+      const resolved = resolvedRewriteIds(applicable, decisions);
+      const keep = (r: CommitRewrite): boolean => staysQueued(r) || !resolved.has(r.id);
+      saveQueue(queue.filter(keep));
+
       if (!appliedIds.size) {
-        // deadRewrites already pruned any VISIBLE decision that moved on or
-        // was superseded/rejected, so a targeted, resolvable id that IS
-        // visible always reaches repairDecisionCommit with a matching
-        // `from` and is always healed into a new object (appliedIds.add
-        // fires unconditionally for every visible match) — reaching here
-        // means every targeted candidate stayed queued (invisible or
-        // withheld, reported independently so neither reason disappears).
-        const invisibleIds = toApply.filter((r) => reasonQueued(r) === "invisible").map((r) => r.id);
-        const withheldIds = toApply.filter((r) => reasonQueued(r) === "withheld").map((r) => r.id);
+        // Counted per entry (not per distinct id), the same way the post-apply
+        // "left queued" summary below counts, so two same-id entries read as two.
+        const invisibleIds = toApply.filter((r) => stayReason(r) === "invisible").map((r) => r.id);
+        const withheldIds = toApply.filter((r) => stayReason(r) === "withheld").map((r) => r.id);
         if (!opts.quiet) {
           if (invisibleIds.length) {
             console.log(`Nothing applied — none of the targeted decision(s) are visible this run (branch checkout, or a private overlay not mounted?): ${invisibleIds.join(", ")}. Left queued for a run where they are — or \`hunch repair-provenance --drop <dec_id>\` if a decision is gone for good.`);
           }
           if (withheldIds.length) {
-            const subject = withheldIds.length === 1
-              ? "an entry whose proposed replacement commit doesn't"
-              : "entries whose proposed replacement commits don't";
+            const subject = withheldIds.length === 1 ? "an entry whose proposed replacement commit doesn't" : "entries whose proposed replacement commits don't";
             console.log(`${invisibleIds.length ? "Also nothing" : "Nothing"} applied for ${subject} resolve in this repository: ${withheldIds.join(", ")}. Left queued — this won't self-heal on its own; \`hunch repair-provenance --drop <dec_id>\` to reject it.`);
           }
         }
         return;
       }
+
       store.reindex();
       const rangeLabel = rangeResolves ? `${oldRef}..${newRef}` : "queued";
-      pumpMemoryHomes(store, root, touchedHomes, `hunch: repair ${appliedIds.size} commit reference(s) after squash-merge (${rangeLabel})`);
+      pumpMemoryHomes(store, root, homes, `hunch: repair ${appliedIds.size} commit reference(s) after squash-merge (${rangeLabel})`);
+
       if (!opts.quiet) {
         console.log(`✓ Repaired ${appliedIds.size} commit reference(s):`);
-        // `wasChosen` restricts this to the one entry per id that
-        // repairDecisionCommit actually wrote — `appliedIds` alone is keyed by
-        // decision id, so without it a same-id sibling that never got written
-        // would print here too (#51).
-        for (const r of applicable) if (appliedIds.has(r.id) && wasChosen(r)) console.log(`  ${r.id}  ${r.from} → ${r.to}`);
-        const stillQueued = toApply.filter((r) => staysQueued(r) || !resolvedIds.has(r.id));
-        const stillInvisible = stillQueued.filter((r) => reasonQueued(r) === "invisible");
-        const stillWithheld = stillQueued.filter((r) => reasonQueued(r) === "withheld");
-        const stillDuplicate = stillQueued.filter((r) => reasonQueued(r) === "duplicate");
-        if (stillInvisible.length) {
-          console.log(`\n${stillInvisible.length} entr${stillInvisible.length === 1 ? "y" : "ies"} not visible this run, left queued: ${stillInvisible.map((r) => r.id).join(", ")} — or \`hunch repair-provenance --drop <dec_id>\` if a decision is gone for good.`);
+        for (const r of applicable) {
+          // A losing same-id sibling must not be listed.
+          if (appliedIds.has(r.id) && isChosen(r)) console.log(`  ${r.id}  ${r.from} → ${r.to}`);
         }
-        if (stillWithheld.length) {
-          console.log(`\n${stillWithheld.length} entr${stillWithheld.length === 1 ? "y" : "ies"} left queued — the proposed replacement commit doesn't resolve in this repository: ${stillWithheld.map((r) => r.id).join(", ")} — \`hunch repair-provenance --drop <dec_id>\` to reject it.`);
+        const left = toApply.filter(keep);
+        const plural = (n: number): string => (n === 1 ? "entry" : "entries");
+        const invisibleLeft = left.filter((r) => stayReason(r) === "invisible");
+        const withheldLeft = left.filter((r) => stayReason(r) === "withheld");
+        const duplicateLeft = left.filter((r) => stayReason(r) === "duplicate");
+        if (invisibleLeft.length) {
+          console.log(`\n${invisibleLeft.length} ${plural(invisibleLeft.length)} not visible this run, left queued: ${invisibleLeft.map((r) => r.id).join(", ")} — or \`hunch repair-provenance --drop <dec_id>\` if a decision is gone for good.`);
         }
-        if (stillDuplicate.length) {
-          // Every entry here shares its id with the sibling that won (that's
-          // what "duplicate" means) — listing ids would just repeat one
-          // value, so name the `to` each one proposed instead. No
-          // `--drop <dec_id>` pointer, unlike the other two buckets: `--drop`
-          // targets the first queued match for an id (the same one
-          // pickRewrite would apply), which by now is the winning sibling
-          // that's already gone from the queue, not the losing one named
-          // here — pointing at `--drop <dec_id>` would read as an offer to
-          // reject this exact entry when it can't (#53).
-          console.log(`\n${stillDuplicate.length} entr${stillDuplicate.length === 1 ? "y" : "ies"} left queued — a sibling entry for the same decision was applied instead (only the first queued match per decision is ever applied): ${stillDuplicate.map((r) => `${r.id} (${r.to})`).join(", ")}`);
+        if (withheldLeft.length) {
+          console.log(`\n${withheldLeft.length} ${plural(withheldLeft.length)} left queued — the proposed replacement commit doesn't resolve in this repository: ${withheldLeft.map((r) => r.id).join(", ")} — \`hunch repair-provenance --drop <dec_id>\` to reject it.`);
+        }
+        if (duplicateLeft.length) {
+          // No --drop pointer: drop targets the first match, which is the winner already gone.
+          console.log(`\n${duplicateLeft.length} ${plural(duplicateLeft.length)} left queued — a sibling entry for the same decision was applied instead (only the first queued match per decision is ever applied): ${duplicateLeft.map((r) => `${r.id} (${r.to})`).join(", ")}`);
         }
       }
     } catch (err) {
@@ -6873,12 +6719,12 @@ program
         for (const f of premiseStale) console.log(`· ${f.id} — ${f.detail}`);
         console.log(`\nHeal: this is a HUMAN call — the decision's authority is unchanged until you make it. Re-attest (update the premise's review_by/attested), supersede via /capture, or retire the decision. Keeping it for consistency is a valid answer.\n`);
       }
-      // Every drift kind heals here — see bug_drift_heal_asymmetry above.
+      // Every drift kind must heal here.
       const commitUnresolvable = kind("commit-unresolvable");
       if (commitUnresolvable.length) {
         console.log(`${commitUnresolvable.length} decision(s) cite a commit that no longer resolves in this repository:\n`);
         for (const f of commitUnresolvable) console.log(`· ${f.id} — ${f.detail}`);
-        console.log(`\nHeal: this is a HUMAN call — check \`hunch repair-provenance\` for a queued match (the post-merge hook detects these automatically while the commit is still resolvable, but never applies one unattended); run \`hunch repair-provenance --apply\` to confirm it, or if the commit is already gone, manually correct the decision's provenance or leave it as historical record.\n`);
+        console.log(`\nHeal: this is a HUMAN call. Check \`hunch repair-provenance\` for a queued match (the post-merge hook detects them while the commit is still resolvable, but never applies one unattended), then run \`hunch repair-provenance --apply\` to confirm it; if the commit is already gone, correct the provenance by hand or keep it as historical record.\n`);
       }
       const fenceUnclosed = kind("doc-fence-unclosed");
       if (fenceUnclosed.length) {
@@ -6986,18 +6832,19 @@ program
     }
   });
 
-// ---- merge-driver-grounding (internal; git invokes this) ------------------
+// ---- merge-driver-grounding (internal) -----------------------------------
 program
   .command("merge-driver-grounding")
-  .description("(internal) git merge driver for the generated grounding docs — auto-resolves a hard conflict confined to the record-counts sentence.")
-  .argument("<base>", "%O — common ancestor")
-  .argument("<ours>", "%A — current branch (also the OUTPUT file)")
-  .argument("<theirs>", "%B — other branch")
-  .argument("[path]", "%P — pathname being merged")
+  .description("(internal) git's merge driver for the generated grounding docs: auto-resolves a hard conflict confined to the record-counts sentence.")
+  .argument("<base>", "common ancestor (%O)")
+  .argument("<ours>", "current branch version, and the output file (%A)")
+  .argument("<theirs>", "other branch version (%B)")
+  .argument("[path]", "pathname (%P)")
   .action((base: string, ours: string, theirs: string) => {
-    const res = mergeGroundingFile(base, ours, theirs);
-    if (res.write !== null) writeFileSync(ours, res.write);
-    if (res.conflict) process.exitCode = 1; // real conflict, or git itself errored → leave for a human
+    const result = mergeGroundingFile(base, ours, theirs);
+    if (result.write !== null) writeFileSync(ours, result.write);
+    // A real conflict or a git error: leave it for a human.
+    if (result.conflict) process.exitCode = 1;
   });
 
 // ---- doctor ---------------------------------------------------------------
@@ -7037,11 +6884,9 @@ program
     const { store, root } = storeFor();
     console.log(`Hunch root: ${root}`);
     console.log(`git repo:   ${isGitRepo(root) ? "yes" : "no"}  ${isGitRepo(root) ? `(HEAD ${headSha(root).slice(0, 8)})` : ""}`);
-    // post-commit/post-merge are the two hooks every setup path installs; a
-    // repo that ran `hunch init` before the post-merge hook existed never
-    // received it, and there was no way to discover that short of noticing a
-    // squash-merge went unrepaired. pre-commit is opt-out (`--no-enforce`),
-    // so its absence is informational only, never a warning.
+    // post-commit and post-merge are the two hooks every setup path installs; a repo
+    // initialized before post-merge existed never got it and had no way to notice.
+    // pre-commit is opt-out (--no-enforce), so its absence is informational only.
     if (isGitRepo(root)) {
       const report = hookReport(root);
       const hooks = hookStatus(root);
@@ -7120,7 +6965,7 @@ program
     // "no assistant CLI found" branch).
     for (const line of synthesisStatusLines(resolution, process.env)) console.log(line);
     const ctxWarning = await maybeWarnOllamaContext(provider.name, process.env);
-    if (ctxWarning) console.log(ctxWarning);
+    if (ctxWarning !== null) console.log(ctxWarning);
     // The native addons load on first PARSE, not at import, so no other command
     // that merely starts up proves the parser works. Doctor is the one place
     // that should pay the ~1.5s load: without this line a broken parser (an
@@ -7248,17 +7093,15 @@ function readStdin(): Promise<string> {
 }
 
 /** Absolute edit path → repo-relative, forward-slash (constraint scopes are
- *  forward-slash globs even on Windows), or "" when `abs` isn't (resolvably)
- *  inside `root`. Thin adapter over the shared `repoRelativeTarget` (core/paths.ts,
- *  which realpath-normalizes both ends first — see its docstring for why, incl.
- *  dec_e0a36efbf5): that function passes an unresolvable absolute path through
- *  UNCHANGED (still absolute) rather than signaling failure directly, since other
- *  callers want the original target back to fail their own match safely. This
- *  adapter converts that "still absolute" signal to "" — the sentinel `onEdit`
- *  and `editTargets` below already treat as "skip, not in this repo". */
+ *  forward-slash globs even on Windows). Returns "" when the path isn't resolvably
+ *  inside `root`. A thin adapter over the shared `repoRelativeTarget` in core/paths.ts,
+ *  which realpath-normalizes both ends but passes an unresolvable absolute path through
+ *  unchanged; this converts that "still absolute" result into "", the sentinel that
+ *  `onEdit` and `editTargets` treat as "skip, not in this repo". */
 function toRepoRel(root: string, abs: string): string {
   const rel = repoRelativeTarget(abs, root);
-  return isAbsolute(rel) || /^[a-zA-Z]:/.test(rel) ? "" : rel;
+  if (isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return "";
+  return rel;
 }
 
 /** Files a shell command wrote get the grounding the edit tools would have

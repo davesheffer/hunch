@@ -1,9 +1,11 @@
-/** Side-effect-free shared CLI logic — safe for any module (including tests)
- *  to import, unlike src/cli/index.ts, which runs the whole program at
- *  import time. Holds: how to re-invoke this CLI from a git hook / .mcp.json
- *  (working both when running the built dist and in dev via tsx), plus small
- *  formatting helpers (dim(), doctor's synthesisStatusLines()) that need the
- *  same import-safety to be unit-testable. */
+/**
+ * Shared CLI logic that is free of import-time side effects, so any module
+ * (tests included) can import it safely, unlike src/cli/index.ts which runs the
+ * program as soon as it loads. It holds how to re-invoke this CLI from a git hook
+ * or `.mcp.json` (from a built dist and in dev via tsx), plus small formatting
+ * helpers (`dim()`, doctor's `synthesisStatusLines()`) that need the same import
+ * safety to be unit-testable.
+ */
 import { fileURLToPath } from "node:url";
 import type { Invocation } from "../integrations/scaffold.js";
 import { probeOllamaNumCtx, type ProviderResolution } from "../synthesis/provider.js";
@@ -21,6 +23,7 @@ export interface ResolvedInvocation {
   installed: boolean;
 }
 
+/** Faint (dim) ANSI styling. */
 export function dim(s: string): string {
   return `\x1b[2m${s}\x1b[0m`;
 }
@@ -40,15 +43,10 @@ export function shellInvocation(inv: Invocation): string {
   return [inv.command, ...inv.args].map(token).join(" ");
 }
 
-/** The doctor command's synthesis-status line(s) for a resolved provider.
- *  Exported for testing — the previous version (a bare provider-name switch,
- *  before the resolveSynthesisProvider preference system existed) had zero
- *  test coverage, which is how issue #8 (openai-compat misreported as "no
- *  assistant CLI found") shipped unnoticed through three review passes. That
- *  bug resurfaces here for the same reason: resolution.statuses carries a
- *  `subscription` field for the CLI providers but openai-compat's is null (it
- *  isn't a subscription), so it must be special-cased explicitly rather than
- *  falling through to the "no assistant CLI" branch. */
+/** Render doctor's synthesis status lines. Exported for testing: an earlier,
+ *  untested version reported openai-compat as "no assistant CLI found". Statuses
+ *  carry a `subscription` for CLI providers but openai-compat's is null, so it is
+ *  special-cased explicitly. */
 export function synthesisStatusLines(resolution: ProviderResolution, env: NodeJS.ProcessEnv): string[] {
   const provider = resolution.provider;
   if (resolution.source === "unavailable-initiator") {
@@ -60,39 +58,38 @@ export function synthesisStatusLines(resolution: ProviderResolution, env: NodeJS
   if (resolution.source === "initiator") {
     return [`            ↳ agent calls remain with ${resolution.initiator}, using that CLI's configured authentication.`];
   }
-  const selected = resolution.statuses.find((s) => s.name === provider.name);
-  if (selected?.subscription) {
-    return [`            ↳ LLM synthesis uses your ${selected.subscription}; provider API credentials are not used.`];
+  const status = resolution.statuses.find((s) => s.name === provider.name);
+  if (status?.subscription) {
+    return [`            ↳ LLM synthesis uses your ${status.subscription}; provider API credentials are not used.`];
   }
   if (provider.name === "openai-compat") {
-    const base = env.HUNCH_SYNTH_BASE_URL ?? "(unset)";
-    const model = env.HUNCH_SYNTH_MODEL ?? "(unset)";
+    const base = env.HUNCH_SYNTH_BASE_URL || "(unset)";
+    const model = env.HUNCH_SYNTH_MODEL || "(unset)";
     const keyNote = env.HUNCH_SYNTH_API_KEY ? " (HUNCH_SYNTH_API_KEY set)" : " (no API key)";
     return [`            ↳ LLM synthesis via local/self-hosted endpoint ${base} (model: ${model})${keyNote}`];
   }
   if (resolution.source === "ambiguous") {
-    const names = resolution.statuses.filter((s) => s.name !== "deterministic" && s.available).map((s) => s.name);
+    const names = resolution.statuses.filter((s) => s.available && s.name !== "deterministic").map((s) => s.name);
     return [
       dim(`            ↳ ${names.join(", ")} are available; Hunch will not guess which provider to use.`),
-      dim(`              choose one locally: ${names.map((name) => `hunch provider ${name}`).join("  or  ")}`),
+      dim(`              choose one locally: ${names.map((n) => `hunch provider ${n}`).join("  or  ")}`),
     ];
   }
   if (resolution.source === "unavailable-preference") {
     return [dim(`            ↳ ${resolution.preference} was selected but is unavailable; using the offline heuristic.`)];
   }
   return [
-    dim(`            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence).`),
-    dim(`              install or log into Claude Code, Codex, or Cursor; then select one with \`hunch provider <name>\`.`),
+    dim("            ↳ no assistant CLI found — synthesis uses the offline heuristic (advisory, low-confidence)."),
+    dim("              install or log into Claude Code, Codex, or Cursor; then select one with `hunch provider <name>`."),
   ];
 }
 
-/** Gate + fetch the Ollama context-window advisory (issue #11): only relevant
- *  for the openai-compat provider, so every other provider is a no-op. Kept
- *  separate from synthesisStatusLines (sync, already fully covered) because
- *  this one makes a best-effort network call. */
+/** Gate + fetch the Ollama context-window advisory. Only openai-compat is
+ *  relevant; kept apart from the sync status lines because it makes a
+ *  best-effort network call. */
 export async function maybeWarnOllamaContext(providerName: string, env: NodeJS.ProcessEnv): Promise<string | null> {
   if (providerName !== "openai-compat") return null;
-  return probeOllamaNumCtx(env.HUNCH_SYNTH_BASE_URL ?? "", env.HUNCH_SYNTH_MODEL ?? "");
+  return probeOllamaNumCtx(env.HUNCH_SYNTH_BASE_URL || "", env.HUNCH_SYNTH_MODEL || "");
 }
 
 /** Classify the entry path without faking import.meta.url in tests. */

@@ -132,6 +132,7 @@ test("post-commit code change captures a decision linked to the changed file", a
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  // Stage only src/a.ts: `-A` would sweep in the .hunch/ manifest ensureDirs() wrote and trip the .hunch/** guard.
   execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
 
@@ -142,69 +143,49 @@ test("post-commit code change captures a decision linked to the changed file", a
   cleanupDir(root);
 });
 
-test("syncCommit does not skip a SKIP_SUBJECT commit whose body is substantive (regression #4)", async () => {
+test("syncCommit does not skip a SKIP_SUBJECT commit whose body is substantive", async () => {
   const root = gitRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
-  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  appendFileSync(join(root, "src/a.ts"), "export function login(){ return 'jwt'; }\n");
   execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
-  execFileSync(
-    "git",
-    [
-      "commit",
-      "-m",
-      "Merge branch 'feature' into main",
-      "-m",
-      "Adds OAuth2 login support with JWT tokens, replacing the old session-cookie flow.",
-    ],
-    { cwd: root, stdio: "ignore" },
-  );
+  execFileSync("git", ["commit", "-m", "Merge branch 'feature' into main", "-m", "Adds OAuth2/JWT login, replacing the session cookies so that API clients can authenticate statelessly."], { cwd: root, stdio: "ignore" });
 
   const r = await syncCommit(store, root);
-  assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
-  assert.ok(r.decision, "decision was recorded despite the merge-prefixed subject");
-
+  assert.equal(r.status, "written", r.reason);
+  assert.ok(r.decision, "a decision exists");
   store.close();
   cleanupDir(root);
 });
 
-test("syncCommit still skips a SKIP_SUBJECT commit with an empty body (no regression #4)", async () => {
+test("syncCommit still skips a SKIP_SUBJECT commit with an empty body", async () => {
   const root = gitRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
-  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
-  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  appendFileSync(join(root, "src/a.ts"), "export function merged(){ return 3; }\n");
+  execFileSync("git", ["add", "-A", "src"], { cwd: root, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "Merge branch 'main' into feature"], { cwd: root, stdio: "ignore" });
 
   const r = await syncCommit(store, root);
   assert.equal(r.status, "skipped");
   assert.match(r.reason!, /trivial subject/);
-  assert.equal(store.json.loadAll("decisions").length, 0, "no decision recorded for a trivial merge commit");
-
+  assert.equal(store.json.loadAll("decisions").length, 0);
   store.close();
   cleanupDir(root);
 });
 
-test("syncCommit skips a chore(deps) commit with an empty body (regex fix, regression #4)", async () => {
+test("syncCommit skips a dependency-bump commit with an empty body", async () => {
   const root = gitRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
-  appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
-  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
-  execFileSync(
-    "git",
-    ["commit", "-m", "chore(deps): bump lodash from 4.1.0 to 4.2.0"],
-    { cwd: root, stdio: "ignore" },
-  );
+  appendFileSync(join(root, "src/a.ts"), "export function bumped(){ return 4; }\n");
+  execFileSync("git", ["add", "-A", "src"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "chore(deps): bump lodash from 4.1.0 to 4.2.0"], { cwd: root, stdio: "ignore" });
 
   const r = await syncCommit(store, root);
-  assert.equal(r.status, "skipped", `expected skipped, got written: ${JSON.stringify(r.decision?.title)}`);
+  assert.equal(r.status, "skipped", r.decision?.title);
   assert.match(r.reason!, /trivial subject/);
-  assert.equal(store.json.loadAll("decisions").length, 0, "no decision recorded for a trivial chore(deps) commit");
-
+  assert.equal(store.json.loadAll("decisions").length, 0);
   store.close();
   cleanupDir(root);
 });
@@ -222,24 +203,17 @@ function pythonGitRepo(): string {
   return root;
 }
 
-test("syncCommit synthesizes a decision from a Python commit (regression: was 'no code files changed')", async () => {
+test("a Python commit synthesizes a decision", async () => {
   const root = pythonGitRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
-  // second commit with enough structural delta to be significant: a new function
-  // definition is itself a structural-delta signal per Task 6's DECL_PATTERNS fix.
-  writeFileSync(
-    join(root, "src/a.py"),
-    "def a():\n    return 1\n\ndef b(x):\n    return a() + x\n",
-  );
+  writeFileSync(join(root, "src/a.py"), "def a():\n    return 1\n\n\ndef b(x):\n    return a() + x\n");
   execFileSync("git", ["add", "src/a.py"], { cwd: root, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
 
   const r = await syncCommit(store, root);
-  assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
-  assert.ok(r.decision, "decision was recorded");
-
+  assert.equal(r.status, "written", r.reason);
+  assert.ok(r.decision, "a decision exists");
   store.close();
   cleanupDir(root);
 });
@@ -251,112 +225,97 @@ function markdownGitRepo(): string {
   g("config", "user.email", "t@t.co");
   g("config", "user.name", "t");
   mkdirSync(join(root, "docs/adr"), { recursive: true });
-  writeFileSync(
-    join(root, "docs/adr/0001-use-postgres.md"),
-    "# Use Postgres\n\nWe chose Postgres over MySQL for its native JSONB support and mature\n" +
-      "extension ecosystem (pg_trgm, PostGIS). MySQL was rejected: weaker JSON indexing\n" +
-      "and no first-class extension mechanism.\n",
-  );
+  writeFileSync(join(root, "docs/adr/0001-use-postgres.md"), [
+    "# 1. Use Postgres",
+    "",
+    "## Decision",
+    "We will use Postgres as the primary datastore.",
+    "",
+    "## Why",
+    "Transactional guarantees, mature tooling and JSONB support.",
+    "",
+    "## Rejected",
+    "MySQL: weaker JSON support and fewer extensions for our needs.",
+    "",
+  ].join("\n"));
   g("add", "-A");
-  g("commit", "-m", "docs: record the Postgres-over-MySQL decision");
+  g("commit", "-m", "docs: add ADR 0001 use postgres");
   return root;
 }
 
-test("syncCommit synthesizes a decision from a markdown-only commit (issue #12)", async () => {
+test("a markdown-only commit synthesizes a decision", async () => {
   const root = markdownGitRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
   const r = await syncCommit(store, root);
-  assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
-  assert.ok(r.decision, "decision was recorded");
+  assert.equal(r.status, "written", r.reason);
+  assert.ok(r.decision, "a decision exists");
   assert.deepEqual(r.decision!.related_files, ["docs/adr/0001-use-postgres.md"]);
-
   store.close();
   cleanupDir(root);
 });
 
-test("syncCommit's deterministic fallback describes a markdown-only edit as content, not \"code\" (issue #12)", async () => {
+test("the deterministic fallback describes a markdown-only edit as content, not code", async () => {
   const root = markdownGitRepo();
-  // A content EDIT to the existing file, not a new file — filesAdded stays empty,
-  // so summarizeDiff(analysis) is "" and DeterministicProvider falls into its
-  // no-summary branch, which is the one that must not hardcode "code".
-  appendFileSync(
-    join(root, "docs/adr/0001-use-postgres.md"),
-    "\nRevisited 2026: still the right call given our read-heavy workload.\n",
-  );
+  appendFileSync(join(root, "docs/adr/0001-use-postgres.md"), "\n## Revisited\nWe revisited this and still prefer Postgres for its extension ecosystem.\n");
   execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
-  execFileSync("git", ["commit", "-m", "docs: revisit the Postgres decision"], { cwd: root, stdio: "ignore" });
-
+  execFileSync("git", ["commit", "-m", "docs: revisit ADR 0001"], { cwd: root, stdio: "ignore" });
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
   const r = await syncCommit(store, root);
-  assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
-  assert.doesNotMatch(r.decision!.decision, /\bcode\b/i, `must not claim "code" for a markdown-only edit: ${r.decision!.decision}`);
-
+  assert.equal(r.status, "written", r.reason);
+  assert.doesNotMatch(r.decision!.decision, /\bcode\b/i);
   store.close();
   cleanupDir(root);
 });
 
-test("syncCommit skips a commit that touches .hunch/** even though it now also touches markdown (regenerated AGENTS.md/CLAUDE.md, issue #12 regression)", async () => {
+test("a commit touching .hunch/** is skipped even though it also touches markdown", async () => {
   const root = gitRepo();
-  const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
   mkdirSync(join(root, ".hunch/decisions"), { recursive: true });
-  writeFileSync(join(root, ".hunch/decisions/dec_abc123.json"), '{"id":"dec_abc123"}\n');
-  writeFileSync(join(root, "AGENTS.md"), "# AGENTS.md\n\n<!-- regenerated by refreshCommittableGrounding -->\n");
-  writeFileSync(join(root, "CLAUDE.md"), "# CLAUDE.md\n\n<!-- regenerated by refreshCommittableGrounding -->\n");
-  g("add", "-A");
-  // Deliberately NOT a "hunch:"-prefixed subject — the guard must be structural
-  // (touches .hunch/**), not a commit-message convention, since flushCapture's
-  // exact wording lives as separate literal strings in mcp/server.ts/cli/index.ts
-  // and could drift independently of any regex here.
-  g("commit", "-m", "chore: sync memory");
-
+  writeFileSync(join(root, ".hunch/decisions/dec_abc123.json"), JSON.stringify({ id: "dec_abc123" }) + "\n");
+  writeFileSync(join(root, "AGENTS.md"), "# Agents\nregenerated\n");
+  writeFileSync(join(root, "CLAUDE.md"), "# Claude\nregenerated\n");
+  execFileSync("git", ["add", "-A"], { cwd: root, stdio: "ignore" });
+  // A non-"hunch:" subject proves the guard is structural, not subject-based.
+  execFileSync("git", ["commit", "-m", "chore: sync memory"], { cwd: root, stdio: "ignore" });
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
   const r = await syncCommit(store, root);
   assert.equal(r.status, "skipped");
   assert.match(r.reason!, /\.hunch\/\*\*/);
-
   store.close();
   cleanupDir(root);
 });
 
-test("syncCommit skips a commit touching neither code nor markdown (e.g. an SVG-only commit)", async () => {
+test("an SVG-only commit is skipped", async () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-int-svg-"));
   const g = (...a: string[]) => execFileSync("git", a, { cwd: root, stdio: ["ignore", "ignore", "ignore"] });
   g("init");
   g("config", "user.email", "t@t.co");
   g("config", "user.name", "t");
   mkdirSync(join(root, "assets"), { recursive: true });
-  writeFileSync(join(root, "assets/logo.svg"), "<svg></svg>\n");
+  writeFileSync(join(root, "assets/logo.svg"), '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n');
   g("add", "-A");
-  g("commit", "-m", "chore: add logo");
-
+  g("commit", "-m", "feat: add logo");
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
-
   const r = await syncCommit(store, root);
   assert.equal(r.status, "skipped");
   assert.equal(r.reason, "no code or markdown files changed");
-
   store.close();
   cleanupDir(root);
 });
 
-test("syncCommit drives synthesis through the openai-compat provider end-to-end (no API key, reports via LLM)", async () => {
+test("syncCommit drafts via an openai-compat endpoint end to end", async () => {
   const root = gitRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
+  // Stage only src/a.ts: `-A` would sweep in the .hunch/ manifest and trip the .hunch/** guard.
   execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
-
   const server = createServer((req, res) => {
-    let body = "";
-    req.on("data", (c) => (body += c));
+    req.on("data", () => {});
     req.on("end", () => {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({
@@ -364,7 +323,7 @@ test("syncCommit drives synthesis through the openai-compat provider end-to-end 
           message: {
             content: JSON.stringify({
               title: "Add b()",
-              context: "local model draft",
+              context: "a.ts needed a second helper",
               decision: "Added function b to a.ts",
               consequences: [],
               alternatives_rejected: [],
@@ -375,21 +334,20 @@ test("syncCommit drives synthesis through the openai-compat provider end-to-end 
       }));
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
-  const { port } = server.address() as AddressInfo;
-
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
   const savedProvider = process.env.HUNCH_SYNTH_PROVIDER;
   process.env.HUNCH_SYNTH_PROVIDER = "openai-compat";
   process.env.HUNCH_SYNTH_BASE_URL = `http://127.0.0.1:${port}`;
-  process.env.HUNCH_SYNTH_MODEL = "local-test-model";
+  process.env.HUNCH_SYNTH_MODEL = "test-model";
   __resetAvailabilityCacheForTests();
   try {
     const r = await withInitiator(
       { provider: "openai-compat", source: "explicit" },
       () => syncCommit(store, root),
     );
-    assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
-    assert.equal(r.provider, "openai-compat", "this is exactly what backfill's 'via LLM' count keys off");
+    assert.equal(r.status, "written");
+    assert.equal(r.provider, "openai-compat", "backfill's via-LLM count keys off this");
     assert.equal(r.decision!.decision, "Added function b to a.ts");
   } finally {
     process.env.HUNCH_SYNTH_PROVIDER = savedProvider ?? "deterministic";
@@ -402,49 +360,36 @@ test("syncCommit drives synthesis through the openai-compat provider end-to-end 
   }
 });
 
-test("syncCommit reports the ACTUAL (fallback) provider when the openai-compat call fails", async () => {
+test("syncCommit reports the deterministic fallback when the endpoint fails", async () => {
   const root = gitRepo();
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   appendFileSync(join(root, "src/a.ts"), "export function b(){ return 2; }\n");
-  // Scoped to the file, not `-A`: ensureDirs() above wrote .hunch/manifest.json, and
-  // sweeping it into this commit would now trip the .hunch/** synthesis-input guard
-  // (this commit would "touch Hunch's own store" and get skipped before ever reaching
-  // the assertions below).
+  // Stage only src/a.ts: `-A` would sweep in the .hunch/ manifest and trip the .hunch/** guard.
   execFileSync("git", ["add", "src/a.ts"], { cwd: root, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "feat: add b"], { cwd: root, stdio: "ignore" });
-
-  // Respond with a non-200 status so OpenAICompatProvider's run() throws before
-  // it ever gets to parse a body — this is what a real network/auth/CLI failure
-  // looks like from the caller's side.
   const server = createServer((req, res) => {
-    let body = "";
-    req.on("data", (c) => (body += c));
+    req.on("data", () => {});
     req.on("end", () => {
       res.statusCode = 500;
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ error: "internal server error" }));
+      res.end(JSON.stringify({ error: { message: "boom" } }));
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
-  const { port } = server.address() as AddressInfo;
-
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
   const savedProvider = process.env.HUNCH_SYNTH_PROVIDER;
   process.env.HUNCH_SYNTH_PROVIDER = "openai-compat";
   process.env.HUNCH_SYNTH_BASE_URL = `http://127.0.0.1:${port}`;
-  process.env.HUNCH_SYNTH_MODEL = "local-test-model";
+  process.env.HUNCH_SYNTH_MODEL = "test-model";
   __resetAvailabilityCacheForTests();
   try {
     const r = await withInitiator(
       { provider: "openai-compat", source: "explicit" },
       () => syncCommit(store, root),
     );
-    assert.equal(r.status, "written", `expected written, got skipped: ${r.reason}`);
-    assert.equal(
-      r.provider,
-      "deterministic",
-      "a failed openai-compat call must report the ACTUAL (fallback) provider, not the one that was merely selected — this is exactly what backfill's LLM-vs-heuristic tally keys off",
-    );
+    assert.equal(r.status, "written");
+    assert.equal(r.provider, "deterministic", "the ACTUAL fallback provider, not the selected one");
     assert.equal(r.decision!.provenance.source, "inferred");
   } finally {
     process.env.HUNCH_SYNTH_PROVIDER = savedProvider ?? "deterministic";
