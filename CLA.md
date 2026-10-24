@@ -1,0 +1,134 @@
+# Hunch Contributor Assignment Agreement
+
+Version 1.0. Any change to this document gets a new version number and a new
+signature record; signatures given to one version stay with that version.
+
+This Agreement is between You and David Sheffer, the owner of the Hunch project
+(the "Project"). "Owner" means David Sheffer until an assignment under Section 7,
+and after it the assignee alone. By signing, You transfer to the Owner all of
+Your rights in Your Contributions, past and future, including patents, and give
+up any claim against the Owner or the Project's users.
+
+## 1. How You accept
+
+You accept this Agreement by posting, from Your GitHub account, a pull request
+comment that consists of exactly this sentence:
+
+> I have read the CLA Document and I hereby sign the CLA
+
+That comment is Your electronic signature. You agree that this Agreement may be
+accepted electronically and binds You as fully as a signed paper copy. You confirm
+that You are of legal age to enter into contracts where You live.
+
+You are identified by the GitHub account that posts the comment. If You
+contribute on behalf of an employer or another organization, that organization
+must also sign the [Corporate Contributor Assignment Agreement](CCLA.md) before
+Your Contributions are merged.
+
+## 2. Definitions
+
+**"You"** means the individual who accepts this Agreement.
+
+**"Contribution"** means any work of authorship, including source code,
+documentation, tests, configuration, designs and changes to existing work, that
+You have submitted or later submit to the Project in any form, including a pull
+request, patch, issue or other communication sent to the Owner for inclusion in
+the Project. A communication You mark in writing as "Not a Contribution" is not a
+Contribution. This Agreement covers every Contribution, including those You
+submitted before You accepted it.
+
+## 3. Assignment of all rights
+
+You hereby assign to the Owner, and agree to assign, all of Your right, title and
+interest worldwide in and to Your Contributions, including:
+
+1. every copyright and other intellectual property right in them;
+2. every invention, and every patent and patent application, that a Contribution
+   discloses or that You disclosed to the Project or the Owner, including any
+   patent or application You filed before accepting this Agreement; and
+3. the right to sue for, and keep any recovery from, past, present and future
+   infringement of those rights.
+
+This assignment is retroactive: for every Contribution, including those submitted
+before You accepted this Agreement, it takes effect as of the date the
+Contribution was created, so the Owner has owned it from that date.
+
+The Owner may use, change, license, sell and enforce those rights in any way,
+including under open-source, proprietary or commercial terms, without paying,
+crediting or notifying You. You keep no rights in Your Contributions, except the
+rights that any member of the public has under the license the Owner publishes
+them under.
+
+You release the Owner, its licensees, successors and customers, and every user of
+the Project, from every claim, known or unknown, that You have or may have arising
+from any use of Your Contributions or the Project up to the date You accept this
+Agreement. You waive any right to compensation, royalties, credit or other payment
+for Your Contributions or for any invention or patent assigned or licensed under
+this Agreement, including any such right given by statute, to the extent the law
+allows it to be waived.
+
+You also agree never to assert any patent or patent application You own or
+control, now or later, against the Owner, its licensees, successors or customers,
+or any user of the Project, for making, using, selling, offering, importing or
+distributing the Project or any work based on it.
+
+## 4. Where an assignment is not possible
+
+If the law does not allow any right in Section 3 to be assigned, You instead grant
+the Owner an exclusive (including as to You), perpetual, irrevocable, worldwide,
+royalty-free license to that right, with the right to sublicense through
+multiple tiers and to enforce it, and You agree never to assert that right
+against the Owner, its licensees or its successors.
+
+## 5. Moral rights
+
+To the extent the law allows, You waive, and agree not to assert against the
+Owner or its licensees, any moral rights or similar rights in Your
+Contributions, including the right to be named as author and the right to object
+to changes. Where these rights cannot be waived, You consent to every use of Your
+Contributions that this Agreement permits.
+
+## 6. Your promises and help
+
+You represent that:
+
+1. You are legally entitled to make this assignment, and nobody else (including
+   an employer) has rights in Your Contributions unless it has signed the
+   Corporate Contributor Assignment Agreement.
+2. Each Contribution is Your original creation. Where part of it comes from
+   someone else, or was substantially generated by an AI tool, You identify that
+   part and its license in the pull request.
+3. No Contribution includes confidential information of anyone else.
+4. You will not file a patent application on anything assigned to the Owner.
+
+At the Owner's request and expense, You will sign any document reasonably needed
+to record, register, protect or enforce the Owner's rights under this Agreement.
+If You do not sign within 30 days of a written request, You appoint the Owner as
+Your attorney-in-fact solely to sign it for You.
+
+## 7. Transfer by the Owner
+
+The Owner may transfer this Agreement and all rights under it without Your
+consent, including to a company the Owner forms to hold the Project or to a buyer
+of the Project. After the transfer, the transferee alone is the Owner under this
+Agreement. This Agreement binds Your heirs, successors and assigns.
+
+## 8. No warranty; no obligation
+
+Unless required by law or agreed in writing, You provide Your Contributions
+"AS IS", without warranties of merchantability or fitness for a particular
+purpose. This does not limit Your promises in Section 6. The Owner has no
+obligation to accept, merge, keep, credit or pay for any Contribution, and this
+Agreement creates no employment, partnership or agency relationship.
+
+## 9. General
+
+This Agreement is governed by the laws of the State of Delaware, United States,
+without regard to its conflict-of-laws rules, and the state and federal courts
+located in Delaware have exclusive jurisdiction over any dispute arising from
+it. This Agreement is the entire agreement between You and the Owner about Your
+Contributions and adds to the Project's earlier contribution terms. The Owner
+changes this Agreement only by publishing a new version, which binds only those
+who sign it. A failure to enforce any provision is not a waiver of it. If any
+provision is found unenforceable, it is enforced to the fullest extent the law
+allows and the rest stays in effect.
