@@ -224,6 +224,11 @@ function scanDocument(docText: string, base: number): Scan {
     }
     const trimmed = content.trim();
     if (trimmed === "" || trimmed.startsWith("#")) continue;
+    if (/^\s/u.test(content.slice(indentOf(content)))) {
+      // Non-ASCII whitespace in the indent: depth unknowable, so every open map is unknown.
+      taintOpen();
+      continue;
+    }
     closeFrom(indentOf(content));
     tainted.add(container());
   }

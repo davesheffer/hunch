@@ -332,3 +332,12 @@ test("3/helpers: namespacesCompatible, isKustomizationFile, totality", () => {
     assert.doesNotThrow(() => extractKustomization(s));
   }
 });
+
+test("non-ASCII whitespace indentation inside a label map makes the map unknown", () => {
+  for (const ws of ["    ", "　　　　", "    "]) {
+    const svc = y("kind: Service", "metadata:", "  name: s", "spec:", "  selector:", "    app: x", `${ws}tier: y`);
+    assert.equal(one(svc).selector, null);
+    const d = y("kind: Deployment", "metadata:", "  name: d", "spec:", "  template:", "    metadata:", "      labels:", "        app: x", `${ws}${ws}tier: y`, "    spec:", "      containers:", "      - name: c");
+    assert.equal(one(d).labels, null);
+  }
+});

@@ -129,3 +129,9 @@ test("long define truncates bodyText only", () => {
   assert.equal(s.endChar, src.length);
   assert.equal(s.loc, 3001);
 });
+
+test("define with an unterminated quoted name emits nothing", () => {
+  for (const src of ['{{ define "foo }}x{{ end }}', '{{ define "foo . }}x{{ end }}', '{{ define "a}}b" }}x{{ end }}']) {
+    assert.deepEqual(extractHelmDirectives(src).symbols, [], src);
+  }
+});

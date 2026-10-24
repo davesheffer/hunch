@@ -76,7 +76,7 @@ export function extractHelmDirectives(source: string): HelmExtraction {
       let name: string | null = null;
       if (rest.startsWith('"')) {
         const q = rest.indexOf('"', 1);
-        const candidate = q === -1 ? rest.slice(1) : rest.slice(1, q);
+        const candidate = q === -1 ? "" : rest.slice(1, q);
         if (candidate.length > 0) name = candidate;
       }
       stack.push({ start: open, name });
