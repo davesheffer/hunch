@@ -912,7 +912,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "a withheld queued repair (its `to` doesn't resolve here) still surfaces via `hunch escalations`, but never advertises --apply --only as a working resolution (#48 follow-up)"
+        "title": "escalations do not claim --drop rejects the resolvable entry when it targets the withheld one"
       }
     ]
   },
@@ -2169,7 +2169,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance --range --apply rewrites commit + evidence directly, and leaves the queue empty"
+        "title": "repair-provenance --range --apply repairs the commit and evidence, commits, and clears the queue"
       }
     ]
   },
@@ -2177,7 +2177,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance --drop removes one queued entry without applying anything"
+        "title": "--drop tombstones one decision's entry without touching decisions or HEAD"
       }
     ]
   },
@@ -2193,7 +2193,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance --from-hook (no --apply, matches installed hook exactly) detects and QUEUES, never writes the decision"
+        "title": "--from-hook queues the match silently and never auto-commits"
       }
     ]
   },
@@ -2201,7 +2201,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "hunch escalations' apply-target wording for a duplicate-id queue (withheld-first, resolvable-second) matches what --apply --only actually applies (#59, mr-complexity-reviewer round 2)"
+        "title": "--apply --only repairs just the named decision and leaves the rest queued"
       }
     ]
   },
@@ -2209,7 +2209,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance's fresh-detection merge on a duplicate-id queue overrides only the entry pickRewrite would pick, leaving the untargeted sibling queued (#56)"
+        "title": "repair-provenance --range --apply repairs the commit and evidence, commits, and clears the queue"
       }
     ]
   },
@@ -2217,7 +2217,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance --range --apply rewrites commit + evidence directly, and leaves the queue empty"
+        "title": "repair-provenance --range --apply repairs the commit and evidence, commits, and clears the queue"
       }
     ]
   },

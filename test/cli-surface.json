@@ -259,7 +259,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "a queued repair surfaces via `hunch escalations` — the discoverable surface for what the silent hook found"
+        "title": "escalations --json surfaces a hook-queued match as commit-repair-pending"
       }
     ]
   },
@@ -915,7 +915,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance --range --apply rewrites commit + evidence directly, and leaves the queue empty"
+        "title": "repair-provenance --range --apply repairs the commit and evidence, commits, and clears the queue"
       }
     ]
   },

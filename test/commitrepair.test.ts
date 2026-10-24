@@ -1,76 +1,68 @@
-import { test } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
-import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, mergeRewrites, firstFor, liveRewrites, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo } from "../src/core/commitrepair.js";
+import {
+  orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, mergeRewrites, firstFor,
+  liveRewrites, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo,
+} from "../src/core/commitrepair.js";
 import type { Decision } from "../src/core/types.js";
 import type { CommitCandidate, CommitRepairStatus } from "../src/extractors/git.js";
 
-const D = (over: Partial<Decision> & { id: string }): Decision => ({
-  id: over.id, title: `t ${over.id}`, decision: "d", status: over.status ?? "accepted",
-  related_files: over.related_files ?? [], rejected_tripwires: [],
-  alternatives_rejected: [],
-  commit: over.commit ?? null,
-  provenance: { source: "human_confirmed", confidence: 0.9, evidence: over.commit ? [`commit:${over.commit}`] : [] },
-  ...over,
-} as unknown as Decision);
+function D(p: Partial<Decision> & { id: string }): Decision {
+  return {
+    title: `title ${p.id}`,
+    decision: "do the thing",
+    status: "accepted",
+    related_files: [],
+    rejected_tripwires: [],
+    alternatives_rejected: [],
+    commit: null,
+    provenance: { source: "human_confirmed", confidence: 0.9, evidence: p.commit ? [`commit:${p.commit}`] : [] },
+    ...p,
+  } as unknown as Decision;
+}
 
-test("orphanedCommitDecisions: only live decisions with a non-ancestor commit are orphaned", () => {
-  const statuses = new Map<string, CommitRepairStatus>([["sha_ancestor", "current"], ["sha_gone", "orphaned"]]);
-  const status = (sha: string): CommitRepairStatus => statuses.get(sha) ?? "unresolvable";
+test("orphanedCommitDecisions keeps only live, orphaned decisions", () => {
   const decisions = [
-    D({ id: "dec_ancestor", commit: "sha_ancestor" }),
-    D({ id: "dec_orphaned", commit: "sha_gone" }),
-    D({ id: "dec_no_commit", commit: null }),
-    D({ id: "dec_superseded", commit: "sha_gone", status: "superseded" }),
-    D({ id: "dec_rejected", commit: "sha_gone", status: "rejected" }),
+    D({ id: "dec_current", commit: "sha_current" }),
+    D({ id: "dec_orphan", commit: "sha_orphan" }),
+    D({ id: "dec_nocommit" }),
+    D({ id: "dec_super", commit: "sha_super", status: "superseded" }),
+    D({ id: "dec_rej", commit: "sha_rej", status: "rejected" }),
   ];
-  assert.deepEqual(orphanedCommitDecisions(decisions, status).map((d) => d.id), ["dec_orphaned"]);
+  const map: Record<string, CommitRepairStatus> = { sha_current: "current", sha_orphan: "orphaned", sha_super: "orphaned", sha_rej: "orphaned" };
+  const out = orphanedCommitDecisions(decisions, (sha) => map[sha] ?? "unresolvable");
+  assert.deepEqual(out.map((d) => d.id), ["dec_orphan"]);
 });
 
-test("orphanedCommitDecisions: unresolvable and unknown commits are never repair-eligible", () => {
-  const statuses = new Map<string, CommitRepairStatus>([
-    ["sha_orphaned", "orphaned"],
-    ["sha_missing", "unresolvable"],
-    ["sha_git_failed", "unknown"],
-  ]);
-  const status = (sha: string): CommitRepairStatus => statuses.get(sha)!;
-  const decisions = [
-    D({ id: "dec_orphaned", commit: "sha_orphaned" }),
-    D({ id: "dec_foreign", commit: "sha_missing" }),
-    D({ id: "dec_git_failed", commit: "sha_git_failed" }),
-  ];
-  assert.deepEqual(orphanedCommitDecisions(decisions, status).map((d) => d.id), ["dec_orphaned"]);
+test("orphanedCommitDecisions excludes unresolvable and unknown statuses", () => {
+  const decisions = [D({ id: "a", commit: "sa" }), D({ id: "b", commit: "sb" }), D({ id: "c", commit: "sc" })];
+  const map: Record<string, CommitRepairStatus> = { sa: "orphaned", sb: "unresolvable", sc: "unknown" };
+  assert.deepEqual(orphanedCommitDecisions(decisions, (s) => map[s]!).map((d) => d.id), ["a"]);
 });
 
-test("planCommitRepair: a unique related_files-subset match is rewritten", () => {
+test("planCommitRepair rewrites a unique match by files", () => {
   const orphaned = [D({ id: "dec_1", commit: "sha_old", related_files: ["src/feature.ts"] })];
-  const candidates: CommitCandidate[] = [{ sha: "sha_squash", files: ["src/feature.ts", "src/unrelated.ts"] }];
+  const candidates: CommitCandidate[] = [{ sha: "sha_new", files: ["src/feature.ts", "README.md"] }, { sha: "sha_other", files: ["x.ts"] }];
   const plan = planCommitRepair(orphaned, candidates);
-  assert.deepEqual(plan.rewrites, [{ id: "dec_1", from: "sha_old", to: "sha_squash" }]);
+  assert.deepEqual(plan.rewrites, [{ id: "dec_1", from: "sha_old", to: "sha_new" }]);
   assert.deepEqual(plan.records, ["dec_1"]);
 });
 
-test("planCommitRepair: two candidates both match — ambiguous, skipped", () => {
-  const orphaned = [D({ id: "dec_1", commit: "sha_old", related_files: ["src/feature.ts"] })];
-  const candidates: CommitCandidate[] = [
-    { sha: "sha_a", files: ["src/feature.ts"] },
-    { sha: "sha_b", files: ["src/feature.ts", "src/other.ts"] },
-  ];
+test("planCommitRepair: two superset candidates are ambiguous", () => {
+  const orphaned = [D({ id: "dec_1", commit: "sha_old", related_files: ["src/a.ts"] })];
+  const candidates: CommitCandidate[] = [{ sha: "s1", files: ["src/a.ts"] }, { sha: "s2", files: ["src/a.ts", "b.ts"] }];
   assert.deepEqual(planCommitRepair(orphaned, candidates), { rewrites: [], records: [] });
 });
 
-test("planCommitRepair: no candidate is a superset — no match, skipped", () => {
-  const orphaned = [D({ id: "dec_1", commit: "sha_old", related_files: ["src/feature.ts", "src/other.ts"] })];
-  const candidates: CommitCandidate[] = [{ sha: "sha_a", files: ["src/feature.ts"] }];
-  assert.deepEqual(planCommitRepair(orphaned, candidates), { rewrites: [], records: [] });
+test("planCommitRepair: no candidate covers every related file", () => {
+  const orphaned = [D({ id: "dec_1", commit: "sha_old", related_files: ["src/a.ts", "src/b.ts"] })];
+  assert.deepEqual(planCommitRepair(orphaned, [{ sha: "s1", files: ["src/a.ts"] }]), { rewrites: [], records: [] });
 });
 
-test("planCommitRepair: empty or all-glob related_files never matches", () => {
-  const orphaned = [
-    D({ id: "dec_empty", commit: "sha_old", related_files: [] }),
-    D({ id: "dec_glob", commit: "sha_old2", related_files: ["src/**"] }),
-  ];
-  const candidates: CommitCandidate[] = [{ sha: "sha_a", files: ["src/feature.ts"] }];
-  assert.deepEqual(planCommitRepair(orphaned, candidates), { rewrites: [], records: [] });
+test("planCommitRepair: empty or glob-only related files never match", () => {
+  const candidates: CommitCandidate[] = [{ sha: "s1", files: ["src/a.ts"] }];
+  assert.deepEqual(planCommitRepair([D({ id: "d1", commit: "o", related_files: [] })], candidates), { rewrites: [], records: [] });
+  assert.deepEqual(planCommitRepair([D({ id: "d2", commit: "o", related_files: ["src/**"] })], candidates), { rewrites: [], records: [] });
 });
 
 test("planCommitRepair: a same-patch-id candidate beats the unique file-superset candidate (#450)", () => {
@@ -96,263 +88,157 @@ test("planCommitRepair: two same-patch-id candidates are ambiguous; no patch-id 
   assert.deepEqual(planCommitRepair(orphaned, candidates, (s) => none.get(s) ?? null).rewrites, [{ id: "dec_1", from: "sha_old", to: "sha_x" }], "a multi-commit squash never matches by patch-id; files still decide");
 });
 
-test("repairDecisionCommit: rewrites commit and the matching evidence entry together", () => {
-  const d = D({
-    id: "dec_1",
-    commit: "sha_old",
-    related_files: ["src/feature.ts"],
-    provenance: { source: "human_confirmed", confidence: 0.9, evidence: ["commit:sha_old", "src/feature.ts"] },
-  });
-  const plan = { rewrites: [{ id: "dec_1", from: "sha_old", to: "sha_new" }], records: ["dec_1"] };
-  const healed = repairDecisionCommit(d, plan);
-  assert.equal(healed.commit, "sha_new");
-  assert.deepEqual(healed.provenance.evidence, ["commit:sha_new", "src/feature.ts"]);
+test("repairDecisionCommit rewrites commit and matching evidence together, preserving other evidence", () => {
+  const d = D({ id: "dec_1", commit: "old", provenance: { source: "human_confirmed", confidence: 1, evidence: ["src/a.ts", "commit:old"] } as Decision["provenance"] });
+  const out = repairDecisionCommit(d, { rewrites: [{ id: "dec_1", from: "old", to: "new" }], records: ["dec_1"] });
+  assert.equal(out.commit, "new");
+  assert.deepEqual(out.provenance.evidence, ["src/a.ts", "commit:new"]);
 });
 
-test("repairDecisionCommit: dedupes evidence if the destination is already cited", () => {
-  const d = D({
-    id: "dec_1",
-    commit: "sha_old",
-    provenance: { source: "human_confirmed", confidence: 0.9, evidence: ["commit:sha_old", "commit:sha_new"] },
-  });
-  const plan = { rewrites: [{ id: "dec_1", from: "sha_old", to: "sha_new" }], records: ["dec_1"] };
-  const healed = repairDecisionCommit(d, plan);
-  assert.deepEqual(healed.provenance.evidence, ["commit:sha_new"]);
+test("repairDecisionCommit dedupes evidence when the new commit was already cited", () => {
+  const d = D({ id: "dec_1", commit: "old", provenance: { source: "human_confirmed", confidence: 1, evidence: ["commit:old", "commit:new"] } as Decision["provenance"] });
+  const out = repairDecisionCommit(d, { rewrites: [{ id: "dec_1", from: "old", to: "new" }], records: ["dec_1"] });
+  assert.deepEqual(out.provenance.evidence, ["commit:new"]);
 });
 
-test("repairDecisionCommit: returns the same reference when the plan doesn't touch this decision", () => {
-  const d = D({ id: "dec_untouched", commit: "sha_old" });
-  const plan = { rewrites: [{ id: "dec_other", from: "sha_a", to: "sha_b" }], records: ["dec_other"] };
-  assert.equal(repairDecisionCommit(d, plan), d);
+test("repairDecisionCommit returns the same reference when nothing applies", () => {
+  const d = D({ id: "dec_1", commit: "old" });
+  assert.equal(repairDecisionCommit(d, { rewrites: [{ id: "other", from: "old", to: "new" }], records: ["other"] }), d);
+  assert.equal(repairDecisionCommit(d, { rewrites: [{ id: "dec_1", from: "older", to: "new" }], records: ["dec_1"] }), d);
 });
 
-test("repairDecisionCommit: bails atomically when the record's commit moved on since the plan was built", () => {
-  const d = D({
-    id: "dec_1",
-    commit: "sha_moved",
-    provenance: { source: "human_confirmed", confidence: 0.9, evidence: ["commit:sha_old"] },
-  });
-  const plan = { rewrites: [{ id: "dec_1", from: "sha_old", to: "sha_new" }], records: ["dec_1"] };
-  assert.equal(repairDecisionCommit(d, plan), d);
+test("firstFor returns the first same-id entry by identity, or undefined", () => {
+  const a = { id: "x", from: "1", to: "2" };
+  const b = { id: "x", from: "1", to: "3" };
+  assert.equal(firstFor([a, b], "x"), a);
+  assert.notEqual(firstFor([a, b], "x"), b);
+  assert.equal(firstFor([a, b], "nope"), undefined);
 });
 
-test("firstFor: returns the first entry for an id, by object identity, when duplicates share it", () => {
-  const first = { id: "dec_1", from: "sha_old", to: "sha_new" };
-  const second = { id: "dec_1", from: "sha_old", to: "sha_other" };
-  assert.equal(firstFor([first, second], "dec_1"), first);
-  assert.notEqual(firstFor([first, second], "dec_1"), second);
+test("pickRewrite returns the first duplicate-id rewrite, or undefined", () => {
+  const a = { id: "x", from: "1", to: "2" };
+  const b = { id: "x", from: "1", to: "3" };
+  const plan = { rewrites: [a, b], records: ["x"] };
+  assert.equal(pickRewrite(plan, "x"), a);
+  assert.notEqual(pickRewrite(plan, "x"), b);
+  assert.equal(pickRewrite(plan, "y"), undefined);
 });
 
-test("firstFor: returns undefined when no entry matches the id", () => {
-  assert.equal(firstFor([{ id: "dec_other", from: "sha_a", to: "sha_b" }], "dec_1"), undefined);
+test("mergeRewrites: a fresh entry overrides the queued entry with the same id", () => {
+  const fresh = { id: "x", from: "1", to: "new" };
+  assert.deepEqual(mergeRewrites([fresh], [{ id: "x", from: "1", to: "stale" }]), [fresh]);
 });
 
-test("pickRewrite: returns the first entry for a decision id, matching repairDecisionCommit's own pick when a plan carries same-id duplicates", () => {
-  const first = { id: "dec_1", from: "sha_old", to: "sha_new" };
-  const second = { id: "dec_1", from: "sha_old", to: "sha_other" };
-  const plan = { rewrites: [first, second], records: ["dec_1"] };
-  assert.equal(pickRewrite(plan, "dec_1"), first, "first match wins, by object identity");
-  assert.notEqual(pickRewrite(plan, "dec_1"), second);
-});
-
-test("pickRewrite: returns undefined when no entry matches the id", () => {
-  const plan = { rewrites: [{ id: "dec_other", from: "sha_a", to: "sha_b" }], records: ["dec_other"] };
-  assert.equal(pickRewrite(plan, "dec_1"), undefined);
-});
-
-test("mergeRewrites: a fresh match overrides a queued match for the same decision", () => {
-  const fresh = [{ id: "dec_1", from: "sha_old", to: "sha_fresh" }];
-  const queued = [{ id: "dec_1", from: "sha_old", to: "sha_stale" }];
-  assert.deepEqual(mergeRewrites(fresh, queued), [{ id: "dec_1", from: "sha_old", to: "sha_fresh" }]);
-});
-
-test("mergeRewrites: queued-only and fresh-only entries both pass through", () => {
-  const fresh = [{ id: "dec_fresh", from: "a", to: "b" }];
-  const queued = [{ id: "dec_queued", from: "c", to: "d" }];
-  const merged = mergeRewrites(fresh, queued);
-  assert.equal(merged.length, 2);
-  assert.deepEqual(merged.find((r) => r.id === "dec_fresh"), fresh[0]);
-  assert.deepEqual(merged.find((r) => r.id === "dec_queued"), queued[0]);
-});
-
-test("mergeRewrites: empty inputs produce an empty result", () => {
+test("mergeRewrites passes through entries unique to either side; empties give empty", () => {
+  const f = { id: "f", from: "1", to: "2" };
+  const q = { id: "q", from: "1", to: "2" };
+  const out = mergeRewrites([f], [q]);
+  assert.equal(out.length, 2);
+  assert.ok(out.includes(f) && out.includes(q));
   assert.deepEqual(mergeRewrites([], []), []);
 });
 
-test("mergeRewrites: a fresh match on a duplicate-id queue overrides only the entry pickRewrite would pick, leaving the untargeted sibling queued (#56)", () => {
-  const fresh = [{ id: "dec_1", from: "sha_old", to: "sha_fresh" }];
-  const first = { id: "dec_1", from: "sha_old", to: "sha_stale_1" };
-  const second = { id: "dec_1", from: "sha_old", to: "sha_stale_2" };
-  const queued = [first, second];
-  assert.deepEqual(mergeRewrites(fresh, queued), [fresh[0], second], "only the first-match sibling is overridden; the second survives untouched");
+test("mergeRewrites replaces only the first duplicate-id sibling", () => {
+  const first = { id: "x", from: "1", to: "a" };
+  const second = { id: "x", from: "1", to: "b" };
+  const fresh = { id: "x", from: "1", to: "c" };
+  assert.deepEqual(mergeRewrites([fresh], [first, second]), [fresh, second]);
 });
 
-test("liveRewrites: drops an entry whose decision no longer exists or whose commit already moved on", () => {
+test("liveRewrites keeps only entries whose decision exists and still cites `from`", () => {
+  const decisions = [D({ id: "a", commit: "old" }), D({ id: "b", commit: "moved" })];
+  const ra = { id: "a", from: "old", to: "n" };
+  const rb = { id: "b", from: "old", to: "n" };
+  const rc = { id: "c", from: "old", to: "n" };
+  assert.deepEqual(liveRewrites([ra, rb, rc], decisions), [ra]);
+});
+
+test("liveRewrites excludes superseded and rejected decisions", () => {
+  const decisions = [D({ id: "a", commit: "old", status: "superseded" }), D({ id: "b", commit: "old", status: "rejected" })];
+  assert.deepEqual(liveRewrites([{ id: "a", from: "old", to: "n" }, { id: "b", from: "old", to: "n" }], decisions), []);
+});
+
+test("deadRewrites never treats an absent decision as dead", () => {
+  const decisions = [D({ id: "a", commit: "old" })];
+  assert.deepEqual(deadRewrites([{ id: "a", from: "old", to: "n" }, { id: "gone", from: "old", to: "n" }], decisions), []);
+});
+
+test("deadRewrites flags moved-on, superseded and rejected decisions", () => {
   const decisions = [
-    D({ id: "dec_current", commit: "sha_old" }),
-    D({ id: "dec_moved_on", commit: "sha_moved" }),
+    D({ id: "moved", commit: "other" }),
+    D({ id: "sup", commit: "old", status: "superseded" }),
+    D({ id: "rej", commit: "old", status: "rejected" }),
+    D({ id: "ok", commit: "old" }),
   ];
-  const queued = [
-    { id: "dec_current", from: "sha_old", to: "sha_new" },
-    { id: "dec_moved_on", from: "sha_old", to: "sha_new" }, // stale — commit no longer matches
-    { id: "dec_gone", from: "sha_old", to: "sha_new" }, // no such decision
-  ];
-  assert.deepEqual(liveRewrites(queued, decisions), [{ id: "dec_current", from: "sha_old", to: "sha_new" }]);
+  const queued = ["moved", "sup", "rej", "ok"].map((id) => ({ id, from: "old", to: "n" }));
+  assert.deepEqual(deadRewrites(queued, decisions).map((r) => r.id).sort(), ["moved", "rej", "sup"]);
 });
 
-test("liveRewrites: excludes superseded/rejected decisions, same exclusion as orphanedCommitDecisions", () => {
-  const decisions = [
-    D({ id: "dec_superseded", commit: "sha_old", status: "superseded" }),
-    D({ id: "dec_rejected", commit: "sha_old", status: "rejected" }),
-  ];
-  const queued = [
-    { id: "dec_superseded", from: "sha_old", to: "sha_new" },
-    { id: "dec_rejected", from: "sha_old", to: "sha_new" },
-  ];
-  assert.deepEqual(liveRewrites(queued, decisions), []);
+test("resolvedRewriteIds: visible ids resolve, absent ids do not", () => {
+  const decisions = [D({ id: "a", commit: "old" })];
+  const ra = { id: "a", from: "old", to: "n" };
+  const rb = { id: "b", from: "old", to: "n" };
+  assert.deepEqual(resolvedRewriteIds([ra], decisions), new Set(["a"]));
+  assert.deepEqual(resolvedRewriteIds([rb], decisions), new Set());
+  assert.deepEqual(resolvedRewriteIds([ra, rb], decisions), new Set(["a"]));
 });
 
-test("deadRewrites: an entry whose decision isn't in the list at all is NOT dead — absence is the reader's problem, not proof the match is stale", () => {
-  const decisions = [D({ id: "dec_present", commit: "sha_old" })];
-  const queued = [
-    { id: "dec_present", from: "sha_old", to: "sha_new" },
-    { id: "dec_invisible", from: "sha_old", to: "sha_new" }, // e.g. a branch checkout that predates it
-  ];
-  assert.deepEqual(deadRewrites(queued, decisions), [], "neither entry is provably dead — dec_present still matches, dec_invisible is merely unresolved");
+test("withoutDropped removes only an exact tombstoned triple", () => {
+  const a = { id: "a", from: "o", to: "n" };
+  const b = { id: "b", from: "o", to: "n" };
+  assert.deepEqual(withoutDropped([a, b], [{ id: "a", from: "o", to: "n" }]), [b]);
+  assert.deepEqual(withoutDropped([a, b], [{ id: "a", from: "o", to: "different" }]), [a, b]);
+  assert.deepEqual(withoutDropped([a, b], [{ id: "a", from: "other", to: "n" }]), [a, b]);
+  assert.deepEqual(withoutDropped([a, b], []), [a, b]);
 });
 
-test("resolvedRewriteIds: a targeted decision that IS visible is resolved, whether or not it actually changed", () => {
-  const decisions = [D({ id: "dec_present", commit: "sha_old" })];
-  const toApply = [{ id: "dec_present", from: "sha_old", to: "sha_new" }];
-  assert.deepEqual(resolvedRewriteIds(toApply, decisions), new Set(["dec_present"]));
+test("withoutDropped preserves object identity of survivors", () => {
+  const a = { id: "a", from: "o", to: "n" };
+  const b = { id: "b", from: "o", to: "n" };
+  const out = withoutDropped([a, b], [{ id: "a", from: "o", to: "n" }]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0], b);
 });
 
-test("resolvedRewriteIds: a targeted decision NOT present this run is never resolved — it must stay queued", () => {
-  const decisions: Decision[] = [];
-  const toApply = [{ id: "dec_invisible", from: "sha_old", to: "sha_new" }];
-  assert.deepEqual(resolvedRewriteIds(toApply, decisions), new Set());
+test("withoutDropped keys cannot collide across field boundaries", () => {
+  const a = { id: "a b", from: "c", to: "d" };
+  assert.deepEqual(withoutDropped([a], [{ id: "a", from: "b c", to: "d" }]), [a]);
 });
 
-test("resolvedRewriteIds: a mix resolves only the visible ones", () => {
-  const decisions = [D({ id: "dec_visible", commit: "sha_old" })];
-  const toApply = [
-    { id: "dec_visible", from: "sha_old", to: "sha_new" },
-    { id: "dec_invisible", from: "sha_old", to: "sha_new" },
-  ];
-  assert.deepEqual(resolvedRewriteIds(toApply, decisions), new Set(["dec_visible"]));
+test("addDropped appends new triples and never duplicates", () => {
+  const t1 = { id: "a", from: "o", to: "n" };
+  const t2 = { id: "b", from: "o", to: "n" };
+  assert.deepEqual(addDropped([t2], [t1]), [t1, t2]);
+  assert.deepEqual(addDropped([{ ...t1 }], [t1]), [t1]);
+  const t3 = { id: "a", from: "o", to: "n2" };
+  assert.deepEqual(addDropped([t3], [t1]), [t1, t3]);
 });
 
-test("withoutDropped: removes a fresh match that exactly matches a tombstoned {id, from, to} triple", () => {
-  const fresh = [
-    { id: "dec_dropped", from: "sha_old", to: "sha_rejected" },
-    { id: "dec_kept", from: "sha_old2", to: "sha_new2" },
-  ];
-  const dropped = [{ id: "dec_dropped", from: "sha_old", to: "sha_rejected" }];
-  assert.deepEqual(withoutDropped(fresh, dropped), [{ id: "dec_kept", from: "sha_old2", to: "sha_new2" }]);
+test("withheldForUnresolvableTo partitions by whether `to` resolves", () => {
+  const a = { id: "a", from: "o", to: "ok" };
+  const b = { id: "b", from: "o", to: "bad" };
+  const one = withheldForUnresolvableTo([a], new Set(["ok"]));
+  assert.deepEqual(one.applicable, [a]);
+  assert.deepEqual(one.withheld, []);
+  const none = withheldForUnresolvableTo([b], new Set());
+  assert.deepEqual(none.applicable, []);
+  assert.deepEqual(none.withheld, [b]);
+  const mix = withheldForUnresolvableTo([a, b], new Set(["ok"]));
+  assert.deepEqual(mix.applicable.map((r) => r.id), ["a"]);
+  assert.deepEqual(mix.withheld.map((r) => r.id), ["b"]);
 });
 
-test("withoutDropped: a genuinely different `to` for the same {id, from} is a NEW proposal, not suppressed", () => {
-  const fresh = [{ id: "dec_1", from: "sha_orphaned", to: "sha_different_candidate" }];
-  const dropped = [{ id: "dec_1", from: "sha_orphaned", to: "sha_rejected_candidate" }];
-  assert.deepEqual(withoutDropped(fresh, dropped), fresh);
+test("withheldForUnresolvableTo fails open when the check could not run", () => {
+  const a = { id: "a", from: "o", to: "x" };
+  const out = withheldForUnresolvableTo([a], null);
+  assert.deepEqual(out.applicable, [a]);
+  assert.deepEqual(out.withheld, []);
 });
 
-test("withoutDropped: a tombstone for a different `from` on the same id doesn't suppress an unrelated match", () => {
-  const fresh = [{ id: "dec_1", from: "sha_current", to: "sha_new" }];
-  const dropped = [{ id: "dec_1", from: "sha_stale_other", to: "sha_new" }];
-  assert.deepEqual(withoutDropped(fresh, dropped), fresh);
-});
-
-test("withoutDropped: empty tombstone list is a no-op", () => {
-  const fresh = [{ id: "dec_1", from: "a", to: "b" }];
-  assert.deepEqual(withoutDropped(fresh, []), fresh);
-});
-
-test("withoutDropped: preserves object identity for every surviving entry — repair-provenance's swept-vs-active diff relies on filtering by reference, not re-deriving the {id, from, to} key", () => {
-  const survivor = { id: "dec_kept", from: "a", to: "b" };
-  const rejected = { id: "dec_dropped", from: "c", to: "d" };
-  const result = withoutDropped([survivor, rejected], [{ id: "dec_dropped", from: "c", to: "d" }]);
-  assert.equal(result.length, 1);
-  assert.equal(result[0], survivor, "the surviving entry must be the SAME object reference, not an equal-but-rebuilt copy");
-});
-
-test("addDropped: appends a newly-dropped {id, from, to} triple", () => {
-  const existing = [{ id: "dec_old", from: "sha_a", to: "sha_a2" }];
-  const newly = [{ id: "dec_new", from: "sha_b", to: "sha_b2" }];
-  assert.deepEqual(addDropped(newly, existing), [
-    { id: "dec_old", from: "sha_a", to: "sha_a2" },
-    { id: "dec_new", from: "sha_b", to: "sha_b2" },
-  ]);
-});
-
-test("addDropped: never duplicates an already-tombstoned exact triple", () => {
-  const existing = [{ id: "dec_1", from: "sha_a", to: "sha_a2" }];
-  const newly = [{ id: "dec_1", from: "sha_a", to: "sha_a2" }];
-  assert.deepEqual(addDropped(newly, existing), existing);
-});
-
-test("addDropped: a different `to` for the same {id, from} is recorded as its OWN tombstone, not deduped away", () => {
-  const existing = [{ id: "dec_1", from: "sha_a", to: "sha_old_rejected" }];
-  const newly = [{ id: "dec_1", from: "sha_a", to: "sha_new_rejected" }];
-  assert.deepEqual(addDropped(newly, existing), [
-    { id: "dec_1", from: "sha_a", to: "sha_old_rejected" },
-    { id: "dec_1", from: "sha_a", to: "sha_new_rejected" },
-  ]);
-});
-
-test("deadRewrites: an entry whose PRESENT decision moved on, or is superseded/rejected, is dead", () => {
-  const decisions = [
-    D({ id: "dec_moved_on", commit: "sha_moved" }),
-    D({ id: "dec_superseded", commit: "sha_old", status: "superseded" }),
-    D({ id: "dec_rejected", commit: "sha_old", status: "rejected" }),
-  ];
-  const queued = [
-    { id: "dec_moved_on", from: "sha_old", to: "sha_new" },
-    { id: "dec_superseded", from: "sha_old", to: "sha_new" },
-    { id: "dec_rejected", from: "sha_old", to: "sha_new" },
-  ];
-  assert.deepEqual(deadRewrites(queued, decisions).map((r) => r.id).sort(), ["dec_moved_on", "dec_rejected", "dec_superseded"]);
-});
-
-test("withheldForUnresolvableTo: an entry whose `to` is in the existing set is applicable", () => {
-  const toApply = [{ id: "dec_1", from: "a", to: "sha_real" }];
-  const result = withheldForUnresolvableTo(toApply, new Set(["sha_real"]));
-  assert.deepEqual(result.applicable, toApply);
-  assert.deepEqual(result.withheld, []);
-});
-
-test("withheldForUnresolvableTo: an entry whose `to` does not resolve is withheld, not applicable — and never dropped from the caller's view", () => {
-  const toApply = [{ id: "dec_1", from: "a", to: "sha_ghost" }];
-  const result = withheldForUnresolvableTo(toApply, new Set());
-  assert.deepEqual(result.applicable, []);
-  assert.deepEqual(result.withheld, toApply);
-});
-
-test("withheldForUnresolvableTo: a mix partitions correctly", () => {
-  const toApply = [
-    { id: "dec_real", from: "a", to: "sha_real" },
-    { id: "dec_ghost", from: "b", to: "sha_ghost" },
-  ];
-  const result = withheldForUnresolvableTo(toApply, new Set(["sha_real"]));
-  assert.deepEqual(result.applicable.map((r) => r.id), ["dec_real"]);
-  assert.deepEqual(result.withheld.map((r) => r.id), ["dec_ghost"]);
-});
-
-test("withheldForUnresolvableTo: existing === null (the check itself failed) is fail-open — nothing withheld", () => {
-  const toApply = [{ id: "dec_1", from: "a", to: "sha_unknown" }];
-  const result = withheldForUnresolvableTo(toApply, null);
-  assert.deepEqual(result.applicable, toApply);
-  assert.deepEqual(result.withheld, []);
-});
-
-test("withheldForUnresolvableTo: preserves object identity for applicable entries", () => {
-  const entry = { id: "dec_1", from: "a", to: "sha_real" };
-  const result = withheldForUnresolvableTo([entry], new Set(["sha_real"]));
-  assert.equal(result.applicable[0], entry);
-});
-
-test("withheldForUnresolvableTo: preserves object identity for withheld entries too — the CLI's queue sweep keys a Set off these exact references to survive a duplicate-id corrupted queue", () => {
-  const entry = { id: "dec_1", from: "a", to: "sha_ghost" };
-  const result = withheldForUnresolvableTo([entry], new Set());
-  assert.equal(result.withheld[0], entry, "must be the SAME object reference, not an equal-but-rebuilt copy");
+test("withheldForUnresolvableTo preserves object identity", () => {
+  const a = { id: "a", from: "o", to: "ok" };
+  const b = { id: "b", from: "o", to: "bad" };
+  const out = withheldForUnresolvableTo([a, b], new Set(["ok"]));
+  assert.equal(out.applicable[0], a);
+  assert.equal(out.withheld[0], b, "the CLI depends on reference identity");
 });
