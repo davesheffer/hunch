@@ -596,7 +596,7 @@ class CursorCliProvider extends PromptSynthProvider {
 function normalizedHostname(url: URL): string {
   return url.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
 }
-@@CLEANROOM_HOLE_R1@@
+
 /** Parse the exact base-URL shape this provider can safely compose with
  * `/chat/completions`. Credentials belong in HUNCH_SYNTH_API_KEY; query strings
  * and fragments are rejected because appending a path to either is ambiguous. */
