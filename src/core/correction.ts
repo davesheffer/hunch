@@ -8,9 +8,9 @@
  *   - buildCorrectionConstraint(): mint the Constraint record (human-confirmed
  *     only when vouched, scoped conservatively) that the pre-edit hook + CI guard then enforce.
  */
-import { isAbsolute } from "node:path";
+@@CLEANROOM_HOLE_1@@
 import { constraintId } from "./ids.js";
-import { toPosixTarget, repoRelativeTarget } from "./paths.js";
+@@CLEANROOM_HOLE_2@@
 import { deriveForbids } from "./constraintmatch.js";
 import type { Constraint } from "./types.js";
 
@@ -94,21 +94,13 @@ export const TESTIMONY_CORRECTION_RATIONALE =
  *  Returns "" when the hint cannot be made repo-relative (no root, or a path outside the
  *  repo). The caller then falls back to "**", where the existing severity guard
  *  down-ranks a non-explicit blocking rule to a warning — fail-safe and honest, rather
- *  than a blocking rule enforced nowhere.
- *
- *  Thin adapter over the shared `repoRelativeTarget` (core/paths.ts): that function
- *  passes an unresolvable absolute hint through UNCHANGED (still absolute) rather
- *  than signaling failure directly, since other callers (checkConstraints, why())
- *  want the original target back to fail their own match safely. This adapter
- *  converts that "still absolute" signal to "" — the fail-safe this caller needs. */
+@@CLEANROOM_HOLE_3@@
 function repoRelativeHint(rawHint: string, root?: string): string {
   if (!rawHint) return "";
   const looksAbsolute = isAbsolute(rawHint) || /^[a-zA-Z]:/.test(rawHint);
   if (!looksAbsolute) return rawHint;
   if (!root) return "";
-  const rewritten = repoRelativeTarget(rawHint, root);
-  const stillAbsolute = isAbsolute(rewritten) || /^[a-zA-Z]:/.test(rewritten);
-  return stillAbsolute ? "" : rewritten;
+@@CLEANROOM_HOLE_4@@
 }
 
 /**
