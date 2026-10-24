@@ -4,10 +4,31 @@ Thanks for helping build Hunch's engineering-memory and deterministic Change Gat
 
 ## License of contributions
 
-By submitting a contribution (a pull request, patch, or any change), you agree it is
-licensed under the **Apache License, Version 2.0** — the same license as the project
-(see [LICENSE](LICENSE)). This is the default under Apache-2.0 §5; no separate CLA is
-required. Don't submit code you don't have the right to license this way.
+Every contributor signs the **[Contributor License Agreement](CLA.md)** before a pull
+request can be merged. You keep the copyright in your work, and you give the owner a
+perpetual, irrevocable license to use, relicense and sell it, including under terms
+other than the project's Apache-2.0 license. The agreement also covers anything you
+contributed before you signed it.
+
+Signing takes one comment. On your first pull request, the **CLA** check posts
+instructions; reply with a comment that contains exactly this sentence and nothing
+else:
+
+    I have read the CLA Document and I hereby sign the CLA
+
+The check then turns green. You sign once, and it covers your later pull requests,
+until a new version of the CLA asks everyone to sign again.
+If you contribute as part of your job, your employer also signs the
+[Corporate CLA](CCLA.md). Don't submit code you don't have the right to license this
+way.
+
+The check looks up each commit's author on GitHub (or its committer, when the author
+email isn't linked to an account), and each of those accounts must sign. Commit with
+an email linked to your GitHub account. `Co-Authored-By` trailers are not checked.
+
+Maintainers: don't squash, `--reset-author` or edit an outside contributor's commits
+in the web UI before they have signed, because the check would then see you (or
+`web-flow`) as the author instead of them.
 
 ## Dev setup
 
