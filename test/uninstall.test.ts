@@ -122,8 +122,9 @@ test("uninstall without --purge keeps .hunch/ and its ignore block; --dry-run wr
 });
 
 test("an unparseable config is refused and the whole uninstall changes nothing", { timeout: 300_000 }, () => {
-  const { base, root, git, hunch } = fixture();
+  const { base, root, home, git, hunch } = fixture();
   try {
+    mkdirSync(join(home, ".cursor"), { recursive: true }); // Cursor installed: init configures it even with other assistants on PATH
     assert.equal(hunch("init", "--no-index").status, 0);
     writeFileSync(join(root, ".cursor", "mcp.json"), "{ \"mcpServers\": { \"hunch\": { not json");
     const snapshot = (): Record<string, string> => Object.fromEntries(
