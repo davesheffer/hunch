@@ -486,7 +486,7 @@
       "tests": [
         {
           "file": "test/grounding-merge-driver.test.ts",
-          "title": "end-to-end: a real `git merge` with the driver installed auto-resolves"
+          "title": "end to end: git auto-resolves a counts-only conflict"
         }
       ]
     },

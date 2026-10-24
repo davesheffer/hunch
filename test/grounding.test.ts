@@ -37,63 +37,46 @@ test("grounding tool signatures match the real MCP param names (no agent-mislead
   assert.doesNotMatch(md, /hunch_query\(question\)/);
   assert.doesNotMatch(md, /hunch_bug_lineage\(symptom\)/);
 });
-
-// A retired constraint has an explicitly closed valid-time window — the invariant it
-// describes is no longer true. Rendering it into "Top invariants (do not break)" tells
-// every future agent to enforce a rule that's already been withdrawn.
-test("renderHunchSection excludes retired constraints from Top invariants", (t) => {
-  const { store, cleanup } = tempStore();
+test("a retired constraint is excluded from the top-invariants list", (t) => {
+  const { store, root, cleanup } = tempStore();
   t.after(cleanup);
-
   store.json.put("constraints", mkConstraint({
-    id: "con_retired0001", statement: "RETIRED_INVARIANT_MUST_NOT_APPEAR", severity: "blocking",
-    status: "retired", valid_from: "2026-01-01T00:00:00.000Z", valid_to: "2026-06-01T00:00:00.000Z",
+    id: "con_retired_one", severity: "blocking", status: "retired",
+    valid_from: "2024-01-01T00:00:00Z", valid_to: "2025-01-01T00:00:00Z",
+    statement: "RETIREDMARKER-alpha must hold",
   }));
   store.json.put("constraints", mkConstraint({
-    id: "con_active0001", statement: "ACTIVE_INVARIANT_MUST_APPEAR", severity: "blocking",
+    id: "con_active_one", severity: "blocking", statement: "ACTIVEMARKER-alpha must hold",
   }));
-
-  const md = renderHunchSection(store);
-  assert.doesNotMatch(md, /RETIRED_INVARIANT_MUST_NOT_APPEAR/);
-  assert.match(md, /ACTIVE_INVARIANT_MUST_APPEAR/);
+  const md = renderHunchSection(store, root);
+  assert.doesNotMatch(md, /RETIREDMARKER-alpha/);
+  assert.match(md, /ACTIVEMARKER-alpha/);
 });
 
-// Retiring a constraint by hand-editing its JSON (the only path that exists today, per
-// #21) can close valid_to without also flipping status — hunchStore.ts's own staleness
-// check already treats either signal as dead (`status === "retired" || !!valid_to`); the
-// render must agree, or a hand-retired constraint keeps appearing as "do not break".
-test("renderHunchSection excludes a constraint whose valid_to is closed even if status wasn't flipped", (t) => {
-  const { store, cleanup } = tempStore();
+test("a closed valid_to alone excludes the constraint", (t) => {
+  const { store, root, cleanup } = tempStore();
   t.after(cleanup);
-
   store.json.put("constraints", mkConstraint({
-    id: "con_closed0001", statement: "CLOSED_VALID_TO_MUST_NOT_APPEAR", severity: "blocking",
-    status: "active", valid_to: "2026-06-01T00:00:00.000Z",
+    id: "con_closed_window", severity: "blocking", status: "active",
+    valid_to: "2025-01-01T00:00:00Z", statement: "CLOSEDMARKER-beta must hold",
   }));
-
-  const md = renderHunchSection(store);
-  assert.doesNotMatch(md, /CLOSED_VALID_TO_MUST_NOT_APPEAR/);
+  assert.doesNotMatch(renderHunchSection(store, root), /CLOSEDMARKER-beta/);
 });
 
-// renderHunchSection caps "Top invariants" at 8 entries. Retired constraints sorting
-// ahead of active ones (by severity) must not consume those slots and starve real,
-// still-enforced invariants out of the rendered list entirely.
-test("renderHunchSection doesn't let retired constraints starve active ones out of the top-8 slice", (t) => {
-  const { store, cleanup } = tempStore();
+test("retired constraints do not starve active ones out of the 8-entry cap", (t) => {
+  const { store, root, cleanup } = tempStore();
   t.after(cleanup);
-
   for (let i = 0; i < 8; i++) {
     store.json.put("constraints", mkConstraint({
-      id: `con_retired000${i}`, statement: `RETIRED_${i}_MUST_NOT_APPEAR`, severity: "blocking", status: "retired",
-      valid_from: "2026-01-01T00:00:00.000Z", valid_to: "2026-06-01T00:00:00.000Z",
+      id: `con_retired_cap_${i}`, severity: "blocking", status: "retired",
+      valid_from: "2024-01-01T00:00:00Z", valid_to: "2025-01-01T00:00:00Z",
+      statement: `RETIREDCAP-${i} must hold`,
     }));
   }
   store.json.put("constraints", mkConstraint({
-    id: "con_active0001", statement: "ACTIVE_MUST_SURVIVE_SLICE", severity: "advisory",
+    id: "con_active_cap", severity: "advisory", statement: "ACTIVECAPMARKER must hold",
   }));
-
-  const md = renderHunchSection(store);
-  assert.match(md, /ACTIVE_MUST_SURVIVE_SLICE/);
+  assert.match(renderHunchSection(store, root), /ACTIVECAPMARKER/);
 });
 
 // The policy-tools grounding line must track whether the MCP server actually registers

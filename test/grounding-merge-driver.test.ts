@@ -1,11 +1,10 @@
 import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveGroundingConflicts, mergeGroundingFile } from "../src/core/groundingMerge.js";
 import { installMergeDriver } from "../src/integrations/mergeDriver.js";
@@ -13,246 +12,202 @@ import { hunchAttributesAreSafe } from "../src/core/overlaySafety.js";
 import { classifyGroundingBlock } from "../src/core/groundingLag.js";
 import { OVERLAY_ATTRIBUTES } from "../tooling/matrix-release-verification.mjs";
 
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-// Invoke THIS checkout's source directly (not whatever `hunch` happens to be
-// on PATH — a globally installed release build would not carry the command
-// under test) via its own vendored tsx, the same way this repo's own
-// .git/hooks/post-commit invokes itself.
-const cliInvocation = `${JSON.stringify(process.execPath)} ${JSON.stringify(resolvePath(repoRoot, "node_modules/tsx/dist/cli.mjs"))} ${JSON.stringify(resolvePath(repoRoot, "src/cli/index.ts"))}`;
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const CLI = [JSON.stringify(process.execPath), resolvePath(REPO_ROOT, "node_modules", "tsx", "dist", "cli.mjs"), resolvePath(REPO_ROOT, "src", "cli", "index.ts")].join(" ");
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
 function configureRepo(root: string): void {
-  git(root, "config", "user.email", "test@example.com");
-  git(root, "config", "user.name", "Test");
+  git(root, "config", "user.email", "t@example.com");
+  git(root, "config", "user.name", "T");
 }
 
-const COUNTS_LINE = (n: number) =>
-  `This repo has **Hunch** — a curated graph. It currently holds **${n} decisions, 2 bugs, 28 constraints, 21 components, 3 policies**.`;
+function countsLine(n: number): string {
+  return `Hunch holds **${n} decisions, 2 bugs, 28 constraints, 21 components, 3 policies** today.`;
+}
 
-/** Real `git merge-file --diff3` output for three whole-file contents, so
- *  fixtures match exactly what git actually emits (marker spelling, label
- *  placement) rather than a hand-guessed approximation. */
 function diff3(base: string, ours: string, theirs: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "hunch-diff3-fixture-"));
+  const dir = mkdtempSync(join(tmpdir(), "hunch-diff3-"));
   try {
-    const write = (name: string, text: string) => {
-      const p = join(dir, name);
-      writeFileSync(p, text);
-      return p;
-    };
-    const o = write("ours.txt", ours);
-    const b = write("base.txt", base);
-    const t = write("theirs.txt", theirs);
+    writeFileSync(join(dir, "base"), base);
+    writeFileSync(join(dir, "ours"), ours);
+    writeFileSync(join(dir, "theirs"), theirs);
+    const args = ["merge-file", "-p", "--diff3", "-L", "ours", "-L", "base", "-L", "theirs", join(dir, "ours"), join(dir, "base"), join(dir, "theirs")];
     try {
-      return execFileSync("git", ["merge-file", "-p", "--diff3", "-L", "ours", "-L", "base", "-L", "theirs", o, b, t], { encoding: "utf8" });
+      return execFileSync("git", args, { encoding: "utf8" });
     } catch (e) {
-      const err = e as { stdout?: string | Buffer };
-      return typeof err.stdout === "string" ? err.stdout : (err.stdout?.toString() ?? "");
+      const out = (e as { stdout?: string | Buffer }).stdout;
+      return out == null ? "" : String(out);
     }
   } finally {
     cleanupDir(dir);
   }
 }
 
-test("resolveGroundingConflicts: a clean 3-way merge (no conflict markers) passes through untouched", () => {
-  const text = diff3("a\nb\nc\n", "a\nb2\nc\n", "a\nb\nc\n"); // only ours changed
-  assert.doesNotMatch(text, /<<<<<<</);
+test("a clean 3-way merge passes through untouched", () => {
+  const text = diff3("a\nb\nc\n", "a\nB\nc\n", "a\nb\nc\n");
+  assert.doesNotMatch(text, /^<{7} /m);
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, false);
   assert.equal(res.text, text);
 });
 
-test("resolveGroundingConflicts: a hard conflict confined to the counts sentence resolves to the HIGHER count, silently", () => {
-  // Not "ours" unconditionally: whichever side is higher is preserved, so a
-  // discarded higher count (potentially a real ahead-of-store signal on the
-  // side we'd otherwise throw away) is never silently lost.
-  const base = `intro\n${COUNTS_LINE(240)}\noutro\n`;
-  const ours = `intro\n${COUNTS_LINE(241)}\noutro\n`;
-  const theirs = `intro\n${COUNTS_LINE(243)}\noutro\n`;
-  const text = diff3(base, ours, theirs);
-  assert.match(text, /<<<<<<< ours/, "sanity: git actually conflicted here");
+test("a counts-only hard conflict resolves to the higher count", () => {
+  const text = diff3(
+    `intro\n${countsLine(240)}\noutro\n`,
+    `intro\n${countsLine(241)}\noutro\n`,
+    `intro\n${countsLine(243)}\noutro\n`,
+  );
+  assert.match(text, /^<{7} ours$/m, "fixture must be a real conflict");
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, false);
-  assert.equal(res.text, `intro\n${COUNTS_LINE(243)}\noutro\n`);
+  assert.equal(res.text, `intro\n${countsLine(243)}\noutro\n`);
 });
 
-test("resolveGroundingConflicts: the resolution takes the max PER FIELD, not just from whichever whole line is bigger", () => {
-  const sentence = (decisions: number, bugs: number) =>
-    `This repo has **Hunch** — a curated graph. It currently holds **${decisions} decisions, ${bugs} bugs, 28 constraints, 21 components, 3 policies**.`;
-  const base = `intro\n${sentence(240, 2)}\noutro\n`;
-  const ours = `intro\n${sentence(241, 5)}\noutro\n`; // higher bugs, lower decisions
-  const theirs = `intro\n${sentence(243, 2)}\noutro\n`; // higher decisions, lower bugs
-  const text = diff3(base, ours, theirs);
-  assert.match(text, /<<<<<<< ours/, "sanity: git actually conflicted here");
+test("the resolution is the per-field maximum", () => {
+  const sentence = (d: number, b: number) => `Totals **${d} decisions, ${b} bugs, 28 constraints, 21 components, 3 policies** here.`;
+  const text = diff3(`x\n${sentence(240, 2)}\ny\n`, `x\n${sentence(241, 5)}\ny\n`, `x\n${sentence(243, 2)}\ny\n`);
+  assert.match(text, /^<{7} ours$/m);
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, false);
-  assert.equal(res.text, `intro\n${sentence(243, 5)}\noutro\n`, "each field independently takes the higher of the two sides");
+  assert.equal(res.text, `x\n${sentence(243, 5)}\ny\n`);
 });
 
-test("resolveGroundingConflicts + classifyGroundingBlock: an incoming (theirs) phantom/uncommitted-record count is never silently downgraded to lag", () => {
-  // davesheffer's reproduction: base=240, ours=241, theirs=243, but the real
-  // merged store only ends up with 242 records (theirs' 243 was never fully
-  // committed — a phantom count, the exact fnd_6391b4242f shape). Unconditionally
-  // keeping `ours` would discard the 243 and read as "lagging" (safe, wrong);
-  // the resolution must preserve enough of theirs' claim that classifying the
-  // resolved doc against the TRUE merged store still reports "ahead".
-  const base = `intro\n${COUNTS_LINE(240)}\noutro\n`;
-  const ours = `intro\n${COUNTS_LINE(241)}\noutro\n`;
-  const theirs = `intro\n${COUNTS_LINE(243)}\noutro\n`;
-  const text = diff3(base, ours, theirs);
-  const res = resolveGroundingConflicts(text);
-  assert.equal(res.conflict, false);
-  const resolvedBlock = res.text.split("\n")[1]!; // strip the intro/outro test scaffolding
-  const trueMergedStoreBlock = COUNTS_LINE(242); // theirs' claimed 3rd decision never actually landed
-  const verdict = classifyGroundingBlock(resolvedBlock, trueMergedStoreBlock);
-  assert.equal(verdict.kind, "ahead", "the discarded higher count must still surface as ahead-of-store, not silently become lag");
+test("a phantom ahead count is not downgraded to lag", () => {
+  const text = diff3(
+    `intro\n${countsLine(240)}\noutro\n`,
+    `intro\n${countsLine(241)}\noutro\n`,
+    `intro\n${countsLine(243)}\noutro\n`,
+  );
+  const merged = resolveGroundingConflicts(text).text.split("\n")[1]!;
+  assert.equal(classifyGroundingBlock(merged, countsLine(242)).kind, "ahead");
 });
 
-test("resolveGroundingConflicts: a conflict outside the counts sentence is left as a real conflict", () => {
-  const base = "intro\nOLD PROSE\noutro\n";
-  const ours = "intro\nOURS PROSE\noutro\n";
-  const theirs = "intro\nTHEIRS PROSE\noutro\n";
-  const text = diff3(base, ours, theirs);
-  assert.match(text, /<<<<<<< ours/);
+test("a prose conflict is left alone", () => {
+  const text = diff3("intro\nbase prose\noutro\n", "intro\nours prose\noutro\n", "intro\ntheirs prose\noutro\n");
+  assert.match(text, /^<{7} ours$/m);
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, true);
-  assert.equal(res.text, text, "must not rewrite a conflict it can't safely resolve");
+  assert.equal(res.text, text);
 });
 
-test("resolveGroundingConflicts: a counts-only hunk alongside a real prose conflict in the same file stays a conflict", () => {
-  const base = `${COUNTS_LINE(240)}\nunchanged\nunchanged\nunchanged\nOLD PROSE\n`;
-  const ours = `${COUNTS_LINE(241)}\nunchanged\nunchanged\nunchanged\nOURS PROSE\n`;
-  const theirs = `${COUNTS_LINE(243)}\nunchanged\nunchanged\nunchanged\nTHEIRS PROSE\n`;
-  const text = diff3(base, ours, theirs);
-  const hunks = text.match(/<<<<<<< ours/g);
-  assert.equal(hunks?.length, 2, "sanity: two independent hunks");
+test("a counts hunk beside a prose hunk stays a conflict, unresolved", () => {
+  const sep = "s1\ns2\ns3\n";
+  const text = diff3(
+    `${countsLine(240)}\n${sep}prose base\n`,
+    `${countsLine(241)}\n${sep}prose ours\n`,
+    `${countsLine(243)}\n${sep}prose theirs\n`,
+  );
+  assert.equal((text.match(/^<{7} ours$/gm) ?? []).length, 2);
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, true);
-  assert.equal(res.text, text, "must not partially resolve — the whole file stays a real conflict");
+  assert.equal(res.text, text);
 });
 
-test("installMergeDriver: routes the five generated grounding docs through merge=hunch-grounding, alongside the existing .hunch/ JSON driver", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-mergedriver-grounding-"));
+test("installMergeDriver routes the grounding docs to the grounding driver", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-grounding-route-"));
   try {
-    execFileSync("git", ["init", "-q", "-b", "main", root]);
+    git(root, "init", "-q", "-b", "main");
     installMergeDriver(root, "hunch");
     const attrs = readFileSync(join(root, ".gitattributes"), "utf8");
     assert.equal(attrs, OVERLAY_ATTRIBUTES,
       "Matrix release verification must recognize the exact installed attributes; update its expectation when routing changes");
-    for (const f of ["CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md", ".cursor/rules/hunch.mdc", ".windsurf/rules/hunch.md"]) {
-      assert.match(attrs, new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} merge=hunch-grounding$`, "m"));
+    for (const p of ["CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md", ".cursor/rules/hunch.mdc", ".windsurf/rules/hunch.md"]) {
+      const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      assert.match(attrs, new RegExp(`^${escaped} merge=hunch-grounding$`, "m"), p);
     }
-    assert.match(attrs, /^\.hunch\/\*\*\/\*\.json merge=hunch$/m, "existing JSON driver routing is untouched");
-    const cfg = (key: string) => execFileSync("git", ["config", "--get", key], { cwd: root, encoding: "utf8" }).trim();
-    assert.match(cfg("merge.hunch-grounding.driver"), /merge-driver-grounding/);
-    assert.match(cfg("merge.hunch.driver"), /merge-driver/); // still registered, unaffected
+    assert.match(attrs, /^\.hunch\/\*\*\/\*\.json merge=hunch$/m);
+    assert.ok(git(root, "config", "--get", "merge.hunch-grounding.driver").includes("merge-driver-grounding"));
+    assert.ok(git(root, "config", "--get", "merge.hunch.driver").includes("merge-driver"));
   } finally {
     cleanupDir(root);
   }
 });
 
-test("resolveGroundingConflicts: an ours-side DELETION conflicting with a theirs-side edit is never silently treated as resolved", () => {
-  // ours removed the counts line entirely; theirs edited it. A hunk shaped
-  // this way has an EMPTY ours side — the regression case where an
-  // over-strict marker regex simply failed to match the hunk at all, leaving
-  // the raw conflict markers in place while still reporting conflict:false.
-  const base = `intro\n${COUNTS_LINE(240)}\noutro\n`;
-  const ours = "intro\noutro\n";
-  const theirs = `intro\n${COUNTS_LINE(243)}\noutro\n`;
-  const text = diff3(base, ours, theirs);
-  assert.match(text, /<<<<<<< ours/, "sanity: git actually conflicted here");
+test("an ours-side deletion against a theirs-side edit is never treated as resolved", () => {
+  const text = diff3(
+    `intro\n${countsLine(240)}\noutro\n`,
+    "intro\noutro\n",
+    `intro\n${countsLine(243)}\noutro\n`,
+  );
+  assert.match(text, /^<{7} ours/m);
   const res = resolveGroundingConflicts(text);
-  assert.equal(res.conflict, true, "a deletion-vs-edit hunk is not a counts-only hunk and must stay a real conflict");
-  assert.match(res.text, /<<<<<<< ours/, "conflict markers must be visible, never silently dropped");
+  assert.equal(res.conflict, true);
+  assert.match(res.text, /^<{7} ours/m);
 });
 
-test("resolveGroundingConflicts: CRLF line endings don't defeat marker detection on the happy path", () => {
-  const nl = (s: string) => s.replace(/\n/g, "\r\n");
-  const base = nl(`intro\n${COUNTS_LINE(240)}\noutro\n`);
-  const ours = nl(`intro\n${COUNTS_LINE(241)}\noutro\n`);
-  const theirs = nl(`intro\n${COUNTS_LINE(243)}\noutro\n`);
-  const text = diff3(base, ours, theirs);
-  assert.match(text, /<<<<<<< ours\r?\n/, "sanity: git actually conflicted here");
+test("CRLF input resolves and keeps its line endings", () => {
+  const crlf = (s: string) => s.replace(/\n/g, "\r\n");
+  const text = diff3(
+    crlf(`intro\n${countsLine(240)}\noutro\n`),
+    crlf(`intro\n${countsLine(241)}\noutro\n`),
+    crlf(`intro\n${countsLine(243)}\noutro\n`),
+  );
+  assert.match(text, /^<{7} ours\r?$/m);
   const res = resolveGroundingConflicts(text);
   assert.equal(res.conflict, false);
-  assert.doesNotMatch(res.text, /<<<<<<</, "no marker may survive into a result reported as resolved");
+  assert.doesNotMatch(res.text, /<{7}/);
   assert.equal(res.text.replace(/\r\n/g, "").includes("\n"), false, "resolved CRLF text retains its line endings");
 });
 
-test("mergeGroundingFile: a git-level error (binary content) is never mistaken for diff3 output — never truncates the file", () => {
-  const dir = mkdtempSync(join(tmpdir(), "hunch-mergefile-binary-"));
+test("mergeGroundingFile reports a git-level error without a write", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-grounding-bin-"));
   try {
-    const write = (name: string, buf: Buffer) => {
-      const p = join(dir, name);
-      writeFileSync(p, buf);
-      return p;
-    };
-    const o = write("ours.txt", Buffer.from("intro\nline\x00binary\noutro\n"));
-    const b = write("base.txt", Buffer.from("intro\nline\noutro\n"));
-    const t = write("theirs.txt", Buffer.from("intro\nedited\noutro\n"));
-    const res = mergeGroundingFile(b, o, t);
+    writeFileSync(join(dir, "ours"), "one\ntw\0o\nthree\n");
+    writeFileSync(join(dir, "base"), "one\ntwo\nthree\n");
+    writeFileSync(join(dir, "theirs"), "one\nTWO\nthree\n");
+    const res = mergeGroundingFile(join(dir, "base"), join(dir, "ours"), join(dir, "theirs"));
     assert.equal(res.conflict, true);
-    assert.equal(res.write, null, "must never guess content when git itself errored — nothing to write");
+    assert.equal(res.write, null);
   } finally {
     cleanupDir(dir);
   }
 });
 
-test("end-to-end: a real `git merge` with the driver installed auto-resolves a counts-only conflict with no markers left behind", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-grounding-e2e-clean-"));
+function setupRepo(root: string, oursBody: string): void {
+  git(root, "init", "-q", "-b", "main");
+  configureRepo(root);
+  installMergeDriver(root, CLI);
+  const doc = (body: string) => `# Project\n<!-- HUNCH:START -->\n${body}<!-- HUNCH:END -->\n`;
+  writeFileSync(join(root, "CLAUDE.md"), doc(`${countsLine(240)}\n`));
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "base");
+  git(root, "checkout", "-q", "-b", "ours");
+  writeFileSync(join(root, "CLAUDE.md"), doc(oursBody));
+  git(root, "commit", "-qam", "ours");
+  git(root, "checkout", "-q", "main");
+  git(root, "checkout", "-q", "-b", "theirs");
+  writeFileSync(join(root, "CLAUDE.md"), doc(`${countsLine(243)}\n`));
+  git(root, "commit", "-qam", "theirs");
+  git(root, "checkout", "-q", "ours");
+}
+
+test("end to end: git auto-resolves a counts-only conflict", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-grounding-e2e-"));
   try {
-    git(root, "init", "-q", "-b", "main");
-    configureRepo(root);
-    installMergeDriver(root, cliInvocation);
-    const doc = join(root, "CLAUDE.md");
-    writeFileSync(doc, `# Project\n<!-- HUNCH:START -->\n${COUNTS_LINE(240)}\n<!-- HUNCH:END -->\n`);
-    git(root, "add", "-A"); git(root, "commit", "-q", "-m", "base");
-    git(root, "checkout", "-q", "-b", "ours");
-    writeFileSync(doc, `# Project\n<!-- HUNCH:START -->\n${COUNTS_LINE(241)}\n<!-- HUNCH:END -->\n`);
-    git(root, "commit", "-q", "-am", "ours captures a decision");
-    git(root, "checkout", "-q", "main");
-    git(root, "checkout", "-q", "-b", "theirs");
-    writeFileSync(doc, `# Project\n<!-- HUNCH:START -->\n${COUNTS_LINE(243)}\n<!-- HUNCH:END -->\n`);
-    git(root, "commit", "-q", "-am", "theirs captures three decisions");
-    git(root, "checkout", "-q", "ours");
+    setupRepo(root, `${countsLine(241)}\n`);
     git(root, "merge", "--no-edit", "-q", "theirs");
-    assert.equal(git(root, "ls-files", "-u"), "", "the driver must leave nothing unmerged");
-    const merged = readFileSync(doc, "utf8");
-    assert.doesNotMatch(merged, /<{7}|={7}|>{7}/, "no conflict markers may survive an auto-resolved counts-only conflict");
+    assert.equal(git(root, "ls-files", "-u"), "");
+    const merged = readFileSync(join(root, "CLAUDE.md"), "utf8");
+    assert.doesNotMatch(merged, /<{7}|={7}|>{7}/);
   } finally {
     cleanupDir(root);
   }
 });
 
-test("end-to-end: a real `git merge` with the driver installed leaves a genuine conflict for a human — deletion vs. edit is never silently resolved", () => {
+test("end to end: a genuine conflict still stops the merge", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-grounding-e2e-conflict-"));
   try {
-    git(root, "init", "-q", "-b", "main");
-    configureRepo(root);
-    installMergeDriver(root, cliInvocation);
-    const doc = join(root, "CLAUDE.md");
-    writeFileSync(doc, `# Project\n<!-- HUNCH:START -->\n${COUNTS_LINE(240)}\n<!-- HUNCH:END -->\n`);
-    git(root, "add", "-A"); git(root, "commit", "-q", "-m", "base");
-    git(root, "checkout", "-q", "-b", "ours");
-    writeFileSync(doc, "# Project\n<!-- HUNCH:START -->\n<!-- HUNCH:END -->\n"); // ours deletes the counts line
-    git(root, "commit", "-q", "-am", "ours drops the line by hand");
-    git(root, "checkout", "-q", "main");
-    git(root, "checkout", "-q", "-b", "theirs");
-    writeFileSync(doc, `# Project\n<!-- HUNCH:START -->\n${COUNTS_LINE(243)}\n<!-- HUNCH:END -->\n`);
-    git(root, "commit", "-q", "-am", "theirs captures three decisions");
-    git(root, "checkout", "-q", "ours");
-    assert.throws(() => git(root, "merge", "--no-edit", "-q", "theirs"), /Command failed/, "a real conflict must stop the merge, not auto-commit");
-    assert.notEqual(git(root, "ls-files", "-u"), "", "the deletion-vs-edit hunk must be left unresolved for a human");
-    const onDisk = readFileSync(doc, "utf8");
-    assert.match(onDisk, /<{7}|={7}|>{7}/, "conflict markers must be visible on disk, never silently dropped");
+    setupRepo(root, "");
+    assert.throws(() => git(root, "merge", "--no-edit", "-q", "theirs"), /Command failed/);
+    assert.notEqual(git(root, "ls-files", "-u"), "");
+    assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /<{7}/);
   } finally {
     cleanupDir(root);
   }
 });
-
 
 test("installed grounding attributes permit private capture without permitting arbitrary transforms", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-grounding-attribute-safety-"));

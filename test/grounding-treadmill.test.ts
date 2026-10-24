@@ -84,29 +84,20 @@ test("an untracked grounding doc stays the user's to stage", () => {
   }
 });
 
-/** An untracked-at-HEAD path is headFileContent's expected, silently-handled case
- *  (the same probe generatedDirtOnly runs for every grounding target on `hunch
- *  sync`/the post-commit flush). git's stderr is INHERITED unless stdio is set, so
- *  the probe used to print `fatal: path '…' exists on disk, but not in 'HEAD'` onto
- *  the caller's terminal — once per untracked doc — even though nothing failed. Only
- *  a child process can observe that leak; an in-process spy on process.stderr.write
- *  never sees a child's inherited write, which is why this needs a spawn. */
+/** A child's inherited stderr write is invisible to an in-process spy, so the
+ *  silence check runs headFileContent in a separate Node process. */
 test("headFileContent stays silent for an untracked path", () => {
   const { root, cleanup } = fixture();
   try {
-    writeFileSync(join(root, "AGENTS.md"), "# AGENTS\n\nuser draft, never committed\n");
+    writeFileSync(join(root, "AGENTS.md"), "# AGENTS\n\nuntracked draft\n");
     const script = [
       'import { headFileContent } from "./src/extractors/git.ts";',
-      `const root = ${JSON.stringify(root)};`,
-      'if (headFileContent(root, "AGENTS.md") !== null) throw new Error("expected null for untracked path");',
-      'if (typeof headFileContent(root, "CLAUDE.md") !== "string") throw new Error("expected tracked content");',
+      `if (headFileContent(${JSON.stringify(root)}, "AGENTS.md") !== null) throw new Error("untracked path must be null");`,
+      `if (typeof headFileContent(${JSON.stringify(root)}, "CLAUDE.md") !== "string") throw new Error("tracked path must be a string");`,
     ].join("\n");
-    const run = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    });
-    assert.equal(run.status, 0, run.stderr);
-    assert.equal(run.stderr, "", "git's expected untracked-at-HEAD fatal must not reach the caller's stderr");
+    const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], { cwd: process.cwd(), encoding: "utf8" });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stderr, "");
   } finally {
     cleanup();
   }

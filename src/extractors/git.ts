@@ -866,9 +866,6 @@ export function headFileContent(root: string, rel: string): string | null {
       encoding: "utf8",
       env: foreignRepoEnv(process.env),
       maxBuffer: 16 * 1024 * 1024,
-      // An untracked/absent-at-HEAD path is an expected, silently-handled case
-      // (falls through to the catch below) — don't let git's "fatal: path ...
-      // does not exist in 'HEAD'" leak onto the caller's stderr for it.
       stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
@@ -945,10 +942,7 @@ function isDerivedStoreArtifact(relativeName: string): boolean {
     // staged alongside the record; treating it as a violation made every served write skip
     // the commit quietly and report durability "local" forever (1.26.0/1.26.1).
     || relativeName === "write.lock"
-    // The post-merge hook's detected-but-unconfirmed repair queue and its
-    // rejected-match tombstones (repairqueue.ts): clone-local scratch, never a
-    // memory record — must never ride a public flush's `git add .` or an
-    // overlay's force-add allowlist into shared/pushed memory.
+    // Clone-local scratch that must never ride a public flush or an overlay force-add into shared memory.
     || relativeName === "pending-commit-repairs.json"
     || relativeName === "dropped-commit-repairs.json";
 }
@@ -2572,85 +2566,71 @@ export interface CommitCandidate {
   files: string[];
 }
 
-/** Default cap on how many commits mergeRangeChanges will inspect. A `git
- *  pull` bringing in an unusually large number of commits (hundreds) would
- *  otherwise spawn one `diff-tree` per commit with no bound — cheap insurance
- *  against an unbounded background hook run, not a hard product limit. */
-const DEFAULT_MERGE_RANGE_CAP = 500;
+/** Default cap on commits the range walk inspects: insurance against an unbounded
+ *  background hook run when a pull brings in hundreds of commits. */
+const DEFAULT_RANGE_CAP = 500;
 
-/** Every commit newly reachable in `oldRef..newRef` (capped to the most
- *  recent `maxCount`), with the files each one changed (rename-aware, via
- *  commitChanges). Used to find the commit a squash-merge produced from a
- *  set of now-orphaned source-branch commits. */
-export function mergeRangeChanges(oldRef: string, newRef: string, cwd: string, maxCount = DEFAULT_MERGE_RANGE_CAP): CommitCandidate[] {
-  const shas = gitSafe(["rev-list", "--abbrev-commit", `--max-count=${maxCount}`, `${oldRef}..${newRef}`], cwd).split("\n").filter(Boolean).reverse();
+/** Commits in `oldRef..newRef` (most recent `maxCount`, oldest first), each with the
+ *  non-deleted paths it touched. Squash-merge provenance repair reads this. A git
+ *  failure yields []. */
+export function mergeRangeChanges(oldRef: string, newRef: string, cwd: string, maxCount = DEFAULT_RANGE_CAP): CommitCandidate[] {
+  const raw = gitSafe(["rev-list", "--abbrev-commit", `--max-count=${maxCount}`, `${oldRef}..${newRef}`], cwd);
+  if (!raw) return [];
+  const shas = raw.split("\n").map((s) => s.trim()).filter(Boolean).reverse();
   return shas.map((sha) => ({
     sha,
-    // A deletion is never a sensible repair target — a decision's provenance
-    // should never resolve to the commit that removed the file it's about.
-    files: commitChanges(sha, cwd).filter((c) => c.status !== "deleted").map((c) => c.after ?? c.before).filter((f): f is string => !!f),
+    files: commitChanges(sha, cwd)
+      .filter((c) => c.status !== "deleted")
+      .map((c) => c.after ?? c.before)
+      .filter((f): f is string => !!f),
   }));
 }
 
-/** Batched existence check for many commit shas at once — one `git cat-file
- *  --batch-check` process instead of one `rev-parse --verify` per sha. Used
- *  by drift.ts's default commitResolvable so hunch drift/heal/doctor spawn a
- *  single git process regardless of how many decisions carry a commit, not
- *  one per decision. Returns the subset of `shas` that resolve to a real
- *  commit object, or `null` if the check itself failed to run (not a git
- *  repo, git missing, timeout) — distinct from an empty set, which means
- *  "checked, and none of them resolve." A caller that collapsed those two
- *  would flag every commit as unresolvable on a transient environment error
- *  instead of failing open. */
+const HEX_COMMIT_RE = /^[0-9a-f]{7,64}$/i;
+
+/** Which of `shas` resolve to a commit, via one `git cat-file --batch-check`.
+ *  Malformed values are dropped before the stdin lines are built (positional mapping).
+ *  Returns null when git itself could not run: callers fail open. */
 export function commitsExist(shas: readonly string[], cwd: string): Set<string> | null {
-  const resolvable = new Set<string>();
-  if (!shas.length) return resolvable;
-  // Same shape guard as commitRepairStatus. Without it, a malformed value
-  // embedding its own newline would count as more input lines than entries
-  // in `shas`, shifting every later sha's output line and misclassifying it.
-  const valid = shas.filter((sha) => /^[0-9a-f]{7,64}$/i.test(sha));
-  if (!valid.length) return resolvable;
-  let raw: string;
+  if (!shas.length) return new Set();
+  const valid = shas.filter((s) => HEX_COMMIT_RE.test(s));
+  if (!valid.length) return new Set();
+  let out: string;
   try {
-    raw = execFileSync("git", ["-C", cwd, "cat-file", "--batch-check"], {
-      encoding: "utf8",
-      input: valid.map((sha) => `${sha}^{commit}\n`).join(""),
-      stdio: ["pipe", "pipe", "ignore"],
-      timeout: 10_000,
+    out = execFileSync("git", ["-C", cwd, "cat-file", "--batch-check"], {
+      input: valid.map((s) => `${s}^{commit}`).join("\n") + "\n",
+      encoding: "utf8", timeout: 10_000, stdio: ["pipe", "pipe", "ignore"], maxBuffer: 16 * 1024 * 1024,
     });
   } catch {
     return null;
   }
-  const lines = raw.split("\n").filter(Boolean);
-  for (let i = 0; i < valid.length && i < lines.length; i++) {
-    if (!lines[i]!.endsWith(" missing")) resolvable.add(valid[i]!);
-  }
-  return resolvable;
+  const lines = out.split("\n");
+  const found = new Set<string>();
+  valid.forEach((sha, i) => {
+    if (lines[i] !== undefined && !/\bmissing$/.test(lines[i]!.trim())) found.add(sha);
+  });
+  return found;
 }
 
 export type CommitRepairStatus = "orphaned" | "current" | "unresolvable" | "unknown";
 
-/** Classifies `commit` relative to `ref` for squash-merge repair eligibility.
- *  "orphaned" (exists in this repo, but is not an ancestor of `ref`) is the
- *  ONLY status planCommitRepair should ever act on. "unresolvable" (the
- *  commit doesn't exist here at all) is explicitly out of repair scope —
- *  drift.ts's commit-unresolvable kind is what flags that case, because
- *  there's no reliable signal left to match a replacement against. "unknown"
- *  (the git command itself failed to run — timeout, git missing) must never
- *  be treated as repair-eligible; collapsing "false" and "error" into one
- *  boolean is exactly the bug this type exists to prevent. */
+/** Whether `commit` is reachable from `ref`. Never collapses "no" and "error": only
+ *  "orphaned" is repair-eligible. A missing or non-directory cwd is "unresolvable". */
 export function commitRepairStatus(commit: string, ref: string, cwd: string): CommitRepairStatus {
-  if (!/^[0-9a-f]{7,64}$/i.test(commit)) return "unresolvable";
+  if (!HEX_COMMIT_RE.test(commit)) return "unresolvable";
+  const opts = { cwd, stdio: "ignore" as const, timeout: 5_000 };
   try {
-    execFileSync("git", ["-C", cwd, "rev-parse", "--verify", "--quiet", `${commit}^{commit}`], { stdio: "ignore", timeout: 5_000 });
+    execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], opts);
   } catch (e) {
-    return typeof (e as { status?: number }).status === "number" ? "unresolvable" : "unknown";
+    const err = e as { status?: unknown; code?: unknown };
+    if (typeof err.status === "number" || err.code === "ENOENT" || err.code === "ENOTDIR") return "unresolvable";
+    return "unknown";
   }
   try {
-    execFileSync("git", ["-C", cwd, "merge-base", "--is-ancestor", commit, ref], { stdio: "ignore", timeout: 5_000 });
+    execFileSync("git", ["merge-base", "--is-ancestor", commit, ref], opts);
     return "current";
   } catch (e) {
-    return (e as { status?: number }).status === 1 ? "orphaned" : "unknown";
+    return (e as { status?: unknown }).status === 1 ? "orphaned" : "unknown";
   }
 }
 
