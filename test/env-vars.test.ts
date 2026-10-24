@@ -129,8 +129,8 @@ test("HUNCH_SIG_MIN_LINES moves the churn threshold for model synthesis; garbage
   assert.deepEqual(significant("0", [11, 12]), [false, true], "zero falls back to 12");
 });
 
-test("HUNCH_SIG_MIN_LINES negative value should fall back to the default", { todo: "BUG: Number('-5') || 12 keeps -5, so every commit is 'significant' and pays for a model call" }, () => {
-  assert.deepEqual(significant("-5", [0, 11]), [false, false]);
+test("HUNCH_SIG_MIN_LINES negative value should fall back to the default", () => {
+  assert.deepEqual(significant("-5", [0, 11, 12]), [false, false, true]);
 });
 
 // ---------------------------------------------------------------- adapter configs

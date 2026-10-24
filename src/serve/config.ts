@@ -121,6 +121,9 @@ export function initServeConfig(opts: { file: string; scope: Scope; root: string
   if (publicOrigin) PublicOriginSchema.parse(publicOrigin);
   const proofKey = opts.principal?.proofKey ?? existing?.principals.find(p => p.id === opts.principal?.id)?.proof_key;
   if (proofKey) { ProofPublicKeySchema.parse(proofKey); if (!publicOrigin) throw new Error("key-bound principals require an HTTPS public origin"); }
+  // Refuse before writing anything: a grant must name a partition this config will serve.
+  const served = new Set([...(existing?.partitions ?? []).map((p) => scopePath(p.scope)), scopePath(opts.scope)]);
+  for (const g of opts.principal?.grants ?? []) if (!served.has(scopePath(g))) throw new Error(`cannot grant ${scopePath(g)}: this server does not serve it`);
   const root = resolve(opts.root);
   const hunchDir = resolve(root, ".hunch");
   mkdirSync(hunchDir, { recursive: true });

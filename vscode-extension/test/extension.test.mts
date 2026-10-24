@@ -321,6 +321,6 @@ test("loadHunch reads the committed store, skipping corrupt and non-JSON files",
   }
 });
 
-test("recordFilePath resolves component ids (core mints cmp_*, the extension maps comp_*)", { todo: "real bug: RECORD_DIRS keys components as 'comp' but src/core/ids.ts mints 'cmp_' ids" }, () => {
+test("recordFilePath resolves component ids (core mints cmp_*)", () => {
   assert.equal(data.recordFilePath("/r", "cmp_abc"), join("/r", ".hunch", "components", "cmp_abc.json"));
 });

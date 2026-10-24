@@ -235,7 +235,7 @@ test("verify-state-upgrade.mjs refuses to run without an older package path", (t
   assert.match(r.out, /pass an existing older package installation/);
 });
 
-test("verify-state-upgrade.mjs leaves no temp dir behind when it refuses", { todo: "mkdtempSync runs before the argv assert and outside try/finally, so the refusal leaks a hunch-old-reader-* dir" }, (t) => {
+test("verify-state-upgrade.mjs leaves no temp dir behind when it refuses", (t) => {
   const root = stage(t, "verify-state-upgrade.mjs");
   stubDist(root, "verify-state-upgrade.mjs");
   const tmp = isolatedTmp(t);
