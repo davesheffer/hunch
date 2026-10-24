@@ -17,12 +17,9 @@ import { pathMatchesGlob } from "../core/glob.js";
 import { draftTripwires, knownRepoDeps } from "./tripwires.js";
 import type { Decision, Bug, Constraint, Component, Symbol } from "../core/types.js";
 import type { TestReport } from "../extractors/testreport.js";
-import { isSubstantive } from "../extractors/languages.js";
+@@CLEANROOM_HOLE_1@@
 
-// "chore(deps):" is anchored separately (not via \b) because \b requires a
-// word/non-word transition, and the character after the closing ")" is ":" or a
-// space — both non-word — so no boundary ever fires there.
-const SKIP_SUBJECT = /^(merge|revert|bump|format|lint|wip)\b|^chore\(deps\):/i;
+@@CLEANROOM_HOLE_2@@
 
 export interface SyncResult {
   status: "written" | "skipped";
@@ -36,28 +33,17 @@ export interface SyncResult {
 const SIG_MIN_LINES = ((raw) => Number.isFinite(raw) && raw > 0 ? raw : 12)(Number(process.env.HUNCH_SIG_MIN_LINES));
 const SIG_MIN_BODY = 40;
 
-/** Trivial-subject commits (merge/revert/bump/format/...) are noise UNLESS the body
- *  carries real content — a squash/PR description often lands there, not on the
- *  subject. Gated on body length ALONE (not the full isSignificant() heuristic): a
- *  large auto-generated reformat or dependency-bump diff with no narrative must stay
- *  skipped even though it would trip isSignificant()'s line/file/structural checks. */
-export function isTrivialSubject(meta: { subject: string; body: string }): boolean {
-  return SKIP_SUBJECT.test(meta.subject) && meta.body.trim().length < SIG_MIN_BODY;
-}
-
+@@CLEANROOM_HOLE_3@@
 /** Is a commit substantive enough to spend a paid LLM synthesis call on? Pure and
  *  deterministic. Any structural change (symbol/dependency delta), non-trivial
  *  churn, several files, OR an explanatory commit body signals a real decision
  *  worth the model. Everything below (typo/tweak/one-liner with no message) falls
- *  to the free deterministic draft — shallower but honestly low-confidence.
- *  `files` is whatever the caller is synthesizing from (code and/or markdown, per
- *  isSubstantive) — the line/file-count checks are format-agnostic. */
-export function isSignificant(meta: { body: string }, a: DiffAnalysis, files: string[]): boolean {
+@@CLEANROOM_HOLE_4@@
   const structural =
     a.addedSymbols.length + a.removedSymbols.length + a.changedSymbols.length + a.addedDeps.length + a.removedDeps.length;
   if (structural > 0) return true;
   if (a.addedLines + a.removedLines >= SIG_MIN_LINES) return true;
-  if (files.length >= 3) return true;
+@@CLEANROOM_HOLE_5@@
   if (meta.body.trim().length >= SIG_MIN_BODY) return true;
   return false;
 }
@@ -75,28 +61,7 @@ export async function syncCommit(
   const meta = commitMeta(target, root);
   if (!meta) return { status: "skipped", reason: "commit not found" };
 
-  if (isTrivialSubject(meta)) return { status: "skipped", reason: `trivial subject: ${meta.subject}` };
-  // .hunch/** is Hunch's OWN store — commitDiff already excludes it from the diff
-  // CONTENT via DIFF_NOISE ("circular noise": re-synthesizing a commit that wrote
-  // it would draft a decision about Hunch's own bookkeeping). That guard never
-  // covered this file-LIST gate, and before #12 it didn't need to: languageFor()
-  // already returned null for .hunch/**'s JSON and for the .md grounding docs
-  // flushCapture regenerates alongside it (AGENTS.md/CLAUDE.md/copilot-instructions.md),
-  // so such a commit failed "no code files changed" by coincidence. Once markdown
-  // became substantive input those grounding docs alone made the commit eligible.
-  // Checked by PATH, not commit-message convention (flushCapture's exact subject
-  // wording lives as separate literals in mcp/server.ts/cli/index.ts and could
-  // drift independently of any subject regex here) — a human editing AGENTS.md on
-  // its own, with no .hunch/** change alongside it, stays fully synthesis-eligible.
-  if (meta.files.some((f) => pathMatchesGlob(f, "**/.hunch/**"))) {
-    return { status: "skipped", reason: "touches Hunch's own store (.hunch/**) — circular, never synthesis input" };
-  }
-  // Substantive, not just parseable: markdown carries the *why* in a docs/ADR repo
-  // just as legitimately as a .ts diff does, even though it has no symbol graph
-  // (issue #12). languageFor() stays the parseability question for the symbol/dep
-  // extraction inside analyzeDiff below.
-  const substantiveFiles = meta.files.filter((f) => isSubstantive(f));
-  if (substantiveFiles.length === 0) return { status: "skipped", reason: "no code or markdown files changed" };
+@@CLEANROOM_HOLE_6@@
 
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
   // (which varies) — so re-syncing a commit updates rather than dupes.
@@ -129,7 +94,7 @@ export async function syncCommit(
   // review triage measured 7 of 14 queued drafts as exactly this. A recent
   // human-confirmed decision claiming this commit's files → skip the draft (and
   // the subscription call). Recency-windowed; --force overrides.
-  const covered = commitCoveredBy(substantiveFiles, meta.subject, store.recs("decisions"), Date.now());
+@@CLEANROOM_HOLE_7@@
   if (covered && !opts.force) {
     return {
       status: "skipped",
@@ -158,26 +123,21 @@ export async function syncCommit(
     ? new DeterministicProvider()
     : opts.deep
     ? (await selectEnsemble({ root, samples: opts.samples })) ?? await selectProvider({ root })
-    : opts.force || opts.verify || isSignificant(meta, analysis, substantiveFiles)
+@@CLEANROOM_HOLE_8@@
       ? await selectProvider({ root })
       : new DeterministicProvider();
-  const input: CommitInput = { subject: meta.subject, body: meta.body, files: substantiveFiles, diff, analysis };
+@@CLEANROOM_HOLE_9@@
   let draft = await draftDecisionSafe(provider, input);
   // The Critic pass: audit the draft against the commit, PRUNE unsupported alternatives
   // (BEFORE they scaffold tripwires below) and consequences, and lower confidence on weak
   // grounding. No-ops when no assistant CLI is available; never raises trust (dec_9a2f2fe72a).
   if (wantVerify) draft = await verifyDecisionSafe(await selectVerifier({ root }), input, draft);
 
-  // The draft's own drafter, not merely the one selected — draftDecisionSafe sets
-  // fellBackTo when the selected provider threw and it silently substituted the
-  // deterministic heuristic. Every telemetry/return below must report THIS, since
-  // backfill's LLM-vs-heuristic tally reads it directly off the return value.
-  const actualProvider = draft.fellBackTo ?? provider.name;
-
+@@CLEANROOM_HOLE_10@@
   // Advisory synthesis telemetry for `hunch review` — which provider ran, how many drafts
   // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
   // (no schema change → respects forward-migration invariant con_947c578b2c).
-  const synthBits = [`provider=${actualProvider}`];
+@@CLEANROOM_HOLE_11@@
   if (draft.samples) synthBits.push(`samples=${draft.samples}`);
   if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
   if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
@@ -194,14 +154,14 @@ export async function syncCommit(
 
   const components = store.json.loadAll("components");
   const relatedComponents = components
-    .filter((c: Component) => substantiveFiles.some((f) => c.paths.some((g) => pathMatchesGlob(f, g))))
+@@CLEANROOM_HOLE_12@@
     .map((c) => c.id);
 
   // Surface any do-not-break constraints this commit's files touch (DESIGN §4
   // "constraint touched" flag) right in the decision context, with evidence.
   const touchedConstraints = store.json
     .loadAll("constraints")
-    .filter((c) => substantiveFiles.some((f) => c.scope.some((g) => pathMatchesGlob(f, g))));
+@@CLEANROOM_HOLE_13@@
   const constraintNote = touchedConstraints.length
     ? ` Touches invariant(s): ${touchedConstraints.map((c) => `${c.id} (${c.statement})`).join("; ")}.`
     : "";
@@ -229,9 +189,9 @@ export async function syncCommit(
     // → never block until confirmed via `hunch review --accept` (dec_a466655539).
     rejected_tripwires: existing?.rejected_tripwires?.length
       ? existing.rejected_tripwires
-      : draftTripwires(draft.alternatives_rejected, substantiveFiles, knownRepoDeps(root)),
+@@CLEANROOM_HOLE_14@@
     related_components: relatedComponents,
-    related_files: substantiveFiles,
+@@CLEANROOM_HOLE_15@@
     supersedes: existing?.supersedes ?? null,
     superseded_by: existing?.superseded_by ?? null,
     caused_by_bug: existing?.caused_by_bug ?? null,
@@ -247,7 +207,7 @@ export async function syncCommit(
     provenance: {
       source: draft.source,
       confidence: draft.confidence,
-      evidence: [`commit:${meta.shortSha}`, synthEvidence, ...branchTag, ...substantiveFiles.slice(0, 8)],
+@@CLEANROOM_HOLE_16@@
       last_verified: new Date().toISOString(), // when the Hunch last re-derived this
     },
     date: meta.date, // the commit date
@@ -264,7 +224,7 @@ export async function syncCommit(
   // which read as an accidental bypass and invited exactly that wrong fix.
   if (home === "private") store.putPrivate("decisions", decision);
   else store.json.put("decisions", decision);
-  return { status: "written", decision, provider: actualProvider };
+@@CLEANROOM_HOLE_17@@
 }
 
 export interface FailureResult {
@@ -312,9 +272,7 @@ export async function recordFailure(
     suspects: suspects.map((s) => `${s.name} @ ${s.file}`),
   };
   const draft = await draftBugSafe(provider, input);
-  // The draft's own drafter, not merely the one selected — see the identical
-  // comment in syncCommit above.
-  const actualProvider = draft.fellBackTo ?? provider.name;
+@@CLEANROOM_HOLE_18@@
 
   // Seed the id from the test id (stable), not the LLM title — one bug per test.
   const id = bugId(failure.test);
@@ -359,7 +317,7 @@ export async function recordFailure(
   }
   raiseFragility(store, affectedFiles, home);
 
-  return { status: "written", bug, constraint, provider: actualProvider, touchedHomes: [home] };
+@@CLEANROOM_HOLE_19@@
 }
 
 export interface CapturedFailure {
@@ -600,25 +558,17 @@ function recentDiffFor(root: string): string {
 export async function draftDecisionSafe(provider: SynthProvider, input: CommitInput): Promise<DecisionDraft> {
   try {
     return await provider.draftDecision(input);
-  } catch (error) {
+@@CLEANROOM_HOLE_20@@
     // A provider failure (network, bad creds, CLI crash, unparseable output) must
     // never abort the learning loop — fall back to the deterministic heuristic
     // draft, which is honestly labeled ("inferred") rather than a hollow llm_draft.
-    // fellBackTo/fallbackReason tell the caller what ACTUALLY drafted this, not
-    // merely what was selected — see syncCommit, which must report this instead
-    // of the originally-selected provider's name.
-    const draft = await new DeterministicProvider().draftDecision(input);
-    return { ...draft, fellBackTo: "deterministic", fallbackReason: error instanceof Error ? error.message : String(error) };
+@@CLEANROOM_HOLE_21@@
   }
 }
 
 export async function draftBugSafe(provider: SynthProvider, input: FailureInput): Promise<BugDraft> {
   try {
     return await provider.draftBug(input);
-  } catch (error) {
-    // See draftDecisionSafe above — the same fallback contract applies to bugs,
-    // and recordFailure must report the actual (fallback) provider likewise.
-    const draft = await new DeterministicProvider().draftBug(input);
-    return { ...draft, fellBackTo: "deterministic", fallbackReason: error instanceof Error ? error.message : String(error) };
+@@CLEANROOM_HOLE_22@@
   }
 }
