@@ -14,12 +14,14 @@ export interface DecisionReferenceRepair {
   evidence: number;
 }
 
-export function replaceExact(values: string[], from: string, to: string): { values: string[]; changed: number } {
+export type ExactReplacement = { values: string[]; changed: number };
+
+export function replaceExact(refs: string[], target: string, replacement: string): ExactReplacement {
   let changed = 0;
-  const replaced = values.map((value) => {
-    if (value !== from) return value;
+  const replaced = refs.map((value) => {
+    if (value !== target) return value;
     changed++;
-    return to;
+    return replacement;
   });
   // A decision may already cite the destination. Keep the reference list a set
   // after the repair so a correction cannot create duplicate scope/evidence.
