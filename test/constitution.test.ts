@@ -65,7 +65,10 @@ function decision(id: string, opts: { private?: boolean } = {}): Decision {
   };
 }
 
-@@CLEANROOM_HOLE_1@@
+function layeredRepo(
+  apiBody = 'import { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n',
+  servicesBody = 'import { dbQuery } from "../db/client.js";\nexport function fetchOrders(u){ return dbQuery(u); }\n',
+) {
   const root = mkdtempSync(join(tmpdir(), "hunch-constitution-"));
   const git = (...args: string[]): void => { execFileSync("git", args, { cwd: root, stdio: "ignore" }); };
   git("init", "-q");
@@ -79,7 +82,7 @@ function decision(id: string, opts: { private?: boolean } = {}): Decision {
   mkdirSync(join(root, "src/services"), { recursive: true });
   mkdirSync(join(root, "src/db"), { recursive: true });
   writeFileSync(join(root, "src/db/client.ts"), "export function dbQuery(sql){ return sql; }\n");
-@@CLEANROOM_HOLE_2@@
+  writeFileSync(join(root, "src/services/orders.ts"), servicesBody);
   writeFileSync(join(root, "src/api/orders.ts"), apiBody);
   git("add", "-A");
   git("commit", "-qm", "fixture: layered orders");
@@ -597,7 +600,65 @@ test("Phase 3E applies an exists mutation to isolated source and persists a pars
   }
 });
 
-@@CLEANROOM_HOLE_3@@
+test("Phase 3E exists mutation deletes the right span when multi-byte text precedes it (issue #85)", () => {
+  const servicesBody = '// café — über\nimport { dbQuery } from "../db/client.js";\nexport function fetchOrders(u){ return dbQuery(u); }\n';
+  const { root, store, cleanup } = layeredRepo(undefined, servicesBody);
+  try {
+    store.json.put("decisions", {
+      ...decision("dec_exists_source_mutation_utf8"),
+      title: "The order service entrypoint must exist",
+      conformance: [{ assert: "exists", subject: "fetchOrders", transitive: false }],
+    });
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const policy = service.compile("dec_exists_source_mutation_utf8", { now: NOW });
+    const proved = service.prove(policy.id, { now: "2026-07-10T10:01:00.000Z" });
+    const primary = proved.proof.mutation_receipts.find((receipt) => receipt.kind === "primary")!;
+    assert.equal(primary.operator, "delete-required-symbol");
+    assert.equal(primary.result, "violated");
+    assert.equal(primary.passed, true);
+    assert.equal(primary.parseability, "parseable");
+    const lines = (primary.source_patch?.diff ?? "").split("\n");
+    const removed = lines.filter((line) => line.startsWith("-") && !line.startsWith("---"));
+    const added = lines.filter((line) => line.startsWith("+") && !line.startsWith("+++"));
+    assert.ok(removed.includes("-export function fetchOrders(u){ return dbQuery(u); }"), "the fetchOrders export line is removed");
+    assert.ok(lines.includes(" // café — über"), "the multi-byte comment stays as unchanged context");
+    assert.ok(![...removed, ...added].some((line) => /café|über|—/.test(line)), "no changed line touches the multi-byte text");
+  } finally {
+    cleanup();
+  }
+});
+
+test("Phase 3E forbidden-edge mutation injects after the right brace when multi-byte text precedes it (issue #85)", () => {
+  // 20 em dashes open a large byte/char gap that breaks a byte-based brace search.
+  const dashes = "—".repeat(20);
+  const apiBody = `// ${dashes}\nimport { fetchOrders } from "../services/orders.js";\nexport function listOrders(u){ return fetchOrders(u); }\n`;
+  const { root, store, cleanup } = layeredRepo(apiBody);
+  try {
+    store.json.put("decisions", decision("dec_forbidden_edge_source_mutation_utf8"));
+    store.reindex();
+    const service = new ConstitutionService(store, root);
+    const policy = service.compile("dec_forbidden_edge_source_mutation_utf8", { now: NOW });
+    const proved = service.prove(policy.id, { now: "2026-07-10T10:01:00.000Z" });
+    const primary = proved.proof.mutation_receipts.find((receipt) => receipt.kind === "primary")!;
+    assert.equal(primary.operator, "add-forbidden-edge");
+    assert.equal(primary.result, "violated");
+    assert.equal(primary.passed, true);
+    assert.equal(primary.parseability, "parseable");
+    const lines = (primary.source_patch?.diff ?? "").split("\n");
+    assert.ok(lines.includes("+export function listOrders(u){"), "the brace line stays intact");
+    assert.ok(lines.includes("+  dbQuery(); // hunch deterministic source mutation"), "the call is injected");
+    assert.ok(lines.includes("+ return fetchOrders(u); }"), "the original body follows the injected call");
+    assert.ok(lines.includes(`// ${dashes}`.replace(/^/, " ")), "the em-dash comment is unchanged context");
+    assert.ok(
+      !lines.some((line) => line.startsWith("-") && line.includes(dashes)),
+      "the em-dash comment is never removed",
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test("Phase 3F imports immutable known-good/bad fixtures and hash-binds them into replay", () => {
   const { root, store, cleanup } = layeredRepo();
   try {

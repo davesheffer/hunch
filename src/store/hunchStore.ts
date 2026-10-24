@@ -26,7 +26,7 @@ import {
   sameGitPublication,
   scopedLastChangeDates,
 } from "../extractors/git.js";
-@@CLEANROOM_HOLE_1@@
+import { pathMatchesGlob, pathsRelated, isIndexedPath, matchSymbolsTiered } from "../core/glob.js";
 import { cochangeFor } from "../core/cochange.js";
 import { withServedDatabase } from "../core/served.js";
 import { normalizePath, rankTaskRecords, recordIdsOf, selectLatestTasks, selectTaskSlots, type RankingContext, type RankingQuery, type RankingWeights, type SlotOptions, type TaskSelection } from "../core/taskRanking.js";
@@ -1438,7 +1438,9 @@ export class HunchStore {
    *  instant — "what did we believe as of commit X?". Omit `asOf` for the full,
    *  history-inclusive view (backward-compatible default). */
   why(target: string, opts: { asOf?: string; canRead?: (record: unknown) => boolean } = {}): WhyResult {
-@@CLEANROOM_HOLE_2@@
+    // An agent's verbatim edit-payload path is absolute; stored paths are
+    // repo-relative, so rewrite before any matching (issue #299).
+    target = repoRelativeTarget(target, this.paths.root);
     // A record id (every delivered brief line ends in `hunch_why("dec_…")`) resolves
     // to that record directly (issue #474). With `asOf`, a record not in force then
     // is "no record"; status stays as stored, like the path view (see whyRecord).
@@ -1458,20 +1460,26 @@ export class HunchStore {
     // pathsRelated, not bare endsWith: "scenario.ts".endsWith("io.ts") is true,
     // so an unanchored suffix pulled unrelated files' records into why()/the
     // pre-edit grounding block (issue #32). Segment-anchored matching only.
-@@CLEANROOM_HOLE_3@@
+    //
+    // A target that is a path the index already knows (README.md,
+    // `vscode-extension/index.ts`) names exactly ONE file. Suffix-matching it too
+    // would pull in every other file sharing its basename (issue #299: root
+    // `index.ts` received `vscode-extension/index.ts`'s rules and vice versa). "Known
+    // to the index" is answered from already-loaded graph data, looked up
     // first (a symbol's exact file, or an indexed component's path glob — so a
     // symbol-less indexed file still counts as real), and only then from the
     // working tree, for a real file the index cannot see at all (issue #334).
     // See isKnownPath. Suffix matching stays reserved for a target that is not
     // itself a real path, e.g. a short/partial reference like "x/scenario.ts".
     const indexed = this.isKnownPath(target, { symbols, components });
-@@CLEANROOM_HOLE_4@@
+    const suffixMatch = (file: string): boolean => !indexed && pathsRelated(file, target);
+    const matchedSymbols = matchSymbolsTiered(target, symbols, indexed);
     const symIds = new Set(matchedSymbols.map((s) => s.id));
     const fileSet = new Set(matchedSymbols.map((s) => s.file));
     const isPath = target.includes("/") || target.includes(".");
 
     const fileMatch = (files: string[]) =>
-@@CLEANROOM_HOLE_5@@
+      files.some((f) => f === target || (isPath && suffixMatch(f)) || fileSet.has(f));
 
     return {
       target,
@@ -1787,7 +1795,9 @@ export class HunchStore {
    *  longer enforced. Pass `{ asOf }` to instead return the invariants in force at
    *  that instant (time-travel: "what must I not have broken as of commit X?"). */
   checkConstraints(scope: string, opts: { asOf?: string } = {}): Constraint[] {
-@@CLEANROOM_HOLE_6@@
+    // Scopes are repo-relative; an absolute target matched nothing even when a
+    // blocking rule applied (issue #296).
+    scope = repoRelativeTarget(scope, this.paths.root);
     const all = this.recs("constraints");
     const asOf = opts.asOf;
     return all
@@ -1802,13 +1812,16 @@ export class HunchStore {
    *  glob, and the queried scope may be either too. Advisory only — findings never
    *  enter any block path. Sorted worst-first, then id for stable output. */
   liveFindingsFor(scope: string): Finding[] {
-@@CLEANROOM_HOLE_7@@
+    // Same absolute-target and same-basename-leak gaps as why() (issue #299):
+    // normalize once and reuse the known-path guard.
+    const t = repoRelativeTarget(scope, this.paths.root);
     const indexed = this.isKnownPath(t);
     const live = (f: Finding): boolean => f.triage === "open" || f.triage === "accepted-risk" || f.triage === "scheduled";
     return this.recs("findings")
       .filter(live)
       .filter((f) =>
-@@CLEANROOM_HOLE_8@@
+        f.affected_files.some((af) => pathMatchesGlob(t, af) || pathMatchesGlob(af, t) || (!indexed && pathsRelated(toPosixTarget(af), t)))
+        || f.affected_symbols.some((s) => s === t))
       .sort((a, b) => (SEV_FINDING[b.severity] ?? 0) - (SEV_FINDING[a.severity] ?? 0) || a.id.localeCompare(b.id));
   }
 
@@ -1817,10 +1830,10 @@ export class HunchStore {
    *  the local ledger's retention window. */
   tasksFor(scope: string, limit = 8): TaskRecord[] {
     // Same normalization + known-path suffix guard as liveFindingsFor/why() (issue #299).
-@@CLEANROOM_HOLE_9@@
+    const t = repoRelativeTarget(scope, this.paths.root);
     const indexed = this.isKnownPath(t);
     return this.recs("tasks")
-@@CLEANROOM_HOLE_10@@
+      .filter((r) => r.files.some((f) => pathMatchesGlob(t, f) || pathMatchesGlob(f, t) || (!indexed && pathsRelated(toPosixTarget(f), t))))
       .sort((a, b) => b.finished_at.localeCompare(a.finished_at) || a.id.localeCompare(b.id))
       .slice(0, Math.max(1, limit));
   }
@@ -2392,7 +2405,8 @@ export class HunchStore {
    *  a task on `target`, ordered by what matters most — invariants first, then the
    *  why, then blast radius and bug history — trimmed to a rough token budget. */
   assembleContext(target: string, budget = 1500, opts: { asOf?: string; canRead?: (record: unknown) => boolean } = {}): AssembledContext {
-@@CLEANROOM_HOLE_11@@
+    // Normalize before it reaches why()/liveFindingsFor() below (issue #299).
+    target = repoRelativeTarget(target, this.paths.root);
     const w = this.why(target, opts);
     const symIds = w.symbols.map((s) => s.id);
     const blast = new Map<string, { id: string; depth: number; via: string }>();

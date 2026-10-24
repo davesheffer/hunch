@@ -69,7 +69,34 @@ test("parseDocAnchors: markers inside fenced code blocks are examples, not decla
   assert.deepEqual(parseDocAnchors("```\n<!-- hunch:topic dangling.example -->"), []);
 });
 
-@@CLEANROOM_HOLE_1@@
+test("parseDocAnchors: a CRLF checkout still hides example markers inside fences (issue #298)", () => {
+  const md = [
+    "# Doc",
+    "",
+    "```markdown",
+    "<!-- hunch:topic example.topic dec_ffff000009 -->",
+    "```",
+    "",
+    "<!-- hunch:topic real.topic dec_aaaa000001 -->",
+    "Prose about the real topic.",
+  ].join("\r\n");
+  assert.deepEqual(parseDocAnchors(md), [{ topic: "real.topic", pin: "dec_aaaa000001", line: 7 }]);
+});
+
+test("parseDocAnchors: mixed LF and CRLF endings in one document behave the same", () => {
+  const md = "# Doc\r\n\n```markdown\r\n<!-- hunch:topic example.topic dec_ffff000009 -->\n```\r\n\n<!-- hunch:topic real.topic dec_aaaa000001 -->\r\nProse about the real topic.";
+  assert.deepEqual(parseDocAnchors(md), [{ topic: "real.topic", pin: "dec_aaaa000001", line: 7 }]);
+});
+
+test("parseDocAnchors: an unclosed fence on CRLF hides everything below it", () => {
+  assert.deepEqual(parseDocAnchors("```\r\n<!-- hunch:topic dangling.example -->"), []);
+});
+
+test("parseDocAnchors: a lone-CR document keeps stray backticks on different lines from pairing into a span", () => {
+  const md = "a stray ` backtick\r<!-- hunch:topic real.topic dec_aaaa000001 -->\ranother stray ` backtick\r";
+  assert.deepEqual(parseDocAnchors(md), [{ topic: "real.topic", pin: "dec_aaaa000001", line: 2 }]);
+});
+
 const LIST_DOC = [
   "# How to anchor a doc",
   "",

@@ -66,12 +66,26 @@ export function pathsRelated(left: string, right: string): boolean {
   const b = norm(right);
   return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
 }
-@@CLEANROOM_HOLE_1@@
+
+/** True when `target` is a path the index already knows: an indexed symbol's
+ *  exact file, or a path covered by an indexed component's `paths` globs (which
+ *  catches symbol-less but indexed files such as README, package manifests,
+ *  Dockerfiles). Derived only from already-loaded graph data, never the
+ *  filesystem, so the answer cannot depend on untracked working-tree state
  *  (a deleted-but-still-indexed path stays "real"; issue #299). It is therefore
  *  only HALF the "is this a real path" question: a real file with no symbols and
  *  no covering component is invisible here, so callers OR in `isRepoFile` as a
  *  last resort (issue #334) — `HunchStore.isKnownPath` is that composition. */
-@@CLEANROOM_HOLE_2@@
+export function isIndexedPath(target: string, symbolFiles: Iterable<string>, componentPaths: Iterable<readonly string[]>): boolean {
+  for (const f of symbolFiles) if (f === target) return true;
+  for (const globs of componentPaths) {
+    for (const g of globs) if (pathMatchesGlob(target, g)) return true;
+  }
+  return false;
+}
+
+/** Resolve the symbols a `target` names, strictly tiered, first non-empty tier
+ *  wins: exact id, then exact name, then exact file, then — conditionally —
  *  (only when `target` is NOT a path already known to be real) segment-anchored
  *  suffix. A real file with zero symbols must return [] rather than fall through
  *  to the suffix tier, which would leak an unrelated same-basename file's records
@@ -80,4 +94,13 @@ export function pathsRelated(left: string, right: string): boolean {
  *  wider graph-or-working-tree answer that also covers a file about to be created;
  *  one that NAMES the file it resolved to (resolveNodeIds, structure()) passes the
  *  narrower `isRepoFile`, since glob coverage alone is not existence. */
-@@CLEANROOM_HOLE_3@@
+export function matchSymbolsTiered<S extends { id: string; file: string; name: string }>(target: string, symbols: readonly S[], indexed: boolean): S[] {
+  const byId = symbols.find((s) => s.id === target);
+  if (byId) return [byId];
+  const byName = symbols.filter((s) => s.name === target);
+  if (byName.length) return byName;
+  const byFile = symbols.filter((s) => s.file === target);
+  if (byFile.length) return byFile;
+  if (indexed) return [];
+  return symbols.filter((s) => pathsRelated(s.file, target));
+}

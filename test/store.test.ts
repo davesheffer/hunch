@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-@@CLEANROOM_HOLE_1@@
+import { tempStore, prov, mkSymbol } from "./helpers.js";
 import { openMemoryDb, type DB } from "../src/store/db.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
@@ -19,7 +19,10 @@ function seed() {
   const ctx = tempStore();
   const { store } = ctx;
   store.json.replaceAll("symbols", [
-@@CLEANROOM_HOLE_2@@
+    mkSymbol("sym_a", "src/auth/session.ts", "verifySession", { metrics: { loc: 40, churn_90d: 14, bug_count: 3, fan_in: 2, fan_out: 0 } }),
+    mkSymbol("sym_b", "src/billing/charge.ts", "charge", { calls: ["sym_a"], metrics: { loc: 30, churn_90d: 1, bug_count: 0, fan_in: 0, fan_out: 1 } }),
+    mkSymbol("sym_c", "src/api/mw.ts", "mw", { calls: ["sym_a"], metrics: { loc: 10, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 1 } }),
+  ]);
   store.json.replaceAll("edges", [
     { id: "e1", from: "sym_b", to: "sym_a", type: "calls", reason: "", strength: 1, provenance: prov() },
     { id: "e2", from: "sym_c", to: "sym_a", type: "calls", reason: "", strength: 1, provenance: prov() },
@@ -136,7 +139,7 @@ test("a misnamed record with NO canonical file is kept, exactly once (con_947c57
 
 test("why() matches on path segments, never a bare suffix — 'io.ts' must not pull 'scenario.ts' records (issue #32)", () => {
   const { store, cleanup } = seed();
-@@CLEANROOM_HOLE_3@@
+  store.json.put("symbols", mkSymbol("sym_scen", "src/x/scenario.ts", "scen", { metrics: { loc: 5, churn_90d: 0, bug_count: 0, fan_in: 0, fan_out: 0 } }) as never);
   store.json.put("decisions", { id: "dec_scen", title: "Scenario decision", status: "accepted", context: "", decision: "x", consequences: [], alternatives_rejected: [], related_components: [], related_files: ["src/x/scenario.ts"], supersedes: null, caused_by_bug: null, commit: null, provenance: prov(0.9), date: "2026-06-01T00:00:00Z" } as never);
   store.reindex();
   const w = store.why("io.ts"); // "scenario.ts".endsWith("io.ts") is true — must NOT match
@@ -148,7 +151,22 @@ test("why() matches on path segments, never a bare suffix — 'io.ts' must not p
   cleanup();
 });
 
-@@CLEANROOM_HOLE_4@@
+test("why() matches an existing full path exactly, never a same-basename suffix — root index.ts must not pull nested index.ts's records (issue #299)", () => {
+  const { store, cleanup } = seed();
+  // No files are created on disk: "known path" must be answered from graph data.
+  store.json.put("symbols", mkSymbol("sym_root_idx", "index.ts", "root", { kind: "variable" }) as never);
+  store.json.put("symbols", mkSymbol("sym_nested_idx", "vscode-extension/index.ts", "nested", { kind: "variable" }) as never);
+  store.json.put("constraints", { id: "con_nested", type: "correctness", statement: "nested rule", scope: ["vscode-extension/index.ts"], severity: "blocking", enforcement: "advisory_v1", rationale: "x", source_decision: null, violations: [], provenance: prov(0.9) } as never);
+  store.reindex();
+  const root = store.why("index.ts");
+  assert.deepEqual(root.symbols.map((s) => s.id), ["sym_root_idx"]);
+  assert.deepEqual(root.constraints.map((c) => c.id), []);
+  const nested = store.why("vscode-extension/index.ts");
+  assert.deepEqual(nested.symbols.map((s) => s.id), ["sym_nested_idx"]);
+  assert.deepEqual(nested.constraints.map((c) => c.id), ["con_nested"]);
+  cleanup();
+});
+
 test("why() does not suffix-leak onto a REAL working-tree file the index cannot see — zero symbols, no covering component (issue #334)", () => {
   const { store, root, cleanup } = seed();
   // The gap left by #299: "is this a real path" was answered from graph data

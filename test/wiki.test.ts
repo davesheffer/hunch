@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-@@CLEANROOM_HOLE_1@@
+import { tempStore, prov, indexedFixtureStore, seedRootLevelFileFixture } from "./helpers.js";
 import {
   assemblePack, packHash, renderPage, slugFor, readWikiManifestAt, writeWikiManifestAt,
   publicHome, privateHome, wikiStatus, generateWiki, computeWikiDrift, wikiSummary,
@@ -104,7 +104,17 @@ test("assemblePack: ownership by path prefix pulls symbols, decisions, scoped co
   assert.deepEqual(pack.bugs.map((b) => b.id), ["bug_trunc"]);
 });
 
-@@CLEANROOM_HOLE_2@@
+test("assemblePack: an indexer-derived root component owns only those files, not the whole repo (issue #34)", (t) => {
+  // Real indexer output, so a regression in the component producer fails here.
+  const { store, cleanup } = indexedFixtureStore(seedRootLevelFileFixture);
+  t.after(cleanup);
+  const rootComp = store.json.loadAll("components").find((c) => c.name === ".");
+  assert.ok(rootComp, "the indexer produces a root component");
+  assert.deepEqual(rootComp.paths, ["config.ts", "settings.ts"], "exact files, not a ./** glob");
+  const pack = assemblePack(store, rootComp);
+  assert.deepEqual(pack.files, rootComp.paths);
+});
+
 test("assemblePack: superseded decisions are history, not page content", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);

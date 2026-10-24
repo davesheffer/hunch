@@ -119,14 +119,25 @@ function parsedSymbolFor(graphSymbol: Symbol, parsed: ParsedFile): ParsedSymbol 
   return matches.find((_symbol, index) => (index === 0 ? base : `${base}_${index}`) === graphSymbol.id) ?? null;
 }
 
-@@CLEANROOM_HOLE_1@@
+/** Apply `{ start, end, text }` replacements to `source`. Offsets are JavaScript
+ *  string (UTF-16 code unit) indices: the parser's `startByte`/`endByte`/`atByte`
+ *  fields, despite their names, carry the same units (tree-sitter indexes the JS
+ *  string it was given, not its UTF-8 bytes), so every scan and splice against
+ *  them must be string-based, never Buffer/byte-based. */
+function applyReplacements(source: string, replacements: ReadonlyArray<{ start: number; end: number; text: string }>): string {
+  let result = source;
   for (const replacement of [...replacements].sort((a, b) => b.start - a.start)) {
-@@CLEANROOM_HOLE_2@@
+    result = result.slice(0, replacement.start) + replacement.text + result.slice(replacement.end);
   }
-@@CLEANROOM_HOLE_3@@
+  return result;
 }
 
-@@CLEANROOM_HOLE_4@@
+/** Offset where a new top-level import may go: 0, or just past a leading shebang line. */
+function importInsertionOffset(source: string): number {
+  if (!source.startsWith("#!")) return 0;
+  return Math.max(0, source.indexOf("\n") + 1);
+}
+
 function mutateSource(policy: PolicySpec, base: GraphSnapshot, sourceFile: string, source: string): { file: string; source: string } | { error: string } {
   const assertion = policy.assertion;
   if (assertion.kind === "executable-behavior") return { error: "mutation-executable-behavior-unsupported" };
@@ -159,10 +170,14 @@ function mutateSource(policy: PolicySpec, base: GraphSnapshot, sourceFile: strin
     }
     const specifier = relativeSpecifier(sourceFile, targetFile);
     if (parsed.imports.some((candidate) => candidate === specifier)) return { error: "mutation-component-import-already-present" };
-@@CLEANROOM_HOLE_5@@
+    const insertion = importInsertionOffset(source);
     return {
       file: sourceFile,
-@@CLEANROOM_HOLE_6@@
+      source: applyReplacements(source, [{
+        start: insertion,
+        end: insertion,
+        text: `import ${JSON.stringify(specifier)}; // hunch deterministic component mutation\n`,
+      }]),
     };
   }
   const subject = symbolForSelector(base, assertion.subject);
@@ -173,7 +188,7 @@ function mutateSource(policy: PolicySpec, base: GraphSnapshot, sourceFile: strin
   if (!definition) return { error: "mutation-subject-definition-unresolved" };
 
   if (assertion.kind === "exists") {
-@@CLEANROOM_HOLE_7@@
+    return { file: subject.file, source: applyReplacements(source, [{ start: definition.startByte, end: definition.endByte, text: "" }]) };
   }
 
   if (assertion.kind === "not-reaches"
@@ -185,10 +200,14 @@ function mutateSource(policy: PolicySpec, base: GraphSnapshot, sourceFile: strin
     if (parsed.imports.some((specifier) => externalPackage(specifier) === dependency)) {
       return { error: "mutation-forbidden-import-already-present" };
     }
-@@CLEANROOM_HOLE_8@@
+    const insertion = importInsertionOffset(source);
     return {
       file: subject.file,
-@@CLEANROOM_HOLE_9@@
+      source: applyReplacements(source, [{
+        start: insertion,
+        end: insertion,
+        text: `import ${JSON.stringify(dependency)}; // hunch deterministic source mutation\n`,
+      }]),
     };
   }
 
@@ -204,17 +223,18 @@ function mutateSource(policy: PolicySpec, base: GraphSnapshot, sourceFile: strin
       .filter((call) => call.atByte >= definition.startByte && call.atByte < definition.endByte && targetNames.has(call.callee))
       .map((call) => ({ start: call.atByte, end: call.endByte, text: "hunchMutationRemovedCall" }));
     if (!replacements.length) return { error: "mutation-required-call-unresolved" };
-@@CLEANROOM_HOLE_10@@
+    return { file: subject.file, source: applyReplacements(source, replacements) };
   }
 
   if (!assertion.relation.edges.includes("calls")) return { error: "mutation-call-edge-not-supported" };
-@@CLEANROOM_HOLE_11@@
+  // String search: offsets are string indices (see applyReplacements), not bytes.
+  const open = source.indexOf("{", definition.startByte);
   if (open < 0 || open >= definition.endByte) return { error: "mutation-subject-body-unsupported" };
   const replacements = [{ start: open + 1, end: open + 1, text: `\n  ${object.name}(); // hunch deterministic source mutation\n` }];
   if (object.file !== subject.file) {
     const specifier = relativeSpecifier(subject.file, object.file);
     if (!parsed.imports.includes(specifier)) {
-@@CLEANROOM_HOLE_12@@
+      const insertion = importInsertionOffset(source);
       replacements.push({
         start: insertion,
         end: insertion,
@@ -224,7 +244,7 @@ function mutateSource(policy: PolicySpec, base: GraphSnapshot, sourceFile: strin
   }
   return {
     file: subject.file,
-@@CLEANROOM_HOLE_13@@
+    source: applyReplacements(source, replacements),
   };
 }
 

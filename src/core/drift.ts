@@ -27,7 +27,7 @@ import { scanDocAnchors } from "./docanchors.js";
 import { markdownDocs, STALE_MARKER, SRC_REF } from "./docscan.js";
 import { computeWikiDrift } from "../wiki/wiki.js";
 import { computeMadrDrift } from "../integrations/madrManifest.js";
-@@CLEANROOM_HOLE_1@@
+import { commitsExist, isGitRepo } from "../extractors/git.js";
 
 export const DRIFT_KINDS = ["dead-ref", "supersede", "doc-stale", "anchor-stale", "doc-anchor-stale", "doc-anchor-dangling", "doc-fence-unclosed", "wiki-stale", "finding-stale", "premise-stale", "commit-unresolvable", "madr-stale", "madr-edited", "madr-orphan"] as const;
 export type DriftKind = typeof DRIFT_KINDS[number];
@@ -42,7 +42,7 @@ export interface DriftReport {
   findings: DriftFinding[];
 }
 
-@@CLEANROOM_HOLE_2@@
+export function computeDrift(store: HunchStore, root: string, deps: { commitResolvable?: (sha: string) => boolean } = {}): DriftReport {
   const findings: DriftFinding[] = [];
   const decisions = store.recs("decisions");
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
@@ -62,7 +62,17 @@ export interface DriftReport {
     return liveFiles.has(p) || liveDirs.some((dir) => p.startsWith(dir));
   };
   const premiseEnv: PremiseEnv = { now: new Date().toISOString(), exists: (p) => existsSync(join(root, p)) };
-@@CLEANROOM_HOLE_3@@
+  // Commit-provenance resolver. Injectable so tests/callers avoid spawning git. The
+  // default runs ONE batched existence check over every decision's commit (not a
+  // process per decision), and outside a git repo the check is meaningless, so it
+  // never flags anything there.
+  let commitResolvable = deps.commitResolvable;
+  if (!commitResolvable) {
+    const inRepo = isGitRepo(root);
+    const shas = inRepo ? [...new Set(decisions.map((d) => d.commit).filter((c): c is string => !!c))] : [];
+    const resolvable = inRepo ? commitsExist(shas, root) : null;
+    commitResolvable = (sha) => !inRepo || resolvable === null || resolvable.has(sha);
+  }
 
   for (const d of decisions) {
     // 1. DEAD-REFERENCE — only for in-force decisions; a superseded one referencing
@@ -75,7 +85,20 @@ export interface DriftReport {
           findings.push({ kind: "dead-ref", id: d.id, detail: `references missing file "${f}"` });
         }
       }
-@@CLEANROOM_HOLE_4@@
+
+      // 8. COMMIT-UNRESOLVABLE — the commit provenance no longer resolves here (its
+      //    source branch was deleted and garbage-collected). The post-merge repair
+      //    flow is the fix path; this is only the deterministic "nothing caught it"
+      //    signal and is never auto-fixed. Same live-records-only rule as the repair
+      //    module, hence the explicit rejected exclusion (a never-adopted decision
+      //    also has superseded_by null).
+      if (d.commit && d.status !== "rejected" && !commitResolvable(d.commit)) {
+        findings.push({
+          kind: "commit-unresolvable",
+          id: d.id,
+          detail: `commit ${d.commit} no longer resolves in this repository — provenance may need manual repair`,
+        });
+      }
     }
 
     // 2. SUPERSEDE-INTEGRITY — a contradiction class: A.supersedes = B, but B is

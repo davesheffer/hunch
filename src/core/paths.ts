@@ -5,7 +5,11 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 
 export const HUNCH_DIR = ".hunch";
 
-@@CLEANROOM_HOLE_1@@
+/** Convert a user- or agent-supplied path/target to forward-slash form. Hunch
+ *  stores every path with "/" (git emits it on every OS), so a Windows-style
+ *  backslash path would otherwise never match the stored form. Harmless on
+ *  symbol names, which carry no backslashes. It does NOT make a path
+ *  repo-relative: an absolute path only has its separators flipped and is left
  *  unchanged otherwise; use `repoRelativeTarget` for that.
  *
  *  Inherently ambiguous for a string like `docs/notes\notes.md`: it could be a
@@ -19,7 +23,42 @@ export function toPosixTarget(target: string): string {
   return target.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
-@@CLEANROOM_HOLE_2@@
+/** Canonical real path of `p`, tolerant of paths that do not exist yet (a file
+ *  about to be written, a glob with non-literal segments): the longest existing
+ *  ancestor is resolved through the native realpath and the missing trailing
+ *  segments are re-appended unchanged. Terminates at the filesystem root,
+ *  is idempotent on a resolved path and never throws for a missing one. */
+export function realpathNorm(p: string): string {
+  const tail: string[] = [];
+  let cur = p;
+  for (;;) {
+    try {
+      const real = realpathSync.native(cur);
+      return tail.length ? join(real, ...tail.reverse()) : real;
+    } catch {
+      const parent = dirname(cur);
+      if (parent === cur) return p;
+      tail.push(basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+/** Rewrite an ABSOLUTE `target` to repo-relative forward-slash form when it lies
+ *  inside `root`. Stored Hunch paths are always repo-relative, so an absolute
+ *  path lifted from an edit payload otherwise matches nothing (issue #296).
+ *  Both ends go through `realpathNorm`, so a symlinked root (macOS /var vs
+ *  /private/var, /tmp, a symlinked home) cancels out (dec_e0a36efbf5). Anything
+ *  with no safe repo-relative form (the root itself, an escape, a drive-letter
+ *  remainder) is returned in its normalized form unchanged. */
+export function repoRelativeTarget(target: string, root: string): string {
+  const norm = toPosixTarget(target);
+  if (!isAbsolute(norm) && !/^[A-Za-z]:/.test(norm)) return norm;
+  const rel = relative(realpathNorm(toPosixTarget(root)), realpathNorm(norm)).replace(/\\/g, "/");
+  if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return norm;
+  return rel;
+}
+
 /** True when `target` (already repo-relative POSIX form) names a regular FILE
  *  that really exists inside `root`. The LAST-RESORT half of the "is this a real
  *  path" question: `isIndexedPath` answers it from graph data alone, but a real
