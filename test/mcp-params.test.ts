@@ -22,6 +22,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { MCP_TOOL_GROUPS } from "../src/mcp/toolset.js";
+import { listReportTasks } from "../src/core/taskReport.js";
 
 const PROJECT_ROOT = process.cwd();
 const TSX = join(PROJECT_ROOT, "node_modules/tsx/dist/cli.mjs");
@@ -410,7 +411,7 @@ const EFFECT: Record<string, Effect> = {
   "nuryel_read.budget_tokens": { v: () => 50 },
   "nuryel_read.facets": { without: (c) => ({ principal: c.principal, scope: c.repo, subject: "customer:params" }), with: (c) => ({ principal: c.principal, scope: c.repo, subject: "customer:params", facets: ["receipts"] }) },
   "nuryel_read.observed_page": { v: () => ({ cursor: { snapshot_hash: sha("e"), offset: 0 } }) },
-  "nuryel_write.expected_version": { none: "compare-and-swap is checked only against an incumbent; a fresh create has none, so a stale expected_version is accepted silently (review)" },
+  "nuryel_write.expected_version": { v: () => sha("e") },
   "nuryel_write.supersedes": { v: (c) => c.receiptId },
   "nuryel_write.cause": { none: "cause is stored on the ledger event (and gates derived current->stale); a receipt create echoes no cause in its answer" },
   "nuryel_write.cwd": cwdEffect,
@@ -475,12 +476,10 @@ const EFFECT: Record<string, Effect> = {
 };
 
 /** Parameter cases that expose a real bug today: kept, reported, not hidden. */
-const TODO: Record<string, string> = {
-  "hunch_task.cwd": "start with cwd=<other repo> answers identically and leaves no new file under <other>/.hunch; routing of the task record is unproven (investigate)",
-};
+const TODO: Record<string, string> = {};
 
 /** Frozen: shrink only. The TODO keys when this ratchet landed; a new known-bug todo cannot be added. */
-const TODO_BASELINE = new Set(["hunch_task.cwd"]);
+const TODO_BASELINE = new Set<string>([]);
 
 test("the TODO map only shrinks: no key outside TODO_BASELINE", () => {
   const added = Object.keys(TODO).filter((k) => !TODO_BASELINE.has(k));
@@ -546,7 +545,9 @@ function observe(r: ToolResult | Error, args: Args): string {
   // that is how a `cwd` routing difference stays visible after ids are normalized away.
   const repoId = /"repository_id"\s*:\s*"([^"]+)"/.exec(answer)?.[1] ?? "";
   const otherFiles = existsSync(join(ctx.other, ".hunch")) ? readdirSync(join(ctx.other, ".hunch"), { recursive: true }).length : 0;
-  return `${normalize(`${answer}\n${written.join("\n")}`)}\nREPO ${repoId}\nOTHER ${otherFiles}`;
+  // Task reports live in the served cache, not .hunch: count them so a routed hunch_task shows.
+  const otherTasks = existsSync(join(ctx.other, ".hunch-cache", "served.db")) ? listReportTasks(ctx.other).length : 0;
+  return `${normalize(`${answer}\n${written.join("\n")}`)}\nREPO ${repoId}\nOTHER ${otherFiles}\nOTHER TASKS ${otherTasks}`;
 }
 
 before(async () => {
@@ -680,7 +681,7 @@ test("every enum value is accepted by the protocol (a domain refusal is fine, a 
 /** Frozen: shrink only. Parameters classified `none` when this ratchet landed. */
 const NONE_BASELINE = new Set([
   "hunch_report.before", "hunch_project_match.body", "hunch_project_match.ref", "hunch_context.include",
-  "hunch_now.roadmap_limit", "hunch_review_imported_adr.reviewed_by", "nuryel_write.expected_version",
+  "hunch_now.roadmap_limit", "hunch_review_imported_adr.reviewed_by",
   "nuryel_write.cause", "hunch_findings.all", "hunch_policy_upgrade_correction.public_only",
   "hunch_policy_candidates.public_only", "hunch_policy_plan.public_only", "hunch_policy_card.public_only",
   "hunch_policy_shadow.public_only", "hunch_policy_proof.public_only", "hunch_policy_evaluate.policy_id",
@@ -700,12 +701,13 @@ test("every optional parameter observably changes the result (or is a reasoned n
       const base = (): Args => BASE[p.tool]!(ctx);
       const without = async (): Promise<Args> => e.without ? e.without(ctx) : (() => { const a = base(); delete a[p.name]; return a; })();
       const withArgs = async (): Promise<Args> => e.with ? e.with(ctx) : p.name in base() && !e.v ? base() : { ...base(), [p.name]: await e.v!(ctx) };
-      const a1 = await without(); const r1 = await call(p.tool, a1);
-      const a2 = await without(); const r2 = await call(p.tool, a2);
-      const aw = await withArgs(); const rw = await call(p.tool, aw);
+      // Observe right after each call: a side effect (a record in the cwd-target repo) must not
+      // leak into the observation of a call that ran before it.
+      const a1 = await without(); const r1 = await call(p.tool, a1); const o1 = observe(r1, a1);
+      const a2 = await without(); const r2 = await call(p.tool, a2); const o2 = observe(r2, a2);
+      const aw = await withArgs(); const rw = await call(p.tool, aw); const ow = observe(rw, aw);
       if ("cwd" in aw) assert.ok(ok(await call("hunch_context", { target: "src/orders.ts", cwd: ctx.root })), "re-home the server to the fixture root");
       assert.ok(!(rw instanceof Error), `protocol error with ${key}: ${rw instanceof Error ? rw.message : ""}`);
-      const o1 = observe(r1, a1); const o2 = observe(r2, a2); const ow = observe(rw, aw);
       assert.equal(o1, o2, `baseline without ${key} is not deterministic after normalization; give it a custom check`);
       assert.notEqual(ow, o1, `${key} made no observable difference:\n${ow.slice(0, 500)}`);
     });
