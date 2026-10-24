@@ -197,14 +197,17 @@ export function executeGuardedReleasePlan(plan, runner, expectedSource, observeS
   });
 }
 
-/** Line-level symmetric difference between two `git status --porcelain` blobs —
- * the concrete evidence a bare "the working tree changed" never carries. Every
- * porcelain line is `<code> <path>`, so a line-set diff is exactly "which
- * paths newly showed up as dirty" / "which stopped being dirty", with no
- * false positives from line reordering. */
+/** Per-line symmetric difference of two `git status --porcelain` blobs: the
+ *  evidence of which paths became dirty (added) or clean (removed). */
 export function statusDiffLines(before, after) {
-  const beforeLines = (before ?? "").split("\n").filter(Boolean);
-  const afterLines = (after ?? "").split("\n").filter(Boolean);
+  const lines = (blob) => {
+    if (blob == null) return [];
+    if (Buffer.isBuffer(blob)) blob = blob.toString("utf8");
+    if (typeof blob !== "string") throw new TypeError(`statusDiffLines expects a porcelain string, got ${Array.isArray(blob) ? "array" : typeof blob}`);
+    return blob.split("\n").filter((line) => line !== "");
+  };
+  const beforeLines = lines(before);
+  const afterLines = lines(after);
   const beforeSet = new Set(beforeLines);
   const afterSet = new Set(afterLines);
   return {
@@ -374,14 +377,10 @@ function run(command, args, options = {}) {
   return { exitCode: child.status ?? 1 };
 }
 
-// trimEnd, NOT trim: `git status --porcelain` lines that are unstaged-only start
-// with a LEADING SPACE ("` M path`" — blank index column, "M" worktree column).
-// A blanket .trim() eats that leading space off whichever path sorts first in
-// the whole blob, shifting statusWithoutMemoryChurn's fixed slice(3) path
-// extraction by one column — ".hunch/evidence/x.json" reads as
-// "hunch/evidence/x.json", silently fails isMemoryChurnPath's `.hunch/` prefix
-// check, and a routine derived-memory write misreports as a real source
-// mutation (root cause of an intermittent repository-index CI flake).
+// Keep leading whitespace: porcelain lines for unstaged-only changes start with
+// a space, and trimming both ends would shift the fixed-column path extraction in
+// statusWithoutMemoryChurn for the first line, so a `.hunch/` churn path was
+// misread as a real source change (an intermittent CI flake).
 export function git(args, cwd = projectRoot) {
   const child = spawnSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (child.status !== 0) throw new Error(child.stderr.trim() || `git ${args.join(" ")} failed`);
@@ -689,11 +688,8 @@ async function main() {
       const detail = `${gate.id}: ${sourceError}`;
       sourceMutationErrors.push(detail);
       process.stderr.write(`Release gate source-integrity failure: ${detail}\n`);
-      // The reason string alone ("the working tree changed") has never once named a
-      // path in the wild — a flake with no evidence trail can't be root-caused from
-      // CI logs. Attach the actual porcelain diff (and, on a HEAD move, the changed
-      // paths between commits) so the NEXT occurrence is diagnosable from the
-      // uploaded release-gate.json receipt instead of requiring a fresh repro.
+      // The bare reason never names a path; this evidence makes the next
+      // occurrence diagnosable from the uploaded receipt.
       if (observed.status !== sourceBefore.status) {
         const { added, removed } = statusDiffLines(sourceBefore.status, observed.status);
         if (added.length) sourceMutationErrors.push(`${gate.id}: newly dirty — ${added.join(" | ")}`);
@@ -701,9 +697,11 @@ async function main() {
       }
       if (observed.commit !== sourceBefore.commit) {
         try {
-          const changed = git(["diff", "--name-only", `${sourceBefore.commit}..${observed.commit}`]).split("\n").filter(Boolean);
-          if (changed.length) sourceMutationErrors.push(`${gate.id}: HEAD-move touched — ${changed.join(" | ")}`);
-        } catch { /* diagnostic-only: a failed git diff must not mask the primary source error */ }
+          const touched = git(["diff", "--name-only", `${sourceBefore.commit}..${observed.commit}`]).split("\n").filter(Boolean);
+          if (touched.length) sourceMutationErrors.push(`${gate.id}: HEAD-move touched — ${touched.join(" | ")}`);
+        } catch {
+          // diagnosis only; never mask the primary source error
+        }
       }
     });
     const contextErrors = [...sourceMutationErrors];

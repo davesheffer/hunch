@@ -7,31 +7,27 @@ import {
   evaluateProductionAudit,
 } from "../tooling/production-dependency-audit.mjs";
 
-// Synthetic fixture, not a real advisory: the reviewed-exception mechanism (accept an
-// exact match, fail closed on any drift) is tested here independent of whatever npm
-// audit currently reports for real dependencies. Coupling this to live CVE data was
-// exactly the trap that made the real REVIEWED_AUDIT_VULNERABILITIES allowlist go stale
-// out from under this test file — an upstream fix changed the real advisory's shape
-// without touching this file's assertions, and both had to be diagnosed together.
+// Synthetic fixture, not a real advisory: it exercises the exact-match and
+// fail-closed mechanism independently of live CVE data.
 const FAKE_REVIEWED = Object.freeze({
-  "fake-vulnerable-package": Object.freeze({
+  "fake-vulnerable-pkg": Object.freeze({
     severity: "moderate",
     isDirect: false,
     range: "<2.0.5",
-    effects: Object.freeze(["fake-parent-package"]),
-    nodes: Object.freeze(["node_modules/fake-parent-package/node_modules/fake-vulnerable-package"]),
+    effects: Object.freeze(["fake-parent-pkg"]),
+    nodes: Object.freeze(["node_modules/fake-parent-pkg/node_modules/fake-vulnerable-pkg"]),
     via: Object.freeze([Object.freeze({
-      source: 9999999,
-      name: "fake-vulnerable-package",
-      dependency: "fake-vulnerable-package",
-      title: "Fake advisory for test purposes only",
-      url: "https://github.com/advisories/GHSA-0000-0000-0000",
+      source: 9900001,
+      name: "fake-vulnerable-pkg",
+      dependency: "fake-vulnerable-pkg",
+      title: "Test-only fake advisory, not a real vulnerability",
+      url: "https://github.com/advisories/GHSA-xxxx-xxxx-xxxx",
       severity: "moderate",
       cwe: Object.freeze(["CWE-22"]),
-      cvss: Object.freeze({ score: 5.9, vectorString: "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N" }),
+      cvss: Object.freeze({ score: 5.3, vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N" }),
       range: "<2.0.5",
     })]),
-    fixAvailable: Object.freeze({ name: "fake-parent-package", version: "1.24.3", isSemVerMajor: true }),
+    fixAvailable: Object.freeze({ name: "fake-parent-pkg", version: "9.9.9", isSemVerMajor: true }),
   }),
 });
 
@@ -39,25 +35,25 @@ function reviewedReport() {
   return {
     auditReportVersion: 2,
     vulnerabilities: {
-      "fake-vulnerable-package": {
-        name: "fake-vulnerable-package",
+      "fake-vulnerable-pkg": {
+        name: "fake-vulnerable-pkg",
         severity: "moderate",
         isDirect: false,
         via: [{
-          source: 9999999,
-          name: "fake-vulnerable-package",
-          dependency: "fake-vulnerable-package",
-          title: "Fake advisory for test purposes only",
-          url: "https://github.com/advisories/GHSA-0000-0000-0000",
+          source: 9900001,
+          name: "fake-vulnerable-pkg",
+          dependency: "fake-vulnerable-pkg",
+          title: "Test-only fake advisory, not a real vulnerability",
+          url: "https://github.com/advisories/GHSA-xxxx-xxxx-xxxx",
           severity: "moderate",
           cwe: ["CWE-22"],
-          cvss: { score: 5.9, vectorString: "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N" },
+          cvss: { score: 5.3, vectorString: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N" },
           range: "<2.0.5",
         }],
-        effects: ["fake-parent-package"],
+        effects: ["fake-parent-pkg"],
         range: "<2.0.5",
-        nodes: ["node_modules/fake-parent-package/node_modules/fake-vulnerable-package"],
-        fixAvailable: { name: "fake-parent-package", version: "1.24.3", isSemVerMajor: true },
+        nodes: ["node_modules/fake-parent-pkg/node_modules/fake-vulnerable-pkg"],
+        fixAvailable: { name: "fake-parent-pkg", version: "9.9.9", isSemVerMajor: true },
       },
     },
     metadata: {
@@ -70,8 +66,8 @@ test("production audit accepts only an exact reviewed exception", () => {
   const result = evaluateProductionAudit(reviewedReport(), [], FAKE_REVIEWED);
   assert.deepEqual(result, {
     status: "passed",
-    reviewed_vulnerable_packages: ["fake-vulnerable-package"],
-    reviewed_advisory_sources: [9999999],
+    reviewed_vulnerable_packages: ["fake-vulnerable-pkg"],
+    reviewed_advisory_sources: [9900001],
     unreviewed_vulnerabilities: 0,
   });
   assert.deepEqual(evaluateProductionAudit({
@@ -88,7 +84,7 @@ test("production audit accepts only an exact reviewed exception", () => {
 
 test("production audit fails closed on advisory drift, new findings, and HTTP/Hono reachability", () => {
   const changed = reviewedReport();
-  changed.vulnerabilities["fake-vulnerable-package"].severity = "high";
+  changed.vulnerabilities["fake-vulnerable-pkg"].severity = "high";
   changed.metadata.vulnerabilities.moderate = 0;
   changed.metadata.vulnerabilities.high = 1;
   assert.throws(() => evaluateProductionAudit(changed, [], FAKE_REVIEWED), /changed identity/);
@@ -106,10 +102,7 @@ test("production audit fails closed on advisory drift, new findings, and HTTP/Ho
   unexpected.metadata.vulnerabilities.critical = 1;
   unexpected.metadata.vulnerabilities.total = 2;
   assert.throws(() => evaluateProductionAudit(unexpected, [], FAKE_REVIEWED), /unreviewed production vulnerability/);
-
-  // the real (non-fake) REVIEWED_AUDIT_VULNERABILITIES allowlist is currently empty (no
-  // live exception) — the old Hono finding shape must now be rejected as unreviewed,
-  // proving the stale allowlist cleanup actually took effect.
+  // The real allowlist is empty, so the old finding shape is no longer accepted.
   assert.throws(() => evaluateProductionAudit(reviewedReport()), /unreviewed production vulnerability/);
 
   for (const specifier of [

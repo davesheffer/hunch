@@ -7,14 +7,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Empty by design: production `npm audit` currently finds nothing. This used to hold a
-// reviewed, byte-exact exception for GHSA-frvp-7c67-39w9 (a Hono serve-static path
-// traversal, transitively pulled in via the MCP SDK's optional HTTP transport — Hunch
-// exposes only its stdio server, so it was unreachable). That advisory was resolved by
-// bumping @modelcontextprotocol/sdk to 1.30.0+, which widened its own @hono/node-server
-// range enough for `npm audit fix` to resolve every affected package in-range (no
-// semver-major). If a future `npm audit` finding needs a reviewed exception instead of a
-// real fix, add its exact reported shape here — any drift from what's added fails closed.
+// Empty on purpose: production `npm audit` currently reports nothing. It once
+// held a reviewed exception for a Hono serve-static advisory that the stdio-only
+// MCP server could not reach; bumping @modelcontextprotocol/sdk resolved it. A
+// future exception must record the exact reported shape (severity, isDirect,
+// range, effects, nodes, via, fixAvailable); any drift fails closed.
 export const REVIEWED_AUDIT_VULNERABILITIES = Object.freeze({});
 
 const DISALLOWED_PRODUCTION_IMPORTS = Object.freeze([

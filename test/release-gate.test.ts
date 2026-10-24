@@ -2,7 +2,7 @@ import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -305,36 +305,40 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   let observedSource = { ...expectedSource };
   const guardedCalls: string[] = [];
   const guardedErrors: string[] = [];
-  let observedAtFailure: unknown;
+  let observedByCallback: unknown;
   const guardedResults = executeGuardedReleasePlan(RELEASE_GATES, (gate) => {
     guardedCalls.push(gate.id);
     if (gate.id === "test") observedSource = { ...observedSource, commit: "b".repeat(40) };
     return { exitCode: 0 };
   }, expectedSource, () => observedSource, (gate, error, observed) => {
     guardedErrors.push(`${gate.id}: ${error}`);
-    observedAtFailure = observed;
+    observedByCallback = observed;
   });
   assert.deepEqual(guardedCalls, ["typecheck", "test"], "HEAD movement stops the plan at the responsible gate");
   assert.deepEqual(guardedResults.map((result) => result.status), ["passed", "failed"]);
   assert.match(guardedErrors[0] ?? "", /^test: HEAD moved/);
-  // A bare "HEAD moved"/"working tree changed" string names no path — the observed
-  // source state is threaded to the caller so it CAN report exactly what changed.
-  assert.deepEqual(observedAtFailure, observedSource, "onSourceError receives the observed source, not just the reason string");
+  assert.deepEqual(observedByCallback, observedSource, "the error callback receives the observed source, not only the reason string");
   assert.match(releaseSourceStateError(expectedSource, observedSource) ?? "", /HEAD moved/);
   assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, status: " M package.json" }) ?? "", /working tree changed/);
   assert.match(releaseSourceStateError(expectedSource, { ...expectedSource, tag_commit_matches: false }) ?? "", /release tag stopped/);
-
+  const cleanToDirty = statusDiffLines("", " M src/a.ts\n?? notes.txt");
+  assert.deepEqual(cleanToDirty.added, [" M src/a.ts", "?? notes.txt"], "every newly dirty line is added, in order, leading space kept");
+  assert.deepEqual(cleanToDirty.removed, []);
+  assert.deepEqual(cleanToDirty, { added: [" M src/a.ts", "?? notes.txt"], removed: [] });
   assert.deepEqual(
-    statusDiffLines("", " M package.json\n?? scratch.txt"),
-    { added: [" M package.json", "?? scratch.txt"], removed: [] },
-    "a clean expected state reports every dirty porcelain line as newly added",
-  );
-  assert.deepEqual(
-    statusDiffLines(" M package.json\n?? scratch.txt", "?? scratch.txt\n M src/index.ts"),
-    { added: [" M src/index.ts"], removed: [" M package.json"] },
-    "only the actual symmetric difference is reported, not the whole status blob",
+    statusDiffLines([" M shared.ts", " M gone.ts"].join("\n"), ["?? fresh.ts", " M shared.ts"].join("\n")),
+    { added: ["?? fresh.ts"], removed: [" M gone.ts"] },
+    "only the symmetric difference is reported, regardless of order",
   );
   assert.deepEqual(statusDiffLines("", ""), { added: [], removed: [] });
+  assert.deepEqual(statusDiffLines(null, undefined), { added: [], removed: [] }, "null/undefined count as empty");
+  assert.deepEqual(
+    statusDiffLines(Buffer.from(" M gone.ts\n"), Buffer.from("?? fresh.ts\n")),
+    { added: ["?? fresh.ts"], removed: [" M gone.ts"] },
+    "Buffer output from git is coerced to a string",
+  );
+  assert.throws(() => statusDiffLines([" M src/a.ts"] as unknown as string, ""), TypeError);
+  assert.throws(() => statusDiffLines("", 42 as unknown as string), TypeError);
 });
 
 test("memory churn never reads as source mutation: paths, status filtering, and what stays fatal", () => {
@@ -364,32 +368,22 @@ test("memory churn never reads as source mutation: paths, status filtering, and 
 });
 
 test("git() preserves the leading space of an unstaged-only porcelain line", () => {
-  // Root cause of the intermittent "the working tree changed" flake at the
-  // repository-index stage: `git status --porcelain` marks an unstaged-only
-  // change with a LEADING SPACE (" M path" — blank index column). A blanket
-  // .trim() on the whole stdout blob eats that leading space off whichever
-  // path sorts first, shifting statusWithoutMemoryChurn's fixed slice(3) path
-  // extraction by one column: ".hunch/evidence/x.json" reads as
-  // "hunch/evidence/x.json" and silently fails the `.hunch/` prefix check —
-  // a routine derived-memory write then misreports as real source mutation.
-  // ".hunch/evidence" sorts before any plain top-level file, so a repo whose
-  // ONLY dirt is an unstaged (not `git add`ed) evidence-record edit puts that
-  // exact failure mode at the very first line of the whole status blob.
-  const repo = mkdtempSync(join(tmpdir(), "hunch-release-gate-git-trim-"));
+  // `.hunch/evidence` sorts first, so the porcelain blob starts with " M": trimming
+  // both ends would shift statusWithoutMemoryChurn's fixed-column path extraction.
+  const repo = mkdtempSync(join(tmpdir(), "hunch-release-gate-git-"));
   try {
     execFileSync("git", ["init", "-q"], { cwd: repo });
     execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repo });
     execFileSync("git", ["config", "user.name", "Test"], { cwd: repo });
     mkdirSync(join(repo, ".hunch", "evidence"), { recursive: true });
-    writeFileSync(join(repo, ".hunch", "evidence", "ev_test.json"), '{"a":1}\n');
-    execFileSync("git", ["add", "."], { cwd: repo });
+    const evidence = join(repo, ".hunch", "evidence", "ev_0123456789.json");
+    writeFileSync(evidence, '{"v":1}\n');
+    execFileSync("git", ["add", "-A"], { cwd: repo });
     execFileSync("git", ["commit", "-q", "-m", "init"], { cwd: repo });
-    // Unstaged-only edit — NOT `git add`ed — so its porcelain code is " M", not "M ".
-    writeFileSync(join(repo, ".hunch", "evidence", "ev_test.json"), '{"a":2}\n');
-
+    writeFileSync(evidence, '{"v":2}\n');
     const status = git(RELEASE_CLEAN_STATUS_ARGS, repo);
-    assert.equal(status[0], " ", "the first porcelain line's leading index-column space must survive git()");
-    assert.equal(statusWithoutMemoryChurn(status), "", "an unstaged-only .hunch/ edit sorted first is still recognized as memory churn");
+    assert.equal(status[0], " ", "the first porcelain line keeps its leading space");
+    assert.equal(statusWithoutMemoryChurn(status), "", "an unstaged memory-churn edit is still recognised as churn");
   } finally {
     cleanupDir(repo);
   }

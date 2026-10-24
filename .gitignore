@@ -3,18 +3,15 @@ dist/
 *.log
 .vercel/
 
-# Local git worktrees for isolated feature-branch work.
+# Local git worktrees used for isolated feature-branch work.
 .worktrees/
 
-# Subagent-driven-development workspace: per-plan ledgers, task briefs, review
-# packages. Local orchestration scratch, not a project artifact — regenerated
-# fresh per plan run, never meant to ship.
+# Subagent-driven-development workspace (per-plan ledgers, task briefs, review
+# packages): local orchestration scratch, regenerated per run and never shipped.
 .superpowers/
 
-# Superpowers brainstorm/spec/plan docs are local planning artifacts, not
-# shipped documentation — matching upstream davesheffer/hunch's convention of
-# keeping design rationale out of the public tree ("this repo is code-only";
-# see their private-overlay commits). Stay on disk for this clone; never committed.
+# Local brainstorm, spec and plan documents: planning artifacts kept out of the
+# public tree, since design rationale lives in the private overlay.
 docs/superpowers/
 
 # VS Code extension build artifact — distribute via GitHub Releases / registries, not git.

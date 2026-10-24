@@ -352,14 +352,14 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
         </tbody>
       </table>
       <p>A terminal provider preference lives in gitignored local config. It does not override a known initiating agent with another provider. <code>hunch provider</code> shows availability and why a provider was selected:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> provider codex-cli               <span class="c"># local: Claude / Codex / Cursor / openai-compat / deterministic</span>
+<div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> provider codex-cli              <span class="c"># local choice: Claude, Codex, Cursor, openai-compat, deterministic</span>
 <span class="k">hunch</span> provider                         <span class="c"># see availability + why this provider is selected</span>
 <span class="k">export</span> HUNCH_SYNTH_PROVIDER=claude-cli <span class="c"># one-shell override; `auto` disables the local choice</span></pre></div>
       <p><strong>Local &amp; self-hosted models.</strong> No subscription CLI is required: point Hunch at an OpenAI-compatible endpoint — Ollama, vLLM, LM Studio, llama.cpp server, and anything else that speaks the chat-completions format. Select it like any other provider (<code>hunch provider openai-compat</code>, or the one-shell override):</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">export</span> HUNCH_SYNTH_PROVIDER=openai-compat   <span class="c"># alias: ollama</span>
+<div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">export</span> HUNCH_SYNTH_PROVIDER=openai-compat      <span class="c"># alias: ollama</span>
 <span class="k">export</span> HUNCH_SYNTH_BASE_URL=http://localhost:11434/v1
-<span class="k">export</span> HUNCH_SYNTH_MODEL=llama3.1
-<span class="k">export</span> HUNCH_SYNTH_API_KEY=...                  <span class="c"># optional — omit for keyless local servers</span>
+<span class="k">export</span> HUNCH_SYNTH_MODEL=qwen2.5-coder:7b
+<span class="k">export</span> HUNCH_SYNTH_API_KEY=your-key-here          <span class="c"># optional — omit for keyless local servers</span>
 <span class="k">export</span> HUNCH_SYNTH_TIMEOUT_MS=300000             <span class="c"># optional, default 5 min — local models can be slow</span>
 <span class="k">export</span> HUNCH_SYNTH_MAX_TOKENS=2048               <span class="c"># optional output cap</span>
 <span class="k">export</span> HUNCH_SYNTH_ALLOW_METERED=1                <span class="c"># public remotes only; deliberate billing/trust opt-in</span></pre></div>
