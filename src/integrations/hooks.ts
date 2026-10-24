@@ -918,7 +918,7 @@ function repairProvenanceMergeBlock(invocation: string): string {
     "fi",
     REPAIR_MERGE_END,
   ].join("\n");
-@@CLEANROOM_HOLE_R1@@
+}
 
 /** Rank used to pick ONE HookInstall action out of two independent sub-installs
  *  into the same file. "created" (the file itself is new) outranks "appended" /
@@ -961,7 +961,7 @@ export function installPostMergeHook(root: string, invocation: string): HookInst
     ...(picked.keptFlags ?? other.keptFlags ? { keptFlags: picked.keptFlags ?? other.keptFlags } : {}),
     ...(picked.droppedFlags ?? other.droppedFlags ? { droppedFlags: picked.droppedFlags ?? other.droppedFlags } : {}),
   };
-@@CLEANROOM_HOLE_R2@@
+}
 
 /** When two snippets for the same file are joined, drop the second's leading
  *  instruction comment (the first already says where it goes). */
@@ -1061,12 +1061,12 @@ export function hookReport(root: string): HookReport {
  *  and a stale one (issue #315) are both NOT installed. */
 export function hookStatus(root: string): { postCommit: boolean; preCommit: boolean; postMerge: boolean; postCheckout: boolean } {
   const r = hookReport(root);
-@@CLEANROOM_HOLE_R3@@
+  return {
     postCommit: r.postCommit.state === "installed",
     preCommit: r.preCommit.state === "installed",
     postMerge: r.postMerge.state === "installed",
     postCheckout: r.postCheckout.state === "installed",
-@@CLEANROOM_HOLE_R4@@
+  };
 }
 
 /** One git hook file `hunch uninstall` would change. `next === null` deletes the
