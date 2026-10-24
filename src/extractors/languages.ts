@@ -1,6 +1,33 @@
-@@CLEANROOM_HOLE_1@@
+/**
+ * The single language registry: one `LanguageSpec` per supported language. The
+ * parser reads grammar and query data from here, and the indexer, diff analysis
+ * and synthesis ask it "is this a code file?". Adding a language means adding an
+ * entry here plus a grammar dependency.
+ */
+import { basename } from "node:path";
+import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
+import type { Edge } from "../core/types.js";
+
 export type ParsedSymbolKind = "function" | "method" | "class" | "interface" | "trait" | "enum" | "type" | "variable" | "file";
-@@CLEANROOM_HOLE_2@@
+
+export interface LanguageSpec {
+  /** Stable language id (`typescript`, `python`, `go`, `php`, `yaml`). */
+  id: string;
+  /** File suffixes, leading dot included, that this spec handles. */
+  extensions: string[];
+  /** Memoization key for the parser+query bundle. One grammar can serve several
+   *  extensions, and two specs may share an `id` yet differ here (TS vs TSX). */
+  grammarKey: string;
+  /** Lazily returns the tree-sitter Language object. */
+  loadGrammar(): unknown;
+  /** Tree-sitter query source capturing every construct of interest. */
+  query: string;
+  /** Node types the parser climbs to when attaching a name capture to its definition. */
+  defNodeTypes: Set<string>;
+  /** Symbol kind for each capture name ending in `.def`. */
+  defKindOf: Record<string, ParsedSymbolKind>;
+  /** Maps each `.name` capture to the `.def` capture it belongs to. */
+  nameToDef: Record<string, string>;
   /** Optional query binding a local name to an imported module, run with
    *  matches() so captures pair up: @bind.src (module specifier), @bind.local
    *  (local name), @bind.name (an imported member, `from X import name`). Feeds
@@ -13,11 +40,18 @@ export type ParsedSymbolKind = "function" | "method" | "class" | "interface" | "
   /** Optional semantic relationship captures. The generic parser/indexer emit
    * these through the normal graph path; languages only describe syntax. */
   relationKindOf?: Record<string, { edgeType: Edge["type"]; label: string }>;
-@@CLEANROOM_HOLE_3@@
+  /** Common builtin/stdlib method names. A member call whose property is in this
+   *  set never produces a call edge to a same-named repo symbol. */
+  builtinMethods: Set<string>;
   /** Direct-call builtins for languages such as PHP. These never become repo
    * call edges merely because a project symbol shares the runtime name. */
   builtinFunctions?: Set<string>;
-@@CLEANROOM_HOLE_4@@
+  /** Edge type emitted for this language's call-list entries; defaults to
+   *  `"calls"`. YAML sets it because alias-to-anchor links are references. */
+  referenceEdgeType?: Edge["type"];
+  /** Name for a `.def` capture that has no paired `.name` capture (a whole-file
+   *  root symbol, say). When omitted, unnamed defs are dropped. */
+  fallbackDefName?: (file: string) => string;
   /** Ancestor shapes in which an ERROR node is a known limitation of THIS grammar
    *  rather than a real syntax error. parse.ts forgives an error only when some
    *  ancestor has type `node` AND that ancestor's own parent has type `parentIs` —
@@ -34,23 +68,47 @@ export type ParsedSymbolKind = "function" | "method" | "class" | "interface" | "
    *  every captured value from the original source at the tree's unchanged
    *  offsets. Keep replacements syntax-equivalent outside the grammar defect. */
   parseErrorRecovery?: (source: string) => string;
-@@CLEANROOM_HOLE_5@@
+  /** Patterns whose presence anywhere in a file's text means the file is a
+   *  template that renders into this language later (Go/Jinja/Helm delimiters in
+   *  YAML). The real parse still runs, but the resulting error nodes must not make
+   *  the file unparseable, so the whole-repo completeness gate does not fail
+   *  closed. Keep patterns narrow so they never match always-valid syntax such as
+   *  GitHub Actions `${{ }}` expressions. */
+  templatingMarkers?: readonly RegExp[];
+  /** Extensions where every file is a template regardless of content, with no
+   *  sniffing (Helm's `_helpers.tpl` convention). Such files are never reported
+   *  unparseable. */
+  alwaysTemplatedExtensions?: readonly string[];
+}
+
+const TS_QUERY = `
+  (function_declaration name: (identifier) @fn.name) @fn.def
+  (generator_function_declaration name: (identifier) @fn.name) @fn.def
+  (method_definition name: (property_identifier) @method.name) @method.def
+  (class_declaration name: (type_identifier) @class.name) @class.def
+  (interface_declaration name: (type_identifier) @iface.name) @iface.def
+  (type_alias_declaration name: (type_identifier) @type.name) @type.def
+  (variable_declarator
+     name: (identifier) @arrow.name
+     value: [(arrow_function) (function_expression)]) @arrow.def
   ;; Class-field arrows (\`handler = () => {}\`) are methods in every way that matters.
   (public_field_definition
      name: (property_identifier) @method.name
      value: [(arrow_function) (function_expression)]) @method.def
-@@CLEANROOM_HOLE_6@@
+  (import_statement source: (string) @import.src)
   ;; require("./x") and dynamic import("./x") are imports too, when the specifier is literal.
   (call_expression function: (identifier) @_require arguments: (arguments . (string) @import.src .) (#eq? @_require "require"))
   (call_expression function: (import) arguments: (arguments . (string) @import.src .))
-@@CLEANROOM_HOLE_7@@
+  (call_expression function: (identifier) @call.id)
+  (call_expression function: (member_expression property: (property_identifier) @call.member))
   ;; Construction IS a call. Without these, \`new Foo()\` produced no edge at all, so
   ;; every class in a TS/JS repo had fan_in 0: blast radius before a constructor
   ;; change came back empty, and a \`not-calls\` conformance predicate over a class
   ;; could never see its own counterexample.
   (new_expression constructor: (identifier) @call.id)
   (new_expression constructor: (member_expression property: (property_identifier) @call.member))
-@@CLEANROOM_HOLE_8@@
+`;
+
 /** Rendering a component IS a call; lowercase tags are intrinsic elements, not symbols. */
 const TSX_QUERY = `${TS_QUERY}
   (jsx_opening_element name: (identifier) @call.id (#match? @call.id "^[A-Z]"))
@@ -71,9 +129,49 @@ const TS_BINDING_QUERY = `
      value: (await_expression (call_expression function: (import) arguments: (arguments . (string) @bind.src .))))
 `;
 
-@@CLEANROOM_HOLE_9@@
+const TS_BUILTIN_METHODS = new Set([
+  // arrays
+  "map", "filter", "forEach", "reduce", "find", "findIndex", "some", "every", "includes",
+  "push", "pop", "shift", "unshift", "slice", "splice", "concat", "join", "split", "flat",
+  "flatMap", "indexOf", "lastIndexOf", "keys", "values", "entries", "sort", "reverse", "fill", "at",
+  // Map / Set
+  "get", "set", "has", "add", "delete", "clear",
+  // Promise
+  "then", "catch", "finally", "all", "race", "resolve", "reject",
+  // object basics
+  "toString", "valueOf", "toJSON", "hasOwnProperty",
+  // strings
+  "replace", "replaceAll", "trim", "trimStart", "trimEnd", "padStart", "padEnd", "startsWith",
+  "endsWith", "toLowerCase", "toUpperCase", "charAt", "charCodeAt", "substring", "substr",
+  "repeat", "match", "matchAll",
+  // Function / RegExp / JSON / Date / Array / Object statics
+  "call", "apply", "bind", "test", "exec", "now", "parse", "stringify", "from", "of", "isArray", "assign",
+  // console
+  "log", "error", "warn", "info", "debug",
+]);
+
+const TS_SHARED = {
+  id: "typescript",
+  query: TS_QUERY,
+  defNodeTypes: new Set([
+    "function_declaration",
+    "generator_function_declaration",
+    "method_definition",
+    "class_declaration",
+    "interface_declaration",
+    "type_alias_declaration",
+    "variable_declarator",
     "public_field_definition",
-@@CLEANROOM_HOLE_10@@
+  ]),
+  defKindOf: {
+    "fn.def": "function", "method.def": "method", "class.def": "class",
+    "iface.def": "interface", "type.def": "type", "arrow.def": "function",
+  },
+  nameToDef: {
+    "fn.name": "fn.def", "method.name": "method.def", "class.name": "class.def",
+    "iface.name": "iface.def", "type.name": "type.def", "arrow.name": "arrow.def",
+  },
+  builtinMethods: TS_BUILTIN_METHODS,
   bindingQuery: TS_BINDING_QUERY,
   // ES2018 relaxed template literals: an INVALID escape (`\x` with no hex, `\u`
   // short, `\u{` unterminated) is legal inside a TAGGED template — the cooked
@@ -85,7 +183,23 @@ const TS_BINDING_QUERY = `
   // template_string hangs off a call_expression, an untagged one off whatever
   // consumes the value — so requiring that pair keeps genuine errors failing.
   toleratedErrorScopes: [{ node: "template_string", parentIs: "call_expression" }],
-@@CLEANROOM_HOLE_11@@
+} as const;
+
+const TYPESCRIPT: LanguageSpec = {
+  ...TS_SHARED,
+  extensions: [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"],
+  grammarKey: "ts",
+  loadGrammar: () => loadNativeTreeSitter().typescript,
+};
+
+/** TSX is a second entry that differs from TYPESCRIPT only in grammar and cache
+ *  key (the `id` is shared). It also overrides the query with TSX_QUERY, widens
+ *  the tolerated error scopes and adds a recovery pass. */
+const TSX: LanguageSpec = {
+  ...TS_SHARED,
+  extensions: [".tsx", ".jsx"],
+  grammarKey: "tsx",
+  loadGrammar: () => loadNativeTreeSitter().tsx,
   query: TSX_QUERY,
   // tree-sitter-javascript rejects a bare ampersand in JSX text even though JSX
   // accepts it (tree-sitter-javascript#366). The ERROR is a direct jsx_element
@@ -100,7 +214,18 @@ const TS_BINDING_QUERY = `
   // text and has the same length; in JS/TS syntax it preserves ampersand
   // operators' arity, so malformed expressions remain malformed on the retry.
   parseErrorRecovery: (source) => source.replaceAll("&", "|"),
-@@CLEANROOM_HOLE_12@@
+};
+
+const PY_QUERY = `
+  ;; A class whose body directly holds a def (plain or decorated): the nested def is
+  ;; a method. parse.ts keeps the first classification per node, so the generic
+  ;; function pattern below does not reclassify it.
+  (class_definition
+     name: (identifier) @class.name
+     body: (block [
+       (function_definition name: (identifier) @method.name) @method.def
+       (decorated_definition definition: (function_definition name: (identifier) @method.name) @method.def)
+     ])) @class.def
   ;; Every class, including one with no directly-nested def: dataclasses, Exception
   ;; subclasses, Enums, TypedDicts and pydantic models are method-less by design and
   ;; were invisible to the entire graph (no symbol, no component, no edges), so
@@ -108,7 +233,36 @@ const TS_BINDING_QUERY = `
   ;; breaks. parse.ts keys pendingDefs by node id and keeps the first classification,
   ;; so a class that ALSO matches the method-bearing pattern above is not duplicated.
   (class_definition name: (identifier) @class.name) @class.def
-@@CLEANROOM_HOLE_13@@
+  (function_definition name: (identifier) @fn.name) @fn.def
+  (import_statement name: (dotted_name) @import.src)
+  (import_statement name: (aliased_import name: (dotted_name) @import.src))
+  (import_from_statement module_name: [(dotted_name) (relative_import)] @import.src)
+  (call function: (identifier) @call.id)
+  (call function: (attribute attribute: (identifier) @call.member))
+`;
+
+const PY_BUILTIN_METHODS = new Set([
+  "get", "set", "keys", "values", "items", "pop", "popitem", "update", "setdefault", "copy",
+  "clear", "append", "extend", "insert", "remove", "reverse", "sort", "count", "index", "add",
+  "discard", "union", "intersection", "difference", "format", "join", "split", "rsplit",
+  "splitlines", "strip", "lstrip", "rstrip", "startswith", "endswith", "replace", "find",
+  "rfind", "lower", "upper", "title", "capitalize", "encode", "decode", "isdigit", "isalpha",
+  "isalnum", "isspace", "read", "write", "close", "open", "readline", "readlines", "run",
+  "wait", "poll", "communicate",
+]);
+
+const PYTHON: LanguageSpec = {
+  id: "python",
+  extensions: [".py", ".pyi"],
+  grammarKey: "python",
+  loadGrammar: () => loadNativeTreeSitter().python,
+  query: PY_QUERY,
+  defNodeTypes: new Set(["function_definition", "class_definition"]),
+  defKindOf: { "fn.def": "function", "method.def": "method", "class.def": "class" },
+  nameToDef: { "fn.name": "fn.def", "method.name": "method.def", "class.name": "class.def" },
+  builtinMethods: PY_BUILTIN_METHODS,
+};
+
 const GO_QUERY = `
   (function_declaration name: (identifier) @fn.name) @fn.def
   (method_declaration name: (field_identifier) @method.name) @method.def
@@ -227,6 +381,50 @@ const PHP: LanguageSpec = {
   builtinFunctions: PHP_BUILTIN_METHODS,
 };
 
-@@CLEANROOM_HOLE_14@@
+const YAML_QUERY = `
+  (block_node (anchor (anchor_name) @anchor.name)) @anchor.def
+  (flow_node (anchor (anchor_name) @anchor.name)) @anchor.def
+  ;; An alias is a reference to its anchor.
+  (alias (alias_name) @call.id)
+  ;; The whole document gets a root symbol (named via fallbackDefName).
+  (stream) @doc.def
+`;
+
+const YAML: LanguageSpec = {
+  id: "yaml",
+  extensions: [".yml", ".yaml", ".tpl"],
+  grammarKey: "yaml",
+  loadGrammar: () => loadNativeTreeSitter().yaml,
+  query: YAML_QUERY,
+  defNodeTypes: new Set(["block_node", "flow_node"]),
+  defKindOf: { "anchor.def": "variable", "doc.def": "file" },
+  nameToDef: { "anchor.name": "anchor.def" },
+  builtinMethods: new Set(),
+  referenceEdgeType: "references",
+  // Most aliases sit outside their anchor's byte range, so without a root symbol
+  // call attribution would drop them. The file's own name is the root.
+  fallbackDefName: (file) => basename(file),
+  // Go/Jinja/Helm delimiters make a file invalid YAML until rendered. A `{{` not
+  // preceded by `$` (GitHub Actions `${{ }}` is plain valid YAML) and a Jinja `{%`.
+  templatingMarkers: [/(?<!\$)\{\{/u, /\{%/u],
+  // `.tpl` files (Helm `_helpers.tpl`) are templates by convention, whatever they hold.
+  alwaysTemplatedExtensions: [".tpl"],
+};
+
 export const LANGUAGES: LanguageSpec[] = [TYPESCRIPT, TSX, PYTHON, GO, PHP, YAML];
-@@CLEANROOM_HOLE_15@@
+
+/** Every registered extension, de-duplicated, in registry order. */
+export const CODE_EXTENSIONS: string[] = [...new Set(LANGUAGES.flatMap((l) => l.extensions))];
+
+/** First spec (registry order) with an extension the file name ends with. */
+export function languageFor(file: string): LanguageSpec | null {
+  return LANGUAGES.find((l) => l.extensions.some((ext) => file.endsWith(ext))) ?? null;
+}
+
+/** Prose formats eligible as synthesis input but never parsed. */
+export const PROSE_EXTENSIONS: string[] = [".md"];
+
+/** True for parseable code or prose. Deliberately broader than parseability. */
+export function isSubstantive(file: string): boolean {
+  return languageFor(file) !== null || PROSE_EXTENSIONS.some((ext) => file.endsWith(ext));
+}

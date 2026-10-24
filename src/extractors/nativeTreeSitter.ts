@@ -12,9 +12,15 @@ const COPY_PREFIX = "hunch-tree-sitter-";
 const CACHE_PREFIX = "hunch-tree-sitter-cache-";
 /** A hash dir no process has used for this long is pruned. */
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-@@CLEANROOM_HOLE_1@@
+/** npm packages whose native addons are loaded from isolated copies. */
+const NATIVE_PACKAGES = [
+  "tree-sitter",
+  "tree-sitter-typescript",
+  "tree-sitter-python",
+  "tree-sitter-go",
   "tree-sitter-php",
-@@CLEANROOM_HOLE_2@@
+  "@tree-sitter-grammars/tree-sitter-yaml",
+] as const;
 
 type NodeGypBuild = ((root: string) => unknown) & { path(root: string): string };
 
@@ -22,10 +28,10 @@ export interface NativeTreeSitterRuntime {
   Parser: typeof TreeSitterParser;
   typescript: unknown;
   tsx: unknown;
-@@CLEANROOM_HOLE_3@@
+  python: unknown;
   go: unknown;
   php: unknown;
-@@CLEANROOM_HOLE_4@@
+  yaml: unknown;
 }
 
 let runtime: NativeTreeSitterRuntime | null = null;
@@ -182,10 +188,12 @@ function pruneCache(root: string, keep: ReadonlySet<string>): void {
   }
 }
 
-@@CLEANROOM_HOLE_5@@
+/** Loads every native tree-sitter addon (the parser runtime and each grammar) from
  * content-addressed copies in a per-user temp cache — never from the installed
  * package. Windows keeps loaded `.node` files locked for the
-@@CLEANROOM_HOLE_6@@
+ * lifetime of the process, so pointing the upstream loaders at copies lets npm
+ * replace the installed package during a live MCP session without killing it and
+ * without ever loading a stale binary. */
 export function loadNativeTreeSitter(): NativeTreeSitterRuntime {
   if (runtime) return runtime;
   // Only SUCCESS is memoized (in `runtime`), never the failure: the conditions
@@ -201,7 +209,12 @@ export function loadNativeTreeSitter(): NativeTreeSitterRuntime {
 }
 
 function loadRuntime(): NativeTreeSitterRuntime {
-@@CLEANROOM_HOLE_7@@
+  // Recognised addon file names: the prebuilt names of the runtime and of each
+  // grammar package, the `@scope+name` spelling that scoped packages use inside
+  // their prebuilds, and from-source builds, which are named after the
+  // binding.gyp target with underscores and end in `_binding`. Missing the
+  // underscore form once let an already-loaded source build slip past isolation
+  // (issue #52).
   const preloaded = Object.keys(runtimeRequire.cache).filter((path) =>
     /(?:tree-sitter(?:-typescript|-python|-go|-php|-yaml)?|tree_sitter(?:_[a-z]+)*_binding)\.node$/.test(path)
     && !new RegExp(`(?:^|[\\\\/])(?:${COPY_PREFIX}\\d+-|${CACHE_PREFIX})`).test(path));
@@ -232,10 +245,10 @@ function loadRuntime(): NativeTreeSitterRuntime {
     }
     const Parser = runtimeRequire("tree-sitter") as typeof TreeSitterParser;
     const languages = runtimeRequire("tree-sitter-typescript") as { typescript: unknown; tsx: unknown };
-@@CLEANROOM_HOLE_8@@
+    const python = runtimeRequire("tree-sitter-python") as unknown;
     const go = runtimeRequire("tree-sitter-go") as unknown;
     const php = runtimeRequire("tree-sitter-php") as { php: unknown };
-@@CLEANROOM_HOLE_9@@
+    const yaml = runtimeRequire("@tree-sitter-grammars/tree-sitter-yaml") as unknown;
     runtime = { Parser, typescript: languages.typescript, tsx: languages.tsx, python, go, php: php.php, yaml };
   } finally {
     for (const [key, value] of previous) {

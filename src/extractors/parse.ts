@@ -6,16 +6,17 @@
  *
  * Uses NATIVE tree-sitter (synchronous, prebuilt for Node 20 — see decision in
  * the commit history; web-tree-sitter's WASM grammars had an incompatible ABI).
-@@CLEANROOM_HOLE_1@@
+ *
+ * Language-specific grammar, query and builtin data lives in languages.ts; this
+ * file is a generic engine over whichever LanguageSpec matches a file.
  */
 import type TreeSitterParser from "tree-sitter";
 import type { SyntaxNode } from "tree-sitter";
 import type { Edge } from "../core/types.js";
-@@CLEANROOM_HOLE_2@@
+import { languageFor, type LanguageSpec, type ParsedSymbolKind } from "./languages.js";
 import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
 
-@@CLEANROOM_HOLE_3@@
-
+export type { ParsedSymbolKind } from "./languages.js";
 /** Resolved on first parse, not at import: loading the native addons copies six
  *  `.node` files into a temp dir and dlopens them (~1.5s+ cold), which every CLI
  *  command and every editor hook would otherwise pay just for importing this
@@ -75,23 +76,46 @@ interface LangBundle {
 }
 const cache = new Map<string, LangBundle>();
 
-@@CLEANROOM_HOLE_4@@
+function bundleFor(spec: LanguageSpec): LangBundle {
+  let b = cache.get(spec.grammarKey);
   if (!b) {
     const Parser = parserRuntime();
     const parser = new Parser();
-@@CLEANROOM_HOLE_5@@
+    const grammar = spec.loadGrammar();
+    parser.setLanguage(grammar as never);
+    const query = new Parser.Query(grammar as never, spec.query);
     const bindingQuery = spec.bindingQuery ? new Parser.Query(grammar as never, spec.bindingQuery) : null;
     b = { parser, query, bindingQuery };
-@@CLEANROOM_HOLE_6@@
+    cache.set(spec.grammarKey, b);
   }
   return b;
 }
 
+/** Per-spec templating markers with g/y stripped, so `.test()` is stateless.
+ *  Built once per language spec rather than on every parseSource call. */
+const statelessMarkers = new WeakMap<LanguageSpec, readonly RegExp[]>();
+function templatingMarkersFor(spec: LanguageSpec): readonly RegExp[] {
+  let markers = statelessMarkers.get(spec);
+  if (!markers) {
+    markers = (spec.templatingMarkers ?? []).map((re) => new RegExp(re.source, re.flags.replace(/[gy]/g, "")));
+    statelessMarkers.set(spec, markers);
+  }
+  return markers;
+}
+
 const STR_QUOTES = /^['"`]|['"`]$/g;
-@@CLEANROOM_HOLE_7@@
+/** Cap on stored symbol body text: enough context for review without bloating JSON records. */
+export const MAX_BODY_TEXT_CHARS = 4000;
 
 export function parseSource(file: string, source: string, opts: { throwOnParseError?: boolean } = {}): ParsedFile | null {
-@@CLEANROOM_HOLE_8@@
+  const spec = languageFor(file);
+  if (!spec) return null;
+  // Templated text is not valid language text until rendered. Still parse, so real
+  // anchors/symbols are extracted, but do not let the expected errors mark the file
+  // unparseable. Severe templating may stop even the root document node from
+  // forming; the fallback whole-file symbol below covers that case.
+  const templated = (spec.alwaysTemplatedExtensions ?? []).some((ext) => file.endsWith(ext))
+    || templatingMarkersFor(spec).some((re) => re.test(source));
   const { parser, query, bindingQuery } = bundleFor(spec);
   // The native binding caps its scratch buffer at 32 KB unless bufferSize is
   // given — without this, any source >= 32768 bytes throws "Invalid argument"
@@ -142,9 +166,12 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     const cname = cap.name;
     const node = cap.node;
     if (cname.endsWith(".def")) {
-@@CLEANROOM_HOLE_9@@
+      // First classification wins: a node matched by several patterns keeps the
+      // kind it received first (Python nested methods, Go struct/interface specs).
+      if (!pendingDefs.has(node.id)) pendingDefs.set(node.id, { kind: spec.defKindOf[cname]!, def: node });
+    } else if (Object.hasOwn(spec.nameToDef, cname)) {
       // name capture: find its parent def node id by walking up to the def type
-@@CLEANROOM_HOLE_10@@
+      const defNode = ascendToDef(node, spec.defNodeTypes);
       if (defNode) {
         const existing = pendingDefs.get(defNode.id);
         if (existing) existing.name = originalText(node);
@@ -199,13 +226,21 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
   }
 
   for (const { kind, def, name } of pendingDefs.values()) {
-@@CLEANROOM_HOLE_11@@
+    const symbolName = name ?? spec.fallbackDefName?.(file);
+    if (!symbolName) continue;
     const loc = def.endPosition.row - def.startPosition.row + 1;
     symbols.push({
-@@CLEANROOM_HOLE_12@@
+      name: symbolName, kind,
       startByte: def.startIndex, endByte: def.endIndex, loc,
       bodyText: originalText(def).slice(0, MAX_BODY_TEXT_CHARS),
-@@CLEANROOM_HOLE_13@@
+    });
+  }
+  // Severe templating can stop the root node from forming; synthesize the whole-file symbol.
+  if (templated && spec.fallbackDefName && !symbols.some((s) => s.kind === "file")) {
+    symbols.push({
+      name: spec.fallbackDefName(file), kind: "file",
+      startByte: 0, endByte: source.length, loc: source.split("\n").length,
+      bodyText: source.slice(0, MAX_BODY_TEXT_CHARS),
     });
   }
   symbols.sort((a, b) => a.startByte - b.startByte);
@@ -252,28 +287,40 @@ function inToleratedScope(node: SyntaxNode, scopes: NonNullable<LanguageSpec["to
   return false;
 }
 
-@@CLEANROOM_HOLE_14@@
+/** Nearest ancestor of `node` whose type is a definition type, or null. */
+function ascendToDef(node: SyntaxNode, defNodeTypes: Set<string>): SyntaxNode | null {
   let cur: SyntaxNode | null = node.parent;
   while (cur) {
-@@CLEANROOM_HOLE_15@@
+    if (defNodeTypes.has(cur.type)) return cur;
     cur = cur.parent;
   }
   return null;
 }
 
 /** Map each call site to the innermost symbol whose byte-range contains it.
-@@CLEANROOM_HOLE_16@@
+ *  The result is keyed by the symbol's INDEX in `parsed.symbols`, not its start
+ *  byte: two distinct symbols can share a start byte (a synthetic whole-file root
+ *  beside others starting at byte 0), so callers must look symbols up in the same
+ *  array order. Each value maps callee name -> memberOnly, true iff every
+ *  occurrence of that callee inside the symbol was a member call, so the indexer
+ *  can resolve member calls conservatively. */
 export function attributeCalls(parsed: ParsedFile): Map<number, Map<string, boolean>> {
   const out = new Map<number, Map<string, boolean>>();
   for (const call of parsed.calls) {
     let best: ParsedSymbol | null = null;
-@@CLEANROOM_HOLE_17@@
+    let bestIndex = -1;
+    for (let i = 0; i < parsed.symbols.length; i++) {
+      const s = parsed.symbols[i]!;
       if (call.atByte >= s.startByte && call.atByte < s.endByte) {
-@@CLEANROOM_HOLE_18@@
+        if (!best || s.endByte - s.startByte < best.endByte - best.startByte) {
+          best = s;
+          bestIndex = i;
+        }
       }
     }
     if (best && best.name !== call.callee) {
-@@CLEANROOM_HOLE_19@@
+      let m = out.get(bestIndex);
+      if (!m) { m = new Map(); out.set(bestIndex, m); }
       const prev = m.get(call.callee);
       m.set(call.callee, prev === undefined ? call.member : prev && call.member);
     }

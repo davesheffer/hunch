@@ -30,9 +30,12 @@ export interface DiffAnalysis {
   changedSymbols: SymbolChange[]; // appeared on both sides of the SAME file
   addedDeps: string[]; // new external (non-relative) imports
   removedDeps: string[];
-@@CLEANROOM_HOLE_1@@
+  addedLines: number; // substantive files only (code + prose, per isSubstantive)
   removedLines: number;
-@@CLEANROOM_HOLE_2@@
+  /** Added line bodies (content after the `+`) per file, for EVERY file, not only
+   *  substantive ones. The text veto's symbol/pattern tiers match call sites, which
+   *  `addedSymbols` cannot see. Keyed by the same new-side path as the per-file
+   *  declarations map. */
   addedLinesByFile: Map<string, string[]>;
 }
 
@@ -47,14 +50,23 @@ const DECL_PATTERNS: Array<{ kind: SymbolChange["kind"]; re: RegExp }> = [
   { kind: "type", re: /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*[=<]/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/ },
   { kind: "const", re: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function/ },
-@@CLEANROOM_HOLE_3@@
+  // No Python class pattern: the generic class pattern above already matches a
+  // Python class header, and the first match wins.
+  { kind: "function", re: /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/ },
 ];
-@@CLEANROOM_HOLE_4@@
+import { languageFor, isSubstantive } from "./languages.js";
+
 const IMPORT_RE = /^\s*import\s+(?:[^'"]*from\s+)?['"]([^'"]+)['"]/;
 const CONT_IMPORT_RE = /^\s*\}?\s*from\s+['"]([^'"]+)['"]/; // multi-line: "} from 'x'"
 const REQUIRE_RE = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/;
 const PHP_REQUIRE_RE = /\b(?:require|require_once|include|include_once)\s*(?:\(\s*)?['"]([^'"]+)['"]/;
-@@CLEANROOM_HOLE_5@@
+// A COMPLETE Python import statement: comma-separated dotted modules, each with an
+// optional alias, an optional trailing comment, and nothing else. The anchoring is
+// what rejects TypeScript's `import Foo = Bar.Baz;`.
+const PY_IMPORT_RE = /^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s+as\s+\w+)?(?:\s*,\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:\s+as\s+\w+)?)*\s*(?:#.*)?$/;
+const PY_FROM_RE = /^\s*from\s+(\.*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|\.+)\s+import\b/;
+
+const isCode = (p: string): boolean => p.length > 0 && languageFor(p) !== null;
 
 function declOf(line: string): SymbolChange | null {
   for (const { kind, re } of DECL_PATTERNS) {
@@ -64,9 +76,13 @@ function declOf(line: string): SymbolChange | null {
   return null;
 }
 function importOf(line: string): string | null {
-@@CLEANROOM_HOLE_6@@
+  const m =
+    IMPORT_RE.exec(line) ??
+    CONT_IMPORT_RE.exec(line) ??
+    REQUIRE_RE.exec(line) ??
     PHP_REQUIRE_RE.exec(line) ??
-@@CLEANROOM_HOLE_7@@
+    PY_FROM_RE.exec(line) ??
+    PY_IMPORT_RE.exec(line);
   return m ? m[1]! : null;
 }
 function stripAB(p: string): string {
@@ -279,14 +295,14 @@ export function analyzeDiff(diff: string): DiffAnalysis {
       } else if (raw.startsWith("rename to ") || raw.startsWith("copy to ")) {
         const to = headerPath(raw.slice(raw.indexOf(" to ") + 4));
         curFile = to;
-@@CLEANROOM_HOLE_8@@
+        if (isSubstantive(to)) filesRenamed.push({ from: renameFrom, to });
       } else if (raw.startsWith("--- ")) {
         const p = headerPath(raw.slice(4));
         if (p !== "/dev/null") curFile = stripAB(p); // old path (may be replaced by +++)
       } else if (raw.startsWith("+++ ")) {
         const p = headerPath(raw.slice(4));
         if (p !== "/dev/null") curFile = stripAB(p); // new path preferred
-@@CLEANROOM_HOLE_9@@
+        if (isSubstantive(curFile)) {
           if (curAdded) filesAdded.add(curFile);
           else if (curDeleted) filesDeleted.add(curFile);
         }
@@ -297,30 +313,32 @@ export function analyzeDiff(diff: string): DiffAnalysis {
     // ---- inside a hunk: content lines ----
     if (raw.startsWith("+")) {
       const body = raw.slice(1);
-@@CLEANROOM_HOLE_10@@
+      // Raw added lines are captured for every file, before the substantive gate:
       // content-matched constraints and Veto tripwires are not code-only rules
       // (a blocking invariant legitimately scopes .github/workflows/**, *.sql,
       // Dockerfile). Skipping them here left `scopedAdded` empty, which
       // buildCheckReport reads as "cannot prove a violation ⇒ complies" — so the
       // pre-edit hook denied the edit while `hunch check --strict` passed the
-@@CLEANROOM_HOLE_11@@
+      // same diff. Churn counters below now include prose (isSubstantive, issue
+      // #12), while symbol/import extraction stays code-only (isCode): a
+      // declaration is a code concept.
       let lines = addedLinesBy.get(curFile);
       if (!lines) { lines = []; addedLinesBy.set(curFile, lines); }
       lines.push(body);
-@@CLEANROOM_HOLE_12@@
+      if (!isSubstantive(curFile)) continue;
       addedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
-@@CLEANROOM_HOLE_13@@
+      if (isCode(curFile)) {
         const d = declOf(body);
         if (d) declsFor(curFile)?.added.set(d.name, d);
         const imp = importOf(body);
         if (imp && !imp.startsWith(".")) addedImports.add(imp);
-@@CLEANROOM_HOLE_14@@
+      }
     } else if (raw.startsWith("-")) {
-@@CLEANROOM_HOLE_15@@
+      if (!isSubstantive(curFile)) continue;
       removedLines++;
       if (!curAdded && !curDeleted) filesModified.add(curFile);
-@@CLEANROOM_HOLE_16@@
+      if (isCode(curFile)) {
         const body = raw.slice(1);
         const d = declOf(body);
         if (d) declsFor(curFile)?.removed.set(d.name, d);
@@ -328,7 +346,7 @@ export function analyzeDiff(diff: string): DiffAnalysis {
         if (imp && !imp.startsWith(".")) removedImports.add(imp);
       }
     }
-@@CLEANROOM_HOLE_17@@
+  }
 
   // per-file symbol classification (added/removed/changed within the same file)
   const addedSymbols: SymbolChange[] = [];

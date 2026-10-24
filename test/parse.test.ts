@@ -38,9 +38,9 @@ test("native tree-sitter addons load only from the per-user content-addressed co
   assert.equal(parseSource("isolation-probe.ts", "export const probe: number = 1")?.parseable, true);
   const require = createRequire(import.meta.url);
   const bindings = Object.keys(require.cache)
-@@CLEANROOM_HOLE_1@@
+    .filter((path) => /(?:^|[\\/])(?:tree-sitter|tree-sitter-typescript|tree-sitter-python)\.node$|tree-sitter-yaml\.node$/.test(path))
     .sort();
-@@CLEANROOM_HOLE_2@@
+  assert.equal(bindings.length, 4, `expected core, TypeScript, Python and YAML bindings, got: ${bindings.join(", ")}`);
   const cachePrefix = join(realpathSync(tmpdir()), "hunch-tree-sitter-cache-");
   for (const binding of bindings) {
     assert.ok(realpathSync(binding).startsWith(cachePrefix), `installed native binding remains loaded: ${binding}`);
@@ -222,9 +222,13 @@ test("real JSX errors beside bare ampersands still fail strict scans", () => {
   }
 });
 
-@@CLEANROOM_HOLE_3@@
+test("attributeCalls maps a callee to its enclosing symbol, keyed by stable symbol index", () => {
   const p = parseSource("f.ts", SRC)!;
-@@CLEANROOM_HOLE_4@@
+  const attr = attributeCalls(p);
+  const calleesOf = (name: string) => attr.get(p.symbols.findIndex((s) => s.name === name));
+  assert.ok(calleesOf("verifySession")?.has("jwtDecode"));
+  assert.ok(calleesOf("helper")?.has("verifySession"));
+  assert.ok(calleesOf("run")?.has("helper"));
 });
 
 test("non-code files return null", () => {
@@ -242,10 +246,96 @@ test("parses files >= 32 KB without throwing (regression: critical bufferSize bu
 test("builtin method calls (.map/.push/...) do NOT become call edges (regression #4)", () => {
   const src = `function f(xs){ return xs.map(g).filter(h).push(1); }\nfunction g(){} function h(){}`;
   const p = parseSource("m.ts", src)!;
-@@CLEANROOM_HOLE_5@@
+  const attr = attributeCalls(p);
+  const index = p.symbols.findIndex((s) => s.name === "f");
+  const callees = attr.get(index) ?? new Map<string, boolean>();
   assert.ok(!callees.has("map") && !callees.has("filter") && !callees.has("push"), "no builtin-method edges");
 });
-@@CLEANROOM_HOLE_6@@
+
+const PY_SRC = `import os
+from .jwt import decode_token
+import external_pkg
+
+def verify_session(token):
+    return decode_token(token)
+
+class Service:
+    def run(self):
+        return verify_session("x")
+
+async def async_helper():
+    return verify_session("y")
+`;
+
+test("parseSource extracts Python symbols, imports, calls", () => {
+  const p = parseSource("src/auth/session.py", PY_SRC)!;
+  assert.ok(p, "python file did not parse");
+  assert.equal(p.parseable, true);
+  assert.deepEqual(p.symbols.map((s) => s.name).sort(), ["Service", "async_helper", "run", "verify_session"].sort());
+  const kindOf = (n: string) => p.symbols.find((s) => s.name === n)!.kind;
+  assert.equal(kindOf("verify_session"), "function");
+  assert.equal(kindOf("async_helper"), "function");
+  assert.equal(kindOf("Service"), "class");
+  assert.equal(kindOf("run"), "method");
+  assert.deepEqual([...p.imports].sort(), [".jwt", "external_pkg", "os"]);
+  assert.ok(p.calls.some((c) => c.callee === "decode_token"));
+});
+
+test("attributeCalls resolves Python calls to their enclosing symbol", () => {
+  const p = parseSource("f.py", PY_SRC)!;
+  const attr = attributeCalls(p);
+  const calleesOf = (name: string) => attr.get(p.symbols.findIndex((s) => s.name === name));
+  assert.ok(calleesOf("verify_session")?.has("decode_token"));
+  assert.ok(calleesOf("run")?.has("verify_session"));
+  assert.ok(calleesOf("async_helper")?.has("verify_session"));
+});
+
+test("Python builtin dict/str/list member calls do NOT become call edges", () => {
+  const src = "def f(d, xs):\n    d.get('a')\n    'x'.strip()\n    xs.append(1)\n";
+  const p = parseSource("m.py", src)!;
+  const attr = attributeCalls(p);
+  const callees = attr.get(p.symbols.findIndex((s) => s.name === "f"));
+  assert.ok(!callees || callees.size === 0, "no builtin-method edges");
+});
+
+test("Python sources larger than 32 KB parse", () => {
+  const big = "def first_fn():\n    return 1\n" + "x = 1\n".repeat(8000);
+  assert.ok(big.length > 32768);
+  const p = parseSource("big.py", big);
+  assert.ok(p, "did not return null on a >32 KB python file");
+  assert.ok(p!.symbols.some((s) => s.name === "first_fn"));
+});
+
+test("decorated Python methods classify as methods exactly once", () => {
+  const src = [
+    "import functools",
+    "class Model:",
+    "    @classmethod",
+    "    def create(cls):",
+    "        return cls()",
+    "    @property",
+    "    def size(self):",
+    "        return 1",
+    "    @staticmethod",
+    "    def util():",
+    "        return 2",
+    "    @functools.cache",
+    "    def cached(self):",
+    "        return 3",
+    "    @retry(times=3)",
+    "    def flaky(self):",
+    "        return 4",
+    "    def plain(self):",
+    "        return 5",
+    "",
+  ].join("\n");
+  const p = parseSource("model.py", src)!;
+  for (const name of ["create", "size", "util", "cached", "flaky", "plain"]) {
+    const matches = p.symbols.filter((s) => s.name === name);
+    assert.equal(matches.length, 1, `${name} appears exactly once`);
+    assert.equal(matches[0]!.kind, "method", `${name} is a method`);
+  }
+});
 
 const GO_SRC = `package auth
 
@@ -295,14 +385,16 @@ test("parseSource extracts Go symbols, imports, calls", () => {
 test("attributeCalls resolves Go calls to their enclosing symbol", () => {
   const p = parseSource("f.go", GO_SRC)!;
   const attr = attributeCalls(p);
-@@CLEANROOM_HOLE_7@@
+  const calleesOf = (name: string) => attr.get(p.symbols.findIndex((s) => s.name === name));
+  assert.ok(calleesOf("VerifySession")?.has("DecodeToken"));
+  assert.ok(calleesOf("Run")?.has("VerifySession"));
 });
 
 test("Go stdlib method/function names (Println/TrimSpace/...) do NOT become call edges", () => {
   const src = "package m\n\nfunc f(x Thing) string {\n\tx.Printf(\"y\")\n\tx.TrimSpace(\"z\")\n\treturn x.Custom()\n}\n";
   const p = parseSource("m.go", src)!;
   const attr = attributeCalls(p);
-@@CLEANROOM_HOLE_8@@
+  const callees = attr.get(p.symbols.findIndex((s) => s.name === "f")) ?? new Map<string, boolean>();
   assert.ok(!callees.has("Printf") && !callees.has("TrimSpace"), "no builtin-method edges");
   assert.ok(callees.has("Custom"), "repo-specific member call survives");
 });
@@ -316,7 +408,100 @@ test("a struct type_spec classifies as class, not the generic type kind (first-c
   assert.equal(kindOf("Plain"), "type");
   assert.equal(p.symbols.filter((s) => s.name === "OnlyStruct").length, 1, "no duplicate from the generic type pattern");
 });
-@@CLEANROOM_HOLE_9@@
+
+const YAML_ANCHORS = `defaults: &defaults
+  adapter: postgres
+  host: localhost
+development:
+  <<: *defaults
+  database: dev
+test:
+  <<: *defaults
+  database: test
+`;
+
+test("YAML anchors become variable symbols beside a file-root symbol", () => {
+  const p = parseSource("config/database.yml", YAML_ANCHORS)!;
+  assert.equal(p.parseable, true);
+  assert.deepEqual(p.symbols.map((s) => s.name).sort(), ["database.yml", "defaults"]);
+  assert.equal(p.symbols.find((s) => s.name === "defaults")!.kind, "variable");
+  assert.equal(p.symbols.find((s) => s.name === "database.yml")!.kind, "file");
+});
+
+test("a YAML alias is attributed to the file-root symbol", () => {
+  const p = parseSource("config/database.yml", YAML_ANCHORS)!;
+  const attr = attributeCalls(p);
+  const rootIndex = p.symbols.findIndex((s) => s.kind === "file");
+  assert.ok(attr.get(rootIndex)?.has("defaults"));
+});
+
+test("flow-style YAML anchors and their aliases are captured", () => {
+  const p = parseSource("flow.yml", "x: &flowanchor {a: 1}\ny: *flowanchor\n")!;
+  assert.ok(p.symbols.some((s) => s.name === "flowanchor" && s.kind === "variable"));
+  assert.ok(p.calls.some((c) => c.callee === "flowanchor"));
+});
+
+test("an anchor-free workflow has exactly one file symbol and no calls", () => {
+  const p = parseSource(".github/workflows/ci.yml", "name: ci\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n")!;
+  assert.equal(p.parseable, true);
+  assert.equal(p.symbols.filter((s) => s.kind === "file").length, 1);
+  assert.equal(p.calls.length, 0);
+});
+
+test("a Helm-templated manifest is parseable and yields only the file symbol", () => {
+  const src = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app
+data:
+  {{- range $k, $v := .Values.config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+`;
+  const p = parseSource("charts/app/templates/configmap.yaml", src)!;
+  assert.equal(p.parseable, true);
+  assert.deepEqual(p.symbols.map((s) => [s.name, s.kind]), [["configmap.yaml", "file"]]);
+  assert.equal(p.calls.length, 0);
+});
+
+test("Jinja-templated YAML is parseable, including a file with only {% %} tags", () => {
+  const both = "{% for x in xs %}\nitem: {{ x }}\n{% endfor %}\n";
+  assert.equal(parseSource("deploy.yml", both)?.parseable, true);
+  const tagsOnly = "{% if prod %}\nkey: value\n  bad: [\n{% endif %}\n";
+  assert.equal(parseSource("deploy.yml", tagsOnly)?.parseable, true);
+});
+
+test("genuinely broken, non-templated YAML is unparseable", () => {
+  assert.equal(parseSource("broken.yml", "key: [1, 2\nother: \"unterminated\n")?.parseable, false);
+});
+
+test("a GitHub Actions ${{ }} expression is not a templating marker", () => {
+  const broken = "name: ci\nenv:\n  A: ${{ secrets.A }}\n  list: [1, 2\nother: \"unterminated\n";
+  assert.equal(parseSource(".github/workflows/ci.yml", broken)?.parseable, false);
+  const valid = "name: ci\nenv:\n  A: ${{ secrets.A }}\n";
+  const p = parseSource(".github/workflows/ci.yml", valid)!;
+  assert.equal(p.parseable, true);
+  assert.equal(p.symbols.length, 1);
+});
+
+test("a templated file with a real anchor keeps it, symbols ordered by start byte", () => {
+  const src = "defaults: &defaults\n  a: 1\nitems:\n  {{- range .Values.x }}\n  - {{ . }}\n  {{- end }}\nref:\n  <<: *defaults\n";
+  const p = parseSource("config.yaml", src)!;
+  assert.equal(p.parseable, true);
+  assert.deepEqual(p.symbols.map((s) => s.name).sort(), ["config.yaml", "defaults"]);
+  for (let i = 1; i < p.symbols.length; i++) assert.ok(p.symbols[i - 1]!.startByte <= p.symbols[i]!.startByte);
+});
+
+test("a .tpl file is treated as templated by extension alone", () => {
+  assert.equal(parseSource("templates/_helpers.tpl", "<% if foo %>\n  key: [unclosed\n<% end %>\n")?.parseable, true);
+});
+
+test("known trade-off: a plain YAML string containing {{ is treated as templated", () => {
+  const src = "base: &base\n  a: 1\ntext: \"literal {{ braces\"\n";
+  const p = parseSource("literal-braces.yml", src)!;
+  assert.equal(p.parseable, true);
+  assert.deepEqual(p.symbols.map((s) => s.name).sort(), ["base", "literal-braces.yml"]);
+});
 
 // ---- the per-user copy cache, exercised in fresh processes under a private TMPDIR ----
 const PROBE = `

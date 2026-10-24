@@ -8,10 +8,11 @@ import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { indexRepo, isExtractorEdge, mergeScannedEdges } from "../src/extractors/indexer.js";
-@@CLEANROOM_HOLE_1@@
+import { pathMatchesGlob } from "../src/core/glob.js";
 import { edgeId, resourceId, resourceRelationshipId } from "../src/core/ids.js";
 import { EdgeSchema, RESOURCE_RELATIONSHIP_SCHEMA_VERSION, extracted } from "../src/core/types.js";
-@@CLEANROOM_HOLE_2@@
+import { SYMLINK_SKIP, indexedFixtureStore, seedRootLevelFileFixture } from "./helpers.js";
+import { dirname } from "node:path";
 
 function fixtureRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "hunch-idx-"));
@@ -235,25 +236,205 @@ test("unimported same-named callbacks do NOT resolve to unrelated cross-file sym
   cleanupDir(root);
 });
 
-@@CLEANROOM_HOLE_3@@
+/** Write `files` (repo-relative path -> content) into a fresh temp repo, index it
+ *  with the standard harness, and hand back the loaded records. */
+function indexTree(files: Record<string, string>) {
+  const root = mkdtempSync(join(tmpdir(), "hunch-idx-"));
+  for (const [rel, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), content);
+  }
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  const res = indexRepo(store, root, { churn: false });
+  store.reindex();
+  return {
+    root, store, res,
+    symbols: store.json.loadAll("symbols"),
+    edges: store.json.loadAll("edges"),
+    components: store.json.loadAll("components"),
+  };
+}
+
+const CHART_YAML = "apiVersion: v2\nname: demo\nversion: 0.1.0\n";
+
+const refsFrom = (edges: Array<{ type: string; from: string }>, id: string) =>
+  edges.filter((e) => e.type === "references" && e.from === id);
+const refsTo = (edges: Array<{ type: string; to: string }>, id: string) =>
+  edges.filter((e) => e.type === "references" && e.to === id);
+
+const deploymentYaml = (name: string, labels: string[], extra = "") => `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${name}
+spec:
+  template:
+    metadata:
+      labels:
+${labels.map((l) => `        ${l}`).join("\n")}
+    spec:
+      containers:
+        - name: app
+          image: example/app:1
+${extra}`;
+
+const serviceYaml = (name: string, selectorBlock: string) => `apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+spec:
+${selectorBlock}
+  ports:
+    - port: 80
+`;
+
+const helmDefine = (name: string) => `{{- define "${name}" -}}\napp: demo\n{{- end -}}\n`;
+const helmDeployment = (include: string) => `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  labels:
+    {{- include "${include}" . | nindent 4 }}
+`;
+
+function pythonFixtureFiles(): Record<string, string> {
+  return {
+    "src/auth/session.py": "from .jwt import decode_token\nfrom ..billing.charge import charge\n\ndef verify_session(t):\n    return decode_token(t)\n",
+    "src/auth/jwt.py": "def decode_token(t):\n    return t\n",
+    "src/billing/charge.py": "def charge(t):\n    return t\n",
+  };
+}
+
+test("indexRepo resolves Python imports, calls and component dependencies (#5)", () => {
+  const { root, store, res, symbols, edges, components } = indexTree(pythonFixtureFiles());
+
+  assert.equal(res.files, 3);
+  assert.ok(res.symbols >= 3);
+
+  const verify = symbols.find((s) => s.name === "verify_session")!;
+  assert.equal(verify?.file, "src/auth/session.py");
+  const decode = symbols.find((s) => s.name === "decode_token")!;
+  assert.ok(decode, "decode_token indexed");
+  assert.ok(store.getDependents(decode.id).some((d) => d.via.includes("verify_session")));
+
+  assert.deepEqual(components.map((c) => c.name).sort(), ["Auth", "Billing"]);
+  const auth = components.find((c) => c.name === "Auth")!;
+  const billing = components.find((c) => c.name === "Billing")!;
+  // two dots from src/auth resolves to src/billing/charge.py
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_4@@
+});
+
+test("a relative Python import climbing above the repo root resolves to nothing", () => {
+  const { root, store, res, edges } = indexTree({
+    "src/auth/session.py": "from ....outside import thing\n\ndef verify(t):\n    return t\n",
+    "src/billing/charge.py": "def charge(t):\n    return t\n",
+  });
+  assert.equal(res.files, 2);
+  assert.equal(edges.filter((e) => e.type === "depends_on").length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_5@@
+});
+
+test("a relative Python import that exactly reaches the repo root still resolves", () => {
+  const { root, store, components, edges } = indexTree({
+    "pkgs/auth/session.py": "from ...otherpkg.mod import value\n\ndef verify(t):\n    return value\n",
+    "otherpkg/mod.py": "value = 1\n\ndef helper():\n    return value\n",
+  });
+  const pkgs = components.find((c) => c.name === "Pkgs")!;
+  const other = components.find((c) => c.name === "Otherpkg")!;
+  assert.ok(pkgs && other, "both components exist");
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === pkgs.id && e.to === other.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_6@@
+});
+
+function bareDotFixture(withInit: boolean): Record<string, string> {
+  return {
+    "src/billing/api.py": "from . import charge\n\ndef run():\n    return 1\n",
+    ...(withInit ? { "src/billing/__init__.py": "def charge():\n    return 1\n" } : {}),
+  };
+}
+
+test("a bare-dot Python import resolves within its own package without crashing", () => {
+  // Crash-safety / discovery check, not an edge check: the target lives in the
+  // same component, so no depends_on edge is expected either way.
+  const { root: withInitRoot, store: withInitStore, res: withInit, symbols } = indexTree(bareDotFixture(true));
+  assert.equal(withInit.files, 2);
+  assert.ok(symbols.some((s) => s.name === "charge" && s.file === "src/billing/__init__.py"));
+  withInitStore.close();
   cleanupDir(withInitRoot);
-@@CLEANROOM_HOLE_7@@
+
+  const { root: noInitRoot, store: noInitStore, res: noInit } = indexTree(bareDotFixture(false));
+  assert.equal(noInit.files, 1);
+  noInitStore.close();
   cleanupDir(noInitRoot);
-@@CLEANROOM_HOLE_8@@
+});
+
+test("absolute Python imports resolve without a src/ layout; stdlib imports do not", () => {
+  const { root, store, res, components, edges } = indexTree({
+    "authpkg/session.py": "import billingpkg.charge\nimport os\n\ndef verify(t):\n    return t\n",
+    "billingpkg/charge.py": "def charge(t):\n    return t\n",
+  });
+  assert.equal(res.files, 2);
+  const auth = components.find((c) => c.name === "Authpkg")!;
+  const billing = components.find((c) => c.name === "Billingpkg")!;
+  assert.ok(auth && billing);
+  const deps = edges.filter((e) => e.type === "depends_on");
+  assert.equal(deps.length, 1);
+  assert.ok(deps[0]!.from === auth.id && deps[0]!.to === billing.id);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_9@@
+});
+
+test("a bare package import resolves through __init__.py", () => {
+  const { root, store, components, edges } = indexTree({
+    "authpkg/session.py": "import billingpkg\n\ndef verify(t):\n    return t\n",
+    "billingpkg/__init__.py": "def charge():\n    return 1\n",
+  });
+  const auth = components.find((c) => c.name === "Authpkg")!;
+  const billing = components.find((c) => c.name === "Billingpkg")!;
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_10@@
+});
+
+test("an absolute Python import resolves under the src root in a src layout", () => {
+  const { root, store, components, edges } = indexTree({
+    "src/auth/session.py": "import billing.charge\n\ndef verify(t):\n    return t\n",
+    "src/billing/charge.py": "def charge(t):\n    return t\n",
+  });
+  const auth = components.find((c) => c.name === "Auth")!;
+  const billing = components.find((c) => c.name === "Billing")!;
+  assert.ok(edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_11@@
+});
+
+test("a cross-file member call to a decorated Python method yields an edge", () => {
+  const { root, store, symbols } = indexTree({
+    "src/auth/session.py": "class Base:\n    @classmethod\n    def create(cls):\n        return cls()\n",
+    "src/billing/charge.py": "from ..auth.session import Base\n\ndef use_it(b):\n    return b.create()\n",
+  });
+  const create = symbols.find((s) => s.name === "create")!;
+  assert.ok(create, "create indexed");
+  assert.equal(create.kind, "method");
+  assert.equal(create.file, "src/auth/session.py");
+  const useIt = symbols.find((s) => s.name === "use_it")!;
+  assert.ok(useIt && useIt.file !== create.file);
+  assert.ok(store.getDependents(create.id).some((d) => d.via.includes("use_it")));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_12@@
+});
+
 test("indexing is deterministic — same ids on re-run", () => {
   const root = fixtureRepo();
   const store = new HunchStore(hunchPaths(root));
@@ -265,55 +446,371 @@ test("indexing is deterministic — same ids on re-run", () => {
   assert.deepEqual(first, second);
   store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_13@@
+});
+
+test("YAML aliases become references edges to their anchor and count toward fan_in", () => {
+  const { root, store, res, symbols, edges } = indexTree({
+    "config/database.yml": "defaults: &defaults\n  adapter: postgres\ndevelopment:\n  <<: *defaults\n  database: dev\n",
+  });
+  assert.equal(res.files, 1);
+  const defaults = symbols.find((s) => s.name === "defaults")!;
+  assert.ok(defaults, "anchor indexed");
+  assert.equal(defaults.kind, "variable");
+  assert.ok(refsTo(edges, defaults.id).length >= 1);
+  assert.ok(defaults.metrics.fan_in >= 1);
+
+  store.close();
   cleanupDir(root);
 });
 
-@@CLEANROOM_HOLE_14@@
+test("a Helm include links to its define across files in a chart", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": helmDefine("mychart.labels"),
+    "templates/deployment.yaml": helmDeployment("mychart.labels"),
+  });
+  const define = symbols.find((s) => s.name === "mychart.labels" && s.file === "templates/_helpers.tpl")!;
+  assert.ok(define, "define indexed");
+  assert.equal(define.kind, "variable");
+  assert.ok(refsTo(edges, define.id).length >= 1);
+  assert.ok(define.metrics.fan_in >= 1);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_15@@
+});
+
+test("same-named Helm defines in two charts do not cross-link", () => {
+  const chart = (dir: string) => ({
+    [`${dir}/Chart.yaml`]: CHART_YAML,
+    [`${dir}/templates/_helpers.tpl`]: helmDefine("labels"),
+    [`${dir}/templates/deployment.yaml`]: helmDeployment("labels"),
+  });
+  const { root, store, symbols, edges } = indexTree({ ...chart("chartA"), ...chart("chartB") });
+  const fileOf = new Map(symbols.map((s) => [s.id, s.file]));
+  for (const dir of ["chartA", "chartB"]) {
+    const define = symbols.find((s) => s.name === "labels" && s.kind === "variable" && s.file === `${dir}/templates/_helpers.tpl`)!;
+    assert.ok(define, `${dir} define indexed`);
+    const incoming = refsTo(edges, define.id);
+    assert.ok(incoming.length >= 1, `${dir} define is referenced`);
+    assert.ok(incoming.every((e) => fileOf.get(e.from)?.startsWith(`${dir}/`)), `${dir} define only referenced from inside ${dir}`);
+  }
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_16@@
+});
+
+test("a subchart define is not linked to its parent chart's includes (#42)", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": helmDefine("labels"),
+    "templates/deployment.yaml": helmDeployment("labels"),
+    "charts/sub/Chart.yaml": CHART_YAML,
+    "charts/sub/templates/_helpers.tpl": helmDefine("labels"),
+    "charts/sub/templates/deployment.yaml": helmDeployment("labels"),
+  });
+  const fileOf = new Map(symbols.map((s) => [s.id, s.file]));
+  const parent = symbols.find((s) => s.name === "labels" && s.file === "templates/_helpers.tpl")!;
+  const sub = symbols.find((s) => s.name === "labels" && s.file === "charts/sub/templates/_helpers.tpl")!;
+  assert.ok(parent && sub, "both defines indexed");
+  const intoParent = refsTo(edges, parent.id);
+  const intoSub = refsTo(edges, sub.id);
+  assert.ok(intoParent.length >= 1 && intoSub.length >= 1);
+  assert.ok(intoSub.every((e) => fileOf.get(e.from)?.startsWith("charts/sub/")));
+  assert.ok(intoParent.every((e) => !fileOf.get(e.from)?.startsWith("charts/sub/")));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_17@@
+});
+
+test("a parent chart include of a subchart-only define is a conservative miss", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/deployment.yaml": helmDeployment("sub.labels"),
+    "charts/sub/Chart.yaml": CHART_YAML,
+    "charts/sub/templates/_helpers.tpl": helmDefine("sub.labels"),
+  });
+  const define = symbols.find((s) => s.name === "sub.labels")!;
+  assert.ok(define, "subchart define indexed");
+  assert.equal(define.kind, "variable");
+  assert.equal(refsTo(edges, define.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_18@@
+});
+
+test("Helm-looking text outside any chart produces no define and no references", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "config/notachart.yaml": "note: |\n  {{ include \"something\" . }}\n",
+  });
+  assert.ok(!symbols.some((s) => s.name === "something"));
+  assert.equal(edges.filter((e) => e.type === "references").length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_19@@
+});
+
+test("a Deployment referencing a ConfigMap by name gets a references edge, not a depends_on", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "manifests/deployment.yaml": deploymentYaml("my-app", ["app: my-app"], "          envFrom:\n            - configMapRef:\n                name: my-config\n"),
+    "manifests/configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  k: v\n",
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const cm = symbols.find((s) => s.name === "ConfigMap/my-config")!;
+  assert.ok(dep && cm, "both resources indexed");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === cm.id));
+  assert.ok(cm.metrics.fan_in >= 1);
+  assert.ok(!edges.some((e) => e.type === "depends_on" && (e.from === dep.id || e.to === dep.id)));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_20@@
+});
+
+test("templated resource names resolve by identical template text", () => {
+  const name = '{{ include "app.fullname" . }}-secret';
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/secret.yaml": `apiVersion: v1\nkind: Secret\nmetadata:\n  name: ${name}\nstringData:\n  k: v\n`,
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app"], `          env:\n            - name: K\n              valueFrom:\n                secretKeyRef:\n                  name: ${name}\n                  key: k\n`),
+  });
+  const secret = symbols.find((s) => s.kind === "variable" && s.file === "templates/secret.yaml" && s.name.startsWith("Secret/"))!;
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  assert.ok(secret && dep, "both resources indexed");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === secret.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_21@@
+});
+
+test("two same-named ConfigMaps in a chart make the reference ambiguous: no edge", () => {
+  const cm = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  k: v\n";
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/a.yaml": cm,
+    "templates/b.yaml": cm,
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app"], "          envFrom:\n            - configMapRef:\n                name: my-config\n"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  assert.equal(refsFrom(edges, dep.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_22@@
+});
+
+test("outside a chart, K8s references resolve only within the same file", () => {
+  // The unrelated file deliberately reuses the SAME ConfigMap name: file scope
+  // is what must keep the Deployment bound to its own bundle's ConfigMap.
+  const cm = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\ndata:\n  k: v\n";
+  const { root, store, symbols, edges } = indexTree({
+    "manifests/bundle.yaml": `${deploymentYaml("my-app", ["app: my-app"], "          envFrom:\n            - configMapRef:\n                name: my-config\n")}---\n${cm}`,
+    "manifests/unrelated.yaml": cm,
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const local = symbols.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/bundle.yaml")!;
+  const other = symbols.find((s) => s.name === "ConfigMap/my-config" && s.file === "manifests/unrelated.yaml")!;
+  assert.ok(dep && local && other, "all three resources indexed");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === local.id));
+  assert.ok(!edges.some((e) => e.type === "references" && e.from === dep.id && e.to === other.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_23@@
+});
+
+test("a Service selector that is a subset of workload labels links to the workload", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: my-app"),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app", "tier: web"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  assert.ok(edges.some((e) => e.type === "references" && e.from === svc.id && e.to === dep.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_24@@
+});
+
+test("a Service selector that differs from workload labels links nothing", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: other-app"),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_25@@
+});
+
+test("a partially templated selector yields no selector map at all (#82)", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", '  selector:\n    app: {{ .Values.app }}\n    tier: web'),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["tier: web"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_26@@
+});
+
+test("a Service fans out to every workload its selector matches", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: my-app"),
+    "templates/blue.yaml": deploymentYaml("my-app-blue", ["app: my-app", "track: blue"]),
+    "templates/green.yaml": deploymentYaml("my-app-green", ["app: my-app", "track: green"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  for (const name of ["Deployment/my-app-blue", "Deployment/my-app-green"]) {
+    const dep = symbols.find((s) => s.name === name)!;
+    assert.ok(edges.some((e) => e.type === "references" && e.from === svc.id && e.to === dep.id), name);
+  }
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_27@@
+});
+
+test("dotted selector keys are compared exactly, not as nested paths", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", "  selector:\n    app: my-app\n    app.kubernetes.io/instance: prod"),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app", "app.kubernetes.io/instance: staging"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.ok(svc, "service indexed");
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_28@@
+});
+
+test("a quoted selector key taints the whole selector", () => {
+  // An unparseable key means we cannot prove the selector is complete; matching
+  // on only the keys we did understand could link a Service to the wrong workload.
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("svc-a", '  selector:\n    "app.kubernetes.io/name": mychart\n    app.kubernetes.io/instance: rel-a'),
+    "templates/deployment.yaml": deploymentYaml("dep-other-chart", ["app.kubernetes.io/name: other", "app.kubernetes.io/instance: rel-a"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/svc-a")!;
+  assert.ok(svc, "service indexed");
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_29@@
+});
+
+test("a selector with a conditional Helm block yields no edge", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-svc", '  selector:\n    app: my-app\n{{- if .Values.canary }}\n    track: canary\n{{- end }}'),
+    "templates/deployment.yaml": deploymentYaml("my-app-canary", ["app: my-app", "track: canary"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/my-svc")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_30@@
+});
+
+test("a flow-mapping selector yields no edge", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("web-svc", "  selector: {app: web-frontend,\n    tier: web}"),
+    "templates/deployment.yaml": deploymentYaml("api-backend", ["app: api-backend", "tier: web"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/web-svc")!;
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_31@@
+});
+
+test("block-scalar names are never taken as literal resource names", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: |-\n    shared-config\ndata:\n  k: v\n",
+    "templates/deployment.yaml": deploymentYaml("web", ["app: web"], "          envFrom:\n            - configMapRef:\n                name: |-\n                  other-config\n"),
+  });
+  assert.ok(!symbols.some((s) => s.name.includes("|-")));
+  const dep = symbols.find((s) => s.name === "Deployment/web")!;
+  assert.ok(dep, "deployment indexed");
+  assert.equal(refsFrom(edges, dep.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_32@@
+});
+
+test("block-form Helm includes in selectors and labels never throw or link", () => {
+  const { root, store, res, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/service.yaml": serviceYaml("my-service", '  selector:\n    {{- include "demo.selectorLabels" . | nindent 4 }}'),
+    "templates/deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\nspec:\n  template:\n    metadata:\n      labels:\n        {{- include \"demo.selectorLabels\" . | nindent 8 }}\n",
+  });
+  assert.ok(res);
+  const svc = symbols.find((s) => s.name === "Service/my-service")!;
+  assert.ok(svc, "service still indexed");
+  assert.equal(refsFrom(edges, svc.id).length, 0);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_33@@
+});
+
+test("a TS call never resolves to a Helm define of the same name", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": helmDefine("labels"),
+    "src/app.ts": "export function run() { return labels(); }\n",
+  });
+  const define = symbols.find((s) => s.name === "labels" && s.kind === "variable" && s.file === "templates/_helpers.tpl")!;
+  const run = symbols.find((s) => s.name === "run")!;
+  assert.ok(define && run, "both symbols indexed");
+  assert.ok(!edges.some((e) => e.from === run.id && e.to === define.id));
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_34@@
+});
+
+test("chart-wide YAML sibling widening does not pollute TS call resolution", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "src/helper.ts": "export function labels() { return 1; }\n",
+    "src/app.ts": 'import { labels } from "./helper.js";\nexport function run() { return labels(); }\n',
+    "values.yaml": "labels: &labels\n  a: 1\n",
+  });
+  const run = symbols.find((s) => s.name === "run")!;
+  const helper = symbols.find((s) => s.name === "labels" && s.file === "src/helper.ts")!;
+  assert.ok(run && helper, "both TS symbols indexed");
+  const call = edges.find((e) => e.type === "calls" && e.from === run.id);
+  assert.ok(call, "run has a calls edge");
+  assert.equal(call!.to, helper.id);
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_35@@
+});
+
+test("a top-level include sharing start byte 0 with a define is attributed by symbol index", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/_helpers.tpl": '{{- define "c.name" -}}\nx\n{{- end -}}\n{{ include "c.name" . }}\n',
+  });
+  const inFile = symbols.filter((s) => s.file === "templates/_helpers.tpl");
+  const fileSym = inFile.find((s) => s.kind === "file")!;
+  const define = inFile.find((s) => s.name === "c.name" && s.kind === "variable")!;
+  assert.ok(fileSym && define, "file root and define both indexed");
+  assert.notEqual(fileSym.id, define.id);
+  const into = edges.filter((e) => e.type === "references" && e.to === define.id);
+  assert.equal(into.length, 1, "exactly one references edge into the included define");
+  assert.equal(into[0]!.from, fileSym.id, "the top-level include is attributed to the file root");
+  assert.ok(!edges.some((e) => e.from === define.id), "no edge originates from the define");
+
+  store.close();
   cleanupDir(root);
-@@CLEANROOM_HOLE_36@@
+});
+
 for (const dirtyKind of ["staged", "unstaged", "untracked"] as const) {
   test(`requireClean rejects ${dirtyKind} indexed-code changes before graph JSON writes`, () => {
     const root = fixtureRepo();
@@ -406,7 +903,19 @@ test("indexRepo resolves module-prefixed Go imports across component boundaries"
   store.close();
   cleanupDir(root);
 });
-@@CLEANROOM_HOLE_37@@
+
+test("root-level files are owned by exact path, never a catch-all glob (#34)", (t) => {
+  const { store, cleanup } = indexedFixtureStore(seedRootLevelFileFixture);
+  t.after(cleanup);
+  const root = store.json.loadAll("components").find((c) => c.name === ".")!;
+  assert.ok(root, "root component exists");
+  assert.deepEqual(root.paths, ["config.ts", "settings.ts"]);
+  for (const path of root.paths) {
+    assert.equal(pathMatchesGlob("config.ts", path), path === "config.ts");
+    assert.equal(pathMatchesGlob("settings.ts", path), path === "settings.ts");
+    assert.equal(pathMatchesGlob("src/auth/session.ts", path), false);
+  }
+});
 
 test("reindex keeps supersedes edges and reviewed relationships (#288)", () => {
   const root = fixtureRepo();
