@@ -1814,19 +1814,43 @@ memoryPolicyCmd
       if (!store.privateDir) {
         return fail("Refused: memory-policy migrate needs an overlay to move records into, and none is configured. Configure one with `hunch private <dir>`, `hunch shared --repo <url>`, or HUNCH_PRIVATE_DIR; nothing was moved.");
       }
-      let moved = 0, conflicts = 0, leftovers = 0;
+      let moved = 0, conflicts = 0, leftovers = 0, skipped = 0;
       for (const kind of ENTITY_KINDS) {
         if (store.memoryPolicy.publicKinds.has(kind)) continue;
+        const deleted: string[] = [];
+        const seen = new Set<string>();
         // Only records the validating loader returned are moved; anything it skipped
         // stays in place (never silently dropped, con_947c578b2c).
         for (const record of store.json.loadAll(kind)) {
           const id = (record as { id: string }).id;
+          // The loader returns every copy it reads; the first one decides the id.
+          if (seen.has(id)) continue;
+          seen.add(id);
+          // The loader keeps a misnamed file whose id no file name can hold; it can be
+          // neither written to the overlay nor deleted by id, so a human renames it.
+          if (!store.json.isSafeRecordId(kind, id)) {
+            console.log(`conflict: ${kind} ${id} has an unsafe id no file name can hold — kept it; give it a safe id by hand, then re-run`);
+            conflicts++;
+            continue;
+          }
+          // delete() drops every index entry with the id, so moving one of two entries
+          // would destroy the other (a differing copy, or one the loader skipped).
+          if (store.json.isSingleFileKind(kind)) {
+            let entries: number | undefined;
+            try {
+              entries = store.json.rawIdCount(kind, id);
+            } catch { /* a corrupt index: reported below as unreadable */ }
+            if (entries !== 1) {
+              console.log(`conflict: ${kind} ${id} ${entries === undefined ? "is in a public index that could not be read" : `is held by ${entries} public index entries`} — kept them all; leave one by hand, then re-run`);
+              conflicts++;
+              continue;
+            }
+          }
           // An overlay copy that differs is a conflict a human settles: deleting the public
           // copy would lose whichever version is newer.
           const existing = store.getPrivateRec(kind, id);
           // A file the overlay loader skipped (invalid, corrupt, 0-byte tombstone) is not
           // an absence: writing over it would destroy it.
-          // An id no file name can hold (a misnamed file the loader kept) is a conflict too.
           let unreadable: boolean;
           try {
             unreadable = !existing && store.hasPrivateRecordFile(kind, id);
@@ -1839,22 +1863,57 @@ memoryPolicyCmd
             continue;
           }
           if (opts.dryRun) {
+            // Only a misnamed file holds it: the move would delete nothing and leave it public.
+            if (!store.json.hasRecordFile(kind, id)) {
+              console.log(`leftover: ${kind} ${id} is held only by a misnamed public file — moving it would leave it public; rename or delete that file by hand, then re-run`);
+              leftovers++;
+              continue;
+            }
             console.log(`would move ${kind} ${id}`);
             moved++;
             continue;
           }
-          if (!existing) store.putPrivate(kind, record);
-          store.json.delete(kind, id);
-          // delete() removes only the canonical `<id>.json`; a misnamed copy the loader
-          // still reads (`<id>.orig.json`, a mergetool `<id>_BASE_1.json`) keeps the record
-          // public. Never delete it unseen, never report it moved.
-          if (store.json.get(kind, id)) {
-            console.log(`leftover: ${kind} ${id} is in the overlay, but a misnamed public file still holds it — check it matches, delete it by hand, then re-run`);
+          // A write or delete that fails (a file another process holds open) must not
+          // abort the run: the moves already made and the summary still get reported.
+          try {
+            if (!existing) store.putPrivate(kind, record);
+            store.json.delete(kind, id);
+          } catch (error) {
+            console.log(`conflict: ${kind} ${id} could not be moved: ${(error as Error).message} — kept the public copy; re-run`);
+            conflicts++;
+            continue;
+          }
+          deleted.push(id);
+        }
+        // delete() removes only the canonical `<id>.json`; a misnamed copy the loader
+        // still reads (`<id>.orig.json`, a mergetool `<id>_BASE_1.json`) keeps the record
+        // public. Never delete it unseen, never report it moved. One read per kind: a
+        // read per record would re-scan the directory after every delete.
+        const loaded = store.json.loadAll(kind);
+        const stillPublic = new Set(loaded.map((r) => (r as { id: string }).id));
+        for (const id of deleted) {
+          if (stillPublic.has(id)) {
+            console.log(store.json.isSingleFileKind(kind)
+              ? `leftover: ${kind} ${id} is in the overlay, but the public index still holds it — check it matches, remove it from the index by hand, then re-run`
+              : `leftover: ${kind} ${id} is in the overlay, but a misnamed public file still holds it — check it matches, delete it by hand, then re-run`);
             leftovers++;
             continue;
           }
           console.log(`moved ${kind} ${id} → overlay`);
           moved++;
+        }
+        // A public file the loader skipped (a stray copy beside its canonical file, an
+        // invalid, corrupt or unreadable record) is never moved, so the kind is not clean.
+        let unloaded: number;
+        try {
+          unloaded = store.json.rawRecordCount(kind) - loaded.length;
+        } catch (error) {
+          console.log(`⛔ ${kind}: could not count the public files: ${(error as Error).message}`);
+          unloaded = 1;
+        }
+        if (unloaded > 0) {
+          console.log(`⛔ ${kind}: ${unloaded} public file(s) the loader skipped stay public (see the warnings above) — fix or remove them by hand, then re-run`);
+          skipped += unloaded;
         }
       }
       console.log(opts.dryRun
@@ -1862,7 +1921,8 @@ memoryPolicyCmd
         : `${moved} record(s) moved to ${store.privateDir}; review, then commit the public deletions (and the overlay)`);
       if (conflicts) console.log(`⛔ ${conflicts} conflicting record(s) were not moved`);
       if (leftovers) console.log(`⛔ ${leftovers} record(s) still have a public copy in a misnamed file`);
-      if (conflicts || leftovers) process.exitCode = 1;
+      if (skipped) console.log(`⛔ ${skipped} public file(s) the loader skipped stay public`);
+      if (conflicts || leftovers || skipped) process.exitCode = 1;
     } finally {
       store.close();
     }

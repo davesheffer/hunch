@@ -11,10 +11,10 @@
  */
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { cleanupDir, isolatedCliEnv, tempDir, writeLocalPointer } from "./fixtures.js";
 import { hunchCliArgs } from "./cli-invocation.js";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -648,6 +648,190 @@ test("§9 memory-policy migrate fails when a misnamed public copy of a moved rec
         assert.equal(r.status, 1, `${label} pass ${pass}: ${r.out}`);
       }
       assert.equal(existsSync(stray), true, `${label}: a misnamed copy is never deleted unseen`);
+    } finally { cleanupDir(f.base); }
+  }
+});
+
+test("§9 memory-policy migrate --dry-run reports a record held only by a misnamed public file as a leftover", () => {
+  const { f, overlay, finding } = migrateFixture("mp-dry-stray");
+  try {
+    const stray = join(f.root, ".hunch", "findings", "fnd_mpcmove01.orig.json");
+    writeFileSync(stray, readFileSync(finding, "utf8"));
+    git(f.root, f.env, "rm", "-q", join(".hunch", "findings", "fnd_mpcmove01.json"));
+    const r = cli(f, ["memory-policy", "migrate", "--dry-run"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.match(r.out, /leftover.*fnd_mpcmove01|fnd_mpcmove01.*leftover/i, `the dry run predicts the leftover:\n${r.out}`);
+    assert.doesNotMatch(r.out, /would move findings fnd_mpcmove01/, r.out);
+    assert.equal(r.status, 1, r.out);
+    assert.deepEqual(overlayFiles(overlay).filter((p) => p.includes("fnd_mpcmove01")), [], "nothing is written to the overlay");
+    assert.equal(existsSync(stray), true);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§9 memory-policy migrate reads each kind once after moving, not once per moved record", () => {
+  const { f, overlay, finding } = migrateFixture("mp-reload");
+  try {
+    writeFileSync(join(f.root, ".hunch", "findings", "fnd_mpcmove01_BASE_1.json"), readFileSync(finding, "utf8"));
+    for (const id of ["fnd_mpcmove02", "fnd_mpcmove03", "fnd_mpcmove04"]) writeRecord(f.root, "findings", FINDING(id));
+    const r = cli(f, ["memory-policy", "migrate"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.equal(r.status, 1, r.out);
+    const warnings = r.out.split("\n").filter((line) => line.includes("fnd_mpcmove01_BASE_1.json"));
+    assert.ok(warnings.length <= 2, `the stray copy is warned about once per read of the kind, not per moved record (${warnings.length}):\n${r.out}`);
+    for (const id of ["fnd_mpcmove02", "fnd_mpcmove03", "fnd_mpcmove04"]) assert.match(r.out, new RegExp(`moved findings ${id}`), r.out);
+    assert.match(r.out, /leftover.*fnd_mpcmove01/, r.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§9 memory-policy migrate reports an id no file name can hold as an unsafe-id conflict and never throws", () => {
+  for (const [label, overlayCopy] of [["mp-unsafe", false], ["mp-unsafe-dup", true]] as const) {
+    const { f, overlay } = migrateFixture(label);
+    try {
+      const body = `${JSON.stringify(FINDING("fnd bad id"), null, 2)}\n`;
+      const publicFile = join(f.root, ".hunch", "findings", "odd.json");
+      writeFileSync(publicFile, body);
+      if (overlayCopy) {
+        mkdirSync(join(overlay, "findings"), { recursive: true });
+        writeFileSync(join(overlay, "findings", "odd.json"), body);
+      }
+      const r = cli(f, ["memory-policy", "migrate"], { HUNCH_PRIVATE_DIR: overlay });
+      assert.match(r.out, /conflict: findings fnd bad id .*unsafe/i, `${label}: the unsafe id is named as such:\n${r.out}`);
+      assert.doesNotMatch(r.out, /loader could not read|refusing unsafe JSON record id|\n\s+at /, `${label}: no misleading message or stack trace:\n${r.out}`);
+      assert.equal(r.status, 1, `${label}: ${r.out}`);
+      assert.equal(existsSync(publicFile), true, `${label}: the public copy is kept`);
+      assert.match(r.out, /moved findings fnd_mpcmove01/, `${label}: other records still move:\n${r.out}`);
+    } finally { cleanupDir(f.base); }
+  }
+});
+
+test("§9 memory-policy migrate reports a record it could not delete as a conflict and still reports every move and the summary", (t) => {
+  if (process.getuid?.() === 0) return t.skip("root ignores file permissions");
+  const { f, overlay } = migrateFixture("mp-undeletable");
+  const dir = join(f.root, ".hunch", "findings");
+  const locked = writeRecord(f.root, "findings", FINDING("fnd_mpcmove02"));
+  writeRecord(f.root, "findings", FINDING("fnd_mpcmove03"));
+  const win = process.platform === "win32";
+  let holder: ReturnType<typeof spawn> | undefined;
+  try {
+    if (win) {
+      // Node opens files with delete sharing, so hold this one from PowerShell: readable, not deletable.
+      const ready = join(f.base, "lock-ready");
+      holder = spawn("powershell.exe", ["-NoProfile", "-Command",
+        `$s=[IO.File]::Open('${locked}','Open','Read','Read'); New-Item -ItemType File '${ready}' | Out-Null; Start-Sleep 120`], { stdio: "ignore" });
+      const deadline = Date.now() + 30_000;
+      while (!existsSync(ready)) {
+        if (Date.now() > deadline) throw new Error("the lock holder never became ready");
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      }
+    } else {
+      chmodSync(dir, 0o555);
+    }
+    const r = cli(f, ["memory-policy", "migrate"], { HUNCH_PRIVATE_DIR: overlay });
+    if (win) {
+      assert.match(r.out, /conflict: findings fnd_mpcmove02 could not be moved/, `the failed record is named:\n${r.out}`);
+      for (const id of ["fnd_mpcmove01", "fnd_mpcmove03"]) assert.match(r.out, new RegExp(`moved findings ${id}`), `moves before and after the failure are reported:\n${r.out}`);
+    } else {
+      // Every delete in the read-only directory fails: each record is a conflict, none moved.
+      for (const id of ["fnd_mpcmove01", "fnd_mpcmove02", "fnd_mpcmove03"]) assert.match(r.out, new RegExp(`conflict: findings ${id} could not be moved`), r.out);
+    }
+    assert.match(r.out, /record\(s\) moved to/, `the summary still prints:\n${r.out}`);
+    assert.equal(r.status, 1, r.out);
+    assert.equal(existsSync(locked), true, "the record that could not be deleted is kept");
+  } finally {
+    holder?.kill();
+    if (!win) chmodSync(dir, 0o755);
+    cleanupDir(f.base);
+  }
+});
+
+test("§9 memory-policy migrate fails while a public file the loader skipped remains, in the dry run too", () => {
+  for (const [label, dryRun, setup] of [
+    ["mp-skip-corrupt", false, (dir: string) => writeFileSync(join(dir, "fnd_mpcbad01.json"), "{ not json")],
+    ["mp-skip-corrupt-dry", true, (dir: string) => writeFileSync(join(dir, "fnd_mpcbad01.json"), "{ not json")],
+    ["mp-skip-stray-dry", true, (dir: string) => writeFileSync(join(dir, "fnd_mpcmove01_BASE_1.json"), readFileSync(join(dir, "fnd_mpcmove01.json"), "utf8"))],
+  ] as const) {
+    const { f, overlay } = migrateFixture(label);
+    try {
+      const dir = join(f.root, ".hunch", "findings");
+      setup(dir);
+      const before = readdirSync(dir).filter((n) => n !== "fnd_mpcmove01.json");
+      const r = cli(f, ["memory-policy", "migrate", ...(dryRun ? ["--dry-run"] : [])], { HUNCH_PRIVATE_DIR: overlay });
+      assert.match(r.out, /findings: 1 public file\(s\) the loader skipped/, `${label}: the skipped file is reported:\n${r.out}`);
+      assert.equal(r.status, 1, `${label}: ${r.out}`);
+      for (const name of before) assert.equal(existsSync(join(dir, name)), true, `${label}: ${name} is never deleted unseen`);
+    } finally { cleanupDir(f.base); }
+  }
+});
+
+test("§9 memory-policy migrate moves single-file kinds whose ids never name a file (entities)", () => {
+  const { f, overlay } = migrateFixture("mp-entities");
+  try {
+    const entity = { schema: "nuryel.entity/1", id: "customer:clinic-7", kind: "customer", name: "Clinic 7", scope: { kind: "organization", id: "acme" },
+      refs: [{ system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" }],
+      attributes: { tier: "key" }, lifecycle: "active", provenance: { source: "imported:crm", confidence: 0.9, evidence: ["crm row a1"] },
+      created_at: "2026-09-07T12:00:00Z", updated_at: "2026-09-07T12:00:00Z" };
+    mkdirSync(join(f.root, ".hunch", "entities"), { recursive: true });
+    writeFileSync(join(f.root, ".hunch", "entities", "index.json"), `${JSON.stringify([entity], null, 2)}\n`);
+    const dry = cli(f, ["memory-policy", "migrate", "--dry-run"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.equal(dry.status, 0, dry.out);
+    assert.match(dry.out, /would move entities customer:clinic-7/, dry.out);
+    const r = cli(f, ["memory-policy", "migrate"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /moved entities customer:clinic-7/, r.out);
+    const store = open(f.root, overlay);
+    try {
+      assert.equal(store.getPrivateRec("entities", "customer:clinic-7")?.id, "customer:clinic-7", "the entity now lives in the overlay");
+    } finally { store.close(); }
+  } finally { cleanupDir(f.base); }
+});
+
+function entityRecord(name = "Clinic 7"): Record<string, unknown> {
+  return { schema: "nuryel.entity/1", id: "customer:clinic-7", kind: "customer", name, scope: { kind: "organization", id: "acme" },
+    refs: [{ system: "crm", object_type: "event", object_key: "10042", version: "2", observed_at: "2026-09-07T12:00:00Z" }],
+    attributes: { tier: "key" }, lifecycle: "active", provenance: { source: "imported:crm", confidence: 0.9, evidence: ["crm row a1"] },
+    created_at: "2026-09-07T12:00:00Z", updated_at: "2026-09-07T12:00:00Z" };
+}
+
+test("§9 memory-policy migrate never overwrites an overlay index entry the loader skipped, nor a non-array overlay index", () => {
+  for (const [label, overlayText] of [
+    ["mp-ent-newer", `${JSON.stringify([{ ...entityRecord("Clinic 7 v2"), schema: "nuryel.entity/2" }], null, 2)}\n`],
+    ["mp-ent-object", "{}\n"],
+  ] as const) {
+    const { f, overlay } = migrateFixture(label);
+    try {
+      const publicIndex = join(f.root, ".hunch", "entities", "index.json");
+      mkdirSync(dirname(publicIndex), { recursive: true });
+      writeFileSync(publicIndex, `${JSON.stringify([entityRecord()], null, 2)}\n`);
+      const overlayIndex = join(overlay, "entities", "index.json");
+      mkdirSync(dirname(overlayIndex), { recursive: true });
+      writeFileSync(overlayIndex, overlayText);
+      const publicBefore = readFileSync(publicIndex, "utf8");
+      const r = cli(f, ["memory-policy", "migrate"], { HUNCH_PRIVATE_DIR: overlay });
+      assert.match(r.out, /conflict: entities customer:clinic-7 has an overlay file the loader could not read/, `${label}:\n${r.out}`);
+      assert.equal(r.status, 1, `${label}: ${r.out}`);
+      assert.equal(readFileSync(overlayIndex, "utf8"), overlayText, `${label}: the overlay index is untouched`);
+      assert.equal(readFileSync(publicIndex, "utf8"), publicBefore, `${label}: the public copy is kept`);
+    } finally { cleanupDir(f.base); }
+  }
+});
+
+test("§9 memory-policy migrate reports an id two public index entries share as a conflict and writes nothing for it", () => {
+  for (const [label, second] of [
+    ["mp-ent-dup-valid", entityRecord("Clinic 7 renamed")],
+    ["mp-ent-dup-invalid", { id: "customer:clinic-7", schema: "nuryel.entity/2" }],
+  ] as const) {
+    const { f, overlay } = migrateFixture(label);
+    try {
+      const publicIndex = join(f.root, ".hunch", "entities", "index.json");
+      mkdirSync(dirname(publicIndex), { recursive: true });
+      writeFileSync(publicIndex, `${JSON.stringify([entityRecord(), second], null, 2)}\n`);
+      const publicBefore = readFileSync(publicIndex, "utf8");
+      for (const dryRun of [true, false]) {
+        const r = cli(f, ["memory-policy", "migrate", ...(dryRun ? ["--dry-run"] : [])], { HUNCH_PRIVATE_DIR: overlay });
+        assert.match(r.out, /conflict: entities customer:clinic-7 is held by 2 public index entries/, `${label}:\n${r.out}`);
+        assert.doesNotMatch(r.out, /move(d)? entities customer:clinic-7/, `${label}: never reported moved:\n${r.out}`);
+        assert.equal(r.status, 1, `${label}: ${r.out}`);
+        assert.equal(readFileSync(publicIndex, "utf8"), publicBefore, `${label}: both public entries are kept`);
+        assert.equal(existsSync(join(overlay, "entities", "index.json")), false, `${label}: nothing is written to the overlay`);
+      }
     } finally { cleanupDir(f.base); }
   }
 });
