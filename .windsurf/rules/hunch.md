@@ -7,7 +7,7 @@ description: Hunch engineering memory — consult the hunch_* MCP tools before e
 <!-- hunch:template 2 -->
 ## 🧠 Hunch (Engineering Memory)
 
-This repo has **Hunch**, a graph of *why* the code is the way it is. It holds **1 decisions, 0 bugs, 31 constraints, 22 components, 3 policies**. Use the `hunch_*` MCP tools by moment:
+This repo has **Hunch**, a graph of *why* the code is the way it is. It holds **1 decisions, 0 bugs, 32 constraints, 22 components, 3 policies**. Use the `hunch_*` MCP tools by moment:
 
 - **Start:** reuse the task ID and `task verify` command the prompt hook printed; with none, call `hunch_task(action: "start", title)` once. Then `hunch_context(target, task_id)` first. Orient with `hunch_structure`, `hunch_workspaces`, `hunch_runbook(task)`. When the prompt hook raises an escalation this task touches, ask the user; silence is never approval. `hunch_escalations()` lists the rest.
 - **Design:** `hunch_why(target)` (includes what was rejected), `hunch_current_decision(topic)`, `hunch_bug_lineage(symptom_or_symbol)`, `hunch_compare(candidates)`, `hunch_query(query)`.
