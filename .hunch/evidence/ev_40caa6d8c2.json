@@ -1,0 +1,34 @@
+{
+  "id": "ev_40caa6d8c2",
+  "kind": "correction",
+  "occurred_at": "2026-07-02T13:02:20.601Z",
+  "repository": "git-remote:sha256:801e97f9f304a28a5268713d3cb80e058933b84e243c849f687345cfb9eb842a",
+  "files": [
+    "wiki/**"
+  ],
+  "symbols": [],
+  "text_ref": "con_547fff76bd",
+  "related_records": [
+    "con_547fff76bd"
+  ],
+  "data_class": "public",
+  "content_hash": "sha1:f2f8b4eb3f07cff69f0111ce9b2916635a6b204d",
+  "compiler": {
+    "status": "uncompilable",
+    "policy": null,
+    "reason": "Correction scope is not one safe, concrete repository-relative file. The legacy Constraint remains active.",
+    "scope_suggestion": {
+      "repos": [],
+      "paths": [],
+      "components": []
+    }
+  },
+  "provenance": {
+    "source": "derived",
+    "confidence": 1,
+    "evidence": [
+      "con_547fff76bd"
+    ],
+    "last_verified": "2026-07-02T13:02:20.602Z"
+  }
+}
