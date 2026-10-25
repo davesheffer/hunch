@@ -909,6 +909,20 @@ test("§10 CI runs memory-policy check against the PR base on every PR leg, fast
   assert.doesNotMatch(step, /src\/cli\/index\.ts\s+index\b|\bhunch\s+index\b/, "the gate stays cheap: no index");
 });
 
+test("§10 the memory-policy gate runs the BASE branch's CLI, before any PR code or dependency runs in the leg", () => {
+  const ci = readFileSync(".github/workflows/ci.yml", "utf8").replace(/\r\n/g, "\n");
+  const legSteps = steps(jobBlock(ci, "ci"));
+  const gateAt = legSteps.findIndex((step) => /memory-policy\s+check/.test(step));
+  const step = legSteps[gateAt] ?? "";
+  // A PR edits its own src/ and package-lock: the gate must execute neither.
+  assert.doesNotMatch(step, /\b(tsx|node|hunch)\s+(--\S+\s+)*"?(\.\/)?(src\/cli\/index\.ts|dist\/cli\/index\.js)/, `the gate must not run the checkout's CLI:\n${step}`);
+  assert.match(step, /git worktree add\b[^\n]*\$RUNNER_TEMP\/base[^\n]*origin\/\$\{BASE_REF\}/, `the gate checks out the base into its own worktree:\n${step}`);
+  assert.match(step, /npm ci\b[^\n]*--ignore-scripts/, `the base install runs no lifecycle scripts:\n${step}`);
+  assert.match(step, /node\s+"?\$base\/dist\/cli\/index\.js"?\s+memory-policy\s+check/, `the gate runs the base's built CLI (no tsx: a PR tsconfig must not steer it):\n${step}`);
+  const installAt = legSteps.findIndex((s) => /^\s+run:\s*npm ci\s*$/m.test(s));
+  assert.ok(gateAt >= 0 && installAt > gateAt, `the gate (step ${gateAt}) runs before the PR's own npm ci (step ${installAt})`);
+});
+
 // ---------------------------------------------------------------- §11 ship-memory
 
 function shipFixture(): { base: string; work: string; other: string; git: (cwd: string, ...args: string[]) => string } {
