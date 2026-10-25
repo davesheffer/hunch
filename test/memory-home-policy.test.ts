@@ -617,5 +617,25 @@ test("a key a newer Hunch adds beside a valid home does not lock older Hunch out
     }
     writeFileSync(paths.config, JSON.stringify({ Memory: { home: "overlay" } }));
     assert.match(memoryPolicyProblem(paths) ?? "", /Memory/, "a misspelled top-level memory key");
+    writeFileSync(paths.config, JSON.stringify({ memorys: { home: "overlay" } }));
+    assert.match(memoryPolicyProblem(paths) ?? "", /memorys/, "a top-level memory key with a stray s");
+  } finally { cleanupDir(pub); }
+});
+
+test("a policy that names public kinds but no home is refused, since it can only have meant overlay", () => {
+  const pub = tmp("hunch-mhp-pub-");
+  try {
+    const paths = hunchPaths(pub);
+    setPolicy(pub, { public_kinds: ["constraints"] });
+    assert.match(memoryPolicyProblem(paths) ?? "", /home/, "public_kinds without home");
+  } finally { cleanupDir(pub); }
+});
+
+test("a misspelled home without a valid home is answered with the key it meant", () => {
+  const pub = tmp("hunch-mhp-pub-");
+  try {
+    const paths = hunchPaths(pub);
+    setPolicy(pub, { Home: "overlay" });
+    assert.match(memoryPolicyProblem(paths) ?? "", /did you mean `home`/);
   } finally { cleanupDir(pub); }
 });

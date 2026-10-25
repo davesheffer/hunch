@@ -114,6 +114,9 @@ export function memoryPolicyProblem(paths: HunchPaths): string | null {
 
 /** A key with case, `_` and `-` ignored, so `publicKinds` and `Public-Kinds` match `public_kinds`. */
 const spelling = (key: string): string => key.toLowerCase().replace(/[_-]/g, "");
+/** Whether `key` is a misspelling of `known`: the same spelling, or one stray or missing trailing s. */
+const misspells = (key: string, known: string): boolean =>
+  key !== known && (spelling(known) === spelling(key) || spelling(known) === `${spelling(key)}s` || `${spelling(known)}s` === spelling(key));
 
 /** memoryPolicyProblem for config.json text already in hand (a file at a git ref). */
 export function memoryConfigTextProblem(text: string): string | null {
@@ -124,21 +127,23 @@ export function memoryConfigTextProblem(text: string): string | null {
     return `.hunch/config.json cannot be parsed (${error instanceof Error ? error.message : String(error)})`;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return ".hunch/config.json is not a JSON object";
-  const misspelledMemory = Object.keys(parsed).find((key) => key !== "memory" && spelling(key) === "memory");
+  const misspelledMemory = Object.keys(parsed).find((key) => misspells(key, "memory"));
   if (misspelledMemory) return `.hunch/config.json has \`${misspelledMemory}\`; the memory policy key is \`memory\``;
   if (!("memory" in parsed)) return null;
   const memory = (parsed as { memory: unknown }).memory;
   if (!memory || typeof memory !== "object" || Array.isArray(memory)) return ".hunch/config.json has a `memory` field that is not an object";
   const { home, public_kinds } = memory as { home?: unknown; public_kinds?: unknown };
-  // Without `home`, a key this build does not know (a typo such as `Home`) may be the
-  // policy itself. Beside a valid home it is a newer Hunch's option, so it is tolerated.
   const unknown = Object.keys(memory).filter((key) => !MEMORY_KEYS.includes(key));
-  if (home === undefined && unknown.length) return `.hunch/config.json memory has key(s) this Hunch does not know (${unknown.join(", ")}) and no home; expected ${MEMORY_KEYS.join(", ")}`;
   // A misspelled known key is a typo, not a newer option: ignoring it could widen what is public.
   for (const key of unknown) {
-    const meant = MEMORY_KEYS.find((known) => spelling(known) === spelling(key) || spelling(known) === `${spelling(key)}s` || `${spelling(known)}s` === spelling(key));
+    const meant = MEMORY_KEYS.find((known) => misspells(key, known));
     if (meant) return `.hunch/config.json memory has \`${key}\`; did you mean \`${meant}\`?`;
   }
+  // Without `home`, a key this build does not know may be the policy itself. Beside a
+  // valid home it is a newer Hunch's option, so it is tolerated.
+  if (home === undefined && unknown.length) return `.hunch/config.json memory has key(s) this Hunch does not know (${unknown.join(", ")}) and no home; expected ${MEMORY_KEYS.join(", ")}`;
+  // public_kinds only means something under an overlay home; without one it reads as repo and goes public.
+  if (home === undefined && public_kinds !== undefined) return ".hunch/config.json memory.public_kinds is set but home is missing; add \"home\": \"overlay\"";
   if (home !== undefined && home !== "repo" && home !== "overlay") return `.hunch/config.json memory.home must be "repo" or "overlay" (found ${JSON.stringify(home)})`;
   if (home === "overlay" && public_kinds !== undefined && !Array.isArray(public_kinds)) return ".hunch/config.json memory.public_kinds must be an array of kind names";
   return null;
