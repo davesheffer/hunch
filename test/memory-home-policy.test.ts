@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
-import { memoryPolicy, readConfig, writeConfig } from "../src/core/config.js";
+import { memoryPolicy, memoryPolicyProblem, readConfig, writeConfig } from "../src/core/config.js";
 import { normalizeRemoteUrl, readRepoProfile, removeRepoProfile, repoProfileFile, repoProfileKey, writeRepoProfile } from "../src/core/repoProfile.js";
 import { repositoryScope, subscribeState } from "../src/store/stateBinding.js";
 import { StateRefusal } from "../src/store/stateError.js";
@@ -82,6 +82,7 @@ function open(root: string, envOverlay?: string): HunchStore {
 }
 
 const KINDS = ["decisions", "findings", "tasks", "bugs", "constraints", "components", "symbols", "edges", "resources"];
+const STRUCTURAL = ["components", "symbols", "edges", "resources"];
 
 test("no memory field, no profile: routing is today's in public, private and shared modes", () => {
   const pub = tmp("hunch-mhp-pub-");
@@ -470,4 +471,151 @@ test("removeRepoProfile drops this origin's entry and leaves the others", () => 
   } finally {
     for (const dir of [first, second, overlay]) cleanupDir(dir);
   }
+});
+
+// A config.json that exists but cannot be read as a policy must not read as "no policy":
+// that would route every capture public, the one outcome the policy exists to prevent.
+const BROKEN_CONFIGS: Record<string, string> = {
+  "trailing comma": "{\"memory\":{\"home\":\"overlay\",}}",
+  "array root": "[]",
+  "null root": "null",
+  "memory not an object": "{\"memory\":\"overlay\"}",
+  "typo'd home key": "{\"memory\":{\"Home\":\"overlay\"}}",
+  "home value case": "{\"memory\":{\"home\":\"Overlay\"}}",
+  "public_kinds not an array": "{\"memory\":{\"home\":\"overlay\",\"public_kinds\":\"constraints\"}}",
+};
+
+test("an unreadable memory policy fails closed: memory captures are refused naming config.json, nothing is written public", () => {
+  for (const [label, text] of Object.entries(BROKEN_CONFIGS)) {
+    const pub = tmp("hunch-mhp-pub-");
+    try {
+      mkdirSync(join(pub, ".hunch"), { recursive: true });
+      writeFileSync(join(pub, ".hunch", "config.json"), text);
+      assert.match(memoryPolicyProblem(hunchPaths(pub)) ?? "", /config\.json/, `${label}: a problem is reported`);
+      const store = open(pub);
+      try {
+        store.json.ensureDirs();
+        assert.throws(() => store.putCapture("findings", { id: "fnd_refused" } as never), (error: Error) => {
+          assert.match(error.message, /^Refused:/, label);
+          assert.match(error.message, /config\.json/, label);
+          return true;
+        }, label);
+        assert.throws(() => store.json.put("decisions", DEC("dec_direct")), /Refused:/, `${label}: the public write guard is armed`);
+        for (const kind of ["findings", "decisions"]) {
+          const dir = join(pub, ".hunch", kind);
+          assert.deepEqual(existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith(".json")) : [], [], `${label}: no public ${kind}`);
+        }
+        // Only memory is refused: index output still writes, so `hunch index` keeps working.
+        for (const kind of STRUCTURAL) assert.equal(store.captureHome(false, kind), "public", `${label}: ${kind} stays writable`);
+        store.json.replaceAll("components", []);
+      } finally { store.close(); }
+    } finally { cleanupDir(pub); }
+  }
+});
+
+test("an unreadable memory policy still takes private captures, and shared mode keeps index output in the overlay", () => {
+  for (const [label, text] of Object.entries(BROKEN_CONFIGS)) {
+    const pub = tmp("hunch-mhp-pub-");
+    const priv = tmp("hunch-mhp-priv-");
+    const sharedRoot = repo();
+    const sharedOverlay = tmp("hunch-mhp-shared-");
+    try {
+      mkdirSync(join(pub, ".hunch"), { recursive: true });
+      writeFileSync(join(pub, ".hunch", "config.json"), text);
+      const store = open(pub, priv);
+      try {
+        store.putCapture("decisions", DEC("dec_private_ok"), true);
+        assert.ok(existsSync(join(priv, "decisions", "dec_private_ok.json")), `${label}: private:true lands in the overlay`);
+      } finally { store.close(); }
+
+      writeLocalPointer(sharedRoot, { privateDir: sharedOverlay, mode: "shared" });
+      writeFileSync(join(sharedRoot, ".hunch", "config.json"), text);
+      const shared = open(sharedRoot);
+      try {
+        assert.equal(shared.mode, "shared", label);
+        // A broken policy must not move what shared mode homes in the overlay into the repo.
+        for (const kind of STRUCTURAL) assert.equal(shared.captureHome(false, kind), "private", `${label}: shared ${kind}`);
+      } finally { shared.close(); }
+    } finally {
+      for (const dir of [pub, priv, sharedRoot, sharedOverlay]) cleanupDir(dir);
+    }
+  }
+});
+
+test("memoryPolicyProblem is null for an absent file, a config without memory, and a valid policy", () => {
+  const pub = tmp("hunch-mhp-pub-");
+  try {
+    const paths = hunchPaths(pub);
+    assert.equal(memoryPolicyProblem(paths), null, "absent");
+    mkdirSync(join(pub, ".hunch"), { recursive: true });
+    writeFileSync(paths.config, "{\"firmness\":\"firm\"}");
+    assert.equal(memoryPolicyProblem(paths), null, "no memory field");
+    for (const memory of [{ home: "repo" }, { home: "overlay" }, { home: "overlay", public_kinds: ["constraints"], min_version: "1.0.0" }]) {
+      setPolicy(pub, memory);
+      assert.equal(memoryPolicyProblem(paths), null, JSON.stringify(memory));
+    }
+    writeFileSync(paths.config, "﻿{\"memory\":{\"home\":\"overlay\"}}");
+    assert.equal(memoryPolicyProblem(paths), null, "BOM");
+  } finally { cleanupDir(pub); }
+});
+
+test("a workspace snapshot under an unreadable policy reports no home instead of writing public", () => {
+  const root = repo();
+  try {
+    mkdirSync(join(root, ".hunch"), { recursive: true });
+    writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memory: { Home: "overlay" }, workspaces: { publish_public: true } }));
+    const store = open(root);
+    try {
+      assert.equal(recordWorkspaceSnapshot(store, root).status, "no-home");
+      assert.equal(existsSync(join(root, ".hunch", "workspaces")) && readdirSync(join(root, ".hunch", "workspaces")).some((n) => n.endsWith(".json")), false);
+    } finally { store.close(); }
+  } finally { cleanupDir(root); }
+});
+
+test("state verbs under an unreadable policy refuse with a contract code naming config.json, not a bare error", () => {
+  const root = repo();
+  try {
+    mkdirSync(join(root, ".hunch"), { recursive: true });
+    writeFileSync(join(root, ".hunch", "config.json"), "{\"memory\":{\"home\":\"Overlay\"}}");
+    const store = open(root);
+    try {
+      const scope = repositoryScope(store);
+      const principal = { id: "agent@test", kind: "agent" as const, grants: [scope] };
+      assert.throws(
+        () => subscribeState(store, { schema: "nuryel.state.subscribe/1", principal, scope, after_seq: 0 }),
+        (error: unknown) => error instanceof StateRefusal && error.code === "no-partition-home" && /config\.json/.test(error.message),
+      );
+    } finally { store.close(); }
+  } finally { cleanupDir(root); }
+});
+
+test("a memory field without home is today's routing unless it holds a key the policy does not know", () => {
+  const pub = tmp("hunch-mhp-pub-");
+  try {
+    const paths = hunchPaths(pub);
+    setPolicy(pub, { min_version: "1.0.0" });
+    assert.equal(memoryPolicyProblem(paths), null, "min_version alone");
+    setPolicy(pub, { home: "repo", public_kinds: "constraints" });
+    assert.equal(memoryPolicyProblem(paths), null, "public_kinds is irrelevant under home=repo");
+    setPolicy(pub, { Home: "overlay", min_version: "1.0.0" });
+    assert.match(memoryPolicyProblem(paths) ?? "", /Home/, "an unknown key is named");
+  } finally { cleanupDir(pub); }
+});
+
+test("a key a newer Hunch adds beside a valid home does not lock older Hunch out of the policy", () => {
+  const pub = tmp("hunch-mhp-pub-");
+  try {
+    const paths = hunchPaths(pub);
+    for (const memory of [{ home: "overlay", future_option: true }, { home: "repo", note: "x" }]) {
+      setPolicy(pub, memory);
+      assert.equal(memoryPolicyProblem(paths), null, JSON.stringify(memory));
+    }
+    // A misspelled known key is a typo, not a newer option: ignoring it would widen what is public.
+    for (const memory of [{ home: "overlay", public_kind: [] }, { home: "overlay", publicKinds: [] }, { home: "overlay", "Public-Kinds": [] }]) {
+      setPolicy(pub, memory);
+      assert.match(memoryPolicyProblem(paths) ?? "", /public_kinds/, JSON.stringify(memory));
+    }
+    writeFileSync(paths.config, JSON.stringify({ Memory: { home: "overlay" } }));
+    assert.match(memoryPolicyProblem(paths) ?? "", /Memory/, "a misspelled top-level memory key");
+  } finally { cleanupDir(pub); }
 });

@@ -18,7 +18,7 @@ import { openDb, withTx, type DB } from "./db.js";
 import { RESET_SQL, embedHash } from "./schema.js";
 import { selectEmbedder, type Embedder } from "./embedder.js";
 import { JsonStore } from "./jsonStore.js";
-import { memoryPolicy, readConfig, type MemoryPolicy } from "../core/config.js";
+import { memoryPolicy, memoryPolicyProblem, readConfig, STRUCTURAL_KINDS, type MemoryPolicy } from "../core/config.js";
 import { readRepoProfile } from "../core/repoProfile.js";
 import {
   checkoutCommonDir,
@@ -152,6 +152,10 @@ export class HunchStore {
   /** The committed memory policy (.hunch/config.json `memory`). Changes capture routing
    *  only; `mode`/`unified` keep describing how the overlay was set up. */
   readonly memoryPolicy: MemoryPolicy;
+  /** Why config.json exists but yields no readable policy (memoryPolicyProblem), or null.
+   *  While set, every capture outside the index kinds is refused: the intended home is
+   *  unknown, and "no policy" would mean public. */
+  readonly memoryPolicyProblem: string | null;
   /** The routing that ignored pointer asked for, so the refusal can name the exact
    *  setup command that re-registers it. */
   private ignoredLocalPointerSetup: { mode?: "private" | "shared"; autoCommit?: boolean } = {};
@@ -270,7 +274,13 @@ export class HunchStore {
     this.mode = priv ? ((local.mode ?? profile?.mode) ?? "private") : "public";
     this.unified = this.mode === "shared" && !!this.privateJson;
     this.memoryPolicy = memoryPolicy(readConfig(paths));
-    if (this.memoryPolicy.home === "overlay") {
+    this.memoryPolicyProblem = memoryPolicyProblem(paths);
+    if (this.memoryPolicyProblem) {
+      const refusal = this.unreadablePolicyRefusal.bind(this);
+      this.json.setWriteGuard((kind) => {
+        if (!STRUCTURAL_KINDS.includes(kind)) throw new Error(refusal(kind));
+      });
+    } else if (this.memoryPolicy.home === "overlay") {
       // Defense in depth: a direct this.json write of an overlay-homed kind (one that
       // bypasses putCapture) is refused too. The overlay's own store has no guard.
       this.json.setWriteGuard((kind) => {
@@ -318,6 +328,11 @@ export class HunchStore {
       "Otherwise delete .hunch/local.json. (HUNCH_PRIVATE_DIR also selects an overlay explicitly for one process.)";
   }
 
+  private unreadablePolicyRefusal(kind: string | null): string {
+    return `Refused: ${this.memoryPolicyProblem}, so the memory policy cannot be read and ${kind ?? "this capture"} has no known home; nothing was written. ` +
+      "Fix .hunch/config.json (`hunch doctor` names the problem), or capture with private: true to write to the overlay.";
+  }
+
   /** Where a capture belongs: an explicit private:true always goes to the overlay
    *  (putPrivate throws rather than silently landing public when none is configured);
    *  otherwise the overlay in unified ("shared") mode, else the public store. ONE home
@@ -326,6 +341,11 @@ export class HunchStore {
    *  as a state ledger, which follows the policy's home. */
   captureHome(isPrivate: boolean, kind: EntityKind | null): "private" | "public" {
     if (isPrivate) return "private";
+    if (this.memoryPolicyProblem) {
+      // Index output keeps the mode's home: shared mode homes it in the overlay.
+      if (kind && STRUCTURAL_KINDS.includes(kind)) return this.unified ? "private" : "public";
+      throw new Error(this.unreadablePolicyRefusal(kind));
+    }
     if (this.memoryPolicy.home === "overlay") {
       // An unnamed kind homes in the overlay: fail toward privacy, never toward the
       // public repository.

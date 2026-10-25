@@ -97,7 +97,7 @@ import { deriveChangeProof } from "../core/changeProof.js";
 import { discoverProjectDna, evaluateProjectDnaMatch, type ProjectDnaArtifact } from "../core/projectDna.js";
 import { diffProjectDna } from "../core/projectDnaDelta.js";
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
-import { readConfig, writeConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, type HunchConfig } from "../core/config.js";
+import { readConfig, writeConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, memoryPolicyProblem, memoryConfigTextProblem, type HunchConfig } from "../core/config.js";
 import { readRepoProfile, removeRepoProfile, repoProfileKey, writeRepoProfileOrWarn, repoProfileFile } from "../core/repoProfile.js";
 import { canonicalize } from "../core/stateCanonical.js";
 import { loadOrCreateMachine, setMachineLabel, machineFile, labelLeaksIdentity } from "../core/machine.js";
@@ -1733,7 +1733,11 @@ memoryPolicyCmd
   .action(() => {
     const root = findRoot();
     const policy = memoryPolicy(readConfig(hunchPaths(root)));
-    console.log(policy.home === "overlay"
+    const problem = memoryPolicyProblem(hunchPaths(root));
+    if (problem) {
+      console.log(unreadablePolicyLine(problem));
+      process.exitCode = 1;
+    } else console.log(policy.home === "overlay"
       ? `memory policy: home=overlay; public kinds: ${[...policy.publicKinds].join(", ")}`
       : "memory policy: home=repo");
     if (policy.unknownKinds.length) console.log(unknownPublicKindsWarning(policy.unknownKinds));
@@ -1763,13 +1767,19 @@ memoryPolicyCmd
     if (!revExists(opts.base, root)) return fail(`base ref "${opts.base}" not found — fetch it before running the memory policy check`);
     // The branch is judged by the stricter of its own policy and the base's, so a branch
     // cannot lift the gate by dropping the policy in the same change.
+    // An unreadable head config fails: the branch's intent is unknown. An unreadable base
+    // config is judged as the strictest policy (home=overlay, default public kinds), so a
+    // branch that only repairs it merges while dropping it lifts nothing.
+    const headProblem = memoryPolicyProblem(hunchPaths(root));
+    if (headProblem) return fail(`${headProblem}, so the memory policy cannot be judged — fix the file`);
     let baseConfig: Pick<HunchConfig, "memory"> = {};
     const baseText = fileAtRef(opts.base, ".hunch/config.json", root);
     if (baseText) {
-      try {
-        const parsed = parseConfigText(baseText);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) baseConfig = parsed as Pick<HunchConfig, "memory">;
-      } catch { /* an unparseable base config holds no policy */ }
+      const baseProblem = memoryConfigTextProblem(baseText);
+      if (baseProblem) {
+        console.log(`⚠ base ${opts.base}: ${baseProblem}; judging it as home=overlay`);
+        baseConfig = { memory: { home: "overlay" } };
+      } else baseConfig = parseConfigText(baseText) as Pick<HunchConfig, "memory">;
     }
     const policies = [memoryPolicy(readConfig(hunchPaths(root))), memoryPolicy(baseConfig)].filter((p) => p.home === "overlay");
     if (!policies.length) {
@@ -7277,7 +7287,11 @@ program
     // Memory home policy (dec_66636a2b1b): a policy that refuses every capture, or that
     // needs a newer Hunch, fails doctor; the machine profile's part is reported beside it.
     const rawPolicy = readConfig(hunchPaths(root)).memory;
-    if (rawPolicy) {
+    const policyProblem = memoryPolicyProblem(hunchPaths(root));
+    if (policyProblem) {
+      console.log(unreadablePolicyLine(policyProblem));
+      process.exitCode = 1;
+    } else if (rawPolicy) {
       console.log(store.memoryPolicy.home === "overlay"
         ? `memory policy: home=overlay; public kinds: ${[...store.memoryPolicy.publicKinds].join(", ")}`
         : "memory policy: home=repo");
@@ -7286,10 +7300,10 @@ program
         console.log("memory policy: ⛔ requires an overlay but none is configured — captures are REFUSED (nothing is written public). Fix: hunch private <dir> | hunch shared --repo <url> | HUNCH_PRIVATE_DIR");
         process.exitCode = 1;
       }
-      if (typeof rawPolicy.min_version === "string" && isNewerVersion(rawPolicy.min_version, HUNCH_VERSION)) {
-        console.log(`memory policy: ⛔ requires Hunch ${rawPolicy.min_version} or newer (this is ${HUNCH_VERSION}) — upgrade Hunch`);
-        process.exitCode = 1;
-      }
+    }
+    if (typeof rawPolicy?.min_version === "string" && isNewerVersion(rawPolicy.min_version, HUNCH_VERSION)) {
+      console.log(`memory policy: ⛔ requires Hunch ${rawPolicy.min_version} or newer (this is ${HUNCH_VERSION}) — upgrade Hunch`);
+      process.exitCode = 1;
     }
     if (store.overlaySource === "machine-profile" && store.privateDir) {
       console.log(`overlay: from this machine's profile → ${store.privateDir}; run hunch init to persist it in this checkout`);
@@ -7348,6 +7362,10 @@ function sameCanonical(a: unknown, b: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+function unreadablePolicyLine(problem: string): string {
+  return `memory policy: ⛔ ${problem} — captures are REFUSED (their home is unknown; nothing is written public). Fix the file, then re-run hunch doctor`;
 }
 
 function unknownPublicKindsWarning(names: string[]): string {

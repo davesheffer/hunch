@@ -73,7 +73,8 @@ export function recordWorkspaceSnapshot(store: HunchStore, root: string, opts: {
   const isPrivate = store.hasPrivate;
   if (!isPrivate && !config.publish_public) return { status: "no-home", record };
   // A memory policy that homes workspaces in the overlay leaves this machine no home without one.
-  if (!isPrivate && store.memoryPolicy.home === "overlay" && !store.memoryPolicy.publicKinds.has("workspaces")) return { status: "no-home", record };
+  // An unreadable policy (store.memoryPolicyProblem) leaves it no known home either.
+  if (!isPrivate && (store.memoryPolicyProblem || (store.memoryPolicy.home === "overlay" && !store.memoryPolicy.publicKinds.has("workspaces")))) return { status: "no-home", record };
   const previous = store.getRec("workspaces", record.id);
   if (previous && Date.now() - Date.parse(previous.observed_at) < 86_400_000 && sameWorkspaceContent(previous, record)) {
     return { status: "unchanged", record, previous };

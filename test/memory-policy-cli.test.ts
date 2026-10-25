@@ -979,3 +979,78 @@ test("§11 ship-memory without a policy is unchanged but prints the deprecation 
     assert.ok(run.stderr.includes("ship-memory is deprecated: set a memory policy (hunch memory-policy) instead"), `stderr lacks the deprecation line:\n${run.stderr}`);
   } finally { cleanupDir(s.base); }
 });
+
+// ---------------------------------------------------------------- §12 unreadable policy
+
+const BROKEN_POLICY = "{\"memory\":{\"home\":\"overlay\",}}";
+
+test("§12 doctor and memory-policy status report an unreadable config.json as blocking; doctor exits 1", () => {
+  const f = fixture("unreadable-doctor", null);
+  try {
+    mkdirSync(join(f.root, ".hunch"), { recursive: true });
+    writeFileSync(join(f.root, ".hunch", "config.json"), BROKEN_POLICY);
+    const d = cli(f, ["doctor"]);
+    assert.match(d.out, /memory policy: ⛔ \.hunch\/config\.json cannot be parsed[^\n]*captures are REFUSED/, d.out);
+    assert.equal(d.status, 1, d.out);
+    const s = cli(f, ["memory-policy", "status"]);
+    assert.match(s.out, /memory policy: ⛔ \.hunch\/config\.json cannot be parsed/, s.out);
+    assert.equal(s.status, 1, s.out);
+
+    // A min_version beside an unreadable policy is still reported.
+    writeFileSync(join(f.root, ".hunch", "config.json"), "{\"memory\":{\"Home\":\"overlay\",\"min_version\":\"99.0.0\"}}");
+    const both = cli(f, ["doctor"]);
+    assert.match(both.out, /memory policy: ⛔ [^\n]*Home/, both.out);
+    assert.match(both.out, /requires Hunch 99\.0\.0 or newer/, both.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§12 memory-policy check fails on an unreadable head config; an unreadable base config is warned about and the head policy judges", () => {
+  const f = fixture("unreadable-check", null);
+  try {
+    git(f.root, f.env, "checkout", "-q", "-b", "feature");
+    mkdirSync(join(f.root, ".hunch"), { recursive: true });
+    writeFileSync(join(f.root, ".hunch", "config.json"), BROKEN_POLICY);
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "broken policy");
+    const head = cli(f, ["memory-policy", "check", "--base", "main"]);
+    assert.match(head.out, /config\.json cannot be parsed/, head.out);
+    assert.equal(head.status, 1, head.out);
+
+    // The broken config lands on main; a branch that fixes it is judged by its own policy.
+    git(f.root, f.env, "checkout", "-q", "main");
+    git(f.root, f.env, "merge", "-q", "--ff-only", "feature");
+    git(f.root, f.env, "checkout", "-q", "-b", "fix");
+    setPolicy(f.root, { home: "overlay" });
+    writeRecord(f.root, "findings", FINDING("fnd_mpcbroken1"));
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "fix policy, add a finding");
+    const fixed = cli(f, ["memory-policy", "check", "--base", "main"]);
+    assert.match(fixed.out, /base .*config\.json.*cannot be parsed/, fixed.out);
+    assert.match(fixed.out, /fnd_mpcbroken1/, "the head policy still judges the finding");
+    assert.equal(fixed.status, 1, fixed.out);
+
+    // Dropping the policy instead of repairing it does not lift the gate: an unreadable
+    // base is judged as the strictest policy.
+    writeFileSync(join(f.root, ".hunch", "config.json"), "{\"firmness\":\"advisory\"}\n");
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "drop the policy");
+    const dropped = cli(f, ["memory-policy", "check", "--base", "main"]);
+    assert.match(dropped.out, /fnd_mpcbroken1/, dropped.out);
+    assert.equal(dropped.status, 1, dropped.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§12 ship-memory refuses to ship under an unreadable config.json: exit 1, no push", () => {
+  const s = shipFixture();
+  try {
+    mkdirSync(join(s.work, ".hunch", "tasks"), { recursive: true });
+    writeFileSync(join(s.work, ".hunch", "tasks", "htask_1.json"), `${JSON.stringify({ id: "htask_1", title: "a task" })}\n`);
+    s.git(s.work, "add", "--", ".hunch/tasks/htask_1.json");
+    s.git(s.work, "commit", "-q", "-m", "a task");
+    writeFileSync(join(s.work, ".hunch", "config.json"), BROKEN_POLICY);
+    const run = ship(s.work);
+    assert.match(`${run.stdout}${run.stderr}`, /config\.json cannot be parsed/, `${run.stdout}${run.stderr}`);
+    assert.equal(run.status, 1, `${run.stdout}${run.stderr}`);
+    assert.equal(s.git(s.work, "ls-remote", "origin", "refs/heads/memory/*"), "", "the shipper pushed nothing");
+  } finally { cleanupDir(s.base); }
+});

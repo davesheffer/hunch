@@ -60,7 +60,8 @@ export interface MemoryPolicy {
 const DEFAULT_PUBLIC_KINDS = ["constraints", "components"];
 // Index output is regenerable from the code and CI indexes with no overlay, so it is
 // public under every policy (the indexer writes components as well as symbols and edges).
-const STRUCTURAL_KINDS = ["components", "symbols", "edges", "resources"];
+const MEMORY_KEYS = ["home", "public_kinds", "min_version"];
+export const STRUCTURAL_KINDS: readonly string[] = ["components", "symbols", "edges", "resources"];
 
 /** The effective memory policy: home "repo" unless the config explicitly says "overlay". */
 export function memoryPolicy(config: Pick<HunchConfig, "memory">): MemoryPolicy {
@@ -94,6 +95,53 @@ export function isFirmness(v: unknown): v is Firmness {
  *  on invalid JSON; callers choose between falling back and refusing. */
 export function parseConfigText(text: string): unknown {
   return JSON.parse(text.startsWith("\uFEFF") ? text.slice(1) : text);
+}
+
+/** Why `.hunch/config.json` exists yet yields no readable memory policy, or null when it
+ *  is absent or fine. readConfig falls back to defaults on these (the edit hook must
+ *  never fail over config), which reads as "no policy" and would route captures public,
+ *  so the capture path asks this first and refuses instead. */
+export function memoryPolicyProblem(paths: HunchPaths): string | null {
+  if (!existsSync(paths.config)) return null;
+  let text: string;
+  try {
+    text = readFileSync(paths.config, "utf8");
+  } catch (error) {
+    return `.hunch/config.json cannot be read (${error instanceof Error ? error.message : String(error)})`;
+  }
+  return memoryConfigTextProblem(text);
+}
+
+/** A key with case, `_` and `-` ignored, so `publicKinds` and `Public-Kinds` match `public_kinds`. */
+const spelling = (key: string): string => key.toLowerCase().replace(/[_-]/g, "");
+
+/** memoryPolicyProblem for config.json text already in hand (a file at a git ref). */
+export function memoryConfigTextProblem(text: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = parseConfigText(text);
+  } catch (error) {
+    return `.hunch/config.json cannot be parsed (${error instanceof Error ? error.message : String(error)})`;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return ".hunch/config.json is not a JSON object";
+  const misspelledMemory = Object.keys(parsed).find((key) => key !== "memory" && spelling(key) === "memory");
+  if (misspelledMemory) return `.hunch/config.json has \`${misspelledMemory}\`; the memory policy key is \`memory\``;
+  if (!("memory" in parsed)) return null;
+  const memory = (parsed as { memory: unknown }).memory;
+  if (!memory || typeof memory !== "object" || Array.isArray(memory)) return ".hunch/config.json has a `memory` field that is not an object";
+  const { home, public_kinds } = memory as { home?: unknown; public_kinds?: unknown };
+  // Without `home`, a key this build does not know (a typo such as `Home`) may be the
+  // policy itself. Beside a valid home it is a newer Hunch's option, so it is tolerated.
+  const unknown = Object.keys(memory).filter((key) => !MEMORY_KEYS.includes(key));
+  if (home === undefined && unknown.length) return `.hunch/config.json memory has key(s) this Hunch does not know (${unknown.join(", ")}) and no home; expected ${MEMORY_KEYS.join(", ")}`;
+  // A misspelled known key is a typo, not a newer option: ignoring it could widen what is public.
+  for (const key of unknown) {
+    const meant = MEMORY_KEYS.find((known) => spelling(known) === spelling(key) || spelling(known) === `${spelling(key)}s` || `${spelling(known)}s` === spelling(key));
+    if (meant) return `.hunch/config.json memory has \`${key}\`; did you mean \`${meant}\`?`;
+  }
+  if (home !== undefined && home !== "repo" && home !== "overlay") return `.hunch/config.json memory.home must be "repo" or "overlay" (found ${JSON.stringify(home)})`;
+  if (home === "overlay" && public_kinds !== undefined && !Array.isArray(public_kinds)) return ".hunch/config.json memory.public_kinds must be an array of kind names";
+  return null;
 }
 
 /** Read `.hunch/config.json`. A missing/unparseable file, or an unknown firmness

@@ -89,6 +89,7 @@ export function stateHomeFor(store: HunchStore, scope: Scope): { home: "public" 
   const own = partitionOf(store);
   if (scopePath(scope) === scopePath(own)) {
     // The store IS this partition: its capture home (public `.hunch/`, or the overlay in shared mode).
+    if (store.memoryPolicyProblem) throw new StateRefusal("no-partition-home", `${store.memoryPolicyProblem}, so the memory policy cannot be read and ${scopePath(scope)} has no known home; fix the file (\`hunch doctor\` names the problem)`);
     if (store.memoryPolicy.home === "overlay" && (!store.hasPrivate || !store.privateDir)) {
       throw new StateRefusal("no-partition-home", `the memory policy in .hunch/config.json homes ${scopePath(scope)} in the overlay, but no overlay is configured on this machine; configure one with \`hunch private <dir>\`, \`hunch shared --repo <url>\`, or HUNCH_PRIVATE_DIR`);
     }
