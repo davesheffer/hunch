@@ -246,6 +246,8 @@ printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
         HUNCH_PRIVATE_DIR: "",
         HUNCH_SYNTH_PROVIDER: "codex-cli",
+        // The fixture commits on `main`; this test is about the lifecycle pump, not the default-branch hold.
+        HUNCH_AUTO_COMMIT_DEFAULT_BRANCH: "1",
         GIT_AUTHOR_NAME: "Auto Review Fixture",
         GIT_AUTHOR_EMAIL: "auto-review@pump.test",
         GIT_COMMITTER_NAME: "Auto Review Fixture",

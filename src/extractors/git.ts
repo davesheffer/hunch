@@ -2199,6 +2199,33 @@ export function currentBranch(cwd: string): string {
   return b === "HEAD" ? "" : b; // detached HEAD reports "HEAD" — treat as no branch
 }
 
+/** Whether `cwd` has its repository's default branch checked out: origin/HEAD's branch
+ *  when the remote names one, else `main` or `master`. False on a detached HEAD or
+ *  outside a repository, so a caller keeps its pre-existing behavior there. */
+export function onDefaultBranch(cwd: string): boolean {
+  const branch = currentBranch(cwd);
+  if (!branch) return false;
+  const remoteHead = gitSafe(["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"], cwd);
+  if (remoteHead) return branch === remoteHead.replace(/^origin\//, "");
+  return branch === "main" || branch === "master";
+}
+
+/** Whether a memory commit of `hunchDir` would have anything to stage: a tracked file git
+ *  sees as changed (after its own line-ending normalization) or an untracked, non-ignored
+ *  file, skipping the derived artifacts and the per-machine local.json the commit never
+ *  stages. A hook's inherited GIT_DIR/GIT_WORK_TREE is stripped, so the repository is
+ *  resolved from `hunchDir` itself. False when git cannot answer. */
+export function hunchDirHasChanges(hunchDir: string): boolean {
+  const changed = [
+    ...gitSafeIsolated(["diff", "--name-only", "--relative", "--no-renames", "HEAD", "--", "."], hunchDir).split("\n"),
+    ...gitSafeIsolated(["ls-files", "--others", "--exclude-standard", "--", "."], hunchDir).split("\n"),
+  ];
+  return changed.some((raw) => {
+    const path = raw.trim().replace(/\\/g, "/");
+    return path !== "" && path !== "local.json" && !isDerivedStoreArtifact(path);
+  });
+}
+
 /** The state files git writes while it is replaying history. `git rev-parse --git-path`
  *  resolves each against THIS worktree's private git dir (a linked worktree keeps its own
  *  rebase-merge/MERGE_HEAD), so a rebase in one worktree never reads as one in another. */

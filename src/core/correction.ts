@@ -32,9 +32,24 @@ const CORRECTION_PATTERNS: RegExp[] = [
   /\b(not like that|don'?t do (that|this)( again)?|stop doing (that|this))\b/i,
 ];
 
+/** Host-generated blocks a prompt can carry: a background task's completion
+ *  (`<task-notification>`, which also wraps a subagent's hand-back report) and
+ *  injected context (`<system-reminder>`, hook output). Their words are not the
+ *  human's, so "never use X" quoted from a constraint is not a correction. A tag
+ *  left unclosed drops only the rest of its own line, never the human's text below. */
+const HOST_TAGS = "task-notification|system-reminder|local-command-stdout|local-command-stderr|command-message|command-name|command-args";
+const HOST_BLOCK = new RegExp(`<(${HOST_TAGS})>[\\s\\S]*?<\\/\\1>`, "gi");
+const HOST_OPEN_LINE = new RegExp(`<(?:${HOST_TAGS})>[^\\n]*`, "gi");
+
+/** The prompt with host-generated blocks removed: what the human actually typed. */
+export function stripHostBlocks(prompt: string): string {
+  return prompt.replace(HOST_BLOCK, " ").replace(HOST_OPEN_LINE, " ");
+}
+
 export function looksLikeCorrection(prompt: string | undefined | null): boolean {
   if (!prompt || typeof prompt !== "string") return false;
-  return CORRECTION_PATTERNS.some((re) => re.test(prompt));
+  const human = stripHostBlocks(prompt);
+  return CORRECTION_PATTERNS.some((re) => re.test(human));
 }
 
 /** One-line nudge appended to the UserPromptSubmit hook context when a prompt

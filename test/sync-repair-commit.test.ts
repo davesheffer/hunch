@@ -97,6 +97,8 @@ test("sync --no-commit applies rename repair without creating a hidden repair co
 test("normal sync folds rename repair and capture into one memory commit", () => {
   const fixture = renamedBindingFixture();
   try {
+    // Auto-commits are held on the default branch; this asserts the feature-branch commit.
+    git(fixture.root, "checkout", "-q", "-b", "feat/test");
     const before = commitCount(fixture.root);
     const run = runCli(fixture.root, "sync", "HEAD", "--quiet", "--force");
     assert.equal(run.status, 0, run.stderr);
@@ -113,6 +115,7 @@ test("normal sync folds rename repair and capture into one memory commit", () =>
 test("standalone repair --apply still auto-commits the repair move", () => {
   const fixture = renamedBindingFixture();
   try {
+    git(fixture.root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
     const before = commitCount(fixture.root);
     const run = runCli(fixture.root, "repair", "HEAD", "--apply");
     assert.equal(run.status, 0, run.stderr);

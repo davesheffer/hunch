@@ -3,7 +3,7 @@ import { z } from "zod";
 import { verificationLauncherFor } from "../core/verifyLauncher.js";
 import { TaskIdSchema, ReportClaimSchema, LessonReferenceSchema, finishReportTask, listReportTasks, readTaskReport, readLessonHistory, recordReportClaim, reportPresentationEnabled, startReportTask } from "../core/taskReport.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
-import { reportSourceSnapshot, runReportConformance } from "../core/taskReportEvidence.js";
+import { currentSource, runReportConformance } from "../core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "../core/taskReportRender.js";
 import type { HunchStore } from "../store/hunchStore.js";
 
@@ -86,7 +86,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           // host hook). Its persisted title is authoritative; a paraphrased title
           // from the model must not fork a second report or fail the start.
           if (!task_id || !/different title/.test((error as Error).message)) throw error;
-          task = readTaskReport(root, task_id, reportSourceSnapshot(root).hash).task;
+          task = readTaskReport(root, task_id, currentSource(root)).task;
         }
         const launcher = verificationLauncher();
         // Compact by design (#370): the rules an agent needs to act, and exact
@@ -110,7 +110,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           graphNote = "\nGraph     nothing to keep (no observation, or task records disabled)";
         }
       } catch (error) { graphNote = `\nGraph     not saved: ${(error as Error).message}`; }
-      const report = readTaskReport(root, task_id, reportSourceSnapshot(root).hash);
+      const report = readTaskReport(root, task_id, currentSource(root));
       const show = reportPresentationEnabled(root);
       // The HTML evidence view is rendered on demand (hunch_report(html: true),
       // `hunch report <id> --html`, or the VS Code view); finish writes no file.
@@ -146,7 +146,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
         const tasks = listReportTasks(root);
         return { content: [{ type: "text" as const, text: tasks.length ? tasks.map(t => `${t.task_id} · ${t.state} · ${t.title}`).join("\n") : "No task reports yet. Start with hunch_task." }], structuredContent: { tasks } };
       }
-      const report = readTaskReport(root, task_id, reportSourceSnapshot(root).hash);
+      const report = readTaskReport(root, task_id, currentSource(root));
       const file = html ? writeTaskReportHtml(root, task_id) : null;
       return { content: [{ type: "text" as const, text: `${renderTaskReport(report)}${file ? `\nLocal evidence view: ${file}` : ""}` }], structuredContent: { ...boundedTaskReportForHost(report), application_references: applicationReferences(report), contribution_card: renderTaskReport(report), report_path: file } as unknown as Record<string, unknown> };
     } catch (error) { return { isError: true, content: [{ type: "text" as const, text: `Invalid: ${(error as Error).message}` }] }; }

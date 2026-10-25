@@ -568,6 +568,7 @@ test("CLI: forget refuses a record committed in the public .hunch/, keeps the fi
   const { base, repo, cleanup } = fixture();
   try {
     const env = machineEnv(base, MACHINE);
+    g(repo, "checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
     writeFileSync(join(repo, ".hunch", "config.json"), JSON.stringify({ workspaces: { publish_public: true } }) + "\n");
     // A FOREIGN machine's record, committed into the repo-tracked .hunch/ exactly as a
     // publish_public snapshot on that machine would have left it.

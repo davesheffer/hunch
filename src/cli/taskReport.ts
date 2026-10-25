@@ -1,10 +1,12 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { findRoot } from "../core/paths.js";
+import { join } from "node:path";
+import { findRoot, isDir } from "../core/paths.js";
+import { sameFilesystemEntry, worktreePaths } from "../extractors/git.js";
 import { writeFileAtomic } from "../core/io.js";
-import { finishReportTask, forgetReportTask, listReportTasks, listTaskSummaries, pruneReportHistory, readTaskReport, readLessonHistory, renderTaskStatusLine, startReportTask, summarizeTaskReport, taskReportStats, type TaskSummary } from "../core/taskReport.js";
+import { finishReportTask, forgetReportTask, reportTaskExists, listReportTasks, listTaskSummaries, pruneReportHistory, readTaskReport, readLessonHistory, renderTaskStatusLine, startReportTask, summarizeTaskReport, taskReportStats, type TaskSummary } from "../core/taskReport.js";
 import { promptTaskId } from "../core/taskReportHook.js";
-import { DEFAULT_CHECK_TIMEOUT_MS, MAX_CHECK_TIMEOUT_MS, reportSourceSnapshot, runReportCheck, runReportConformance } from "../core/taskReportEvidence.js";
+import { DEFAULT_CHECK_TIMEOUT_MS, MAX_CHECK_TIMEOUT_MS, currentSource, runReportCheck, runReportConformance } from "../core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "../core/taskReportRender.js";
 import { assertReportPath } from "../core/taskReportPaths.js";
 import { publicTaskReport } from "../core/taskReportPublic.js";
@@ -44,7 +46,7 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
             : "\nGraph     nothing to keep (no observation, or task records disabled)";
         } finally { opened.store.close(); }
       } catch (error) { graph = `\nGraph     not saved: ${(error as Error).message}`; }
-      console.log(renderTaskReport(readTaskReport(root, id, reportSourceSnapshot(root).hash)) + graph);
+      console.log(renderTaskReport(readTaskReport(root, id, currentSource(root))) + graph);
     });
   task.command("list").description("Recent tasks observed in this repository with what Hunch delivered, saved, guarded, and checked")
     .option("--limit <n>", "how many recent tasks (max 30)", "30")
@@ -52,7 +54,7 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
     .action((opts: { limit: string; json?: boolean }) => {
       const root = findRoot();
       const limit = Number(opts.limit) || 30;
-      let summaries = listTaskSummaries(root, limit, reportSourceSnapshot(root).hash);
+      let summaries = listTaskSummaries(root, limit, currentSource(root));
       // Graph records (this machine's or a teammate's) join the local ledger view.
       try {
         const opened = openStore();
@@ -118,7 +120,7 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
       } catch { /* a malformed host payload falls back to the most recent task */ }
       let summary: TaskSummary | null = null;
       try {
-        const snapshot = reportSourceSnapshot(root).hash;
+        const snapshot = currentSource(root);
         summary = taskId ? summarizeTaskReport(root, taskId, snapshot) : listTaskSummaries(root, 1, snapshot)[0] ?? null;
       } catch { summary = null; }
       if (opts.json) { console.log(JSON.stringify(summary)); return; }
@@ -153,7 +155,9 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
       const terminate = () => { signalExit = 143; controller.abort(); };
       process.on("SIGINT", interrupt); process.on("SIGTERM", terminate);
       try {
-        const result = await runReportCheck(findRoot(), id, command, opts.label, seconds * 1000, {
+        const here = findRoot();
+        const result = await runReportCheck(taskLedgerRoot(here, id), id, command, opts.label, seconds * 1000, {
+          workRoot: here,
           signal: controller.signal,
           onStdout: opts.json ? undefined : chunk => { process.stdout.write(chunk); },
           onStderr: opts.json ? undefined : chunk => { process.stderr.write(chunk); },
@@ -190,7 +194,7 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
       if (opts.html) { console.log(writeTaskReportHtml(root, id, opts.publicOnly)); return; }
       if (opts.publicOnly) { console.log(JSON.stringify(publicTaskReport(root, id), null, 2)); return; }
       let report: ReturnType<typeof readTaskReport>;
-      try { report = readTaskReport(root, id, reportSourceSnapshot(root).hash); }
+      try { report = readTaskReport(root, id, currentSource(root)); }
       catch (error) {
         // Not in this machine's ledger: the graph record (if any) is what remains.
         const opened = openStore();
@@ -203,6 +207,20 @@ export function registerTaskReportCommands(program: Command, openStore: () => { 
       }
       console.log(opts.json ? JSON.stringify(report, null, 2) : renderTaskReport(report));
     });
+}
+
+/** The root whose task ledger holds `id`: `root` itself, else a sibling worktree of
+ *  the same repository that has a .hunch/. A hook rooted at the main checkout opens
+ *  the task while the agent works in a linked worktree (or the reverse); the check
+ *  still runs, and is snapshotted, where the caller stands. `root` when no sibling
+ *  has the task, so the usual "task not found" stays the error. */
+export function taskLedgerRoot(root: string, id: string): string {
+  if (reportTaskExists(root, id)) return root;
+  for (const other of worktreePaths(root)) {
+    if (sameFilesystemEntry(other, root) || !isDir(join(other, ".hunch")) || !existsSync(join(other, ".hunch-cache", "served.db"))) continue;
+    try { if (reportTaskExists(other, id)) return other; } catch { /* unreadable ledger: keep looking */ }
+  }
+  return root;
 }
 
 function readStdinText(): Promise<string> {

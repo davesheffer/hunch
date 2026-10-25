@@ -61,6 +61,7 @@ test("public capture proof is commit-only", t => {
   const base = mkdtempSync(join(tmpdir(), "hunch-save-local-"));
   t.after(() => cleanupDir(base));
   const root = join(base, "code"); repo(root);
+  git(root, "checkout", "-q", "-b", "feat/test"); // captures are not auto-committed onto the default branch
   const store = new HunchStore(hunchPaths(root)); t.after(() => store.close());
   const task = startReportTask(root, "Save public memory");
   const record = store.putCapture("constraints", mkConstraint({ id: "con_public_save" }));

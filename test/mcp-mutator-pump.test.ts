@@ -64,6 +64,7 @@ function publicFixture(label: string): { root: string; cleanup: () => void } {
   store.reindex();
   store.close();
   commitAll(root, "fixture: public graph");
+  git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
   return {
     root,
     cleanup: () => cleanupDir(root),

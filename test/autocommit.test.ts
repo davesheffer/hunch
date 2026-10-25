@@ -107,6 +107,7 @@ test("flushCapture: a PUBLIC capture auto-commits .hunch/ in the project repo (c
   try {
     withoutPrivateEnv(() => {
       g(root, "add", "-A"); g(root, "commit", "-q", "-m", "track .hunch");
+      g(root, "checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
       writeFileSync(join(root, ".hunch", "decisions", "dec_pub.json"), "{}\n");
       const store = new HunchStore(hunchPaths(root));
       const r = flushCapture(store, hunchPaths(root).hunch, false, "hunch: capture dec_pub");
@@ -131,6 +132,7 @@ test("flushCapture public path skips QUIETLY (no commit) when the user has non-m
   try {
     withoutPrivateEnv(() => {
       g(root, "add", "-A"); g(root, "commit", "-q", "-m", "track .hunch");
+      g(root, "checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
       writeFileSync(join(root, "app.ts"), "export const x = 2;\n");
       g(root, "add", "app.ts"); // the user's own staged work
       writeFileSync(join(root, ".hunch", "decisions", "dec_wip.json"), "{}\n");
@@ -164,6 +166,7 @@ test("flushMemoryHome honors an explicit public Constitution home even when shar
       writeFileSync(join(root, ".gitignore"), ".hunch/local.json\n.hunch-private/\n");
       g(root, "add", ".gitignore", ".hunch/manifest.json");
       g(root, "commit", "-q", "-m", "track public memory home");
+      g(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
       writeLocalPointer(root, { privateDir: overlayHunch, autoCommit: true, mode: "shared" });
       mkdirSync(join(root, ".hunch", "policies"), { recursive: true });
       writeFileSync(join(root, ".hunch", "policies", "pol_public.json"),
