@@ -858,13 +858,18 @@ export class JsonStore {
     const text = this.readContainedFile(directory, f, this.maxBytes(kind));
     if (text === null) return [];
     if (!text.trim()) return [];
+    // Only the indexer's kinds can be rebuilt; state records (entities, relationships)
+    // exist nowhere else, so they are restored from history instead.
+    const recover = kind === "symbols" || kind === "edges" || kind === "resources"
+      ? "Fix or remove it, then re-run `hunch index`."
+      : "Fix it, or restore it from git history (or the overlay's remote); removing it loses these records.";
     let v: unknown;
     try {
       v = JSON.parse(text);
     } catch (e) {
-      throw new Error(`refusing to rewrite ${f}: the existing index is not valid JSON (${(e as Error).message}). Fix or remove it, then re-run \`hunch index\`.`);
+      throw new Error(`refusing to rewrite ${f}: the existing index is not valid JSON (${(e as Error).message}). ${recover}`);
     }
-    if (!Array.isArray(v)) throw new Error(`refusing to rewrite ${f}: the existing index is not a JSON array. Fix or remove it, then re-run \`hunch index\`.`);
+    if (!Array.isArray(v)) throw new Error(`refusing to rewrite ${f}: the existing index is not a JSON array. ${recover}`);
     return v;
   }
 
