@@ -106,6 +106,7 @@ test("flushCapture refreshes a git-clean grounding doc and commits it with the c
     updateClaudeMd(root, store); // grounding block reflects 1 decision
     git("add", "-A");
     git("commit", "-qm", "baseline");
+    git("checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
     assert.match(readFileSync(join(root, "CLAUDE.md"), "utf8"), /\b1 decisions\b/);
 
     store.json.put("decisions", decision("dec_two", "second choice"));
@@ -127,6 +128,7 @@ test("flushCapture leaves a user-dirty grounding doc completely untouched", () =
     updateClaudeMd(root, store);
     git("add", "-A");
     git("commit", "-qm", "baseline");
+    git("checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
 
     const userEdit = `${readFileSync(join(root, "CLAUDE.md"), "utf8")}\nMY UNCOMMITTED NOTES\n`;
     writeFileSync(join(root, "CLAUDE.md"), userEdit);
@@ -158,6 +160,7 @@ test("hunch index commits refreshed grounding atomically with an auto-pumped gra
     store.close();
     git("add", "-A");
     git("commit", "-qm", "fixture: indexed graph and grounding");
+    git("checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
 
     const changed = new HunchStore(hunchPaths(root));
     changed.json.put("decisions", decision("dec_two", "second choice"));

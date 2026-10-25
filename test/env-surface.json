@@ -161,6 +161,16 @@
       }
     ]
   },
+  "HUNCH_AUTO_COMMIT_DEFAULT_BRANCH": {
+    "class": "hunch-config",
+    "purpose": "Set to 1 to restore automatic public memory commits while the default branch is checked out (same as autoCommitDefaultBranch in .hunch/local.json)",
+    "tests": [
+      {
+        "file": "test/worktree-field-regressions.test.ts",
+        "title": "B11: a capture never auto-commits onto the default branch; a feature branch and the explicit opt-in still commit"
+      }
+    ]
+  },
   "HUNCH_CLI_CONFIG": {
     "class": "hunch-config",
     "purpose": "Path to a local agent-CLI adapter config (also set by --cli-config) for non-builtin initiators",

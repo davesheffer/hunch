@@ -82,6 +82,7 @@ test("mcp->integrations: hunch_record_correction auto-commits the captured const
   writeFileSync(join(root, "src", "billing.ts"), "export const charge = () => 1;\n");
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "init");
+  git(root, "checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
   seedStore(root);
   const mcp = await connect(root);
   t.after(async () => { await mcp.close(); cleanupDir(root); });

@@ -23,7 +23,7 @@ import { STATE_PROOF_CAPABILITY } from '../core/stateProof.js';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
-import { flushCapture } from "../integrations/sync.js";
+import { flushStateWrite } from "../integrations/sync.js";
 import { StateRefusal, capabilities, mergeReadResponses, readState, recordsState, stateHomeFor, subscribeState, writeState } from "../store/stateBinding.js";
 import { STATE_READ_VERSION, STATE_RECORDS_VERSION, STATE_SUBSCRIBE_VERSION, STATE_WRITE_VERSION, ReadScopesSchema, ScopeSchema, scopePath, type Principal, type Scope } from "../core/stateContract.js";
 import { partitionFor, resolveCredential, readServeConfig, type ServeConfig } from "./config.js";
@@ -173,7 +173,7 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
     // Only authenticated grants select stores for cross-partition source visibility.
     const accessOptions = { additionalStores: principal.grants.map(grant => requestStore(grant).store) };
     const { store, root } = requestStore(scope);
-    const flush = (isPrivate: boolean, message: string) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message);
+    const flush = (isPrivate: boolean, message: string) => flushStateWrite(store, hunchPaths(root).hunch, isPrivate, message);
 
     if (route === "read") {
       if (body.observed_page !== undefined && body.scopes !== undefined) throw problem(400, 'malformed', 'observation pages require a single partition without scopes');

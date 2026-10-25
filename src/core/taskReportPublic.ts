@@ -3,10 +3,10 @@
 import { JsonStore } from "../store/jsonStore.js";
 import { hunchPaths } from "./paths.js";
 import { readTaskReport, reportHash, type ReportRecord } from "./taskReport.js";
-import { reportSourceSnapshot } from "./taskReportEvidence.js";
+import { currentSource } from "./taskReportEvidence.js";
 
 export function publicTaskReport(root: string, taskId: string) {
-  const report = readTaskReport(root, taskId, reportSourceSnapshot(root).hash);
+  const report = readTaskReport(root, taskId, currentSource(root));
   const publicStore = new JsonStore(hunchPaths(root));
   const records = new Map<string, ReportRecord>();
   const deliveries: Array<{ occurrence_id: string; receipt_id: string; envelope_hash: string; record_id: string; record_hash: string }> = [];

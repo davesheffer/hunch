@@ -2,7 +2,7 @@
  * lifecycle and display; neither operation depends on model compliance. */
 import { z } from "zod";
 import { finishReportTask, listReportTasks, readTaskReport, readLessonHistory, recordReportClaim, recordTaskDelivery, reportHash, reportPresentationEnabled, startReportTask, type ReportClaim, type ReportRecord, type LessonReference } from "./core/taskReport.js";
-import { DEFAULT_CHECK_TIMEOUT_MS, reportSourceSnapshot, runReportCheck, runReportConformance } from "./core/taskReportEvidence.js";
+import { DEFAULT_CHECK_TIMEOUT_MS, currentSource, runReportCheck, runReportConformance } from "./core/taskReportEvidence.js";
 export { DEFAULT_CHECK_TIMEOUT_MS, MAX_CHECK_TIMEOUT_MS } from "./core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "./core/taskReportRender.js";
 import type { DeliveryEnvelope } from "./core/delivery.js";
@@ -22,7 +22,7 @@ const IdentitySchema = z.object({ task: z.string().min(1).max(1024), attempt: z.
  * their own principal/partition boundary before reaching this local API. */
 export function createTaskReporter(root: string) {
   const scope = canonicalReportRoot(root);
-  const report = (taskId: string) => readTaskReport(scope, taskId, reportSourceSnapshot(scope).hash);
+  const report = (taskId: string) => readTaskReport(scope, taskId, currentSource(scope));
   return {
     /** Omit identity for a fresh task, or supply the harness's stable task AND
      * execution attempt for idempotent retries. Raw identities are not retained. */

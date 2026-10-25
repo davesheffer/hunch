@@ -147,6 +147,7 @@ test("review accept, duplicate rejection, and verified batch update each pump th
     writeFileSync(join(fixture.root, "CLAUDE.md"), "# Review fixture\n");
     git(fixture.root, "add", "-A");
     git(fixture.root, "commit", "-qm", "seed review records");
+    git(fixture.root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
 
     const accept = reviewArgs(fixture.root, "--accept", acceptedById.id);
     assert.equal(accept.status, 0, `${accept.stdout}${accept.stderr}`);

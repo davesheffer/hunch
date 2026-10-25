@@ -7,7 +7,7 @@ import { findRoot } from "./paths.js";
 import { canonicalReportRoot } from "./taskReportPaths.js";
 import { isCredentialFreeText } from "./types.js";
 import { aliasReportTask, continuationLinks, finishReportTask, isEmptyTaskReport, latestSessionTask, readTaskReport, recordReportRefusal, reportHash, reportPresentationEnabled, reportTaskExists, resolveReportTask, settleSessionTasks, startReportTask, type TaskLinks } from "./taskReport.js";
-import { reportSourceSnapshot } from "./taskReportEvidence.js";
+import { currentSource } from "./taskReportEvidence.js";
 import { renderTaskReport } from "./taskReportRender.js";
 import { verificationLauncher } from "./verifyLauncher.js";
 import { injectionMode } from "./hookcache.js";
@@ -250,7 +250,7 @@ export function stopHookReport(root: string, provider: HookProvider, event: Hunc
   if (!id) return null;
   if (id === "legacy") return { systemMessage: "Hunch hook active. This host version does not provide an exact prompt identifier, so contribution for this response is unverified. Explicit task reports remain available with hunch report." };
   try {
-    const report = readTaskReport(root, id, reportSourceSnapshot(root).hash);
+    const report = readTaskReport(root, id, currentSource(root));
     if (isEmptyTaskReport(report)) return null;
     // The HTML evidence view is a rendering of the local ledger, generated on
     // demand (`hunch report <id> --html`, or a click in the VS Code view). The

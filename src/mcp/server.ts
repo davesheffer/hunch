@@ -35,7 +35,7 @@ import { refreshExistingGrounding } from "../integrations/providers.js";
 import { workspaceLedgerView, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, snapshotHasHome, recordWorkspaceSnapshot, branchRows, worktreeRows } from "../integrations/workspaceLedger.js";
 import { workspacesConfig } from "../core/config.js";
 import { revParse, asOfDate, revExists, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatusDetailed, describePullFailure, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
-import { flushCapture, flushMemoryHome, pinSharedRemote } from "../integrations/sync.js";
+import { flushCapture, flushStateWrite, flushMemoryHome, pinSharedRemote, HELD_ON_DEFAULT_BRANCH } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, isTeamStoreTrusted, overlayMatchesTeamRemote, teamWiringConsented, untrustedTeamStoreMessage, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
 import { formatSearchHit, formatStructure } from "../core/format.js";
@@ -150,8 +150,9 @@ function cwdHintOf(input: unknown): string | undefined {
 /** Honest auto-commit suffix: reports only what flushCapture ACTUALLY did. A skipped
  *  commit (backstop/lock/nothing staged) says nothing — the record is on disk and the
  *  next flush sweeps it up; claiming "auto-committed" there would be a lie. */
-const flushNote = (flush: "pushed" | "committed" | null, home: "public" | "private", mode: string): string =>
-  flush === "pushed" ? ` (committed + pushed to the ${mode === "shared" ? "shared team store" : "private repo"})`
+const flushNote = (flush: "pushed" | "committed" | "held" | null, home: "public" | "private", mode: string): string =>
+  flush === "held" ? ` (${HELD_ON_DEFAULT_BRANCH})`
+  : flush === "pushed" ? ` (committed + pushed to the ${mode === "shared" ? "shared team store" : "private repo"})`
     : flush === "committed"
       ? home === "private"
         ? " (committed to the overlay repo — push deferred: offline, no upstream, or merge conflict; the next capture or `hunch private --sync` retries)"
@@ -2998,7 +2999,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // not race the HTTP server between the ledger read and the record write.
         const { hunchDir } = stateHomeFor(store, input.scope);
         const result = await withWriteLock(hunchDir, () => writeState(store, { schema: STATE_WRITE_VERSION, ...input }, {
-          flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
+          flush: (isPrivate, message) => flushStateWrite(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
         }));
         return stateResult(`${result.outcome} ${result.record_id} (${result.durability}) ${result.record_hash}`, result);
       } catch (e) {
@@ -3019,7 +3020,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       try {
         const { hunchDir } = stateHomeFor(store, input.scope);
         const result = await withWriteLock(hunchDir, () => captureState(store, { schema: STATE_CAPTURE_VERSION, ...input }, {
-          flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
+          flush: (isPrivate, message) => flushStateWrite(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
         }));
         return stateResult(`${result.outcome} observation ${result.record_id} (${result.durability}); this does not assert currentness. ${result.record_hash}`, result);
       } catch (e) { return stateRefusal(e); }
@@ -3038,7 +3039,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
       try {
         const { hunchDir } = stateHomeFor(store, input.scope);
         const result = await withWriteLock(hunchDir, () => captureBatchState(store, { schema: STATE_CAPTURE_BATCH_VERSION, ...input }, {
-          flush: (isPrivate, message) => flushCapture(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
+          flush: (isPrivate, message) => flushStateWrite(store, hunchPaths(root).hunch, isPrivate, message, startupTeamRoute ?? undefined),
         }));
         return stateResult(`Capture batch: ${result.results.filter(r => r.status === "saved").length} saved/replayed, ${result.results.filter(r => r.status === "refused").length} refused.${result.reviews ? ` Reviews: ${result.reviews.filter(r => r.status === "saved").length} withdrawn/replayed, ${result.reviews.filter(r => r.status === "refused").length} refused.` : ''} Inspect each indexed result.`, result);
       } catch (e) { return stateRefusal(e); }

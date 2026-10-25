@@ -107,6 +107,7 @@ function squashFixture(): { root: string; decisionFile: string; oldRef: string; 
   const decisionFile = join(root, ".hunch", "decisions", "dec_squash_fixture.json");
   git(root, "add", "-A");
   git(root, "commit", "-qm", "hunch: record decision");
+  git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
   return { root, decisionFile, oldRef: origHead, newRef: newHead, origCommit, cleanup: () => cleanupDir(root) };
 }
 
@@ -265,6 +266,7 @@ function twoDecisionFixture(): { root: string; decisionFile: (id: string) => str
   store.close();
   git(root, "add", ".hunch");
   git(root, "commit", "-qm", "hunch: record decisions");
+  git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
   writeQueue(root, [
     { id: "dec_a", from: "sha_a_old", to: shaANew },
     { id: "dec_b", from: "sha_b_old", to: shaBNew },
