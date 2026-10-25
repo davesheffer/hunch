@@ -33,11 +33,12 @@ const CORRECTION_PATTERNS: RegExp[] = [
 ];
 
 /** Host-generated blocks a prompt can carry: a background task's completion
- *  (`<task-notification>`, which also wraps a subagent's hand-back report) and
- *  injected context (`<system-reminder>`, hook output). Their words are not the
+ *  (`<task-notification>`, which also wraps a subagent's hand-back report),
+ *  injected context (`<system-reminder>`, hook output) and the browser
+ *  extension's standing instructions (`<browser_instruction>`). Their words are not the
  *  human's, so "never use X" quoted from a constraint is not a correction. A tag
  *  left unclosed drops only the rest of its own line, never the human's text below. */
-const HOST_TAGS = "task-notification|system-reminder|local-command-stdout|local-command-stderr|command-message|command-name|command-args";
+const HOST_TAGS = "task-notification|system-reminder|local-command-stdout|local-command-stderr|command-message|command-name|command-args|browser_instruction";
 const HOST_BLOCK = new RegExp(`<(${HOST_TAGS})>[\\s\\S]*?<\\/\\1>`, "gi");
 const HOST_OPEN_LINE = new RegExp(`<(?:${HOST_TAGS})>[^\\n]*`, "gi");
 

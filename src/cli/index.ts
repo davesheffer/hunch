@@ -23,7 +23,8 @@ import { Command } from "commander";
 import { hunchPaths, hunchPathsForDir, findRoot, toPosixTarget, isDir, realpathNorm, repoRelativeTarget } from "../core/paths.js";
 import { writeFileAtomic } from "../core/io.js";
 import { boundedSpawnSync } from "../core/boundedSpawn.js";
-import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
+import { looksLikeCorrection, CORRECTION_NUDGE, stripHostBlocks } from "../core/correction.js";
+import { roleHasHunchTools } from "../core/subagentrole.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
 import { registerTaskReportCommands } from "./taskReport.js";
@@ -5147,9 +5148,11 @@ program
             return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
           };
           const type = (evt.agent_type ?? "").toLowerCase();
+          // A role whose tool list leaves out Hunch's MCP tools is not told to call them.
+          const tools = roleHasHunchTools(root, evt.agent_type ?? "");
           const L: string[] = [];
           const served: Array<{ kind: string; record_id: string; token_cost: number }> = [];
-          const route = routedCwd
+          const route = routedCwd && tools
             ? `Worktree routing: call hunch_context first with cwd: ${JSON.stringify(routedCwd)}, and pass the same cwd to hunch_task, hunch_report, and every Hunch capture/write call in this delegated task.`
             : null;
           const activeProvider = provider;
@@ -5164,8 +5167,8 @@ program
               L.push(line);
               served.push({ kind: "components", record_id: c.id, token_cost: Math.ceil([...line].length / 4) });
             }
-            if (components.length > 12) L.push(`…and ${components.length - 12} more — hunch_structure() for the full map.`);
-            L.push("Orient: hunch_structure(target) · hunch_why(target) · hunch_context(task).");
+            if (components.length > 12) L.push(`…and ${components.length - 12} more${tools ? " — hunch_structure() for the full map" : ""}.`);
+            if (tools) L.push("Orient: hunch_structure(target) · hunch_why(target) · hunch_context(task).");
           } else if (/plan|architect|design/.test(type)) {
             // A plan drafted blind re-proposes what the graph already rejected.
             const decisions = s.advisoryRecs("decisions")
@@ -5178,7 +5181,7 @@ program
               L.push(line);
               served.push({ kind: "decisions", record_id: d.id, token_cost: Math.ceil([...line].length / 4) });
             }
-            L.push("Before finalizing a plan: hunch_why(target) · hunch_current_decision(topic) · hunch_check_constraints(scope).");
+            if (tools) L.push("Before finalizing a plan: hunch_why(target) · hunch_current_decision(topic) · hunch_check_constraints(scope).");
           } else {
             const sevRank = { blocking: 0, warning: 1, advisory: 2 } as const;
             const constraints = s.advisoryRecs("constraints")
@@ -5191,8 +5194,8 @@ program
               L.push(line);
               served.push({ kind: "constraints", record_id: c.id, token_cost: Math.ceil([...line].length / 4) });
             }
-            if (constraints.length > 8) L.push(`…and ${constraints.length - 8} more — hunch_check_constraints(scope) for your files.`);
-            L.push("Before editing: hunch_check_constraints(scope) · hunch_why(target). Orient: hunch_context(task).");
+            if (constraints.length > 8) L.push(`…and ${constraints.length - 8} more${tools ? " — hunch_check_constraints(scope) for your files" : "; the edit hook shows the ones your files touch"}.`);
+            if (tools) L.push("Before editing: hunch_check_constraints(scope) · hunch_why(target). Orient: hunch_context(task).");
           }
           if (route) L.push(route);
           // No dedup here: the hook event carries the PARENT session id, but each
@@ -7255,12 +7258,14 @@ function promptTaskSelection(root: string, store: HunchStore, provider: HookProv
   if (!taskSelectionEnabled() || isNotificationPrompt(evt.prompt)) return "";
   const taskId = hookReportTaskId(root, provider, evt);
   if (!taskId) return "";
+  // Host-injected blocks (reminders, browser instructions) are not the task the human named.
+  const humanText = stripHostBlocks(evt.prompt ?? "");
   const selection = selectForTask(liveSelectionRecords({
     decisions: store.recs("decisions"),
     bugs: store.recs("bugs"),
     constraints: store.recs("constraints"),
     findings: store.recs("findings"),
-  }), evt.prompt ?? "", { root, pathExists: (p) => existsSync(join(root, p)) });
+  }), humanText, { root, pathExists: (p) => existsSync(join(root, p)) });
   // Same task id again (a notification alias) keeps its own earlier selection; a
   // new task that CONTINUES the session's previous one inherits that task's
   // selection only on a bare follow-up ("continue", "go on"), so it is not left
