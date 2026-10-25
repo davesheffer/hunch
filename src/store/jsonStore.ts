@@ -280,6 +280,9 @@ export class JsonStore {
   private readonly lexicalRoot: string;
   private readonly canonicalRoot: string;
   private readonly lexicalHunch: string;
+  /** Throws to refuse a record write of a kind (the memory policy's public-store guard).
+   *  Deletes are never guarded: removing a record is the migration direction. */
+  private writeGuard?: (kind: EntityKind) => void;
 
   /** `lockOpts.startedAt` is an INTERNAL TEST SEAM, not API: it replaces the OS
    *  creation-time probe of the `.rmw-lock` "unproven" rule so the suite can
@@ -293,6 +296,10 @@ export class JsonStore {
     if (!hunchRelative || !pathIsWithin(this.lexicalHunch, this.lexicalRoot)) {
       throw unsafePath(paths.hunch, "the Hunch directory is not a child of its declared store root");
     }
+  }
+
+  setWriteGuard(guard: ((kind: EntityKind) => void) | undefined): void {
+    this.writeGuard = guard;
   }
 
   private lstatOrMissing(path: string): FileStat | null {
@@ -754,6 +761,7 @@ export class JsonStore {
 
   /** Write a single record (validated) to its JSON file / into the index array. */
   put<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] {
+    this.writeGuard?.(kind);
     const schema = SCHEMAS[kind];
     const validated = schema.parse(record) as EntityFor[K] & { id: string };
     const single = SINGLE_FILE[kind];
@@ -781,6 +789,7 @@ export class JsonStore {
 
   /** Bulk replace all records of a kind (used by the extractor for symbols/edges). */
   replaceAll<K extends EntityKind>(kind: K, records: EntityFor[K][]): void {
+    this.writeGuard?.(kind);
     const schema = SCHEMAS[kind];
     const validated = records.map((r) => schema.parse(r));
     const single = SINGLE_FILE[kind];
@@ -876,6 +885,23 @@ export class JsonStore {
       if (text !== null && text.trim() !== "") count++;
     }
     return count;
+  }
+
+  /** Whether a per-record kind has ANY file at the record's canonical name, valid or
+   *  not (an invalid, corrupt, oversized or 0-byte tombstone file counts). Lets a
+   *  caller about to WRITE that id tell "absent" from "present but skipped by the
+   *  validating loader", so it never overwrites what loadAll could not read.
+   *  Single-file kinds (symbols/edges/resources) answer from the validating loader
+   *  only; they are structural and always public, so no migration writes them. */
+  hasRecordFile(kind: EntityKind, id: string): boolean {
+    if (SINGLE_FILE[kind]) return this.get(kind, id) !== undefined;
+    const file = this.fileFor(kind, id);
+    try {
+      lstatSync(file);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Remove a record (used by the curate/reject flow). Returns true if removed.

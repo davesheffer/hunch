@@ -123,6 +123,6 @@ function noteVerdictChange(root: string, store: HunchStore, prev: RankEvalCache,
       provenance: { source: "task_rank_eval", confidence: 0.9, evidence: ["hunch task rank-eval"], last_verified: next.computed_at },
     });
     store.putCapture("findings", finding, false);
-    flushCapture(store, hunchPaths(root).hunch, false, `hunch: capture ${id}`);
+    flushCapture(store, hunchPaths(root).hunch, false, `hunch: capture ${id}`, undefined, undefined, "findings");
   } catch { /* the cache still carries the verdict; memory of the change is best-effort */ }
 }

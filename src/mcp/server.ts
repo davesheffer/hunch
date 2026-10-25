@@ -2279,11 +2279,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           expectedReviewHash: expected_review_hash,
           reviewer: reviewed_by ?? "human:interactive-chat",
         });
-        const home = store.captureHome(false);
+        const home = store.captureHome(false, "decisions");
         store.putCapture("decisions", reviewed, home === "private");
         store.reindex();
         if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
-        const flush = flushCapture(store, hunchPaths(root).hunch, home === "private", `hunch: ${disposition} imported ADR ${decision_id}`, startupTeamRoute ?? undefined);
+        const flush = flushCapture(store, hunchPaths(root).hunch, home === "private", `hunch: ${disposition} imported ADR ${decision_id}`, startupTeamRoute ?? undefined, undefined, "decisions");
         const remaining = pendingImportedAdrReviews(store.advisoryRecs("decisions"));
         const outcome = disposition === "approve"
           ? `${decision_id} is now human-confirmed authority for ${expected_source_hash}.`
@@ -2458,7 +2458,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // Preserve the ADR lineage from the SAME home this write will use. A private
         // re-record must retain its own optional fields, but must never inherit a
         // same-id public record (and vice versa).
-        const home = store.captureHome(!!decision.private);
+        const home = store.captureHome(!!decision.private, "decisions");
         const existing = home === "private" ? store.getPrivateRec("decisions", id) : store.json.get("decisions", id);
         // A commit-keyed id intentionally lets a human capture upgrade the machine draft
         // for that commit. Once the slot is human-confirmed, however, a differently
@@ -2648,7 +2648,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // Auto-flush the store the record landed in (on by default in every mode): a private
         // record commits+pushes its overlay repo; a public one commits .hunch/ in THIS repo
         // (commit only — it rides the user's next push, never auto-pushing their code branch).
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe);
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe, "decisions");
         const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         // Capture-session gate (staged deprecation, §9.3): the token was consumed
         // above. No token still writes (non-breaking) but lands as agent_recorded with a
@@ -2743,7 +2743,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const requested = buildCorrectionConstraint({ ...input, knownDeps, root, vouched: true }, now);
         // Private corrections go to the overlay (enforced locally via the merged read,
         // never rendered into the public CI comment, which is public-only by construction).
-        const home = store.captureHome(!!input.private);
+        const home = store.captureHome(!!input.private, "constraints");
         if (home === "public" && requested.source_decision && !store.json.get("decisions", requested.source_decision)) {
           const location = store.getPrivateRec("decisions", requested.source_decision) ? "exists only in the private overlay" : "does not exist in the public home";
           return refused(`source decision ${requested.source_decision} ${location}; refusing to record public correction ${requested.id}.`);
@@ -2771,7 +2771,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // selector to skip them and leave successful captures with stale HEAD plus
         // dirty AGENTS/assistant docs. Manual mode still refreshes in place.
         if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`, startupTeamRoute ?? undefined, observed.observe);
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`, startupTeamRoute ?? undefined, observed.observe, "constraints");
         const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
@@ -2833,7 +2833,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const findingMisroute = misrouteGuard(root, `finding "${finding.title.slice(0, 60)}"`, guardEvidence(root, finding.affected_files ?? []));
         if (findingMisroute) return findingMisroute;
         const id = findingId(finding.title);
-        const home = store.captureHome(!!finding.private);
+        const home = store.captureHome(!!finding.private, "findings");
         const existing = home === "private" ? store.getPrivateRec("findings", id) : store.json.get("findings", id);
         const now = new Date().toISOString();
         const triage = finding.triage ?? existing?.triage ?? "open";
@@ -2863,7 +2863,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const stored = store.putCapture("findings", rec, !!finding.private);
         const observed = observeReportCapture(root, task_id, "findings", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
         store.reindex();
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!finding.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe);
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!finding.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe, "findings");
         const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const where = finding.private
           ? ` [PRIVATE overlay — not committed to this repo]${flushed}`

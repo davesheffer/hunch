@@ -54,7 +54,7 @@ import {
   normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeCommits, revExists, revParse, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, fileAtRef, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeFilesOrNull, rangeGateDiff, rangeCommits, revExists, revParse, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
 import { runbookDraft } from "../core/runbookDraft.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
@@ -97,7 +97,9 @@ import { deriveChangeProof } from "../core/changeProof.js";
 import { discoverProjectDna, evaluateProjectDnaMatch, type ProjectDnaArtifact } from "../core/projectDna.js";
 import { diffProjectDna } from "../core/projectDnaDelta.js";
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
-import { readConfig, writeConfig, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig } from "../core/config.js";
+import { readConfig, writeConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, type HunchConfig } from "../core/config.js";
+import { readRepoProfile, removeRepoProfile, repoProfileKey, writeRepoProfileOrWarn, repoProfileFile } from "../core/repoProfile.js";
+import { canonicalize } from "../core/stateCanonical.js";
 import { loadOrCreateMachine, setMachineLabel, machineFile, labelLeaksIdentity } from "../core/machine.js";
 import { worktreeRows, branchRows, publicWorkspaceRemovalRecipe } from "../core/workspace.js";
 import { workspaceLedgerView, recordWorkspaceSnapshot, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, prunePlanFor, renderPrunePlan, applyPrune, confirmPrune, pruneConfirmQuestion } from "../integrations/workspaceLedger.js";
@@ -181,7 +183,7 @@ import { constraintId } from "../core/ids.js";
 import type { Constraint, Decision, Finding } from "../core/types.js";
 import { readManifest, writeManifest, SCHEMA_VERSION } from "../core/migrate.js";
 import { mergeHunchJson } from "../store/merge.js";
-import { ledgerFile } from "../store/changeLedger.js";
+import { CHANGES_DIR, ledgerFile } from "../store/changeLedger.js";
 import { verifyReplay } from "../store/replay.js";
 import { partitionOf, stateHomeFor } from "../store/stateBinding.js";
 import { scopePath } from "../core/stateContract.js";
@@ -191,7 +193,7 @@ import { formatWhyRecord } from "../core/whyRecord.js";
 import { planCompaction } from "../store/compact.js";
 import { repairDecisionReference } from "../core/refrepair.js";
 import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } from "./invocation.js";
-import { formatUpdateNotice, scheduleUpdateCheck, shouldCheckForUpdate } from "../core/updatecheck.js";
+import { formatUpdateNotice, isNewerVersion, scheduleUpdateCheck, shouldCheckForUpdate } from "../core/updatecheck.js";
 
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
@@ -226,7 +228,7 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
   if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
     throw new Error("review packet repository does not match this checkout's remotes");
   }
-  const home = store.captureHome(privateOnly);
+  const home = store.captureHome(!!privateOnly, "constraints");
   // Preflight the whole batch. A repeated import must never revive a retired rule,
   // replace a countersigned constraint, or change its scope/evidence silently.
   for (const record of records) {
@@ -243,11 +245,11 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
   if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
     throw new Error("review repository does not match this checkout's remotes");
   }
-  if (privateOnly !== undefined && store.captureHome(privateOnly) === "private" && !store.privateDir) {
+  if (privateOnly !== undefined && store.captureHome(!!privateOnly, "constraints") === "private" && !store.privateDir) {
     throw new Error("--private requires a configured private overlay");
   }
   // A public artifact must never be model-derived from private overlay statements.
-  return { root, existing: store.captureHome(privateOnly) === "private"
+  return { root, existing: store.captureHome(!!privateOnly, "constraints") === "private"
     ? store.recs("constraints") : store.json.loadAll("constraints") };
 });
 
@@ -537,6 +539,26 @@ program
       if (ignored) say(`  ⚠ ${describeMemoryIgnoreRule(ignored)}`);
     }
 
+    // A fresh clone resolved its overlay from this machine's profile: persist it in the
+    // checkout (local.json + the common-dir registration + overlay-routed hooks) so every
+    // later open, hook, and worktree resolves it the ordinary way. Idempotent: the next
+    // init sees the local config, not the profile.
+    let restoredOverlay = false;
+    if (store.overlaySource === "machine-profile" && store.privateDir) {
+      const localFile = join(paths.hunch, "local.json");
+      let existingLocal: Record<string, unknown> | null;
+      try { existingLocal = readOverlaySetupLocal(localFile); } catch { existingLocal = null; }
+      if (existingLocal === null) {
+        say(`  ⚠ refusing to rewrite ${localFile} to restore the overlay from this machine's profile: it is not a JSON object. Fix or remove it, then re-run \`hunch init\`.`);
+      } else {
+        const overlayMode = store.mode === "shared" ? "shared" : "private";
+        writeFileAtomic(localFile, JSON.stringify({ ...existingLocal, privateDir: store.privateDir, autoCommit: store.autoCommit, mode: overlayMode }, null, 2) + "\n");
+        ensureSharedOverlayPointer(root, store.privateDir, store.autoCommit, overlayMode, true);
+        restoredOverlay = true;
+        console.log(`memory: restored overlay ${store.privateDir} (${overlayMode}) from this machine's profile`);
+      }
+    }
+
     if (opts.index !== false) {
       if (isGitRepo(root) && revExists("HEAD", root)) {
         const res = indexRepo(store, root, { source: { kind: "commit", ref: "HEAD" } });
@@ -589,15 +611,23 @@ program
     // to the SHARED hooks dir (issue #316) rather than assuming.
     const installs: HookInstall[] = [];
     if (isGitRepo(root)) {
-      const syncToOverlay = !!(opts.privateSync || opts.sharedSync);
+      // An overlay this checkout resolves keeps the overlay-routed hook its setup (or the
+      // profile restore above) installed: a bare re-run must not downgrade it to public.
+      const existingPostCommit = hookReport(root).postCommit;
+      const overlayHook = restoredOverlay
+        || (!!store.privateDir && existingPostCommit.state === "installed" && !!existingPostCommit.flags?.includes("--private"));
+      const syncToOverlay = !!(opts.privateSync || opts.sharedSync) || overlayHook;
       // A default is not an explicit request to change the repo-wide hook.
       // Linked init keeps an installed shared block's existing commit choice.
-      let hookCommit = opts.autoCommit;
+      let hookCommit = opts.autoCommit && (!overlayHook || store.autoCommit);
       if (hookCommit && isLinkedWorktree(root)) {
         const existingHook = hookReport(root).postCommit;
         if (existingHook.state === "installed") hookCommit = existingHook.flags?.includes("--commit") ?? false;
       }
-      const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: hookCommit, localOnly: syncToOverlay });
+      // An overlay hook is the one its setup command installs: only a private-mode
+      // overlay is local-only (shared overlays follow the team's synthesis policy).
+      const localOnly = overlayHook ? store.mode !== "shared" : syncToOverlay;
+      const h = installPostCommitHook(root, inv.shell, { private: syncToOverlay, commit: hookCommit, localOnly });
       installs.push(h);
       sayHook(formatHookInstall(root, "post-commit hook", h, ` (learning loop)${syncToOverlay ? " — syncs to the shared overlay" : ""}${hookCommit ? " — auto-commit on" : ""}`), hookCommit ? "post-commit (auto-commit on)" : "post-commit");
       if (opts.autoCommit === false && hookReport(root).postCommit.flags?.includes("--commit")) {
@@ -844,7 +874,7 @@ program
       if (ctxWarning !== null) console.log(ctxWarning);
     }
     let written = 0, skipped = 0, llm = 0, heuristic = 0;
-    const home = store.captureHome(false);
+    const home = store.captureHome(false, "decisions");
     // The per-commit cost is the Claude synthesis spawn; run several at once. Safe:
     // each commit drafts independently and writes its OWN decision file atomically,
     // and the store's JS-side reads/writes run synchronously between awaits (single
@@ -1238,6 +1268,7 @@ type FreshOverlaySetupTransaction = {
   markGitignoreWrite(): void;
   markTeamWrite(): void;
   markSharedPointerWrite(): void;
+  markProfileWrite(): void;
   markHookWrite(): void;
   preserveOverlayOnRollback(): void;
   rollback(): void;
@@ -1265,7 +1296,10 @@ function beginFreshOverlaySetup(
   // Setup installs both hooks together, so both must be snapshotted: restoring only one
   // while the other still points at a deleted overlay is not a rollback.
   const hookFiles = hookDir ? [join(hookDir, "post-commit"), join(hookDir, "post-merge")] : [];
-  const paths = [localFile, codeGitignore, teamFile, ...(sharedPointer ? [sharedPointer, backLink] : []), ...hookFiles];
+  // The machine profile lives outside the repository, but a failed setup must not leave
+  // an entry that would restore a removed overlay into every future clone.
+  const profileFile = repoProfileFile();
+  const paths = [localFile, codeGitignore, teamFile, profileFile, ...(sharedPointer ? [sharedPointer, backLink] : []), ...hookFiles];
   const snapshots = new Map(paths.map((path) => [path, setupPathSnapshot(path)] as const));
   const parentExisted = new Map([
     [dirname(localFile), existsSync(dirname(localFile))],
@@ -1284,6 +1318,7 @@ function beginFreshOverlaySetup(
     markGitignoreWrite: () => mark(codeGitignore),
     markTeamWrite: () => mark(teamFile),
     markSharedPointerWrite: () => { mark(backLink); mark(sharedPointer); },
+    markProfileWrite: () => mark(profileFile),
     markHookWrite: () => { for (const f of hookFiles) mark(f); },
     // Migration is a one-way ownership handoff. Once public records have been
     // durably copied into this clone, a later setup failure may restore routing
@@ -1570,6 +1605,9 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
   freshSetup?.markSharedPointerWrite();
   if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit, mode, true)) {
     worktreeNote = "  ✓ registered in the git common dir — shared by every worktree of this repo, on any branch\n";
+    // This machine's profile for the origin lets a fresh clone restore the same overlay.
+    freshSetup?.markProfileWrite();
+    writeRepoProfileOrWarn(root, { privateDir: resolve(hunchDir), mode, autoCommit: !!opts.autoCommit });
   } else {
     worktreeNote = "  ⚠ could not register the overlay in this checkout's git common dir, so Hunch will not use .hunch/local.json here; set HUNCH_PRIVATE_DIR to this overlay instead\n";
   }
@@ -1683,6 +1721,163 @@ program
   .option("--migrate", "ONE-TIME: move this repo's EXISTING public .hunch memory into the shared overlay, then make the public repo code-only")
   .option("--trust", "trust the shared store advertised in the committed .hunch/team.json on this machine, then connect to it")
   .action((dir: string | undefined, opts: OverlaySetupOpts) => configureOverlay(dir, opts, "shared"));
+
+// ---- memory-policy (dec_66636a2b1b) -----------------------------------------
+const memoryPolicyCmd = program
+  .command("memory-policy")
+  .description("Inspect and enforce the committed memory home policy (.hunch/config.json `memory`): which kinds live in the overlay and which stay public.");
+
+memoryPolicyCmd
+  .command("status")
+  .description("Print the effective memory policy, the overlay this checkout resolves and its source, and this machine's profile entry.")
+  .action(() => {
+    const root = findRoot();
+    const policy = memoryPolicy(readConfig(hunchPaths(root)));
+    console.log(policy.home === "overlay"
+      ? `memory policy: home=overlay; public kinds: ${[...policy.publicKinds].join(", ")}`
+      : "memory policy: home=repo");
+    if (policy.unknownKinds.length) console.log(unknownPublicKindsWarning(policy.unknownKinds));
+    const store = new HunchStore(hunchPaths(root));
+    try {
+      console.log(store.privateDir
+        ? `overlay:       ${store.privateDir} (${store.mode}; source: ${store.overlaySource})`
+        : "overlay:       none configured");
+    } finally {
+      store.close();
+    }
+    const profile = readRepoProfile(root);
+    console.log(profile
+      ? `profile:       ${profile.privateDir} (${profile.mode}, auto-commit ${profile.autoCommit ? "on" : "off"}${profile.updated_at ? `, updated ${profile.updated_at}` : ""})`
+      : `profile:       none for ${repoProfileKey(root) || "this checkout (no origin remote)"}`);
+  });
+
+memoryPolicyCmd
+  .command("check")
+  .description("CI gate: fail when the branch adds or modifies a public .hunch/ record whose kind the policy homes in the overlay. Diffs git paths only; needs no overlay.")
+  .option("--base <ref>", "the ref the branch is compared against", "origin/main")
+  .action((opts: { base: string }) => {
+    const root = findRoot();
+    // Never open the store: public CI has no overlay, and the gate only judges paths.
+    // Fail before judging policy: an unfetched base would otherwise read as "no policy"
+    // and skip the base-side rule below.
+    if (!revExists(opts.base, root)) return fail(`base ref "${opts.base}" not found — fetch it before running the memory policy check`);
+    // The branch is judged by the stricter of its own policy and the base's, so a branch
+    // cannot lift the gate by dropping the policy in the same change.
+    let baseConfig: Pick<HunchConfig, "memory"> = {};
+    const baseText = fileAtRef(opts.base, ".hunch/config.json", root);
+    if (baseText) {
+      try {
+        const parsed = parseConfigText(baseText);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) baseConfig = parsed as Pick<HunchConfig, "memory">;
+      } catch { /* an unparseable base config holds no policy */ }
+    }
+    const policies = [memoryPolicy(readConfig(hunchPaths(root))), memoryPolicy(baseConfig)].filter((p) => p.home === "overlay");
+    if (!policies.length) {
+      console.log("no overlay memory policy");
+      return;
+    }
+    const policy = { home: "overlay" as const, publicKinds: new Set([...policies[0]!.publicKinds].filter((k) => policies.every((p) => p.publicKinds.has(k)))) };
+    // The state ledger (.hunch/changes/) lives with the partition's records, so under an
+    // overlay policy it is overlay-homed too.
+    const kinds = [...ENTITY_KINDS, CHANGES_DIR] as readonly string[];
+    // Deletions are allowed (rangeFilesOrNull excludes them): removing a public record is
+    // the migration direction.
+    const changed = rangeFilesOrNull(opts.base, root);
+    if (changed === null) return fail(`cannot diff ${opts.base}...HEAD (no merge base?) — fetch full history before running the memory policy check`);
+    const offending = changed.filter((path) => {
+      const parts = path.split("/");
+      return parts[0] === ".hunch" && parts.length > 2 && kinds.includes(parts[1]!) && !policy.publicKinds.has(parts[1]!);
+    });
+    if (!offending.length) {
+      console.log(`✓ memory policy: no overlay-homed record added or modified in the public store since ${opts.base}`);
+      return;
+    }
+    console.log(`⛔ memory policy: ${offending.length} public record(s) of overlay-homed kinds added or modified since ${opts.base}:`);
+    for (const path of offending) console.log(`  ${path}`);
+    console.log(`The policy in .hunch/config.json homes every kind except ${[...policy.publicKinds].join(", ")} in the overlay, so these must not be committed here.`);
+    console.log("Fix: capture them through the overlay, or move them with `hunch memory-policy migrate` and commit the deletions.");
+    process.exitCode = 1;
+  });
+
+memoryPolicyCmd
+  .command("migrate")
+  .description("Move public records of overlay-homed kinds into the overlay and delete the public files. Commits nothing; review and commit yourself.")
+  .option("--dry-run", "list what would move and write nothing")
+  .action((opts: { dryRun?: boolean }) => {
+    const root = findRoot();
+    const store = new HunchStore(hunchPaths(root));
+    try {
+      if (store.memoryPolicy.home !== "overlay") {
+        console.log("no overlay memory policy — nothing to migrate");
+        return;
+      }
+      if (!store.privateDir) {
+        return fail("Refused: memory-policy migrate needs an overlay to move records into, and none is configured. Configure one with `hunch private <dir>`, `hunch shared --repo <url>`, or HUNCH_PRIVATE_DIR; nothing was moved.");
+      }
+      let moved = 0, conflicts = 0, leftovers = 0;
+      for (const kind of ENTITY_KINDS) {
+        if (store.memoryPolicy.publicKinds.has(kind)) continue;
+        // Only records the validating loader returned are moved; anything it skipped
+        // stays in place (never silently dropped, con_947c578b2c).
+        for (const record of store.json.loadAll(kind)) {
+          const id = (record as { id: string }).id;
+          // An overlay copy that differs is a conflict a human settles: deleting the public
+          // copy would lose whichever version is newer.
+          const existing = store.getPrivateRec(kind, id);
+          // A file the overlay loader skipped (invalid, corrupt, 0-byte tombstone) is not
+          // an absence: writing over it would destroy it.
+          // An id no file name can hold (a misnamed file the loader kept) is a conflict too.
+          let unreadable: boolean;
+          try {
+            unreadable = !existing && store.hasPrivateRecordFile(kind, id);
+          } catch {
+            unreadable = true;
+          }
+          if (unreadable || (existing && !sameCanonical(existing, record))) {
+            console.log(`conflict: ${kind} ${id} ${unreadable ? "has an overlay file the loader could not read" : "differs between the public store and the overlay"} — kept both; reconcile by hand, then re-run`);
+            conflicts++;
+            continue;
+          }
+          if (opts.dryRun) {
+            console.log(`would move ${kind} ${id}`);
+            moved++;
+            continue;
+          }
+          if (!existing) store.putPrivate(kind, record);
+          store.json.delete(kind, id);
+          // delete() removes only the canonical `<id>.json`; a misnamed copy the loader
+          // still reads (`<id>.orig.json`, a mergetool `<id>_BASE_1.json`) keeps the record
+          // public. Never delete it unseen, never report it moved.
+          if (store.json.get(kind, id)) {
+            console.log(`leftover: ${kind} ${id} is in the overlay, but a misnamed public file still holds it — check it matches, delete it by hand, then re-run`);
+            leftovers++;
+            continue;
+          }
+          console.log(`moved ${kind} ${id} → overlay`);
+          moved++;
+        }
+      }
+      console.log(opts.dryRun
+        ? `${moved} record(s) would move to ${store.privateDir}; nothing was written`
+        : `${moved} record(s) moved to ${store.privateDir}; review, then commit the public deletions (and the overlay)`);
+      if (conflicts) console.log(`⛔ ${conflicts} conflicting record(s) were not moved`);
+      if (leftovers) console.log(`⛔ ${leftovers} record(s) still have a public copy in a misnamed file`);
+      if (conflicts || leftovers) process.exitCode = 1;
+    } finally {
+      store.close();
+    }
+  });
+
+memoryPolicyCmd
+  .command("forget")
+  .description("Drop this machine's profile entry for this repository's origin, so a fresh clone no longer restores the overlay. Touches nothing in the checkout.")
+  .action(() => {
+    const root = findRoot();
+    const key = repoProfileKey(root);
+    console.log(removeRepoProfile(root)
+      ? `removed the machine profile entry for ${key}`
+      : `no profile entry for ${key || "this checkout (no origin remote)"}`);
+  });
 
 // ---- worktree (one-command worktree wired into Hunch) ----------------------
 program
@@ -2128,7 +2323,7 @@ program
       provenance: { source: "extracted", confidence: 0.5, evidence: [range] },
       date: now,
     };
-    const home = store.captureHome(!!opts.private);
+    const home = store.captureHome(!!opts.private, "runbooks");
     store.putCapture("runbooks", rec, opts.private);
     store.reindex();
     pumpMemoryHome(store, root, home, `hunch: capture runbook ${rec.id}`);
@@ -2147,7 +2342,9 @@ program
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     const intents = extractInlineIntent(root);
     const now = new Date().toISOString();
-    const home = store.captureHome(!!opts.private);
+    // Decisions and constraints can have different homes under a memory policy, so each
+    // kind resolves its own (lazily: a constraint-only file must not need an overlay).
+    const homeOf = (kind: "decisions" | "constraints") => store.captureHome(!!opts.private, kind);
     let dec = 0, con = 0;
     for (const it of intents) {
       const ev = [`${it.file}:${it.line}`];
@@ -2156,7 +2353,7 @@ program
         // Preserve idempotence only from the selected physical home. A merged
         // overlay-first lookup could copy a private topic/window into a public
         // record with the same deterministic id.
-        const prev = store.recsInHome("decisions", home).find((d) => d.id === id);
+        const prev = store.recsInHome("decisions", homeOf("decisions")).find((d) => d.id === id);
         const rec: Decision = {
           id, title: it.text, topic: prev?.topic ?? null, status: "accepted",
           context: `Captured from an inline hunch-why comment (${it.file}:${it.line}).`,
@@ -2170,7 +2367,7 @@ program
         dec++;
       } else {
         const id = constraintId(`inline:${it.file}:${it.text}`);
-        const prev = store.recsInHome("constraints", home).find((c) => c.id === id);
+        const prev = store.recsInHome("constraints", homeOf("constraints")).find((c) => c.id === id);
         const rec: Constraint = {
           id, type: "correctness", statement: it.text, scope: [it.file],
           // Advisory by default — an inline rule never auto-blocks a build; raise severity
@@ -2186,7 +2383,15 @@ program
       }
     }
     store.reindex();
-    if (dec || con) flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: capture ${dec + con} inline intent(s)`);
+    if (dec || con) {
+      const message = `hunch: capture ${dec + con} inline intent(s)`;
+      if (dec && con && homeOf("decisions") !== homeOf("constraints")) {
+        flushCapture(store, hunchPaths(root).hunch, !!opts.private, message, undefined, undefined, "decisions");
+        flushCapture(store, hunchPaths(root).hunch, !!opts.private, message, undefined, undefined, "constraints");
+      } else {
+        flushCapture(store, hunchPaths(root).hunch, !!opts.private, message, undefined, undefined, dec ? "decisions" : "constraints");
+      }
+    }
     if (!intents.length) console.log("No `hunch-why:` / `hunch-rule:` comments found.");
     else console.log(`✓ captured ${dec} decision(s) + ${con} constraint(s) from inline comments${opts.private ? " [private overlay]" : ""}`);
     store.close();
@@ -2214,7 +2419,7 @@ program
       store.json.ensureDirs();
       const now = new Date().toISOString();
       const arrow = opts.assert.startsWith("not-") ? "↛" : "→";
-      const home = store.captureHome(false);
+      const home = store.captureHome(false, "decisions");
       const d = store.putCapture("decisions", {
         id: decisionId(`conform:${opts.add}:${opts.subject}:${opts.object ?? ""}`),
         title: opts.add,
@@ -3614,7 +3819,7 @@ landscapeCmd
       for (const relationship of plan.relationshipsToWrite) store.putCapture("edges", relationship);
       store.reindex();
       if (plan.resourcesToWrite.length || plan.relationshipsToWrite.length) {
-        pumpMemoryHome(store, root, store.captureHome(false), "hunch: adopt reviewed Engineering Landscape candidates");
+        pumpMemoryHome(store, root, store.captureHome(false, "resources"), "hunch: adopt reviewed Engineering Landscape candidates");
       }
       console.log(JSON.stringify(plan.receipt, null, 2));
       const refreshed = plan.refreshedResourceIds.length + plan.refreshedRelationshipIds.length;
@@ -3834,9 +4039,9 @@ program
         store.putCapture("decisions", d, opts.private);
       }
       store.reindex();
-      const home = store.captureHome(!!opts.private);
+      const home = store.captureHome(!!opts.private, "decisions");
       if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
-      const flush = flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: import ${decisions.length} ADR(s) from ${dir}`);
+      const flush = flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: import ${decisions.length} ADR(s) from ${dir}`, undefined, undefined, "decisions");
       const live = decisions.filter((d) => d.status === "accepted").length;
       console.log(`✓ imported ${decisions.length} ADR(s) from ${dir} (${created} new, ${updated} updated; ${live} live, ${decisions.length - live} historical)${opts.private ? " [private overlay]" : ""}`);
       const pending = pendingImportedAdrReviews(decisions);
@@ -3931,7 +4136,7 @@ program
     if (!SEV.includes(opts.severity)) return fail(`--severity must be one of: ${SEV.join(", ")}`);
     const { store, root } = storeFor();
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
-    const home = store.captureHome(!!opts.private);
+    const home = store.captureHome(!!opts.private, "constraints");
     if (opts.sourceDecision) {
       const source = home === "private"
         // Private reads intentionally see public + private memory, so a private
@@ -3984,7 +4189,7 @@ program
     // Public grounding is a publishable artifact. Private rules stay local and
     // are surfaced by local checks/MCP, never copied into committed agent docs.
     if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store);
-    const flush = flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: capture ${c.id}`);
+    const flush = flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: capture ${c.id}`, undefined, undefined, "constraints");
     console.log(`✓ recorded ${c.severity} constraint ${c.id}: "${c.statement}" (scope: ${scope.join(", ") || "repo"})${opts.private ? " [private overlay]" : ""}`);
     if (derived && c.forbids?.deps.length) console.log(`  ↳ matcher: forbids import of ${c.forbids.deps.join(", ")} (precise, immune to staleness)`);
     if (c.severity === "blocking" && !effectiveForbids(c)) {
@@ -7009,6 +7214,31 @@ program
       const ignored = memoryIgnoreRule(root);
       if (ignored) console.log(`memory:     ⚠ ${describeMemoryIgnoreRule(ignored)}`);
     }
+    // Memory home policy (dec_66636a2b1b): a policy that refuses every capture, or that
+    // needs a newer Hunch, fails doctor; the machine profile's part is reported beside it.
+    const rawPolicy = readConfig(hunchPaths(root)).memory;
+    if (rawPolicy) {
+      console.log(store.memoryPolicy.home === "overlay"
+        ? `memory policy: home=overlay; public kinds: ${[...store.memoryPolicy.publicKinds].join(", ")}`
+        : "memory policy: home=repo");
+      if (store.memoryPolicy.unknownKinds.length) console.log(unknownPublicKindsWarning(store.memoryPolicy.unknownKinds));
+      if (store.memoryPolicy.home === "overlay" && !store.privateDir) {
+        console.log("memory policy: ⛔ requires an overlay but none is configured — captures are REFUSED (nothing is written public). Fix: hunch private <dir> | hunch shared --repo <url> | HUNCH_PRIVATE_DIR");
+        process.exitCode = 1;
+      }
+      if (typeof rawPolicy.min_version === "string" && isNewerVersion(rawPolicy.min_version, HUNCH_VERSION)) {
+        console.log(`memory policy: ⛔ requires Hunch ${rawPolicy.min_version} or newer (this is ${HUNCH_VERSION}) — upgrade Hunch`);
+        process.exitCode = 1;
+      }
+    }
+    if (store.overlaySource === "machine-profile" && store.privateDir) {
+      console.log(`overlay: from this machine's profile → ${store.privateDir}; run hunch init to persist it in this checkout`);
+    } else if (store.overlaySource === "local-config" && store.privateDir) {
+      const profile = readRepoProfile(root);
+      if (profile && !samePathLoose(store.privateDir, profile.privateDir)) {
+        console.log(`memory profile drift: checkout uses ${store.privateDir}, machine profile says ${profile.privateDir}; re-run hunch private/shared to update`);
+      }
+    }
     // Worktree posture: linked worktrees share ONE memory via the git common dir. Only
     // surfaced in a linked worktree (no noise in a normal single checkout), so a
     // "memory missing here" symptom has an obvious cause + fix.
@@ -7048,6 +7278,28 @@ program
 
 function rel(root: string, p: string): string {
   return p.startsWith(root) ? p.slice(root.length + 1) : p;
+}
+
+/** Whether two records are the same once canonicalized; one that cannot be
+ *  canonicalized counts as different, so migrate keeps both copies. */
+function sameCanonical(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
+  } catch {
+    return false;
+  }
+}
+
+function unknownPublicKindsWarning(names: string[]): string {
+  return `memory policy: ⚠ unknown kind(s) in public_kinds: ${names.join(", ")} — ignored, so those names stay overlay-homed (policies are always public). Known kinds: ${ENTITY_KINDS.join(", ")}`;
+}
+
+/** Same location whatever the separators or a trailing slash; the same real directory
+ *  (through symlinks, and in its canonical case on Windows) also counts. */
+function samePathLoose(a: string, b: string): boolean {
+  const norm = (p: string): string => resolve(p).replace(/[\\/]+$/, "");
+  if (norm(a) === norm(b)) return true;
+  return norm(realpathNorm(a)) === norm(realpathNorm(b));
 }
 
 /** Run the Windows ~/.claude.json drive-letter case-split heal and print what it

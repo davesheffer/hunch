@@ -1469,5 +1469,45 @@
         "title": "linked worktree of a temp repo: the shared hooks dir in the common git dir is still a plain install"
       }
     ]
+  },
+  "memory-policy": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy status prints the policy, the overlay dir and its source, and the profile entry"
+      }
+    ]
+  },
+  "memory-policy check": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy check: an added or modified overlay-homed record fails; added constraints and deletions pass"
+      }
+    ]
+  },
+  "memory-policy migrate": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy migrate moves a public finding into the overlay, deletes the public file, keeps constraints, commits nothing"
+      }
+    ]
+  },
+  "memory-policy status": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy status prints the policy, the overlay dir and its source, and the profile entry"
+      }
+    ]
+  },
+  "memory-policy forget": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy forget drops this machine's profile entry for the origin"
+      }
+    ]
   }
 }

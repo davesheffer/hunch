@@ -2,9 +2,11 @@
  *  state (the on-disk schema version lives in manifest.json). Committed alongside
  *  the graph, so a whole team shares the same settings — e.g. how firmly the
  *  agent lifecycle hooks enforce engineering memory before an edit. */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { writeFileAtomic } from "./io.js";
 import type { HunchPaths } from "./paths.js";
+import { ENTITY_KINDS } from "./types.js";
 
 /** How firmly the agent lifecycle hook (`hunch hook`) enforces Hunch on edits:
  *   off      — emit nothing (hook is a no-op).
@@ -41,6 +43,32 @@ export interface HunchConfig {
   /** `hunch verify` knobs: `tests` discovery glob, `command` runner template
    *  (`{files}` is replaced by the selected test paths). */
   verify?: { tests?: string; command?: string };
+  /** Where memory lives (dec_66636a2b1b). `home: "overlay"` makes the overlay the home of
+   *  every kind outside `public_kinds`, and a capture with no reachable overlay is refused
+   *  rather than written public. Absent = today's routing. */
+  memory?: { home?: "repo" | "overlay"; public_kinds?: string[]; min_version?: string };
+}
+
+export interface MemoryPolicy {
+  home: "repo" | "overlay";
+  publicKinds: ReadonlySet<string>;
+  /** `public_kinds` entries that name no kind (a typo, or `policies`, which is always
+   *  public and outside kind routing). Ignored for routing; status and doctor warn. */
+  unknownKinds: string[];
+}
+
+const DEFAULT_PUBLIC_KINDS = ["constraints", "components"];
+// Index output is regenerable from the code and CI indexes with no overlay, so it is
+// public under every policy (the indexer writes components as well as symbols and edges).
+const STRUCTURAL_KINDS = ["components", "symbols", "edges", "resources"];
+
+/** The effective memory policy: home "repo" unless the config explicitly says "overlay". */
+export function memoryPolicy(config: Pick<HunchConfig, "memory">): MemoryPolicy {
+  const raw = config.memory;
+  if (!raw || raw.home !== "overlay") return { home: "repo", publicKinds: new Set(), unknownKinds: [] };
+  const names = Array.isArray(raw.public_kinds) ? raw.public_kinds.filter((k): k is string => typeof k === "string") : DEFAULT_PUBLIC_KINDS;
+  const isKind = (k: string): boolean => (ENTITY_KINDS as readonly string[]).includes(k);
+  return { home: "overlay", publicKinds: new Set([...names.filter(isKind), ...STRUCTURAL_KINDS]), unknownKinds: names.filter((k) => !isKind(k)) };
 }
 
 /** The effective workspace config: every field present, unknown values ignored. */
@@ -62,27 +90,49 @@ export function isFirmness(v: unknown): v is Firmness {
   return typeof v === "string" && (FIRMNESS_LEVELS as readonly string[]).includes(v);
 }
 
+/** Parse config.json text, tolerating a leading BOM (Windows editors write one). Throws
+ *  on invalid JSON; callers choose between falling back and refusing. */
+export function parseConfigText(text: string): unknown {
+  return JSON.parse(text.startsWith("\uFEFF") ? text.slice(1) : text);
+}
+
 /** Read `.hunch/config.json`. A missing/unparseable file, or an unknown firmness
  *  value, falls back to defaults — the hook must NEVER crash an edit over config. */
 export function readConfig(paths: HunchPaths): HunchConfig {
   if (!existsSync(paths.config)) return defaults();
   try {
-    const raw = JSON.parse(readFileSync(paths.config, "utf8")) as Partial<HunchConfig>;
+    const raw = parseConfigText(readFileSync(paths.config, "utf8")) as Partial<HunchConfig>;
     return {
       firmness: isFirmness(raw.firmness) ? raw.firmness : DEFAULT_FIRMNESS,
       ...(typeof raw.mcp_tools === "string" && raw.mcp_tools.trim() ? { mcp_tools: raw.mcp_tools.trim() } : {}),
       ...(raw.workspaces && typeof raw.workspaces === "object" && !Array.isArray(raw.workspaces) ? { workspaces: raw.workspaces } : {}),
       ...(raw.verify && typeof raw.verify === "object" && !Array.isArray(raw.verify) ? { verify: raw.verify } : {}),
+      ...(raw.memory && typeof raw.memory === "object" && !Array.isArray(raw.memory) ? { memory: raw.memory } : {}),
     };
   } catch {
     return defaults();
   }
 }
 
-/** Write `.hunch/config.json`, merging `patch` over the current on-disk config. */
+/** Write `.hunch/config.json`, merging `patch` over the current on-disk config. Keys
+ *  this build does not know survive (a newer build's settings must not vanish on an older
+ *  write), and an unparseable file is refused rather than clobbered. */
 export function writeConfig(paths: HunchPaths, patch: Partial<HunchConfig>): HunchConfig {
-  const next: HunchConfig = { ...readConfig(paths), ...patch };
+  let onDisk: Record<string, unknown> = {};
+  if (existsSync(paths.config)) {
+    let parsed: unknown;
+    try {
+      parsed = parseConfigText(readFileSync(paths.config, "utf8"));
+    } catch (error) {
+      throw new Error(`refusing to overwrite unparseable ${paths.config}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`refusing to overwrite ${paths.config}: it is not a JSON object`);
+    }
+    onDisk = parsed as Record<string, unknown>;
+  }
+  const next = { ...onDisk, ...readConfig(paths), ...patch } as HunchConfig;
   mkdirSync(dirname(paths.config), { recursive: true });
-  writeFileSync(paths.config, JSON.stringify(next, null, 2) + "\n");
+  writeFileAtomic(paths.config, JSON.stringify(next, null, 2) + "\n");
   return next;
 }

@@ -115,6 +115,19 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
+      # The memory home policy gate (dec_66636a2b1b): a PR must not add or modify a
+      # public .hunch/ record whose kind the committed policy homes in the overlay. It
+      # diffs git paths only (no overlay, no index), so it runs on every PR leg, the
+      # memory-only fast path included. The checkout's full fetch already holds the
+      # base; the explicit fetch keeps the gate honest if that ever changes.
+      - name: Memory policy check
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          npx tsx src/cli/index.ts memory-policy check --base "origin/${BASE_REF}"
+
       # The release gate's graph stages, in its order: the tests that read the
       # committed graph run BEFORE `index` regenerates the grounding docs, or the
       # freshness test would compare the regenerated copy with itself.

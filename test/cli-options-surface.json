@@ -1481,6 +1481,22 @@
       }
     ]
   },
+  "memory-policy check --base": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy check: an added or modified overlay-homed record fails; added constraints and deletions pass"
+      }
+    ]
+  },
+  "memory-policy migrate --dry-run": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy migrate --dry-run lists the move and writes nothing"
+      }
+    ]
+  },
   "now --private": {
     "tests": [
       {

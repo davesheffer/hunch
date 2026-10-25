@@ -17,6 +17,7 @@ import { canonicalRemoteUrl, checkoutCommonDir, gitNullDevice, mainWorktreeRoot,
 import { HunchStore } from "../store/hunchStore.js";
 import { JsonStore } from "../store/jsonStore.js";
 import { ensureSharedOverlayPointer } from "./worktree.js";
+import { writeRepoProfileOrWarn } from "../core/repoProfile.js";
 import { installMergeDriver } from "./mergeDriver.js";
 import { ensureGitignore } from "./gitignore.js";
 import { resolveInvocation } from "../cli/invocation.js";
@@ -931,6 +932,8 @@ export function ensureTeamOverlay(root: string): string | null {
     const autoCommit = existing.autoCommit !== false;
     writeFileAtomic(localFile, JSON.stringify({ ...existing, privateDir: hunchDir, autoCommit, mode: "shared" }, null, 2) + "\n");
     ensureSharedOverlayPointer(root, hunchDir, autoCommit, "shared");
+    // Remember the wiring on this machine so a fresh clone of the same origin restores it.
+    writeRepoProfileOrWarn(root, { privateDir: resolve(hunchDir), mode: "shared", autoCommit });
     return hunchDir;
   } catch {
     return null;

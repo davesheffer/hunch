@@ -2938,7 +2938,14 @@ export function revExists(ref: string, cwd: string): boolean {
 /** Files a PR/branch changes vs `base` (3-dot: changes on HEAD since the merge-base,
  *  i.e. exactly the PR's own commits — the CI Constraint Guard's surface). */
 export function rangeFiles(base: string, cwd: string, head = "HEAD"): string[] {
-  return nulPaths(gitOutputOrNull(["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR", `${base}...${head}`], cwd));
+  return rangeFilesOrNull(base, cwd, head) ?? [];
+}
+
+/** `rangeFiles`, but null when git cannot diff the range (no merge base, bad ref), so a
+ *  gate can fail closed instead of judging an empty list. */
+export function rangeFilesOrNull(base: string, cwd: string, head = "HEAD"): string[] | null {
+  const out = gitOutputOrNull(["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--diff-filter=ACMR", `${base}...${head}`], cwd);
+  return out === null ? null : nulPaths(out);
 }
 
 /** Commits on `head` since `base` (2-dot: commits added by the task), oldest-first, each

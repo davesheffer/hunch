@@ -122,7 +122,7 @@ export function taskRecordFromReports(reports: readonly TaskReport[], touched: r
  * private save, or a delivered lesson that lives only there — must not be named
  * in a public record; the store's own routing (unified/shared mode) wins first. */
 export function taskRecordHome(store: HunchStore, record: TaskRecord): TaskRecordHome {
-  if (store.captureHome(false) === "private") return "private";
+  if (store.captureHome(false, "tasks") === "private") return "private";
   if (!store.hasPrivate) return "public";
   if (record.saved.some((s) => s.home === "private")) return "private";
   for (const lesson of record.lessons) {
@@ -203,7 +203,7 @@ export function persistTaskRecord(root: string, store: HunchStore, taskId: strin
   const stored = store.putCapture("tasks", record, home === "private");
   store.reindex();
   const flushNow = options.flush ?? taskRecordFlushMode(root) === "each";
-  const flushed = flushNow ? flushCapture(store, hunchPaths(root).hunch, home === "private", `hunch: task ${record.id}`) : null;
+  const flushed = flushNow ? flushCapture(store, hunchPaths(root).hunch, home === "private", `hunch: task ${record.id}`, undefined, undefined, "tasks") : null;
   // The ranking evaluation follows the corpus: recomputed here, read at delivery. Never blocks a finish.
   refreshRankEval(root, store);
   return { record: stored, home, flushed, changed: true };

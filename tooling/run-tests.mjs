@@ -51,16 +51,20 @@ export function fixtureGitSystemConfig(inherited = process.env) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const tsx = fileURLToPath(import.meta.resolve("tsx/cli"));
   const config = fixtureGitSystemConfig();
+  // The user config dir holds machine.json and repo-profiles.json; a real repo profile
+  // must never route a fixture's captures into the developer's actual overlay.
+  const configHome = mkdtempSync(join(tmpdir(), "hunch-test-config-"));
   let status = 1;
   try {
     const run = spawnSync(process.execPath, [tsx, "--test", ...process.argv.slice(2)], {
-      env: fixtureGitEnv({ ...process.env, GIT_CONFIG_SYSTEM: config.file }), stdio: "inherit", windowsHide: true,
+      env: fixtureGitEnv({ ...process.env, GIT_CONFIG_SYSTEM: config.file, XDG_CONFIG_HOME: configHome }), stdio: "inherit", windowsHide: true,
     });
     if (run.error) throw run.error;
     status = run.status ?? 1;
   } finally {
     rmSync(config.file, { force: true });
     rmdirSync(config.dir);
+    rmSync(configHome, { recursive: true, force: true });
   }
   process.exit(status);
 }

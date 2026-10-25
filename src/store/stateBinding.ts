@@ -89,7 +89,10 @@ export function stateHomeFor(store: HunchStore, scope: Scope): { home: "public" 
   const own = partitionOf(store);
   if (scopePath(scope) === scopePath(own)) {
     // The store IS this partition: its capture home (public `.hunch/`, or the overlay in shared mode).
-    const home = store.captureHome(false);
+    if (store.memoryPolicy.home === "overlay" && (!store.hasPrivate || !store.privateDir)) {
+      throw new StateRefusal("no-partition-home", `the memory policy in .hunch/config.json homes ${scopePath(scope)} in the overlay, but no overlay is configured on this machine; configure one with \`hunch private <dir>\`, \`hunch shared --repo <url>\`, or HUNCH_PRIVATE_DIR`);
+    }
+    const home = store.captureHome(false, null);
     return { home, hunchDir: home === "private" ? store.privateDir! : hunchPaths(store.publicRoot).hunch, isPrivate: false };
   }
   if (scope.kind === "repository") throw new StateRefusal("unsupported", `this store serves ${scopePath(own)}, not ${scopePath(scope)}`);
@@ -647,6 +650,9 @@ function writeStateAuthorized(store: HunchStore, input: unknown, opts: WriteOpti
     throw new StateRefusal("unsupported", `${request.facet} records belong to this store's own partition ${scopePath(repo)}; they cannot be written under ${scopePath(request.scope)} — use a partition-scoped facet (conventions, receipts, commitments, derived, entities, relationships) there`);
   }
   const { home, hunchDir, isPrivate } = stateHomeFor(store, request.scope);
+  // Under a memory policy putCapture routes per kind (constraints stay public) while this
+  // partition's ledger lives in one home; a state write keeps record and ledger together.
+  const recordPrivate = isPrivate || (store.memoryPolicy.home === "overlay" && home === "private");
   /** Several partitions share one overlay home: a record counts for this write only when it is
    *  in the write's own partition. */
   const inScope = (r: unknown): boolean => scopePath(recordScope(r, repo)) === scopePath(request.scope);
@@ -902,12 +908,12 @@ function writeStateAuthorized(store: HunchStore, input: unknown, opts: WriteOpti
     const declaration = join(hunchPaths(store.publicRoot).hunch, 'partition.json');
     writeFileAtomic(declaration, JSON.stringify({ ...partitionOf(store), required_capabilities: [STATE_RECORD_VISIBILITY_VERSION] }, null, 2) + '\n');
   }
-  store.putCapture(facet as EntityKind, record, isPrivate);
+  store.putCapture(facet as EntityKind, record, recordPrivate);
   /** What is on file now — the hash every event, ref and result carries. */
   const onFileHash = stateHash(getHere(id) ?? record);
   const changes: PendingChange[] = [];
   if (supersedes) {
-    const closed = closeWindow(store, facet, supersedes, id, now, isPrivate);
+    const closed = closeWindow(store, facet, supersedes, id, now, recordPrivate);
     if (closed) changes.push(supersededChange(store.getRec(facet as EntityKind, supersedes)! as Record<string, unknown>));
   }
   changes.push(ownChange(onFileHash));

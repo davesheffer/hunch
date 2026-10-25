@@ -92,7 +92,7 @@ export async function syncCommit(
   // Check the store this capture WILL write to. Looking only in the public store
   // made private/shared re-syncs re-draft the same commit and let `--force`
   // overwrite a human-confirmed overlay decision.
-  const home = opts.home ?? store.captureHome(!!opts.private);
+  const home = opts.home ?? store.captureHome(!!opts.private, "decisions");
   const existing = home === "private" ? store.getPrivateRec("decisions", id) : store.json.get("decisions", id);
   // Never clobber a human-confirmed decision with a low-confidence auto-draft —
   // even under --force. Skip BEFORE synthesizing so we never pay for a draft we'd
@@ -305,7 +305,7 @@ export async function recordFailure(
   const id = bugId(failure.test);
   // recurrence = a DIFFERENT prior bug with a similar symptom (not this same one).
   // Query text mirrors the corpus side (title+symptom+root_cause) for symmetry.
-  const home = store.captureHome(!!opts.private);
+  const home = store.captureHome(!!opts.private, "bugs");
   const prior = findRecurrence(store, `${draft.title} ${draft.symptom} ${draft.root_cause}`, id, home);
 
   const affectedFiles = [...new Set(suspects.map((s) => s.file))];
@@ -336,15 +336,22 @@ export async function recordFailure(
 
   // Promotion (DESIGN §4): a recurrence or a SUBSTANTIATED high-severity bug raises
   // a regression Constraint to stop it coming back, and bumps fragility.
+  // The promoted guard and the fragility bump follow their OWN kinds' homes: a memory
+  // policy can home bugs in the overlay while constraints/components stay public.
+  const touched = new Set<SynthesisHome>([home]);
   let constraint: Constraint | undefined;
   if (shouldPromoteConstraint(draft.severity, bug.root_cause, !!prior)) {
-    constraint = promoteConstraint(store, bug, home, !!prior);
+    const constraintHome = store.captureHome(!!opts.private, "constraints");
+    constraint = promoteConstraint(store, bug, constraintHome, !!prior);
+    touched.add(constraintHome);
     bug.lineage.spawned_constraint = constraint.id;
     putBugInHome(store, bug, home);
   }
-  raiseFragility(store, affectedFiles, home);
+  const componentHome = store.captureHome(!!opts.private, "components");
+  raiseFragility(store, affectedFiles, componentHome);
+  touched.add(componentHome);
 
-  return { status: "written", bug, constraint, provider: actualProvider, touchedHomes: [home] };
+  return { status: "written", bug, constraint, provider: actualProvider, touchedHomes: [...touched] };
 }
 
 export interface CapturedFailure {
@@ -392,7 +399,7 @@ export async function captureTestRun(
   let sha: string | null = null;
   try { sha = headSha(root); } catch { /* not a git repo / no HEAD — leave null */ }
   const fixed: Bug[] = [];
-  const home = store.captureHome(!!input.private);
+  const home = store.captureHome(!!input.private, "bugs");
   for (const name of report.passed) {
     const b = home === "private" ? store.getPrivateRec("bugs", bugId(name)) : store.json.get("bugs", bugId(name));
     if (b && b.status === "open") {

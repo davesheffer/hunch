@@ -72,6 +72,8 @@ export function recordWorkspaceSnapshot(store: HunchStore, root: string, opts: {
   if (opts.dryRun) return { status: "dry-run", record };
   const isPrivate = store.hasPrivate;
   if (!isPrivate && !config.publish_public) return { status: "no-home", record };
+  // A memory policy that homes workspaces in the overlay leaves this machine no home without one.
+  if (!isPrivate && store.memoryPolicy.home === "overlay" && !store.memoryPolicy.publicKinds.has("workspaces")) return { status: "no-home", record };
   const previous = store.getRec("workspaces", record.id);
   if (previous && Date.now() - Date.parse(previous.observed_at) < 86_400_000 && sameWorkspaceContent(previous, record)) {
     return { status: "unchanged", record, previous };
@@ -90,7 +92,7 @@ export function recordWorkspaceSnapshot(store: HunchStore, root: string, opts: {
     if (/already exists in the other memory home/.test(reason)) return { status: "collision", record, reason };
     throw error;
   }
-  const flushed = flushCapture(store, hunchPaths(root).hunch, isPrivate, `hunch: workspace snapshot ${machine.label}`);
+  const flushed = flushCapture(store, hunchPaths(root).hunch, isPrivate, `hunch: workspace snapshot ${machine.label}`, undefined, undefined, "workspaces");
   return { status: "written", record, home: isPrivate ? "private" : "public", flushed };
 }
 
