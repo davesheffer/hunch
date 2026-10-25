@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "הקשר שמתאים לסוכן ולהנחיה",
       "עצי עבודה מקושרים מקבלים הקשר, ואין קומיטים אוטומטיים לענף הראשי",
       "שכתוב נקי מאפס",
       "בדיקות לפי השינוי, טווח השפעה רחב יותר וכתיבות בטוחות יותר",
@@ -98,6 +99,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Контекст по агенту и по запросу",
       "Связанные worktree получают контекст; без автокоммитов в основную ветку",
       "Код переписан с нуля",
       "Тесты по изменению, более широкий радиус влияния и более надёжная запись",
@@ -188,6 +190,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "سياق يناسب الوكيل والطلب",
       "أشجار العمل المرتبطة تحصل على السياق، ولا التزامات تلقائية على الفرع الرئيسي",
       "إعادة كتابة نظيفة من الصفر",
       "اختبارات بحسب التغيير، ونطاق تأثير أوسع، وكتابة أكثر أمانًا",
@@ -278,6 +281,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Contexto a la medida del agente y de la petición",
       "Worktrees enlazados con contexto y sin commits automáticos en la rama principal",
       "Una reescritura desde cero",
       "Pruebas según el cambio, mayor radio de impacto y escrituras más seguras",
