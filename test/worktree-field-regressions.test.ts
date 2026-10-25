@@ -49,12 +49,15 @@ function repoWithWorktree(t: { after: (f: () => void) => void }): { base: string
   return { base, main, wt };
 }
 
-/** The hook as a host spawns it: process cwd is the MAIN checkout. */
+/** The hook as a host spawns it: process cwd is the MAIN checkout. An isolated
+ *  home keeps the developer's own ~/.claude/agents roles out of the result. */
 function hook(processCwd: string, payload: Record<string, unknown>): string {
   const tmp = join(processCwd, ".tmp");
+  const home = join(processCwd, ".home");
   mkdirSync(tmp, { recursive: true });
+  mkdirSync(home, { recursive: true });
   return execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", "claude"], {
-    cwd: processCwd, env: { ...process.env, HUNCH_PIPELINE: "0", TMPDIR: tmp, TMP: tmp, TEMP: tmp },
+    cwd: processCwd, env: { ...process.env, HUNCH_PIPELINE: "0", TMPDIR: tmp, TMP: tmp, TEMP: tmp, HOME: home, USERPROFILE: home },
     input: JSON.stringify({ cwd: processCwd, session_id: `s-${Math.random().toString(36).slice(2)}`, ...payload }), encoding: "utf8",
   }).trim();
 }
@@ -118,6 +121,34 @@ test("B5: host notification turns and injected reminders never read as a human c
   assert.equal(looksLikeCorrection("<system-reminder>context</system-reminder>\nno, that's wrong — revert that"), true, "the human's own words after a reminder still count");
   assert.equal(looksLikeCorrection("never use the pay-per-token API here"), true);
   assert.equal(looksLikeCorrection("<system-reminder>truncated host text\nno, that's wrong — revert that"), true, "an unclosed host tag never swallows the human's next lines");
+  assert.equal(looksLikeCorrection("<browser_instruction># Browser automation\nYou must ALWAYS capture extra frames.</browser_instruction>continue from the saved handoff."), false, "the browser extension's standing instructions are host text");
+});
+
+test("B3: a role without Hunch's MCP tools is never told to call them", t => {
+  const { main, wt } = repoWithWorktree(t);
+  const role = "---\nname: scout\ntools: Read, Grep, Glob\n---\nRead-only lookup.\n";
+  for (const root of [main, wt]) {
+    mkdirSync(join(root, ".claude", "agents"), { recursive: true });
+    writeFileSync(join(root, ".claude", "agents", "scout.md"), role);
+  }
+  const out = hook(main, { hook_event_name: "SubagentStart", cwd: wt, agent_type: "scout", agent_id: "agent-1" });
+  assert.match(out, /Module a must stay free of side effects/, "the role is still grounded");
+  assert.doesNotMatch(out, /Worktree routing|hunch_/, "a tool it cannot call is never named");
+  const withTools = "---\nname: scout\ntools: Read, mcp__hunch__hunch_why\n---\n";
+  writeFileSync(join(wt, ".claude", "agents", "scout.md"), withTools);
+  writeFileSync(join(main, ".claude", "agents", "scout.md"), withTools);
+  assert.match(hook(main, { hook_event_name: "SubagentStart", cwd: wt, agent_type: "scout", agent_id: "agent-2" }), /Worktree routing: call hunch_context first with cwd/);
+});
+
+test("B3: a role defined only in the user's home, or with a flow list across lines, is read the same way", t => {
+  const { main, wt } = repoWithWorktree(t);
+  mkdirSync(join(main, ".home", ".claude", "agents"), { recursive: true });
+  writeFileSync(join(main, ".home", ".claude", "agents", "runner.md"), "﻿---\r\nname: runner\r\ntools: Read, Bash\r\n---\r\n");
+  const out = hook(main, { hook_event_name: "SubagentStart", cwd: wt, agent_type: "runner", agent_id: "agent-1" });
+  assert.match(out, /Module a must stay free of side effects/);
+  assert.doesNotMatch(out, /Worktree routing|hunch_/, "the home role's tool list applies");
+  writeFileSync(join(main, ".home", ".claude", "agents", "runner.md"), "---\nname: runner\ntools: [Read,\n  mcp__hunch__hunch_why]\n---\n");
+  assert.match(hook(main, { hook_event_name: "SubagentStart", cwd: wt, agent_type: "runner", agent_id: "agent-2" }), /Worktree routing/, "a flow list naming a Hunch tool on a later line keeps the tools");
 });
 
 test("B9: a launcher running this same Hunch build may be probed; any other node script may not", t => {
