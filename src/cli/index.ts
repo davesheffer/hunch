@@ -7272,7 +7272,7 @@ function promptTaskSelection(root: string, store: HunchStore, provider: HookProv
   // ungrounded. A substantive prompt names its own task: a same-session prompt
   // inside the continuation window must not hide memory behind an old selection.
   let previous = loadTaskSelection(taskId);
-  if (!previous && isBareFollowUp(evt.prompt ?? "")) {
+  if (!previous && isBareFollowUp(humanText)) {
     try {
       const continues = readTaskReport(root, taskId).task.continues;
       previous = continues ? loadTaskSelection(continues) : null;

@@ -13,9 +13,10 @@ export function roleHasHunchTools(root: string, agentType: string, home = homedi
   for (const dir of [join(root, ".claude", "agents"), join(home, ".claude", "agents")]) {
     let text: string;
     try { text = readFileSync(join(dir, `${type}.md`), "utf8"); } catch { continue; }
-    const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1];
+    const front = /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1];
     if (!front) return true;
-    const tools = /^tools:[ \t]*(.*(?:\r?\n[ \t]+-.*)*)/m.exec(front)?.[1];
+    // A block list continues on indented "- x" lines; a flow list runs to its "]".
+    const tools = /^tools:[ \t]*(\[[^\]]*\]?|.*(?:\r?\n[ \t]+-.*)*)/m.exec(front)?.[1];
     if (tools === undefined || !tools.trim()) return true;
     return /\*|mcp__hunch/.test(tools);
   }
