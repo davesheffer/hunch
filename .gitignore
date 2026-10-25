@@ -44,13 +44,14 @@ docs/superpowers/
 # npm auth: references ${NPM_TOKEN} env var, but never commit in case a real token is pasted.
 .npmrc
 
-# Hunch: this repo's FULL engineering memory lives in a PRIVATE overlay
-# (the .hunch-private/ store, pointed at by the gitignored .hunch/local.json).
-# A CURATED subset — foundational decisions whose substance is already public in
-# commit messages, plus the enforced constraints — is committed under .hunch/ so
-# the repo demos its own graph. Everything else in .hunch/ stays local-only.
+# Hunch: this repo's engineering memory lives in a PRIVATE overlay. The committed
+# memory policy in .hunch/config.json (home: overlay) routes every capture there;
+# only the enforced constraints, components and policies are committed under
+# .hunch/, so public CI can check them. Everything else in .hunch/ stays local-only.
 .hunch/*
 !.hunch/manifest.json
+# The memory home policy is repo-scoped and must travel with the repo.
+!.hunch/config.json
 # Opt-in publication vocabulary — repo-scoped policy, useless if it cannot travel
 # with the repo (the package deliberately ships no term list of its own).
 !.hunch/publication.json
