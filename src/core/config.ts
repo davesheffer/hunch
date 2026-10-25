@@ -127,7 +127,8 @@ export function memoryConfigTextProblem(text: string): string | null {
     return `.hunch/config.json cannot be parsed (${error instanceof Error ? error.message : String(error)})`;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return ".hunch/config.json is not a JSON object";
-  const misspelledMemory = Object.keys(parsed).find((key) => misspells(key, "memory"));
+  // No other config key starts with `memor`, so any such key (`Memory`, `memories`) meant the policy.
+  const misspelledMemory = Object.keys(parsed).find((key) => key !== "memory" && (misspells(key, "memory") || spelling(key).startsWith("memor")));
   if (misspelledMemory) return `.hunch/config.json has \`${misspelledMemory}\`; the memory policy key is \`memory\``;
   if (!("memory" in parsed)) return null;
   const memory = (parsed as { memory: unknown }).memory;

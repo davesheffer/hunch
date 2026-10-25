@@ -541,6 +541,60 @@ test("§9 memory-policy check: the public state ledger under .hunch/changes is o
   } finally { cleanupDir(f.base); }
 });
 
+test("§9 memory-policy check: a file standing where an overlay-homed kind's directory goes is flagged", () => {
+  const f = fixture("mp-check-kindblob", null);
+  try {
+    setPolicy(f.root, { home: "overlay" });
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "overlay policy");
+    git(f.root, f.env, "checkout", "-q", "-b", "kind-blob", "main");
+    writeFileSync(join(f.root, ".hunch", "findings"), `${JSON.stringify([FINDING("fnd_mpcblob01")])}\n`);
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "a findings blob");
+    const r = cli(f, ["memory-policy", "check", "--base", "main"]);
+    assert.match(r.out, /^\s+\.hunch\/findings$/m, `the blob was not listed:\n${r.out}`);
+    assert.equal(r.status, 1, r.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§9 memory-policy check: a committed constitution artifact must declare data_class public, under any policy", () => {
+  const f = fixture("mp-check-constitution", null);
+  try {
+    writeRecord(f.root, "policies", { id: "pol_mpcold0001", data_class: "private" });
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "a legacy private policy on main");
+    const check = () => cli(f, ["memory-policy", "check", "--base", "main"]);
+
+    git(f.root, f.env, "checkout", "-q", "-b", "public-artifacts", "main");
+    writeRecord(f.root, "policies", { id: "pol_mpcpub0001", data_class: "public" });
+    writeRecord(f.root, "evidence", { id: "ev_mpcpub0001", data_class: "public" });
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "public artifacts");
+    const pub = check();
+    assert.equal(pub.status, 0, `public artifacts pass:\n${pub.out}`);
+
+    git(f.root, f.env, "checkout", "-q", "-b", "leaky-artifacts", "main");
+    writeRecord(f.root, "proofs", { id: "prf_mpcpriv001", data_class: "private" });
+    writeRecord(f.root, "shadow", { id: "shd_mpcsec0001", data_class: "secret" });
+    writeRecord(f.root, "evidence", { id: "ev_mpcnone001" });
+    mkdirSync(join(f.root, ".hunch", "plans"), { recursive: true });
+    writeFileSync(join(f.root, ".hunch", "plans", "plan_mpcbad001.json"), "{ not json");
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "non-public artifacts");
+    const leaky = check();
+    for (const path of [".hunch/proofs/prf_mpcpriv001.json", ".hunch/shadow/shd_mpcsec0001.json", ".hunch/evidence/ev_mpcnone001.json", ".hunch/plans/plan_mpcbad001.json"]) {
+      assert.ok(leaky.out.includes(path), `check did not list ${path}:\n${leaky.out}`);
+    }
+    assert.equal(leaky.status, 1, leaky.out);
+
+    git(f.root, f.env, "checkout", "-q", "-b", "delete-private", "main");
+    git(f.root, f.env, "rm", "-q", join(".hunch", "policies", "pol_mpcold0001.json"));
+    git(f.root, f.env, "commit", "-qm", "delete the legacy private policy");
+    const deleted = check();
+    assert.equal(deleted.status, 0, `deleting a non-public artifact is allowed:\n${deleted.out}`);
+  } finally { cleanupDir(f.base); }
+});
+
 function migrateFixture(label: string): { f: Fx; overlay: string; finding: string; constraint: string } {
   const f = fixture(label, null);
   const overlay = join(f.base, "overlay", ".hunch");

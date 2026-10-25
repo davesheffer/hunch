@@ -1723,6 +1723,7 @@ program
   .action((dir: string | undefined, opts: OverlaySetupOpts) => configureOverlay(dir, opts, "shared"));
 
 // ---- memory-policy (dec_66636a2b1b) -----------------------------------------
+const CONSTITUTION_DIRS = ["policies", "proofs", "plans", "evidence", "corpora", "dispositions", "shadow"];
 const memoryPolicyCmd = program
   .command("memory-policy")
   .description("Inspect and enforce the committed memory home policy (.hunch/config.json `memory`): which kinds live in the overlay and which stay public.");
@@ -1781,6 +1782,28 @@ memoryPolicyCmd
         baseConfig = { memory: { home: "overlay" } };
       } else baseConfig = parseConfigText(baseText) as Pick<HunchConfig, "memory">;
     }
+    // Deletions are allowed (rangeFilesOrNull excludes them): removing a public record is
+    // the migration direction.
+    const changed = rangeFilesOrNull(opts.base, root);
+    if (changed === null) return fail(`cannot diff ${opts.base}...HEAD (no merge base?) — fetch full history before running the memory policy check`);
+    // Constitution artifacts are public or private per record (data_class), not per policy,
+    // and the repository refuses to write a non-public one into the public home, so one
+    // committed here without data_class "public" was written around it: a leak under any policy.
+    const artifactProblems = changed.flatMap((path) => {
+      const parts = path.split("/");
+      if (parts[0] !== ".hunch" || parts.length < 3 || !CONSTITUTION_DIRS.includes(parts[1]!) || !path.endsWith(".json")) return [];
+      let record: unknown;
+      try { record = parseConfigText(fileAtRef("HEAD", path, root) ?? ""); }
+      catch { return [`${path} (not readable JSON)`]; }
+      const dataClass = record && typeof record === "object" ? (record as { data_class?: unknown }).data_class : undefined;
+      return dataClass === "public" ? [] : [`${path} (data_class ${dataClass === undefined ? "missing" : JSON.stringify(dataClass)})`];
+    });
+    if (artifactProblems.length) {
+      console.log(`⛔ memory policy: ${artifactProblems.length} constitution artifact(s) committed public without data_class "public" since ${opts.base}:`);
+      for (const problem of artifactProblems) console.log(`  ${problem}`);
+      console.log("Fix: move them to the private overlay (data_class private/secret lives there), or declare data_class \"public\" if they are meant to be public.");
+      process.exitCode = 1;
+    }
     const policies = [memoryPolicy(readConfig(hunchPaths(root))), memoryPolicy(baseConfig)].filter((p) => p.home === "overlay");
     if (!policies.length) {
       console.log("no overlay memory policy");
@@ -1790,13 +1813,10 @@ memoryPolicyCmd
     // The state ledger (.hunch/changes/) lives with the partition's records, so under an
     // overlay policy it is overlay-homed too.
     const kinds = [...ENTITY_KINDS, CHANGES_DIR] as readonly string[];
-    // Deletions are allowed (rangeFilesOrNull excludes them): removing a public record is
-    // the migration direction.
-    const changed = rangeFilesOrNull(opts.base, root);
-    if (changed === null) return fail(`cannot diff ${opts.base}...HEAD (no merge base?) — fetch full history before running the memory policy check`);
     const offending = changed.filter((path) => {
       const parts = path.split("/");
-      return parts[0] === ".hunch" && parts.length > 2 && kinds.includes(parts[1]!) && !policy.publicKinds.has(parts[1]!);
+      // A file at `.hunch/<kind>` itself is checked too: it can carry records just as well.
+      return parts[0] === ".hunch" && parts.length >= 2 && kinds.includes(parts[1]!) && !policy.publicKinds.has(parts[1]!);
     });
     if (!offending.length) {
       console.log(`✓ memory policy: no overlay-homed record added or modified in the public store since ${opts.base}`);

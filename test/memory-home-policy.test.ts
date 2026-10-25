@@ -619,6 +619,8 @@ test("a key a newer Hunch adds beside a valid home does not lock older Hunch out
     assert.match(memoryPolicyProblem(paths) ?? "", /Memory/, "a misspelled top-level memory key");
     writeFileSync(paths.config, JSON.stringify({ memorys: { home: "overlay" } }));
     assert.match(memoryPolicyProblem(paths) ?? "", /memorys/, "a top-level memory key with a stray s");
+    writeFileSync(paths.config, JSON.stringify({ memories: { home: "overlay" } }));
+    assert.match(memoryPolicyProblem(paths) ?? "", /memories/, "the plural of memory");
   } finally { cleanupDir(pub); }
 });
 
