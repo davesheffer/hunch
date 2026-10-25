@@ -9,6 +9,14 @@
 - `hunch integrations check --probe` can probe a launcher that runs this same Hunch build (`node <build>/cli/index.js mcp`, bare `node` or this exact Node binary); the probe runs it with its own Node binary, and any other custom launcher stays inspect-only.
 - The configured-MCP hint names the full probe command, `hunch integrations check --probe --harness <harness>`.
 
+## 1.47.1 — 2026-10-25
+
+- **Edits in a linked git worktree are grounded.** When a session runs in the main checkout and edits a file in a linked worktree, the pre-edit and post-edit hooks and SubagentStart grounding now use that worktree's memory instead of dropping the edit as outside the repo. A worktree without `.hunch/` gets one "edit proceeds ungrounded" line, and a nested package `.hunch/` never displaces the checkout's own constraints (#549).
+- **`hunch task verify` works across linked worktrees.** It finds a task opened in the main checkout (or the reverse), runs the check where you stand, and judges currentness against that worktree's source (#549).
+- **No automatic memory commits on the default branch.** On `main`/`master` (or the branch `origin/HEAD` names), captures, the post-commit `hunch sync` and other automatic public memory commits are written to `.hunch/` but left uncommitted, with a one-line notice. Opt back in with `"autoCommitDefaultBranch": true` in `.hunch/local.json` or `HUNCH_AUTO_COMMIT_DEFAULT_BRANCH=1`; a typed `--commit`, feature branches and state-contract writes are unchanged (#549).
+- Host-generated prompt blocks (`<task-notification>`, `<system-reminder>`, local command output) no longer trigger the correction nudge (#549).
+- `hunch integrations check --probe` can probe a launcher that runs this same Hunch build, and the configured-MCP hint names the full probe command (#549).
+
 ## 1.47.0 — 2026-10-24
 
 - **Clean-room rewrite.** The indexer, parser and language specs, the Helm and Kubernetes manifest extractors, CLI command wiring, MCP tool routing and root resolution, synthesis provider detection, the git hook, `.gitignore` and `CLAUDE.md` writers, grounding merge, escalations and human corrections, provenance repair, core helpers and the release tooling were rewritten from scratch. Behaviour is unchanged apart from the fixes below: the existing test suite and release matrix pass unchanged against the new code (#533–#545).

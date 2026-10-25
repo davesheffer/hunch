@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Oct 25, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.47.1</span><span class="clog-t"><b>Linked worktrees are grounded; no automatic commits on the default branch</b> — edits and <code>task verify</code> in a linked git worktree use that worktree's memory, and automatic memory commits are held on <code>main</code> unless you opt in.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Oct 24, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.47.0</span><span class="clog-t"><b>A clean-room rewrite</b> — the indexer and parser, the Helm and Kubernetes extractors, CLI wiring, MCP routing, synthesis provider detection, the git hook and grounding writers, escalations, provenance repair and the release tooling were rewritten from scratch, with behaviour unchanged and the existing test suite passing against the new code. The YAML grammar now installs under an npm alias like the other grammars, Kubernetes and Helm extraction fails closed on non-ASCII indentation and unterminated <code>define</code> names, and the Helm chart-root lookup stops at the filesystem root. Contributions now need a signed Contributor Assignment Agreement.</span></div>
       </div>
