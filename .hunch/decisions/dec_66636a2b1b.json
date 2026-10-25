@@ -1,0 +1,52 @@
+{
+  "id": "dec_66636a2b1b",
+  "title": "Memory home is a committed policy plus a per-machine profile; a missing overlay fails closed, never a silent public write",
+  "topic": "memory.home-policy",
+  "status": "accepted",
+  "context": "Memory location was held only in places git never carries: .hunch/local.json (gitignored), the git-common-dir overlay registration, and a hand-armed ship-memory block in .git/hooks/post-commit. A fresh clone on 2026-10-22 silently lost the shipper arming; hook captures landed as commits on public main and stranded (backup/main-local-memory-2026-10-25). The repo also wrote task records and findings to public .hunch/ although CLAUDE.md states only constraints, policies and components are committed publicly. David asked for a robust, backward-compatible way to manage where memory lives that persists across re-clone and hunch update.",
+  "decision": "(1) Committed routing policy in .hunch/config.json, optional field `memory` (e.g. {home:'overlay', public_kinds:['constraints','policies','components'], min_version}); absent = today's behavior exactly. With home:'overlay', every capture routes to the overlay except the listed public kinds. (2) Per-machine profile outside the repo (~/.hunch/repos/<hash of normalized origin URL>.json) holding overlay path, mode and autoCommit; hunch init / any store open on a clone without .hunch/local.json restores local.json, overlay registration and hooks from it. (3) Fail closed: when the committed policy says home:'overlay' and no overlay is reachable, a capture that would route to the overlay is refused loudly (never written public). (4) readConfig/writeConfig preserve unknown config keys so a future field cannot be dropped by a rewrite; doctor flags drift between profile, local.json and policy. (5) The ship-memory shipper stays working for one release with a deprecation notice, then is removed; this repo moves to overlay home.",
+  "consequences": [
+    "Old Hunch versions ignore the `memory` field and keep today's routing; an old writeConfig strips it, mitigated by the profile copy and doctor drift check",
+    "A CI guard must fail a public PR that adds non-public-kind memory records, catching old clients that do not know to refuse",
+    "Newly recorded constraints land public (listed kind) so public CI keeps enforcing them; other kinds need an explicit promote to go public",
+    "dec_68e4ca8893 (ci.memory-shipping) remains for repos that keep public memory; this repo stops depending on it"
+  ],
+  "alternatives_rejected": [
+    "Dedicated memory branch in the same repo (hidden worktree, reads union main + branch): new subsystem, two-ref reads, extra branch-protection/CI rules — most build and most failure modes",
+    "Keep memory on public main and make the ship-memory hook first-class: keeps shipper, PRs, auto-merge, scanner and merge conflicts, and keeps the public-leak risk mitigated rather than removed",
+    "Commit machine paths (overlay dir) into the repo: absolute paths differ per machine and would leak local layout publicly",
+    "Fall back to public writes when the overlay is missing: this is the exact silent failure that stranded memory; an unattended public write must never be the degraded mode"
+  ],
+  "rejected_tripwires": [],
+  "related_components": [],
+  "related_files": [
+    "src/core/config.ts",
+    "src/store/hunchStore.ts",
+    "src/cli/index.ts",
+    "src/integrations/hooks.ts",
+    "tooling/ship-memory.mjs"
+  ],
+  "supersedes": null,
+  "superseded_by": null,
+  "caused_by_bug": null,
+  "commit": null,
+  "valid_from": "2026-10-25T07:35:32.073Z",
+  "valid_to": null,
+  "retired": {
+    "symbols": [],
+    "deps": []
+  },
+  "premises": [],
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [
+      "src/core/config.ts",
+      "src/store/hunchStore.ts",
+      "src/cli/index.ts",
+      "src/integrations/hooks.ts",
+      "tooling/ship-memory.mjs"
+    ]
+  },
+  "date": "2026-10-25T07:35:32.073Z"
+}
