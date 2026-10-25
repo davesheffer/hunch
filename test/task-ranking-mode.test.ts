@@ -103,3 +103,19 @@ test("a verdict change is recorded once as a finding through the normal capture 
   assert.equal(store.recs("findings").length, 1);
   assert.equal(JSON.parse(readFileSync(join(root, ".hunch-cache", "task-rank-eval.json"), "utf8")).report.verdict, "insufficient-data");
 });
+
+test("a verdict change the memory policy refuses to write is said on stderr, not swallowed", t => {
+  const { root } = fixture(t);
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memory: { home: "overlay" } }));
+  const store = new HunchStore(hunchPaths(root));
+  t.after(() => store.close());
+  const seeded: RankEvalCache = { schema: "hunch.task-rank-eval-cache/1", computed_at: "2026-09-14T00:00:00.000Z", records: 999, corpus_hash: "sha256:stale", report: report({ verdict: "ranked-better" }) };
+  writeFileSync(join(root, ".hunch-cache", "task-rank-eval.json"), JSON.stringify(seeded));
+  const written: string[] = [];
+  t.mock.method(process.stderr, "write", (chunk: unknown) => { written.push(String(chunk)); return true; });
+  const next = refreshRankEval(root, store, { now: () => "2026-09-15T12:00:00.000Z" })!;
+  t.mock.restoreAll();
+  assert.equal(next.report.verdict, "insufficient-data", "the cache still carries the verdict");
+  assert.equal(store.recs("findings").length, 0);
+  assert.match(written.join(""), /Refused:/, written.join(""));
+});

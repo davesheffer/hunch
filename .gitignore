@@ -48,6 +48,8 @@ docs/superpowers/
 # memory policy in .hunch/config.json (home: overlay) routes every capture there;
 # only the enforced constraints, components and policies are committed under
 # .hunch/, so public CI can check them. Everything else in .hunch/ stays local-only.
+# Constitution artifacts (policies, proofs, plans, evidence, corpora, dispositions,
+# shadow) are public by data_class; `hunch memory-policy check` refuses any that is not.
 .hunch/*
 !.hunch/manifest.json
 # The memory home policy is repo-scoped and must travel with the repo.
@@ -55,7 +57,6 @@ docs/superpowers/
 # Opt-in publication vocabulary — repo-scoped policy, useless if it cannot travel
 # with the repo (the package deliberately ships no term list of its own).
 !.hunch/publication.json
-!.hunch/decisions/
 !.hunch/constraints/
 !.hunch/components/
 !.hunch/evidence/
@@ -65,18 +66,6 @@ docs/superpowers/
 !.hunch/plans/
 !.hunch/dispositions/
 !.hunch/shadow/
-!.hunch/runbooks/
-!.hunch/bugs/
-!.hunch/findings/
-!.hunch/tasks/
-# nuryel.state/1 record kinds — repository scope only; organization/team/user
-# partitions are served by the product and never ride a repository.
-!.hunch/receipts/
-!.hunch/commitments/
-!.hunch/derived/
-!.hunch/entities/
-!.hunch/relationships/
-!.hunch/changes/
 # THIS repo's generated wiki stays out of the public repo (we use the PRIVATE
 # overlay wiki via `hunch wiki --private`). Other repos may commit theirs —
 # committing wiki/ + .hunch/wiki-manifest.json is what enables the CI drift gate.

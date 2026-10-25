@@ -124,5 +124,9 @@ function noteVerdictChange(root: string, store: HunchStore, prev: RankEvalCache,
     });
     store.putCapture("findings", finding, false);
     flushCapture(store, hunchPaths(root).hunch, false, `hunch: capture ${id}`, undefined, undefined, "findings");
-  } catch { /* the cache still carries the verdict; memory of the change is best-effort */ }
+  } catch (error) {
+    // The cache still carries the verdict; memory of the change is best-effort, but a
+    // refusal (say, a memory policy with no overlay) is said rather than dropped.
+    process.stderr.write(`hunch: task ranking verdict change not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
+  }
 }

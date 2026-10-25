@@ -17,6 +17,8 @@ import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
 import { lineContent } from "../core/eol.js";
+import { memoryPolicy, readConfig } from "../core/config.js";
+import { hunchPaths } from "../core/paths.js";
 import { gitTrackedPaths, gitUntrackCached, isGitRepoRoot } from "../extractors/git.js";
 
 const MARK = "# >>> hunch (derived runtime index — regenerable from .hunch/*.json) >>>";
@@ -265,9 +267,12 @@ export interface MemoryIgnoreRule {
  *  A repository that ignores `.hunch/` (or `.hunch/decisions/`) silently loses every
  *  capture: the records are written, never committed, and gone on a fresh clone.
  *  Hunch's own private-only block ignores the same paths on purpose (memory lives
- *  in an overlay), so a rule inside that block is not reported. Unknown git state
+ *  in an overlay), so a rule inside that block is not reported, nor is any rule when
+ *  the committed memory policy homes decisions in the overlay. Unknown git state
  *  yields null: the caller then says nothing rather than guessing. */
 export function memoryIgnoreRule(root: string): MemoryIgnoreRule | null {
+  const policy = memoryPolicy(readConfig(hunchPaths(root)));
+  if (policy.home === "overlay" && !policy.publicKinds.has("decisions")) return null;
   const probe = ".hunch/decisions/dec_0000000000.json";
   const r = spawnSync("git", ["check-ignore", "-v", "--no-index", "--", probe], { cwd: root, encoding: "utf8", windowsHide: true });
   if (r.error || r.status !== 0) return null;

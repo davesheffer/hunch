@@ -295,6 +295,15 @@ test("§7 a fresh clone + hunch init restores local.json, the common-dir registr
   }
 });
 
+test("§7 hunch init under an overlay policy with no overlay says captures are refused, as doctor does", () => {
+  const f = fixture("init-no-overlay", null);
+  try {
+    setPolicy(f.root, { home: "overlay" });
+    const r = cli(f, ["init", "--no-index", "--no-providers", "--no-agent-hooks", "--no-enforce"]);
+    assert.ok(r.out.includes(NO_OVERLAY_LINE), `init did not print the refusal line:\n${r.out}`);
+  } finally { cleanupDir(f.base); }
+});
+
 // ---------------------------------------------------------------- §8 doctor
 
 test("§8 doctor: policy home=overlay with no overlay prints the policy and the ⛔ refusal line and exits 1", () => {

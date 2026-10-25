@@ -333,6 +333,18 @@ test("memoryIgnoreRule stays quiet for Hunch's own private-only block and for a 
   });
 });
 
+test("memoryIgnoreRule stays quiet when the memory policy homes decisions in the overlay", () => {
+  inTmp((root) => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    writeFileSync(join(root, ".gitignore"), ".hunch/*\n!.hunch/config.json\n");
+    mkdirSync(join(root, ".hunch"));
+    writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memory: { home: "overlay" } }));
+    assert.equal(memoryIgnoreRule(root), null, "ignoring overlay-homed memory is the policy");
+    writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memory: { home: "overlay", public_kinds: ["decisions"] } }));
+    assert.notEqual(memoryIgnoreRule(root), null, "decisions are public under this policy, so ignoring them loses them");
+  });
+});
+
 test("memoryIgnoreRule returns null outside a git repository", () => {
   inTmp((root) => {
     writeFileSync(join(root, ".gitignore"), ".hunch/\n");

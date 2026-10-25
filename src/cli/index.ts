@@ -537,6 +537,10 @@ program
     if (!store.privateDir) {
       const ignored = memoryIgnoreRule(root);
       if (ignored) say(`  ⚠ ${describeMemoryIgnoreRule(ignored)}`);
+      // The same refusal doctor reports, so a fresh clone does not read init's success as "ready".
+      const policyProblem = memoryPolicyProblem(paths);
+      if (policyProblem) console.log(unreadablePolicyLine(policyProblem));
+      else if (store.memoryPolicy.home === "overlay") console.log(NO_OVERLAY_POLICY_LINE);
     }
 
     // A fresh clone resolved its overlay from this machine's profile: persist it in the
@@ -1788,7 +1792,9 @@ memoryPolicyCmd
     if (changed === null) return fail(`cannot diff ${opts.base}...HEAD (no merge base?) — fetch full history before running the memory policy check`);
     // Constitution artifacts are public or private per record (data_class), not per policy,
     // and the repository refuses to write a non-public one into the public home, so one
-    // committed here without data_class "public" was written around it: a leak under any policy.
+    // committed here as non-public was written around it: a leak under any policy. Hunch's
+    // writers always store data_class, so one without it (which some schemas would read as
+    // public) must declare it before it is committed.
     const artifactProblems = changed.flatMap((path) => {
       const parts = path.split("/");
       if (parts[0] !== ".hunch" || parts.length < 3 || !CONSTITUTION_DIRS.includes(parts[1]!) || !path.endsWith(".json")) return [];
@@ -7317,7 +7323,7 @@ program
         : "memory policy: home=repo");
       if (store.memoryPolicy.unknownKinds.length) console.log(unknownPublicKindsWarning(store.memoryPolicy.unknownKinds));
       if (store.memoryPolicy.home === "overlay" && !store.privateDir) {
-        console.log("memory policy: ⛔ requires an overlay but none is configured — captures are REFUSED (nothing is written public). Fix: hunch private <dir> | hunch shared --repo <url> | HUNCH_PRIVATE_DIR");
+        console.log(NO_OVERLAY_POLICY_LINE);
         process.exitCode = 1;
       }
     }
@@ -7383,6 +7389,8 @@ function sameCanonical(a: unknown, b: unknown): boolean {
     return false;
   }
 }
+
+const NO_OVERLAY_POLICY_LINE = "memory policy: ⛔ requires an overlay but none is configured — captures are REFUSED (nothing is written public). Fix: hunch private <dir> | hunch shared --repo <url> | HUNCH_PRIVATE_DIR";
 
 function unreadablePolicyLine(problem: string): string {
   return `memory policy: ⛔ ${problem} — captures are REFUSED (their home is unknown; nothing is written public). Fix the file, then re-run hunch doctor`;
