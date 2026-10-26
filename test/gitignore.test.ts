@@ -379,7 +379,7 @@ test("policyNotCommitted says when the committed memory policy is not committed"
     assert.equal(policyNotCommitted(root), null, "committed: other checkouts see it");
     writeFileSync(join(root, ".gitignore"), ".hunch/\n");
     assert.equal(policyNotCommitted(root), null, "tracked wins over a later ignore rule");
-    rmSync(join(root, ".git"), { recursive: true, force: true });
+    rmSync(join(root, ".git"), { recursive: true, force: true }); // rmSync-ok: starts a fresh repository with nothing committed
     execFileSync("git", ["init", "-q"], { cwd: root });
     writeFileSync(config, JSON.stringify({ firmness: "strict" }));
     assert.equal(policyNotCommitted(root), null, "no memory policy: nothing to commit");

@@ -1494,6 +1494,14 @@
       }
     ]
   },
+  "memory-policy strays": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§13 memory-policy strays lists a worktree's record the overlay lacks; --import rescues it and leaves the source"
+      }
+    ]
+  },
   "memory-policy status": {
     "tests": [
       {
