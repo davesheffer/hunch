@@ -2,7 +2,7 @@
   "name": "@davesheffer/hunch",
   "version": "1.47.2",
   "mcpName": "io.github.davesheffer/hunch",
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "author": "Dave Sheffer <dave.sheffer1@gmail.com>",
   "description": "A shared record for AI agents: decisions, completed work, and commitments, with sources. Git-native engineering memory and a self-hosted state server.",
   "homepage": "https://www.hunchmemory.com",
