@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { memoryPolicy, memoryPolicyProblem, readConfig, writeConfig } from "../src/core/config.js";
-import { normalizeRemoteUrl, readRepoProfile, removeRepoProfile, repoProfileFile, repoProfileKey, writeRepoProfile } from "../src/core/repoProfile.js";
+import { ensureRepoId, normalizeRemoteUrl, readRepoProfile, removeRepoProfile, repoIdClaimConflict, repoIdForgetConflict, repoIdOf, repoProfileFile, repoProfileKey, resolveRepoProfile, writeRepoProfile } from "../src/core/repoProfile.js";
 import { repositoryScope, subscribeState } from "../src/store/stateBinding.js";
 import { StateRefusal } from "../src/store/stateError.js";
 import { taskRecordHome } from "../src/core/taskRecord.js";
@@ -640,4 +640,374 @@ test("a misspelled home without a valid home is answered with the key it meant",
     setPolicy(pub, { Home: "overlay" });
     assert.match(memoryPolicyProblem(paths) ?? "", /did you mean `home`/);
   } finally { cleanupDir(pub); }
+});
+
+// ---------------------------------------------------------------- repo identity (Step 2b)
+
+function profileFileJson(): { version: 1; repos: Record<string, Record<string, unknown>> } {
+  return JSON.parse(readFileSync(repoProfileFile(), "utf8"));
+}
+
+function withRepoId(root: string, id: string): void {
+  mkdirSync(join(root, ".hunch"), { recursive: true });
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory", repo_id: id }, null, 2) + "\n");
+}
+
+test("repo id: ensureRepoId mints once, keeps every other key, and refuses to clobber an unparseable config", () => {
+  const root = repo();
+  try {
+    setPolicy(root, { home: "overlay" });
+    const first = ensureRepoId(root);
+    assert.equal(first.minted, true);
+    assert.match(first.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    assert.deepEqual(ensureRepoId(root), { id: first.id, minted: false }, "idempotent");
+    const config = JSON.parse(readFileSync(join(root, ".hunch", "config.json"), "utf8"));
+    assert.deepEqual(config.memory, { home: "overlay" }, "the policy survives");
+    assert.equal(config.repo_id, first.id);
+    assert.equal(memoryPolicyProblem(hunchPaths(root)), null, "repo_id is not a policy problem");
+    assert.equal(repoIdOf(root), first.id);
+    writeFileSync(join(root, ".hunch", "config.json"), "{ broken");
+    assert.throws(() => ensureRepoId(root), /refusing to overwrite/);
+    assert.equal(readFileSync(join(root, ".hunch", "config.json"), "utf8"), "{ broken");
+    withRepoId(root, "not-a-uuid");
+    assert.equal(repoIdOf(root), "", "a malformed id names no repository");
+    assert.throws(() => ensureRepoId(root), /repo_id/, "a malformed id is refused, never replaced");
+  } finally { cleanupDir(root); }
+});
+
+test("repo id: a no-origin repo and a clone from a local path find the overlay through the committed repo_id", () => {
+  const first = repo("git@github.com:Acme/Widgets.git");
+  const localClone = repo("C:/repos/widgets");
+  const noOrigin = repo();
+  const overlay = tmp("hunch-mhp-id-");
+  try {
+    const { id } = ensureRepoId(first);
+    assert.equal(writeRepoProfile(first, { privateDir: overlay, mode: "private", autoCommit: true }), true);
+    assert.equal(readRepoProfile(localClone), null, "precondition: without the id a local-path clone has no identity");
+    withRepoId(localClone, id);
+    withRepoId(noOrigin, id);
+    assert.equal(readRepoProfile(localClone)?.privateDir, overlay);
+    assert.equal(readRepoProfile(noOrigin)?.privateDir, overlay);
+    const store = open(noOrigin);
+    assert.equal(store.overlaySource, "machine-profile");
+    assert.equal(store.privateDir, resolve(overlay));
+    store.close();
+
+    // A repository that was never on a network remote records and restores by id alone.
+    const lone = repo();
+    const loneClone = repo("file:///srv/git/lone");
+    const loneOverlay = tmp("hunch-mhp-lone-");
+    try {
+      const lid = ensureRepoId(lone).id;
+      assert.equal(writeRepoProfile(lone, { privateDir: loneOverlay, mode: "private", autoCommit: true }), true);
+      withRepoId(loneClone, lid);
+      assert.equal(readRepoProfile(loneClone)?.privateDir, loneOverlay);
+    } finally { for (const dir of [lone, loneClone, loneOverlay]) cleanupDir(dir); }
+  } finally {
+    for (const dir of [first, localClone, noOrigin, overlay]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: a fork that carries the id but has another network origin never inherits the overlay", () => {
+  const first = repo("git@github.com:Acme/Widgets.git");
+  const fork = repo("git@github.com:Someone/Widgets.git");
+  const overlay = tmp("hunch-mhp-fork-");
+  try {
+    const { id } = ensureRepoId(first);
+    writeRepoProfile(first, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(fork, id);
+    assert.equal(readRepoProfile(fork), null);
+    const resolved = resolveRepoProfile(fork);
+    assert.equal(resolved.entry, null);
+    assert.match(resolved.conflict ?? "", /github\.com\/Acme\/Widgets/, "the refusal names the origin the id was recorded for");
+  } finally {
+    for (const dir of [first, fork, overlay]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: a fork's setup and forget never take or drop the upstream's id entry", () => {
+  const first = repo("git@github.com:Acme/Widgets.git");
+  const fork = repo("git@github.com:Someone/Widgets.git");
+  const localClone = repo("C:/repos/widgets");
+  const overlay = tmp("hunch-mhp-own-");
+  const forkOverlay = tmp("hunch-mhp-own-fork-");
+  try {
+    const { id } = ensureRepoId(first);
+    writeRepoProfile(first, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(fork, id);
+    withRepoId(localClone, id);
+    assert.equal(writeRepoProfile(fork, { privateDir: forkOverlay, mode: "private", autoCommit: true }), true);
+    const idEntry = profileFileJson().repos[`repo-id:${id}`]!;
+    assert.equal(idEntry.privateDir, overlay, "the fork did not take the upstream's id entry");
+    assert.equal(idEntry.origin, "github.com/Acme/Widgets");
+    assert.match(repoIdClaimConflict(fork), /github\.com\/Acme\/Widgets/, "the fork is told why its id was not recorded");
+    assert.equal(repoIdClaimConflict(first), "");
+    assert.equal(readRepoProfile(localClone)?.privateDir, overlay, "the upstream's local clone still finds the upstream overlay");
+    assert.equal(readRepoProfile(fork)?.privateDir, forkOverlay, "the fork resolves its own overlay by origin");
+
+    assert.equal(removeRepoProfile(fork), true);
+    assert.deepEqual(Object.keys(profileFileJson().repos).sort(), [`repo-id:${id}`, "github.com/Acme/Widgets"].sort(), "forget in the fork dropped only the fork's entry");
+
+    // A clone with no network origin re-running setup keeps the network origin the id was bound to.
+    const recorded = profileFileJson().repos[`repo-id:${id}`]!;
+    writeRepoProfile(localClone, { privateDir: overlay, mode: recorded.mode === "shared" ? "private" : "shared", autoCommit: !recorded.autoCommit });
+    const rebound = profileFileJson().repos[`repo-id:${id}`]!;
+    assert.equal(rebound.origin, "github.com/Acme/Widgets");
+    assert.deepEqual([rebound.mode, rebound.autoCommit], [recorded.mode, recorded.autoCommit], "a rebind across the origin gap never changes the owner's mode or auto-commit");
+    withRepoId(fork, id);
+    assert.equal(readRepoProfile(fork), null, "the fork still never inherits");
+  } finally {
+    for (const dir of [first, fork, localClone, overlay, forkOverlay]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: an id recorded without a network origin is not inherited by a checkout that has one until setup binds it", () => {
+  const lone = repo();
+  const loneFork = repo("git@github.com:Other/Lone.git");
+  const overlay = tmp("hunch-mhp-lone-bind-");
+  try {
+    const { id } = ensureRepoId(lone);
+    writeRepoProfile(lone, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(loneFork, id);
+    const resolved = resolveRepoProfile(loneFork);
+    assert.equal(resolved.entry, null);
+    assert.match(resolved.conflict ?? "", /without a network origin/);
+    // The owner adding a remote re-runs setup, which binds the id to that origin.
+    git(lone, "remote", "add", "origin", "git@github.com:Me/Lone.git");
+    writeRepoProfile(lone, { privateDir: overlay, mode: "shared", autoCommit: false });
+    const bound = profileFileJson().repos[`repo-id:${id}`]!;
+    assert.equal(bound.origin, "github.com/Me/Lone");
+    // Binding moves ownership to that origin, so the id entry takes the settings it asked
+    // for, the same ones its origin entry records: no split policy for one repository.
+    assert.deepEqual([bound.mode, bound.autoCommit], ["shared", false]);
+    const originEntry = profileFileJson().repos["github.com/Me/Lone"]!;
+    assert.deepEqual([originEntry.mode, originEntry.autoCommit], ["shared", false]);
+    assert.equal(readRepoProfile(lone)?.privateDir, overlay);
+    assert.equal(readRepoProfile(lone)?.mode, "shared");
+    assert.equal(readRepoProfile(loneFork), null);
+  } finally {
+    for (const dir of [lone, loneFork, overlay]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: a checkout across the origin gap rebinds the id only to the overlay already recorded", () => {
+  const lone = repo();
+  const copy = repo("git@github.com:Other/Lone.git");
+  const upstream = repo("git@github.com:Acme/Widgets.git");
+  const localClone = repo("C:/repos/widgets");
+  const overlay = tmp("hunch-mhp-gap-");
+  const copyOverlay = tmp("hunch-mhp-gap-copy-");
+  try {
+    const { id } = ensureRepoId(lone);
+    writeRepoProfile(lone, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(copy, id);
+    writeRepoProfile(copy, { privateDir: copyOverlay, mode: "private", autoCommit: true });
+    assert.equal(readRepoProfile(lone)?.privateDir, overlay, "a copy pushed elsewhere never re-points the original");
+    assert.match(repoIdClaimConflict(copy, copyOverlay), /without a network origin/);
+    assert.equal(readRepoProfile(copy)?.privateDir, copyOverlay, "the copy resolves its own overlay by origin");
+    assert.equal(removeRepoProfile(copy), true);
+    assert.equal(readRepoProfile(lone)?.privateDir, overlay, "forget in the copy left the original's id entry");
+
+    const uid = ensureRepoId(upstream).id;
+    writeRepoProfile(upstream, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(localClone, uid);
+    writeRepoProfile(localClone, { privateDir: copyOverlay, mode: "private", autoCommit: true });
+    assert.equal(readRepoProfile(upstream)?.privateDir, overlay, "a local clone choosing another overlay never splits the upstream");
+    assert.match(repoIdClaimConflict(localClone, copyOverlay), /github\.com\/Acme\/Widgets/);
+  } finally {
+    for (const dir of [lone, copy, upstream, localClone, overlay, copyOverlay]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: forget follows the setup rule, so no clone or de-remoted fork can seize the id; junk and dead entries are absent", () => {
+  const upstream = repo("git@github.com:Acme/Widgets.git");
+  const localClone = repo("C:/repos/widgets");
+  const fork = repo("git@github.com:Fork/Widgets.git");
+  const overlay = tmp("hunch-mhp-seize-");
+  const other = tmp("hunch-mhp-seize-other-");
+  try {
+    const { id } = ensureRepoId(upstream);
+    writeRepoProfile(upstream, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(localClone, id);
+    withRepoId(fork, id);
+    assert.equal(removeRepoProfile(localClone), false, "a no-origin clone cannot forget an id bound to a network origin");
+    assert.equal(writeRepoProfile(localClone, { privateDir: other, mode: "private", autoCommit: true }), false, "nothing is recorded");
+    assert.match(repoIdClaimConflict(localClone, other), /bound to github\.com\/Acme\/Widgets/);
+    git(fork, "remote", "remove", "origin");
+    assert.equal(removeRepoProfile(fork), false, "a de-remoted fork cannot forget it either");
+    assert.equal(profileFileJson().repos[`repo-id:${id}`]!.privateDir, overlay);
+    assert.equal(repoIdClaimConflict(upstream, overlay), "", "the owner is never called a fork");
+    assert.equal(removeRepoProfile(upstream), true);
+    assert.deepEqual(Object.keys(profileFileJson().repos), [], "the owner's forget drops both keys");
+
+    // A hand-edited non-entry, or an entry whose overlay is gone, is absent: the owner re-binds.
+    writeFileSync(repoProfileFile(), JSON.stringify({ version: 1, repos: { [`repo-id:${id}`]: "junk" } }));
+    writeRepoProfile(upstream, { privateDir: overlay, mode: "private", autoCommit: true });
+    assert.equal(profileFileJson().repos[`repo-id:${id}`]!.privateDir, overlay);
+    const lone = repo();
+    const dead = tmp("hunch-mhp-seize-dead-");
+    try {
+      const lid = ensureRepoId(lone).id;
+      writeRepoProfile(lone, { privateDir: dead, mode: "private", autoCommit: true });
+      cleanupDir(dead);
+      git(lone, "remote", "add", "origin", "git@github.com:Me/Lone.git");
+      writeRepoProfile(lone, { privateDir: other, mode: "private", autoCommit: true });
+      assert.equal(profileFileJson().repos[`repo-id:${lid}`]!.privateDir, dead, "a dead overlay still holds the id: a copy pushed elsewhere must not seize it");
+      assert.match(repoIdClaimConflict(lone, other), /recorded for a checkout without a network origin/);
+      assert.equal(removeRepoProfile(lone), true, "its own origin entry goes");
+      assert.ok(profileFileJson().repos[`repo-id:${lid}`], "the id entry is never forgotten across the origin gap");
+    } finally { cleanupDir(lone); }
+  } finally {
+    for (const dir of [upstream, localClone, fork, overlay, other]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: an upstream overlay that is merely unavailable still holds the id against a fork; only the origin gap treats it as gone", () => {
+  const upstream = repo("git@github.com:Acme/Widgets.git");
+  const fork = repo("git@github.com:Fork/Widgets.git");
+  const localClone = repo("C:/repos/widgets");
+  const overlay = tmp("hunch-mhp-unavail-");
+  const other = tmp("hunch-mhp-unavail-other-");
+  try {
+    const { id } = ensureRepoId(upstream);
+    writeRepoProfile(upstream, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(fork, id);
+    withRepoId(localClone, id);
+    cleanupDir(overlay); // an unmounted drive or a moved dir: the upstream still owns the id
+    writeRepoProfile(fork, { privateDir: other, mode: "private", autoCommit: true });
+    const entry = profileFileJson().repos[`repo-id:${id}`]!;
+    assert.equal(entry.privateDir, overlay, "the fork did not seize the id");
+    assert.equal(entry.origin, "github.com/Acme/Widgets");
+    assert.match(repoIdClaimConflict(fork, other), /recorded for github\.com\/Acme\/Widgets/);
+    assert.equal(removeRepoProfile(fork), true, "the fork forgets its own origin entry");
+    assert.ok(profileFileJson().repos[`repo-id:${id}`], "but never the upstream's id entry");
+    assert.match(repoIdForgetConflict(fork), /bound to github\.com\/Acme\/Widgets; forget it from a checkout of github\.com\/Acme\/Widgets/);
+    assert.match(repoIdForgetConflict(localClone), /bound to github\.com\/Acme\/Widgets/, "a no-origin clone is refused too");
+    assert.equal(repoIdForgetConflict(upstream), "", "the owner may forget it");
+  } finally {
+    for (const dir of [upstream, fork, localClone, overlay, other]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: an invalid id entry holds nothing, not even its origin", () => {
+  const upstream = repo("git@github.com:Acme/Widgets.git");
+  const localClone = repo("C:/repos/widgets");
+  const overlay = tmp("hunch-mhp-junk-origin-");
+  try {
+    const { id } = ensureRepoId(upstream);
+    withRepoId(localClone, id);
+    mkdirSync(resolve(repoProfileFile(), ".."), { recursive: true });
+    // Non-absolute dir: invalid, as a hand edit or a newer Hunch's entry can be.
+    writeFileSync(repoProfileFile(), JSON.stringify({ version: 1, repos: { [`repo-id:${id}`]: { privateDir: "relative/junk", mode: "private", autoCommit: false, origin: "github.com/Acme/Widgets" } } }));
+    assert.equal(writeRepoProfile(localClone, { privateDir: overlay, mode: "shared", autoCommit: true }), true);
+    assert.equal(profileFileJson().repos[`repo-id:${id}`]!.origin, "", "a no-origin checkout never mints an entry bound to an origin it lacks");
+    assert.equal(readRepoProfile(upstream), null, "so the origin's clones do not inherit its overlay");
+  } finally {
+    for (const dir of [upstream, localClone, overlay]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id: a no-origin clone refused setup is told its local pointer serves it, not the id", () => {
+  const upstream = repo("git@github.com:Acme/Widgets.git");
+  const localClone = repo("C:/repos/widgets");
+  const overlay = tmp("hunch-mhp-ptr-");
+  const other = tmp("hunch-mhp-ptr-other-");
+  try {
+    const { id } = ensureRepoId(upstream);
+    writeRepoProfile(upstream, { privateDir: overlay, mode: "private", autoCommit: true });
+    withRepoId(localClone, id);
+    const msg = repoIdClaimConflict(localClone, other);
+    assert.match(msg, /nothing was recorded in the machine profile/);
+    assert.match(msg, /uses .* through its local pointer, but a fresh clone without a network origin resolves .* through the id/);
+    assert.doesNotMatch(msg, /keeps resolving/);
+
+    // The reverse gap: an id recorded with no origin, read from a checkout that has one.
+    const lone = repo();
+    const remoted = repo("git@github.com:Me/Lone.git");
+    try {
+      const lid = ensureRepoId(lone).id;
+      writeRepoProfile(lone, { privateDir: other, mode: "private", autoCommit: true });
+      withRepoId(remoted, lid);
+      assert.match(resolveRepoProfile(remoted).conflict ?? "", /re-run hunch private\/shared here with the recorded overlay to bind it/);
+    } finally { for (const dir of [lone, remoted]) cleanupDir(dir); }
+  } finally {
+    for (const dir of [upstream, localClone, overlay, other]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("origin case: path case folds only on hosts known to be case-insensitive", () => {
+  const upper = repo("git@git.corp.example:team/Deploy.git");
+  const lower = repo("git@git.corp.example:team/deploy.git");
+  const overlay = tmp("hunch-mhp-cs-");
+  const other = tmp("hunch-mhp-cs-other-");
+  try {
+    writeRepoProfile(upper, { privateDir: overlay, mode: "private", autoCommit: true });
+    assert.equal(readRepoProfile(lower), null, "a case-sensitive host: Deploy and deploy are two repositories");
+    writeRepoProfile(lower, { privateDir: other, mode: "private", autoCommit: true });
+    assert.equal(readRepoProfile(upper)?.privateDir, overlay, "setting up deploy kept Deploy's entry");
+    assert.equal(removeRepoProfile(lower), true);
+    assert.equal(readRepoProfile(upper)?.privateDir, overlay, "forgetting deploy kept Deploy's entry");
+  } finally {
+    for (const dir of [upper, lower, overlay, other]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("origin case: one identity; a legacy exact-case entry is found; a rewrite drops case variants; disagreeing variants refuse", () => {
+  const upper = repo("git@github.com:Acme/Widgets.git");
+  const lower = repo("https://github.com/acme/widgets");
+  const overlay = tmp("hunch-mhp-case-");
+  const other = tmp("hunch-mhp-case-other-");
+  try {
+    writeRepoProfile(upper, { privateDir: overlay, mode: "private", autoCommit: true });
+    assert.equal(readRepoProfile(lower)?.privateDir, overlay, "path case does not split one repository");
+    writeRepoProfile(lower, { privateDir: overlay, mode: "shared", autoCommit: false });
+    assert.deepEqual(Object.keys(profileFileJson().repos), ["github.com/acme/widgets"], "the rewrite replaced the case variant");
+    assert.equal(readRepoProfile(upper)?.mode, "shared");
+
+    writeFileSync(repoProfileFile(), JSON.stringify({ version: 1, repos: {
+      "github.com/Acme/Widgets": { privateDir: overlay, mode: "private", autoCommit: true, updated_at: "" },
+      "github.com/ACME/widgets": { privateDir: other, mode: "private", autoCommit: true, updated_at: "" },
+    } }));
+    assert.equal(readRepoProfile(upper)?.privateDir, overlay, "an exact-case entry wins");
+    const ambiguous = resolveRepoProfile(lower);
+    assert.equal(ambiguous.entry, null, "two case variants naming different overlays: unresolved");
+    assert.match(ambiguous.conflict ?? "", /github\.com\/Acme\/Widgets/);
+  } finally {
+    for (const dir of [upper, lower, overlay, other]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
+});
+
+test("repo id and origin entries that name different overlays leave the home unresolved, never a guess", () => {
+  const root = repo("git@github.com:Acme/Widgets.git");
+  const overlay = tmp("hunch-mhp-split-");
+  const other = tmp("hunch-mhp-split-other-");
+  try {
+    const { id } = ensureRepoId(root);
+    writeRepoProfile(root, { privateDir: overlay, mode: "private", autoCommit: true });
+    const file = profileFileJson();
+    file.repos["github.com/Acme/Widgets"]!.privateDir = other; // an older Hunch rewrote the origin entry
+    writeFileSync(repoProfileFile(), JSON.stringify(file));
+    const resolved = resolveRepoProfile(root);
+    assert.equal(resolved.entry, null);
+    assert.match(resolved.conflict ?? "", new RegExp(id));
+    const store = open(root);
+    assert.equal(store.overlaySource, null);
+    store.close();
+    assert.equal(removeRepoProfile(root), true);
+    assert.deepEqual(Object.keys(profileFileJson().repos), [], "forget drops the id and the origin entry");
+  } finally {
+    for (const dir of [root, overlay, other]) cleanupDir(dir);
+    rmSync(repoProfileFile(), { force: true });
+  }
 });

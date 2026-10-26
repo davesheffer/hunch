@@ -47,6 +47,11 @@ export interface HunchConfig {
    *  every kind outside `public_kinds`, and a capture with no reachable overlay is refused
    *  rather than written public. Absent = today's routing. */
   memory?: { home?: "repo" | "overlay"; public_kinds?: string[]; min_version?: string };
+  /** This repository's identity (a UUID), committed so a checkout with no network origin
+   *  (none, a local path, file://) still finds its overlay in the machine profile. Read
+   *  as written (unvalidated) so a malformed value is refused, never replaced: see
+   *  repoIdOf / ensureRepoId. */
+  repo_id?: unknown;
 }
 
 export interface MemoryPolicy {
@@ -162,6 +167,7 @@ export function readConfig(paths: HunchPaths): HunchConfig {
       ...(raw.workspaces && typeof raw.workspaces === "object" && !Array.isArray(raw.workspaces) ? { workspaces: raw.workspaces } : {}),
       ...(raw.verify && typeof raw.verify === "object" && !Array.isArray(raw.verify) ? { verify: raw.verify } : {}),
       ...(raw.memory && typeof raw.memory === "object" && !Array.isArray(raw.memory) ? { memory: raw.memory } : {}),
+      ...(raw.repo_id !== undefined ? { repo_id: raw.repo_id } : {}),
     };
   } catch {
     return defaults();

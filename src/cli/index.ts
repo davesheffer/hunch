@@ -98,7 +98,7 @@ import { discoverProjectDna, evaluateProjectDnaMatch, type ProjectDnaArtifact } 
 import { diffProjectDna } from "../core/projectDnaDelta.js";
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
 import { readConfig, writeConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, memoryPolicyProblem, memoryConfigTextProblem, type HunchConfig } from "../core/config.js";
-import { readRepoProfile, removeRepoProfile, repoProfileKey, writeRepoProfileOrWarn, repoProfileFile } from "../core/repoProfile.js";
+import { readRepoProfile, resolveRepoProfile, removeRepoProfile, repoIdForgetConflict, repoProfileKey, repoIdOf, ensureRepoId, writeRepoProfileOrWarn, repoProfileFile } from "../core/repoProfile.js";
 import { canonicalize } from "../core/stateCanonical.js";
 import { loadOrCreateMachine, setMachineLabel, machineFile, labelLeaksIdentity } from "../core/machine.js";
 import { worktreeRows, branchRows, publicWorkspaceRemovalRecipe } from "../core/workspace.js";
@@ -1277,6 +1277,7 @@ type FreshOverlaySetupTransaction = {
   markTeamWrite(): void;
   markSharedPointerWrite(): void;
   markProfileWrite(): void;
+  markConfigWrite(): void;
   markHookWrite(): void;
   preserveOverlayOnRollback(): void;
   rollback(): void;
@@ -1307,7 +1308,9 @@ function beginFreshOverlaySetup(
   // The machine profile lives outside the repository, but a failed setup must not leave
   // an entry that would restore a removed overlay into every future clone.
   const profileFile = repoProfileFile();
-  const paths = [localFile, codeGitignore, teamFile, profileFile, ...(sharedPointer ? [sharedPointer, backLink] : []), ...hookFiles];
+  // Setup mints the committed repo_id here; a failed setup must not leave it behind.
+  const configFile = hunchPaths(root).config;
+  const paths = [localFile, codeGitignore, teamFile, profileFile, configFile, ...(sharedPointer ? [sharedPointer, backLink] : []), ...hookFiles];
   const snapshots = new Map(paths.map((path) => [path, setupPathSnapshot(path)] as const));
   const parentExisted = new Map([
     [dirname(localFile), existsSync(dirname(localFile))],
@@ -1327,6 +1330,7 @@ function beginFreshOverlaySetup(
     markTeamWrite: () => mark(teamFile),
     markSharedPointerWrite: () => { mark(backLink); mark(sharedPointer); },
     markProfileWrite: () => mark(profileFile),
+    markConfigWrite: () => mark(configFile),
     markHookWrite: () => { for (const f of hookFiles) mark(f); },
     // Migration is a one-way ownership handoff. Once public records have been
     // durably copied into this clone, a later setup failure may restore routing
@@ -1613,7 +1617,10 @@ function configureOverlay(dir: string | undefined, opts: OverlaySetupOpts, mode:
   freshSetup?.markSharedPointerWrite();
   if (ensureSharedOverlayPointer(root, hunchDir, !!opts.autoCommit, mode, true)) {
     worktreeNote = "  ✓ registered in the git common dir — shared by every worktree of this repo, on any branch\n";
-    // This machine's profile for the origin lets a fresh clone restore the same overlay.
+    // This machine's profile for the origin lets a fresh clone restore the same overlay; the
+    // committed repo id lets a clone with no network origin (a local path) find it too.
+    freshSetup?.markConfigWrite();
+    worktreeNote += repoIdNote(root);
     freshSetup?.markProfileWrite();
     writeRepoProfileOrWarn(root, { privateDir: resolve(hunchDir), mode, autoCommit: !!opts.autoCommit });
   } else {
@@ -1760,10 +1767,13 @@ memoryPolicyCmd
     } finally {
       store.close();
     }
-    const profile = readRepoProfile(root);
+    const { entry: profile, conflict } = resolveRepoProfile(root);
+    const repoId = repoIdOf(root);
+    const identity = [repoProfileKey(root), repoId && `repo id ${repoId}`].filter(Boolean).join(" / ");
     console.log(profile
       ? `profile:       ${profile.privateDir} (${profile.mode}, auto-commit ${profile.autoCommit ? "on" : "off"}${profile.updated_at ? `, updated ${profile.updated_at}` : ""})`
-      : `profile:       none for ${repoProfileKey(root) || "this checkout (no origin remote)"}`);
+      : `profile:       none for ${identity || "this checkout (no origin remote, no repo_id)"}`);
+    if (conflict) console.log(`profile:       ⚠ ${conflict}`);
   });
 
 memoryPolicyCmd
@@ -1976,9 +1986,14 @@ memoryPolicyCmd
   .action(() => {
     const root = findRoot();
     const key = repoProfileKey(root);
-    console.log(removeRepoProfile(root)
-      ? `removed the machine profile entry for ${key}`
-      : `no profile entry for ${key || "this checkout (no origin remote)"}`);
+    const refused = repoIdForgetConflict(root);
+    if (removeRepoProfile(root)) {
+      console.log(`removed the machine profile entry for ${key || "this checkout's repo_id"}`);
+      if (refused) console.error(`⚠ kept ${refused}`);
+    } else if (refused) {
+      console.error(`refused: ${refused}`);
+      process.exitCode = 1;
+    } else console.log(`no profile entry for ${key || "this checkout (no origin remote)"}`);
   });
 
 // ---- worktree (one-command worktree wired into Hunch) ----------------------
@@ -7339,6 +7354,11 @@ program
       console.log(`memory policy: ⛔ requires Hunch ${rawPolicy.min_version} or newer (this is ${HUNCH_VERSION}) — upgrade Hunch`);
       process.exitCode = 1;
     }
+    if (!store.privateDir) {
+      // Profile entries that matched but were set aside (another origin, split overlays): say why.
+      const { conflict } = resolveRepoProfile(root);
+      if (conflict) console.log(`memory profile: ⚠ ${conflict}`);
+    }
     if (store.overlaySource === "machine-profile" && store.privateDir) {
       console.log(`overlay: from this machine's profile → ${store.privateDir}; run hunch init to persist it in this checkout`);
     } else if (store.overlaySource === "local-config" && store.privateDir) {
@@ -7402,6 +7422,17 @@ const NO_OVERLAY_POLICY_LINE = "memory policy: ⛔ requires an overlay but none 
 
 function unreadablePolicyLine(problem: string): string {
   return `memory policy: ⛔ ${problem} — captures are REFUSED (their home is unknown; nothing is written public). Fix the file, then re-run hunch doctor`;
+}
+
+/** Record the committed repo id the machine profile is also keyed by; the line to print, if any. */
+function repoIdNote(root: string): string {
+  try {
+    return ensureRepoId(root).minted
+      ? "  ✓ recorded repo_id in .hunch/config.json (commit it) — clones without a network origin find this overlay too\n"
+      : "";
+  } catch (error) {
+    return `  ⚠ ${(error as Error).message}; clones without a network origin will not find this overlay\n`;
+  }
 }
 
 /** Whether writeConfig will refuse `.hunch/config.json` (unreadable, unparseable, not an object). */

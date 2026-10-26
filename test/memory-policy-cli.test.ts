@@ -193,6 +193,44 @@ test("§6 hunch shared <dir> records the profile with mode shared and the auto-c
   } finally { cleanupDir(f.base); }
 });
 
+test("§6 hunch private records a repo_id, so a clone from a local path finds the overlay; a different origin is a reported conflict", () => {
+  const f = fixture("prof-id", origin("prof-id"));
+  try {
+    const overlay = join(f.base, "overlay", ".hunch");
+    mkdirSync(join(f.base, "overlay"), { recursive: true });
+    const configFile = join(f.root, ".hunch", "config.json");
+    const r = cli(f, ["private", overlay, "--no-hook", "--no-auto-commit"]);
+    assert.equal(r.status, 0, r.out);
+    const id = JSON.parse(readFileSync(configFile, "utf8")).repo_id;
+    assert.match(String(id), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, r.out);
+    assert.match(r.out, /recorded repo_id in \.hunch\/config\.json \(commit it\)/, r.out);
+    const again = cli(f, ["private", overlay, "--no-hook", "--no-auto-commit"]);
+    assert.equal(again.status, 0, again.out);
+    assert.equal(JSON.parse(readFileSync(configFile, "utf8")).repo_id, id, "an existing id is kept");
+    assert.doesNotMatch(again.out, /recorded repo_id/, "nothing new to commit");
+
+    git(f.root, f.env, "add", ".hunch/config.json");
+    git(f.root, f.env, "commit", "-qm", "repo id");
+    const clone: Fx = { ...f, root: join(f.base, "clone") };
+    git(f.base, f.env, "clone", "-q", f.root, clone.root);
+    const status = cli(clone, ["memory-policy", "status"]);
+    assert.match(status.out, /overlay: +\S.*source: machine-profile/, `a clone from a local path did not resolve the overlay by repo id:\n${status.out}`);
+
+    git(clone.root, f.env, "remote", "set-url", "origin", origin("prof-id-fork"));
+    for (const args of [["memory-policy", "status"], ["doctor"]]) {
+      const fork = cli(clone, args);
+      assert.doesNotMatch(fork.out, /source: machine-profile/, `${args.join(" ")}: a different origin inherited the overlay:\n${fork.out}`);
+      assert.match(fork.out, new RegExp(`⚠ repo id ${id} was recorded for \\S+, but this checkout's origin is \\S+prof-id-fork`), `${args.join(" ")}:\n${fork.out}`);
+    }
+    const forget = cli(clone, ["memory-policy", "forget"]);
+    assert.equal(forget.status, 1, `forgetting another origin's id entry is a refusal:\n${forget.out}`);
+    assert.doesNotMatch(forget.out, /no profile entry/, forget.out);
+    assert.match(forget.out, new RegExp(`the entry for repo_id ${id} is bound to (\\S+); forget it from a checkout of \\1`), forget.out);
+    // The upstream checkout itself resolves through its local pointer; its id entry is what survives.
+    samePath(JSON.parse(readFileSync(repoProfileFile(), "utf8")).repos[`repo-id:${id}`]?.privateDir, overlay, "the upstream's entry survived");
+  } finally { cleanupDir(f.base); }
+});
+
 test("§6 team auto-wiring (ensureTeamOverlay) records the profile with mode shared", () => {
   const f = fixture("prof-team", origin("prof-team"));
   const prevTimeout = process.env.HUNCH_TEAM_CLONE_TIMEOUT_MS;
@@ -229,6 +267,8 @@ test("§6 a fresh --repo setup that fails after the pointer write leaves no prof
     assert.match(failed.out, /injected late overlay migration failure/);
     assert.equal(profileEntryRaw(failing.root), undefined, "a failed setup leaves no repo profile entry behind");
     assert.equal(readRepoProfile(failing.root), null);
+    const failedConfig = join(failing.root, ".hunch", "config.json");
+    assert.ok(!existsSync(failedConfig) || !("repo_id" in JSON.parse(readFileSync(failedConfig, "utf8"))), "a failed setup leaves no minted repo_id behind");
 
     // Positive control: without the injected failure the same command persists the profile,
     // so the assertion above is about rollback, not about a profile that is never written.
