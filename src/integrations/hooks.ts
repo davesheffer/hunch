@@ -698,14 +698,16 @@ function sharedInvocationFor(root: string, mark: string, invocation: string, own
   return null;
 }
 
-/** Shared idempotent create/append/update-in-place logic for every hunch git
- *  hook: write a fresh hook file, replace our own managed block in place if the
- *  invocation changed, or append after any pre-existing (non-hunch) hook body
- *  without clobbering it. Used by all hook installers below — the copies had
- *  already drifted (installPreCommitHook was missing the chmodSync on its
- *  "updated" path) before this was unified. When a hook manager owns the file,
- *  or the block would sit after an exec/exit, nothing is written and the result
- *  carries the snippet to add by hand (issue #311). */
+/** The one idempotent install path every Hunch git hook goes through: create the
+ *  hook file when there is none; rewrite our own managed block in place when its
+ *  invocation moved; otherwise append the block after whatever non-Hunch body the
+ *  file already holds, never clobbering it. Each installer used to carry its own
+ *  copy of this, and the copies drifted (one forgot to chmod the file on its
+ *  update path), hence a single shared implementation.
+ *
+ *  When a hook manager owns the file, or the block would land after an `exec` /
+ *  `exit` that stops it from ever running, nothing is written: the result
+ *  carries the snippet for the user to add by hand instead (issue #311). */
 function installManagedBlock(root: string, hookName: string, mark: string, end: string, build: BlockBuilder, invocation: string): HookInstall {
   // A linked worktree whose branch predates the opt-out marker shares the main
   // checkout's hooks dir: never re-hook a repository `hunch uninstall` opted out (#488).

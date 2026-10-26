@@ -83,10 +83,10 @@ test("hunch_record_decision refuses a write whose related_files exist only in a 
 
   const result = await client.callTool({
     name: "hunch_record_decision",
-    arguments: { decision: { title: "misrouted decision", related_files: ["decision-evidence.ts"] } },
-  }) as { content: Array<{ text: string }>; isError?: boolean };
+    arguments: { decision: { title: "decision aimed at the wrong checkout", related_files: ["decision-evidence.ts"] } },
+  }) as { isError?: boolean; content?: unknown };
   assert.equal(result.isError, true);
-  const text = result.content.map((c) => c.text ?? "").join("\n");
+  const text = ((result.content ?? []) as Array<{ type: string; text?: string }>).map((c) => c.text ?? "").join("\n");
   assert.ok(text.includes(fixture.worktree), `refusal should name the worktree: ${text}`);
   assert.ok(/cwd/.test(text), `refusal should mention retrying with cwd: ${text}`);
 });
@@ -99,10 +99,10 @@ test("hunch_record_correction refuses a write whose scope_hint_file exists only 
 
   const result = await client.callTool({
     name: "hunch_record_correction",
-    arguments: { rule: "never do the thing", scope_hint_file: "correction-evidence.ts" },
-  }) as { content: Array<{ text: string }>; isError?: boolean };
+    arguments: { rule: "never touch this from the wrong checkout", scope_hint_file: "correction-evidence.ts" },
+  }) as { isError?: boolean; content?: unknown };
   assert.equal(result.isError, true);
-  const text = result.content.map((c) => c.text ?? "").join("\n");
+  const text = ((result.content ?? []) as Array<{ type: string; text?: string }>).map((c) => c.text ?? "").join("\n");
   assert.ok(text.includes(fixture.worktree), `refusal should name the worktree: ${text}`);
 });
 
@@ -114,10 +114,10 @@ test("hunch_record_finding refuses a write whose affected_files exist only in a 
 
   const result = await client.callTool({
     name: "hunch_record_finding",
-    arguments: { finding: { title: "misrouted finding", observation: "saw a thing", affected_files: ["finding-evidence.ts"] } },
-  }) as { content: Array<{ text: string }>; isError?: boolean };
+    arguments: { finding: { title: "finding aimed at the wrong checkout", observation: "seen only in the sibling worktree", affected_files: ["finding-evidence.ts"] } },
+  }) as { isError?: boolean; content?: unknown };
   assert.equal(result.isError, true);
-  const text = result.content.map((c) => c.text ?? "").join("\n");
+  const text = ((result.content ?? []) as Array<{ type: string; text?: string }>).map((c) => c.text ?? "").join("\n");
   assert.ok(text.includes(fixture.worktree), `refusal should name the worktree: ${text}`);
 });
 
@@ -210,10 +210,7 @@ test("a write in the correct worktree (matching cwd hint) is never refused by th
 
   const result = await client.callTool({
     name: "hunch_record_decision",
-    arguments: {
-      decision: { title: "correctly-routed decision", related_files: ["same-place-evidence.ts"] },
-      cwd: fixture.worktree,
-    },
+    arguments: { decision: { title: "decision made where the evidence lives", related_files: ["same-place-evidence.ts"] }, cwd: fixture.worktree },
   }) as { isError?: boolean };
   assert.equal(!!result.isError, false);
 });
