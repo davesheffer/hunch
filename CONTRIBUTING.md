@@ -16,6 +16,10 @@ else:
 
     I have read the CLA Document and I hereby sign the CLA
 
+Paste it as the whole comment and add nothing to it, not even a period at the end.
+The workflow compares the full comment against this sentence, and a comment that
+differs in any way is ignored without a reply.
+
 The check then turns green (if it doesn't, comment `recheck` or push a commit). You sign once, and it covers your later pull requests,
 until a new version of the CLA asks everyone to sign again.
 If you contribute as part of your job, your employer also signs the
