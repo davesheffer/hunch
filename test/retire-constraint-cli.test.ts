@@ -18,6 +18,14 @@ function git(root: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
 
+/** Spawn `hunch retire-constraint ...` in `root` with the deterministic provider and no colour. */
+function retireCli(root: string, ...args: string[]): { run: ReturnType<typeof spawnSync>; output: string } {
+  const run = spawnSync(process.execPath, hunchCliArgs("retire-constraint", ...args), {
+    cwd: root, encoding: "utf8", env: isolatedCliEnv({ NO_COLOR: "1" }),
+  });
+  return { run, output: `${run.stdout ?? ""}${run.stderr ?? ""}` };
+}
+
 function activeConstraint(id: string): Constraint {
   return {
     id,
@@ -91,12 +99,7 @@ test("retire-constraint closes an active constraint's window, keeps the reason o
     git(root, "commit", "-qm", "fixture: baseline with an active constraint");
     git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
 
-    const run = spawnSync(process.execPath, hunchCliArgs("retire-constraint", constraint.id, "--reason", "superseded by the new gateway module"), {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" },
-    });
-    const output = `${run.stdout}${run.stderr}`;
+    const { run, output } = retireCli(root, constraint.id, "--reason", "superseded by the new gateway module");
     assert.equal(run.status, 0, output);
     assert.match(output, /retired — window closed/);
 
@@ -172,12 +175,7 @@ test("retire-constraint refuses a nonexistent id, without any write or commit", 
     git(root, "commit", "-qm", "fixture: baseline");
     const headBefore = git(root, "rev-parse", "HEAD");
 
-    const run = spawnSync(process.execPath, hunchCliArgs("retire-constraint", "con_does_not_exist"), {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" },
-    });
-    const output = `${run.stdout}${run.stderr}`;
+    const { run, output } = retireCli(root, "con_does_not_exist");
     assert.notEqual(run.status, 0, output);
     assert.match(output, /constraint "con_does_not_exist" not found/);
     assert.equal(git(root, "rev-parse", "HEAD"), headBefore, "no commit is created");
@@ -198,12 +196,7 @@ test("retire-constraint idempotent-refuses an already-retired id, reporting the 
     git(root, "commit", "-qm", "fixture: already-retired constraint");
     const headBefore = git(root, "rev-parse", "HEAD");
 
-    const run = spawnSync(process.execPath, hunchCliArgs("retire-constraint", retiredAlready.id), {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" },
-    });
-    const output = `${run.stdout}${run.stderr}`;
+    const { run, output } = retireCli(root, retiredAlready.id);
     assert.notEqual(run.status, 0, output);
     assert.match(output, /already retired/);
     assert.match(output, /2026-02-01/);
@@ -229,12 +222,7 @@ test("retire-constraint warns when --reason has nowhere to land because auto-com
     git(root, "commit", "-qm", "fixture: baseline, auto-commit off");
     const headBefore = git(root, "rev-parse", "HEAD");
 
-    const run = spawnSync(process.execPath, hunchCliArgs("retire-constraint", constraint.id, "--reason", "no longer needed"), {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" },
-    });
-    const output = `${run.stdout}${run.stderr}`;
+    const { run, output } = retireCli(root, constraint.id, "--reason", "no longer applies");
     assert.equal(run.status, 0, output);
     assert.match(output, /retired — window closed/);
     assert.match(output, /--reason is not recorded anywhere/);

@@ -30,53 +30,44 @@ function applyReviewed(root: string) {
   });
 }
 
-const queueFile = (root: string): string => join(root, ".hunch", "pending-commit-repairs.json");
+function queueFile(root: string): string {
+  return join(root, ".hunch", "pending-commit-repairs.json");
+}
 
-/** A repo with two recorded decisions (dec_a, dec_b) and real commits their repairs can resolve to. */
-function twoDecisionRepo(): { root: string; shaBNew: string; cleanup(): void } {
+/** Two accepted decisions (dec_a, dec_b) whose recorded commits are gone from this repo. */
+function twoDecisionRepo(): { root: string; shaBNew: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "hunch-repair-counts-"));
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test Human");
+  git(root, "config", "commit.gpgsign", "false");
   ensureGitignore(root);
-  writeFileSync(join(root, "a.txt"), "x\n");
+  writeFileSync(join(root, "a.ts"), "export const a = 1;\n");
   git(root, "add", "-A");
-  git(root, "commit", "-qm", "init");
-  writeFileSync(join(root, "b.txt"), "y\n");
+  git(root, "commit", "-qm", "initial");
+  writeFileSync(join(root, "b.ts"), "export const b = 2;\n");
   git(root, "add", "-A");
-  git(root, "commit", "-qm", "a commit dec_b's queued repair can resolve to");
+  git(root, "commit", "-qm", "second");
   const shaBNew = git(root, "rev-parse", "HEAD");
-
-  const mkDecision = (id: string, commit: string): Decision => ({
-    id,
-    title: `Decision ${id}`,
-    topic: null,
-    status: "accepted",
-    context: "",
-    decision: `Decision ${id}.`,
-    consequences: [],
-    alternatives_rejected: [],
-    rejected_tripwires: [],
-    related_components: [],
-    related_files: [`src/${id}.ts`],
-    supersedes: null,
-    superseded_by: null,
-    caused_by_bug: null,
-    commit,
-    valid_from: "2026-01-01T00:00:00.000Z",
-    valid_to: null,
-    retired: { symbols: [], deps: [] },
-    provenance: { source: "human_confirmed", confidence: 1, evidence: [`commit:${commit}`], last_verified: "2026-01-01T00:00:00.000Z" },
-    date: "2026-01-01T00:00:00.000Z",
+  const stamp = "2026-01-01T00:00:00.000Z";
+  const record = (id: string, commit: string, file: string): Decision => ({
+    id, title: `counts fixture ${id}`, topic: null, status: "accepted",
+    context: "", decision: `keep ${file} stable`, consequences: [], alternatives_rejected: [], rejected_tripwires: [],
+    related_components: [], related_files: [file], supersedes: null, superseded_by: null, caused_by_bug: null,
+    commit, valid_from: stamp, valid_to: null, retired: { symbols: [], deps: [] },
+    provenance: { source: "human_confirmed", confidence: 1, evidence: [`commit:${commit}`], last_verified: stamp },
+    date: stamp,
   });
-
   const store = new HunchStore(hunchPaths(root));
-  store.json.put("decisions", mkDecision("dec_a", "sha_a_old"));
-  store.json.put("decisions", mkDecision("dec_b", "sha_b_old"));
-  store.reindex();
-  store.close();
-  git(root, "add", ".hunch");
-  git(root, "commit", "-qm", "hunch: record dec_a and dec_b");
+  try {
+    store.json.put("decisions", record("dec_a", "sha_a_old", "a.ts"));
+    store.json.put("decisions", record("dec_b", "sha_b_old", "b.ts"));
+    store.reindex();
+  } finally {
+    store.close();
+  }
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "record decisions");
   return { root, shaBNew, cleanup: () => cleanupDir(root) };
 }
 
@@ -110,7 +101,7 @@ test("repair-provenance --apply counts same-id withheld entries per entry in BOT
     ], null, 2) + "\n");
     const run = applyReviewed(some.root);
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /Repaired 1 commit reference/);
+    assert.match(run.stdout, /Repaired 1 commit reference/, "only the dec_b entry is applied");
     assert.match(run.stdout, /2 entries left queued — the proposed replacement commit doesn't resolve in this repository: dec_a, dec_a /, "post-apply summary counts the same two entries");
   } finally {
     some.cleanup();

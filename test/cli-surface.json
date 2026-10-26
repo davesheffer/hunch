@@ -231,7 +231,7 @@
     "tests": [
       {
         "file": "test/hook-invocation-health.test.ts",
-        "title": "hunch doctor's stale hint names the init options that keep the block's flags"
+        "title": "hunch doctor flags a dead strict pre-commit launcher as stale and says how to keep --strict"
       },
       {
         "file": "test/hook-managers.test.ts",

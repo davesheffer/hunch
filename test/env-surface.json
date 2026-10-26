@@ -476,7 +476,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.available() requires explicit opt-in for any public remote endpoint"
+        "title": "HUNCH_SYNTH_API_KEY is sent as a Bearer Authorization header"
       },
       {
         "file": "test/doctor.test.ts",
@@ -490,7 +490,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.available() is false unless BOTH HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL are set"
+        "title": "OpenAICompatProvider is unavailable until both the base URL and the model are configured"
       },
       {
         "file": "test/doctor.test.ts",
@@ -504,7 +504,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.draftDecision honors HUNCH_SYNTH_MAX_TOKENS"
+        "title": "HUNCH_SYNTH_MAX_TOKENS overrides the max_tokens sent to the endpoint"
       }
     ]
   },
@@ -514,7 +514,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.available() is false unless BOTH HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL are set"
+        "title": "OpenAICompatProvider is unavailable until both the base URL and the model are configured"
       },
       {
         "file": "test/doctor.test.ts",
@@ -542,7 +542,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.draftDecision rejects when the endpoint exceeds HUNCH_SYNTH_TIMEOUT_MS"
+        "title": "a reply slower than HUNCH_SYNTH_TIMEOUT_MS aborts the draft"
       }
     ]
   },

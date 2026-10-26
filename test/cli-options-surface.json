@@ -2209,7 +2209,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance --range --apply repairs the commit and evidence, commits, and clears the queue"
+        "title": "--from-hook queues the match silently and never auto-commits"
       }
     ]
   },

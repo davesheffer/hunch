@@ -248,25 +248,25 @@ test("a stale hook reports the Hunch options its block carried, so a re-install 
   } finally { cleanupDir(r); }
 });
 
-test("hunch doctor's stale hint names the init options that keep the block's flags", { timeout: 120_000 }, () => {
+test("hunch doctor flags a dead strict pre-commit launcher as stale and says how to keep --strict", { timeout: 120_000 }, () => {
   const r = repo();
   try {
-    writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
-    git(r, "add", "-A");
-    git(r, "commit", "-qm", "init");
+    writeFileSync(join(r, "app.ts"), "export const seed = 7;\n");
+    git(r, "add", "app.ts");
+    git(r, "commit", "-q", "-m", "fixture: seed");
     installPostCommitHook(r, "hunch");
     installPostMergeHook(r, "hunch");
-    // A strict pre-commit guard whose launcher no longer exists.
-    installPreCommitHook(r, join(r, "gone", "bin", "hunch"), true);
-
+    // Never executed: doctor only reads the hook.
+    const vanished = `${JSON.stringify(join(r, "vanished", "node"))} ${JSON.stringify(join(r, "vanished", "cli", "index.js"))}`;
+    installPreCommitHook(r, vanished, true);
     const run = spawnSync(process.execPath, [TSX, CLI, "doctor"], {
       cwd: r,
       env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" },
       encoding: "utf8",
     });
     const out = `${run.stdout}${run.stderr}`;
-    assert.match(out, /⚠ stale: pre-commit/, out);
-    assert.match(out, /--enforce-strict/, out);
+    assert.match(out, /⚠ stale: pre-commit/);
+    assert.match(out, /--enforce-strict/, "the hint must name the init option that keeps the strict guard");
   } finally { cleanupDir(r); }
 });
 
@@ -308,24 +308,25 @@ test("hookInvocationLines: identical invocations share a line, and only a differ
   ], "no running invocation to compare against: no suffix");
 });
 
-test("hunch doctor reports a stale hook instead of calling it installed", { timeout: 120_000 }, () => {
+test("hunch doctor reports a post-commit hook whose Windows launcher is gone as stale, not installed", { timeout: 120_000 }, () => {
   const r = repo();
   try {
-    writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
-    git(r, "add", "-A");
-    git(r, "commit", "-qm", "init");
+    writeFileSync(join(r, "app.ts"), "export const seed = 7;\n");
+    git(r, "add", "app.ts");
+    git(r, "commit", "-q", "-m", "fixture: seed");
     installPostCommitHook(r, "hunch");
     installPostMergeHook(r, "hunch");
-    rewriteSyncLine(r, `  ( ${JSON.stringify("C:\\nope\\node.exe")} ${JSON.stringify("C:\\nope\\index.js")} sync --from-hook --quiet >/dev/null 2>&1 || true ) &`);
-
+    const node = "C:\\missing-hunch-runtime\\node.exe";
+    const entry = "C:\\missing-hunch-runtime\\index.js";
+    rewriteSyncLine(r, `  ( ${JSON.stringify(node)} ${JSON.stringify(entry)} sync --from-hook --quiet >/dev/null 2>&1 || true ) &`);
     const run = spawnSync(process.execPath, [TSX, CLI, "doctor"], {
       cwd: r,
       env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" },
       encoding: "utf8",
     });
     const out = `${run.stdout}${run.stderr}`;
-    assert.match(out, /hooks:.*⚠ stale: post-commit/s, out);
-    assert.match(out, /C:\\nope\\node\.exe does not exist/, out);
-    assert.doesNotMatch(out, /hooks:\s+post-commit, post-merge installed/, out);
+    assert.match(out, /hooks:[\s\S]*⚠[\s\S]*stale: post-commit/);
+    assert.ok(out.includes(`${node} does not exist`), out);
+    assert.doesNotMatch(out, /post-commit, post-merge installed/);
   } finally { cleanupDir(r); }
 });

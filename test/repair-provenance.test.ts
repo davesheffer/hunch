@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Decision } from "../src/core/types.js";
@@ -33,82 +33,86 @@ function runCliRaw(root: string, ...args: string[]) {
   });
 }
 
-/** Simulate reviewing the existing queue for the older action-path tests. */
+/** Like runCliRaw, but supplies the review hash an apply/drop now requires, the way a
+ *  human would after reading the preview. Callers that pass --expect themselves are untouched. */
 function runCli(root: string, ...args: string[]) {
-  if (args[0] === "repair-provenance" && (args.includes("--apply") || args.includes("--drop")) && !args.includes("--expect")) {
-    // Explicit scan-and-apply fixtures now follow the required two-step flow.
-    const rangeIndex = args.indexOf("--range");
-    if (rangeIndex >= 0) {
-      const preview = runCliRaw(root, "repair-provenance", "--range", args[rangeIndex + 1]!, "--quiet");
-      if (preview.status !== 0) return preview;
-    }
-    const queued = readActivePendingRepairs(root);
-    args.push("--expect", commitRepairReviewHash(queued, withheldRewrites(root, queued)));
+  const acts = args[0] === "repair-provenance" && (args.includes("--apply") || args.includes("--drop")) && !args.includes("--expect");
+  if (!acts) return runCliRaw(root, ...args);
+  const rangeAt = args.indexOf("--range");
+  if (rangeAt >= 0) {
+    const preview = runCliRaw(root, "repair-provenance", "--range", args[rangeAt + 1] ?? "", "--quiet");
+    if (preview.status !== 0) return preview;
   }
-  return runCliRaw(root, ...args);
+  const queued = readActivePendingRepairs(root);
+  return runCliRaw(root, ...args, "--expect", commitRepairReviewHash(queued, withheldRewrites(root, queued)));
 }
 
-/** A complete, accepted decision citing `commit` and scoped to `file`. */
 function fullDecision(id: string, commit: string, file: string): Decision {
+  const stamp = "2026-01-01T00:00:00.000Z";
   return {
-    id, title: `title ${id}`, topic: null, status: "accepted", context: "", decision: "d.", consequences: [],
-    alternatives_rejected: [], rejected_tripwires: [], related_components: [], related_files: [file],
-    supersedes: null, superseded_by: null, caused_by_bug: null, commit,
-    valid_from: "2026-01-01T00:00:00.000Z", valid_to: null, retired: { symbols: [], deps: [] },
-    provenance: { source: "human_confirmed", confidence: 1, evidence: [`commit:${commit}`], last_verified: "2026-01-01T00:00:00.000Z" },
-    date: "2026-01-01T00:00:00.000Z",
-  } as Decision;
+    id, title: `fixture decision ${id}`, topic: null, status: "accepted",
+    context: "", decision: `keep ${file} as it is`, consequences: [], alternatives_rejected: [], rejected_tripwires: [],
+    related_components: [], related_files: [file], supersedes: null, superseded_by: null, caused_by_bug: null,
+    commit, valid_from: stamp, valid_to: null, retired: { symbols: [], deps: [] },
+    provenance: { source: "human_confirmed", confidence: 1, evidence: [`commit:${commit}`], last_verified: stamp },
+    date: stamp,
+  };
 }
 
-/** Store the decisions, reindex, and commit them. */
 function storeDecisions(root: string, decisions: Decision[]): void {
   const store = new HunchStore(hunchPaths(root));
-  for (const d of decisions) store.json.put("decisions", d);
-  store.reindex();
-  store.close();
+  try {
+    for (const d of decisions) store.json.put("decisions", d);
+    store.reindex();
+  } finally {
+    store.close();
+  }
   git(root, "add", "-A");
-  git(root, "commit", "-qm", "hunch: record decisions");
+  git(root, "commit", "-qm", "hunch: record fixture decisions");
 }
 
-/**
- * Simulates a real squash-merge: a decision cites a commit on `feature`, then
- * `main` lands the identical change as a NEW commit (same patch-id) that does
- * not have the original as an ancestor.
- */
-function squashFixture(): { root: string; decisionFile: string; oldRef: string; newRef: string; origCommit: string; cleanup(): void } {
-  const root = mkdtempSync(join(tmpdir(), "hunch-repair-squash-"));
+/** A temp repo on main with a test identity and Hunch's gitignore rules. */
+function freshRepo(prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test Human");
+  git(root, "config", "commit.gpgsign", "false");
   ensureGitignore(root);
-  mkdirSync(join(root, "src"), { recursive: true });
-  writeFileSync(join(root, "src/base.ts"), "export const base = 1;\n");
+  return root;
+}
+
+/** Write one file (relative path), commit everything, and return the new HEAD sha. */
+function commitFile(root: string, rel: string, body: string, message: string): string {
+  const abs = join(root, rel);
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, body);
   git(root, "add", "-A");
-  git(root, "commit", "-qm", "base");
-  git(root, "checkout", "-qb", "feature");
-  writeFileSync(join(root, "src/feature.ts"), "export const feature = 1;\n");
-  git(root, "add", "src/feature.ts");
-  git(root, "commit", "-qm", "feat: feature");
-  const origCommit = git(root, "rev-parse", "HEAD");
-  const decision = fullDecision("dec_squash_fixture", origCommit, "src/feature.ts");
+  git(root, "commit", "-qm", message);
+  return git(root, "rev-parse", "HEAD");
+}
+
+function squashFixture() {
+  const root = freshRepo("hunch-repair-squash-");
+  commitFile(root, "src/base.ts", "export const base = 1;\n", "base");
+  git(root, "checkout", "-q", "-b", "feature");
+  const featureBody = "export function feature(): number { return 42; }\n";
+  const origCommit = commitFile(root, "src/feature.ts", featureBody, "feat: add feature");
   git(root, "checkout", "-q", "main");
-  writeFileSync(join(root, "src/unrelated.ts"), "export const unrelated = 1;\n");
-  git(root, "add", "src/unrelated.ts");
-  git(root, "commit", "-qm", "unrelated change");
-  const origHead = git(root, "rev-parse", "HEAD");
-  writeFileSync(join(root, "src/feature.ts"), "export const feature = 1;\n");
-  git(root, "add", "src/feature.ts");
-  git(root, "commit", "-qm", "feat: feature (#1)");
-  const newHead = git(root, "rev-parse", "HEAD");
-  const store = new HunchStore(hunchPaths(root));
-  store.json.put("decisions", decision);
-  store.reindex();
-  store.close();
-  const decisionFile = join(root, ".hunch", "decisions", "dec_squash_fixture.json");
-  git(root, "add", "-A");
-  git(root, "commit", "-qm", "hunch: record decision");
+  const oldRef = commitFile(root, "src/unrelated.ts", "export const unrelated = true;\n", "chore: unrelated change");
+  // The squash: the same content lands as a brand-new commit with no link to the original.
+  const newRef = commitFile(root, "src/feature.ts", featureBody, "feat: add feature (#1)");
+  git(root, "branch", "-q", "-D", "feature");
+  storeDecisions(root, [fullDecision("dec_squash_fixture", origCommit, "src/feature.ts")]);
   git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
-  return { root, decisionFile, oldRef: origHead, newRef: newHead, origCommit, cleanup: () => cleanupDir(root) };
+  return {
+    root,
+    decisionFile: join(root, ".hunch", "decisions", "dec_squash_fixture.json"),
+    oldRef,
+    newRef,
+    origCommit,
+    cleanup: () => cleanupDir(root),
+  };
 }
 
 function queueFile(root: string): string {
@@ -240,37 +244,20 @@ test("a withheld entry is worded as unresolvable and never advertises --apply --
   } finally { f.cleanup(); }
 });
 
-/** Two decisions whose queued targets are real commits, so they resolve by default. */
-function twoDecisionFixture(): { root: string; decisionFile: (id: string) => string; shaANew: string; shaBNew: string; cleanup(): void } {
-  const root = mkdtempSync(join(tmpdir(), "hunch-repair-two-"));
-  git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.email", "test@example.com");
-  git(root, "config", "user.name", "Test Human");
-  ensureGitignore(root);
-  mkdirSync(join(root, "src"), { recursive: true });
-  writeFileSync(join(root, "src/base.ts"), "1\n");
-  git(root, "add", "-A");
-  git(root, "commit", "-qm", "base");
-  writeFileSync(join(root, "src/dec_a.ts"), "a\n");
-  git(root, "add", "-A");
-  git(root, "commit", "-qm", "add a");
-  const shaANew = git(root, "rev-parse", "HEAD");
-  writeFileSync(join(root, "src/dec_b.ts"), "b\n");
-  git(root, "add", "-A");
-  git(root, "commit", "-qm", "add b");
-  const shaBNew = git(root, "rev-parse", "HEAD");
-  const store = new HunchStore(hunchPaths(root));
-  store.json.put("decisions", fullDecision("dec_a", "sha_a_old", "src/dec_a.ts"));
-  store.json.put("decisions", fullDecision("dec_b", "sha_b_old", "src/dec_b.ts"));
-  store.reindex();
-  store.close();
-  git(root, "add", ".hunch");
-  git(root, "commit", "-qm", "hunch: record decisions");
-  git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
+function twoDecisionFixture() {
+  const root = freshRepo("hunch-repair-two-");
+  commitFile(root, "src/base.ts", "export const base = 1;\n", "base");
+  const shaANew = commitFile(root, "src/dec_a.ts", "export const a = 1;\n", "add a");
+  const shaBNew = commitFile(root, "src/dec_b.ts", "export const b = 1;\n", "add b");
+  storeDecisions(root, [
+    fullDecision("dec_a", "sha_a_old", "src/dec_a.ts"),
+    fullDecision("dec_b", "sha_b_old", "src/dec_b.ts"),
+  ]);
   writeQueue(root, [
     { id: "dec_a", from: "sha_a_old", to: shaANew },
     { id: "dec_b", from: "sha_b_old", to: shaBNew },
   ]);
+  git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
   return {
     root,
     decisionFile: (id: string) => join(root, ".hunch", "decisions", `${id}.json`),
@@ -875,225 +862,175 @@ test("--apply --only applies the first sibling and leaves the others queued", ()
   } finally { f.cleanup(); }
 });
 
-test("--from-hook with no ORIG_HEAD is a quiet no-op", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-repair-noorig-"));
+test("--from-hook in a one-commit repo without ORIG_HEAD exits cleanly and prints nothing", () => {
+  const root = freshRepo("hunch-repair-noorig-");
   try {
-    git(root, "init", "-q", "-b", "main");
-    git(root, "config", "user.email", "test@example.com");
-    git(root, "config", "user.name", "Test Human");
-    ensureGitignore(root);
-    writeFileSync(join(root, "a.txt"), "a\n");
-    git(root, "add", "-A");
-    git(root, "commit", "-qm", "init");
+    commitFile(root, "README.md", "# fixture\n", "only commit");
     const run = runCli(root, "repair-provenance", "--from-hook", "--quiet");
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stdout.trim(), "");
-  } finally {
-    cleanupDir(root);
-  }
+  } finally { cleanupDir(root); }
 });
 
-/**
- * A repo whose PUBLIC store holds zero decisions: the decision exists only in a
- * separate overlay repository. The advisory/public view therefore sees nothing,
- * while the full store (public + private overlay) sees the decision.
- */
-function privateOverlaySessionStartFixture(): { root: string; overlayRoot: string; decisionId: string; env: NodeJS.ProcessEnv; cleanup(): void } {
-  const root = mkdtempSync(join(tmpdir(), "hunch-repair-pub-"));
+type OverlayFixture = { root: string; overlayRoot: string; decisionId: string; env: Record<string, string>; cleanup: () => void };
+
+/** Public store: zero decisions. Overlay: one decision whose queued repair target never resolves. */
+function privateOverlaySessionStartFixture(): OverlayFixture {
+  const root = freshRepo("hunch-repair-public-");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "public baseline");
   const overlayRoot = mkdtempSync(join(tmpdir(), "hunch-repair-overlay-"));
-  const privateDir = join(overlayRoot, ".hunch");
-  git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.email", "test@example.com");
-  git(root, "config", "user.name", "Test Human");
-  ensureGitignore(root);
-  git(root, "add", ".gitignore");
-  git(root, "commit", "-qm", "gitignore");
   git(overlayRoot, "init", "-q", "-b", "main");
   git(overlayRoot, "config", "user.email", "test@example.com");
   git(overlayRoot, "config", "user.name", "Test Human");
-  git(overlayRoot, "commit", "-q", "--allow-empty", "-m", "init overlay");
+  git(overlayRoot, "config", "commit.gpgsign", "false");
+  git(overlayRoot, "commit", "-q", "--allow-empty", "-m", "overlay baseline");
+  const privateDir = join(overlayRoot, ".hunch");
   mkdirSync(privateDir, { recursive: true });
   const decisionId = "dec_private_sessionstart";
-  const commit = "cafefeed00cafefeed00cafefeed00cafefeed0";
-  const decision = fullDecision(decisionId, commit, "src/private.ts");
-  const previous = process.env.HUNCH_PRIVATE_DIR;
+  const cited = "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00";
+  const savedPrivateDir = process.env.HUNCH_PRIVATE_DIR;
   process.env.HUNCH_PRIVATE_DIR = privateDir;
   try {
     const store = new HunchStore(hunchPaths(root));
-    store.putPrivate("decisions", decision);
-    store.close();
+    try { store.putPrivate("decisions", fullDecision(decisionId, cited, "src/private.ts")); } finally { store.close(); }
   } finally {
-    if (previous === undefined) delete process.env.HUNCH_PRIVATE_DIR;
-    else process.env.HUNCH_PRIVATE_DIR = previous;
+    if (savedPrivateDir === undefined) delete process.env.HUNCH_PRIVATE_DIR;
+    else process.env.HUNCH_PRIVATE_DIR = savedPrivateDir;
   }
   mkdirSync(join(root, ".hunch"), { recursive: true });
-  writeFileSync(queueFile(root), JSON.stringify([{ id: decisionId, from: commit, to: "d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0" }], null, 2) + "\n");
-  return {
-    root,
-    overlayRoot,
-    decisionId,
-    env: { ...process.env, HUNCH_PRIVATE_DIR: privateDir, HUNCH_SYNTH_PROVIDER: "deterministic" },
-    cleanup: () => {
-      cleanupDir(root);
-      cleanupDir(overlayRoot);
-    },
-  };
+  writeQueue(root, [{ id: decisionId, from: cited, to: "badc0de0badc0de0badc0de0badc0de0badc0de0" }]);
+  const env = { ...process.env, HUNCH_PRIVATE_DIR: privateDir, HUNCH_SYNTH_PROVIDER: "deterministic" } as Record<string, string>;
+  return { root, overlayRoot, decisionId, env, cleanup: () => { cleanupDir(root); cleanupDir(overlayRoot); } };
 }
 
-test("a prompt naming the decision's file surfaces a queued commit-repair escalation for a private-overlay decision even when the public store has zero decisions", () => {
-  const fixture = privateOverlaySessionStartFixture();
+/** Feed one hook event to `hunch hook --provider <provider>` in the overlay fixture. */
+function overlayHook(f: OverlayFixture, provider: string, event: Record<string, unknown>) {
+  return spawnSync(process.execPath, [tsx, cli, "hook", "--provider", provider], {
+    cwd: f.root,
+    env: f.env,
+    input: JSON.stringify({ cwd: f.root, ...event }),
+    encoding: "utf8",
+  });
+}
+
+const privatePrompt = (session: string = randomUUID()) => ({ hook_event_name: "UserPromptSubmit", session_id: session, prompt: "please fix the bug in src/private.ts" });
+
+test("the prompt hook raises a queued repair for a decision that lives only in the private overlay", () => {
+  const f = privateOverlaySessionStartFixture();
   try {
-    const run = spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
-      cwd: fixture.root,
-      env: fixture.env,
-      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: `s-${randomUUID()}`, prompt: "fix the bug in src/private.ts" }),
-      encoding: "utf8",
-    });
+    const run = overlayHook(f, "claude", privatePrompt());
     assert.equal(run.status, 0, run.stderr);
-    assert.match(
-      run.stdout,
-      new RegExp(fixture.decisionId),
-      "the public decisions list is empty, but the queued repair is fully answerable via the full store — the prompt hook must check it",
-    );
-  } finally {
-    fixture.cleanup();
-  }
+    assert.ok(run.stdout.includes(f.decisionId), run.stdout + run.stderr);
+  } finally { f.cleanup(); }
 });
 
-test("the prompt hook surfaces the withheld (never-resolves) wording, not the ordinary --apply-works wording, when the queued `to` doesn't resolve here (#48 follow-up)", () => {
-  const fixture = privateOverlaySessionStartFixture();
+test("the prompt hook words an unresolvable overlay repair as withheld, never as an --apply --only offer", () => {
+  const f = privateOverlaySessionStartFixture();
   try {
-    // The fixture's queued `to` is withheld by construction. This guards the
-    // SessionStart/prompt call site that feeds withheldRewrites into
-    // commitRepairEscalations, using the same queue array for both.
-    const run = spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
-      cwd: fixture.root,
-      env: fixture.env,
-      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: `s-${randomUUID()}`, prompt: "fix the bug in src/private.ts" }),
-      encoding: "utf8",
-    });
+    const run = overlayHook(f, "claude", privatePrompt());
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /doesn't resolve in this repository/, "the prompt hook must surface the withheld wording");
-    assert.doesNotMatch(run.stdout, new RegExp(`--apply --only ${fixture.decisionId} to accept`), "never advertise an action that no-ops forever");
-  } finally {
-    fixture.cleanup();
-  }
+    assert.ok(run.stdout.includes("doesn't resolve in this repository"), run.stdout + run.stderr);
+    assert.ok(!run.stdout.includes(`--apply --only ${f.decisionId} to accept`), run.stdout);
+  } finally { f.cleanup(); }
 });
 
-test("the prompt hook does NOT re-surface a private-overlay commit-repair escalation once its exact triple is tombstoned — the same private-overlay liveness path must respect --drop too", () => {
-  const fixture = privateOverlaySessionStartFixture();
+test("the prompt hook stays silent about a repair the human already tombstoned with --drop", () => {
+  const f = privateOverlaySessionStartFixture();
   try {
-    const first = readQueue(fixture.root)[0]!;
-    writeFileSync(
-      join(fixture.root, ".hunch", "dropped-commit-repairs.json"),
-      JSON.stringify([{ id: first.id, from: first.from, to: first.to }], null, 2) + "\n",
-    );
-    const run = spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
-      cwd: fixture.root,
-      env: fixture.env,
-      input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: `s-${randomUUID()}`, prompt: "fix the bug in src/private.ts" }),
-      encoding: "utf8",
-    });
+    const [entry] = readQueue(f.root);
+    assert.ok(entry, "fixture sanity: one queued repair");
+    writeFileSync(droppedFile(f.root), JSON.stringify([{ id: entry.id, from: entry.from, to: entry.to }]));
+    const run = overlayHook(f, "claude", privatePrompt());
     assert.equal(run.status, 0, run.stderr);
-    assert.doesNotMatch(
-      run.stdout,
-      new RegExp(fixture.decisionId),
-      "the tombstoned repair must not surface here either — the prompt hook shares the same readActivePendingRepairs path as `hunch escalations`, not a raw queue read",
-    );
-  } finally {
-    fixture.cleanup();
-  }
+    assert.ok(!run.stdout.includes(f.decisionId), run.stdout);
+  } finally { f.cleanup(); }
 });
 
 
-test("escalations are task-scoped: SessionStart and an unrelated prompt ask nothing, and the entry stays listed (dec_12ba37db1c)", () => {
-  const fixture = privateOverlaySessionStartFixture();
-  const session = `s-${randomUUID()}`;
+test("a queued commit repair is asked only when a prompt touches its files, once per session (dec_12ba37db1c)", () => {
+  const f = privateOverlaySessionStartFixture();
   try {
-    const hook = (input: object) => spawnSync(process.execPath, [tsx, cli, "hook", "--provider", "claude"], {
-      cwd: fixture.root, env: fixture.env, input: JSON.stringify(input), encoding: "utf8",
-    });
-    const start = hook({ hook_event_name: "SessionStart", session_id: session });
+    const session = randomUUID();
+    const start = overlayHook(f, "claude", { hook_event_name: "SessionStart", session_id: session });
     assert.equal(start.status, 0, start.stderr);
-    assert.doesNotMatch(start.stdout, new RegExp(fixture.decisionId), "session start has no task yet, so it asks nothing");
-    const unrelated = hook({ hook_event_name: "UserPromptSubmit", session_id: session, prompt: "add a flag to src/other.ts" });
-    assert.equal(unrelated.status, 0, unrelated.stderr);
-    assert.doesNotMatch(unrelated.stdout, new RegExp(fixture.decisionId), "a prompt that touches none of its files must not be asked");
-    const listed = spawnSync(process.execPath, [tsx, cli, "escalations", "--json"], { cwd: fixture.root, env: fixture.env, encoding: "utf8" });
-    assert.match(listed.stdout, new RegExp(fixture.decisionId), "the unasked entry is never dropped");
-    const asked = hook({ hook_event_name: "UserPromptSubmit", session_id: session, prompt: "now fix src/private.ts" });
-    assert.match(asked.stdout, new RegExp(fixture.decisionId), "the prompt that touches it asks");
-    const again = hook({ hook_event_name: "UserPromptSubmit", session_id: session, prompt: "and src/private.ts again" });
-    assert.doesNotMatch(again.stdout, new RegExp(fixture.decisionId), "the same question is asked once per session");
-  } finally {
-    fixture.cleanup();
-  }
+    assert.ok(!start.stdout.includes(f.decisionId), start.stdout);
+    const elsewhere = overlayHook(f, "claude", { hook_event_name: "UserPromptSubmit", session_id: session, prompt: "tidy up src/other.ts" });
+    assert.equal(elsewhere.status, 0, elsewhere.stderr);
+    assert.ok(!elsewhere.stdout.includes(f.decisionId), elsewhere.stdout);
+    const listed = spawnSync(process.execPath, [tsx, cli, "escalations", "--json"], { cwd: f.root, env: f.env, encoding: "utf8" });
+    assert.ok(listed.stdout.includes(f.decisionId), listed.stdout + listed.stderr);
+    const touching = overlayHook(f, "claude", privatePrompt(session));
+    assert.equal(touching.status, 0, touching.stderr);
+    assert.ok(touching.stdout.includes(f.decisionId), touching.stdout + touching.stderr);
+    const again = overlayHook(f, "claude", { hook_event_name: "UserPromptSubmit", session_id: session, prompt: "and now refactor src/private.ts too" });
+    assert.equal(again.status, 0, again.stderr);
+    assert.ok(!again.stdout.includes(f.decisionId), again.stdout);
+  } finally { f.cleanup(); }
 });
 
-test("a provider with no prompt event keeps the session-start ask, even on a fresh public graph; a prompt-capable one does not (dec_12ba37db1c)", () => {
-  const fixture = privateOverlaySessionStartFixture();
+test("a provider without prompt events still asks at orientation, even on an empty public graph (dec_12ba37db1c)", () => {
+  const f = privateOverlaySessionStartFixture();
   try {
-    const hook = (provider: string, input: object) => spawnSync(process.execPath, [tsx, cli, "hook", "--provider", provider], {
-      cwd: fixture.root, env: fixture.env, input: JSON.stringify(input), encoding: "utf8",
-    });
-    // Antigravity's PreInvocation is its orientation event and carries no turn text.
-    const ag = hook("antigravity", { conversationId: `c-${randomUUID()}`, invocationNum: 0 });
+    const ag = overlayHook(f, "antigravity", { conversationId: randomUUID(), invocationNum: 0 });
     assert.equal(ag.status, 0, ag.stderr);
-    assert.match(ag.stdout, /need YOUR call/, "no prompt hook would ever ask, so orientation asks");
-    assert.match(ag.stdout, new RegExp(fixture.decisionId), "the queued repair prevents the fresh-graph early return");
-    const claude = hook("claude", { hook_event_name: "SessionStart", session_id: `s-${randomUUID()}` });
+    assert.match(ag.stdout, /need YOUR call/);
+    assert.ok(ag.stdout.includes(f.decisionId), ag.stdout);
+    const claude = overlayHook(f, "claude", { hook_event_name: "SessionStart", session_id: randomUUID() });
     assert.equal(claude.status, 0, claude.stderr);
-    assert.doesNotMatch(claude.stdout, /need YOUR call/, "a prompt-capable provider asks at the prompt instead");
-  } finally {
-    fixture.cleanup();
-  }
+    assert.doesNotMatch(claude.stdout, /need YOUR call/);
+  } finally { f.cleanup(); }
 });
 
-test("reviewed repair cannot switch targets after an intervening merge", () => {
-  const fixture = squashFixture();
+/** The resolution text of the single commit-repair-pending escalation. */
+function pendingRepairResolution(root: string): string {
+  const run = runCli(root, "escalations", "--json");
+  const item = (JSON.parse(run.stdout) as EscItem[]).find((e) => e.kind === "commit-repair-pending");
+  assert.ok(item, run.stdout);
+  return item.resolution;
+}
+
+/** Land a newer change to src/feature.ts and point ORIG_HEAD at the head before it. */
+function laterFeatureCommit(root: string): void {
+  const before = git(root, "rev-parse", "HEAD");
+  commitFile(root, "src/feature.ts", "export function feature(): number { return 43; }\n", "feat: tweak feature");
+  git(root, "update-ref", "ORIG_HEAD", before);
+}
+
+test("a reviewed apply keeps the target it was reviewed against after a newer commit lands", () => {
+  const f = squashFixture();
   try {
-    git(fixture.root, "update-ref", "ORIG_HEAD", fixture.oldRef);
-    assert.equal(runCli(fixture.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
-    const escalation = JSON.parse(runCli(fixture.root, "escalations", "--json").stdout)
-      .find((e: { kind: string }) => e.kind === "commit-repair-pending");
-    const command = /hunch (repair-provenance --apply --only \S+(?: --expect sha256:[a-f0-9]{64})?)/.exec(escalation.resolution)![1]!;
-    const before = git(fixture.root, "rev-parse", "HEAD");
-    writeFileSync(join(fixture.root, "src/feature.ts"), "export const feature = 2;\n");
-    git(fixture.root, "add", "src/feature.ts");
-    git(fixture.root, "commit", "-qm", "later unrelated change to same file");
-    git(fixture.root, "update-ref", "ORIG_HEAD", before);
-    const run = runCliRaw(fixture.root, ...command.split(" "));
+    git(f.root, "update-ref", "ORIG_HEAD", f.oldRef);
+    assert.equal(runCli(f.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
+    const suggested = /hunch repair-provenance (--apply --only \S+ --expect sha256:[a-f0-9]{64})/.exec(pendingRepairResolution(f.root));
+    assert.ok(suggested, "the escalation suggests a reviewed --apply --only command");
+    laterFeatureCommit(f.root);
+    const run = runCliRaw(f.root, "repair-provenance", ...suggested[1]!.split(" "));
     assert.equal(run.status, 0, run.stderr);
-    const repaired = JSON.parse(readFileSync(fixture.decisionFile, "utf8")) as Decision;
-    assert.equal(repaired.commit, git(fixture.root, "rev-parse", "--short", fixture.newRef), "apply only the proposal that was reviewed");
-  } finally { fixture.cleanup(); }
+    assert.equal(readDecision(f.decisionFile).commit, git(f.root, "rev-parse", "--short", f.newRef));
+  } finally { f.cleanup(); }
 });
 
 for (const action of ["apply", "drop"] as const) {
-  test(`repair-provenance refuses stale ${action} approval after hook replaces the proposal`, () => {
-    const fixture = squashFixture();
+  test(`--${action} with a review hash from before the hook re-proposed the repair is refused untouched`, () => {
+    const f = squashFixture();
     try {
-      git(fixture.root, "update-ref", "ORIG_HEAD", fixture.oldRef);
-      assert.equal(runCliRaw(fixture.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
-      const escalation = JSON.parse(runCliRaw(fixture.root, "escalations", "--json").stdout)
-        .find((e: { kind: string }) => e.kind === "commit-repair-pending");
-      const expected = /--expect (sha256:[a-f0-9]{64})/.exec(escalation.resolution)![1]!;
-      const before = git(fixture.root, "rev-parse", "HEAD");
-      writeFileSync(join(fixture.root, "src/feature.ts"), "export const feature = 2;\n");
-      git(fixture.root, "add", "src/feature.ts");
-      git(fixture.root, "commit", "-qm", "later change");
-      git(fixture.root, "update-ref", "ORIG_HEAD", before);
-      assert.equal(runCliRaw(fixture.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
-      const queueBefore = readFileSync(queueFile(fixture.root), "utf8");
-      const decisionBefore = readFileSync(fixture.decisionFile, "utf8");
-      const args = action === "apply" ? ["--apply", "--only", "dec_squash_fixture"] : ["--drop", "dec_squash_fixture"];
-      const run = runCliRaw(fixture.root, "repair-provenance", ...args, "--expect", expected);
-      assert.equal(run.status, 1);
-      assert.match(run.stderr, /review is missing or stale/);
-      assert.equal(readFileSync(fixture.decisionFile, "utf8"), decisionBefore);
-      assert.equal(readFileSync(queueFile(fixture.root), "utf8"), queueBefore);
-      assert.equal(existsSync(join(fixture.root, ".hunch/dropped-commit-repairs.json")), false);
-    } finally { fixture.cleanup(); }
+      git(f.root, "update-ref", "ORIG_HEAD", f.oldRef);
+      assert.equal(runCli(f.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
+      const staleHash = /--expect (sha256:[a-f0-9]{64})/.exec(pendingRepairResolution(f.root))?.[1];
+      assert.ok(staleHash, "the escalation carries a review hash");
+      laterFeatureCommit(f.root);
+      assert.equal(runCli(f.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
+      const queueBefore = readFileSync(queueFile(f.root), "utf8");
+      const decisionBefore = readFileSync(f.decisionFile, "utf8");
+      const verb = action === "apply" ? ["--apply", "--only", "dec_squash_fixture"] : ["--drop", "dec_squash_fixture"];
+      const run = runCliRaw(f.root, "repair-provenance", ...verb, "--expect", staleHash);
+      assert.equal(run.status, 1, run.stdout + run.stderr);
+      assert.match(run.stderr, /missing or stale/);
+      assert.equal(readFileSync(f.decisionFile, "utf8"), decisionBefore);
+      assert.equal(readFileSync(queueFile(f.root), "utf8"), queueBefore);
+      assert.equal(existsSync(droppedFile(f.root)), false);
+    } finally { f.cleanup(); }
   });
 }
 
@@ -1113,82 +1050,77 @@ test("repair-provenance requires a review hash before any apply or drop", () => 
   } finally { fixture.cleanup(); }
 });
 
-/** A bare repo plus a decision citing `commit` with `related_files`, committed. */
-function repoWith(build: (root: string, commit: (msg: string, files: Record<string, string>) => string) => { commit: string; related: string[] }): { root: string; cleanup(): void } {
-  const root = mkdtempSync(join(tmpdir(), "hunch-repair450-"));
-  git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.email", "test@example.com");
-  git(root, "config", "user.name", "Test Human");
-  ensureGitignore(root);
-  const commit = (msg: string, files: Record<string, string>): string => {
-    for (const [rel, text] of Object.entries(files)) {
-      mkdirSync(join(root, rel, ".."), { recursive: true });
-      writeFileSync(join(root, rel), text);
-    }
-    git(root, "add", "-A");
-    git(root, "commit", "-qm", msg);
-    return git(root, "rev-parse", "HEAD");
-  };
-  const { commit: cited, related } = build(root, commit);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.put("decisions", {
-    id: "dec_repair450", title: "t", topic: null, status: "accepted", context: "", decision: "d.", consequences: [],
-    alternatives_rejected: [], rejected_tripwires: [], related_components: [], related_files: related,
-    supersedes: null, superseded_by: null, caused_by_bug: null, commit: cited,
-    valid_from: "2026-01-01T00:00:00.000Z", valid_to: null, retired: { symbols: [], deps: [] },
-    provenance: { source: "human_confirmed", confidence: 1, evidence: [`commit:${cited}`], last_verified: "2026-01-01T00:00:00.000Z" },
-    date: "2026-01-01T00:00:00.000Z",
-  } as Decision);
-  store.reindex();
-  store.close();
-  git(root, "add", "-A");
-  git(root, "commit", "-qm", "hunch: record decision");
+type CommitFn = (message: string, files: Record<string, string>) => string;
+
+function repoWith(build: (root: string, commit: CommitFn) => { commit: string; related: string[] }): { root: string; cleanup: () => void } {
+  const root = freshRepo("hunch-repair-450-");
+  try {
+    const commit: CommitFn = (message, files) => {
+      for (const [rel, body] of Object.entries(files)) {
+        mkdirSync(dirname(join(root, rel)), { recursive: true });
+        writeFileSync(join(root, rel), body);
+      }
+      git(root, "add", "-A");
+      git(root, "commit", "-qm", message);
+      return git(root, "rev-parse", "HEAD");
+    };
+    const cited = build(root, commit);
+    storeDecisions(root, [{ ...fullDecision("dec_repair450", cited.commit, cited.related[0] ?? ""), related_files: cited.related }]);
+  } catch (error) {
+    cleanupDir(root);
+    throw error;
+  }
   return { root, cleanup: () => cleanupDir(root) };
 }
 
-test("repair-provenance --range over a historical commit never proposes rewriting a decision whose commit HEAD still reaches (#450)", () => {
-  let old = "", later = "";
-  const fixture = repoWith((_root, commit) => {
-    commit("base", { "src/base.ts": "1\n" });
-    old = commit("release", { "src/feature.ts": "v1\n", "src/other.ts": "1\n" });
-    later = commit("later change", { "src/feature.ts": "v2\n" });
+test("a historical --range never proposes rewriting a commit HEAD still reaches (#450)", () => {
+  let release = "";
+  let later = "";
+  const repo = repoWith((_root, commit) => {
+    commit("base", { "src/feature.ts": "export const v = 0;\n", "README.md": "# app\n" });
+    release = commit("release 1.0.0", { "src/feature.ts": "export const v = 1;\n", "CHANGELOG.md": "## 1.0.0\n", "README.md": "# app 1.0\n" });
+    later = commit("feat: feature again", { "src/feature.ts": "export const v = 2;\n" });
     return { commit: later, related: ["src/feature.ts"] };
   });
   try {
-    const run = runCliRaw(fixture.root, "repair-provenance", "--range", `${old}^..${old}`);
+    const run = runCli(repo.root, "repair-provenance", "--range", `${release}~1..${release}`);
     assert.equal(run.status, 0, run.stderr);
     assert.doesNotMatch(run.stdout, /Would repair/);
-    assert.deepEqual(readActivePendingRepairs(fixture.root), [], "the cited commit is on main: nothing is orphaned");
-    // Control: judged against the range tip alone (the old rule) the same commit IS orphaned.
-    assert.equal(commitRepairStatus(later, old, fixture.root), "orphaned");
-    assert.equal(commitRepairStatusAgainst(later, [old, "HEAD"], fixture.root), "current");
-  } finally { fixture.cleanup(); }
+    assert.deepEqual(readActivePendingRepairs(repo.root), []);
+    assert.equal(commitRepairStatus(later, release, repo.root), "orphaned", "control: the old tip alone does not reach the later commit");
+    assert.equal(commitRepairStatusAgainst(later, [release, "HEAD"], repo.root), "current");
+  } finally { repo.cleanup(); }
 });
 
-test("repair-provenance prefers the same-patch-id commit over the unique file-superset one, and says which kind of match it is (#450)", () => {
-  let base = "", picked = "", head = "", orphanSha = "";
-  const fixture = repoWith((root, commit) => {
-    base = commit("base", { "CHANGELOG.md": "# log\n", "src/a.ts": "1\n", "package.json": "{}\n" });
-    git(root, "checkout", "-qb", "feature");
-    const orphan = commit("feat: script", { "CHANGELOG.md": "# log\n- script\n", "scripts/x.sh": "echo x\n" });
-    orphanSha = orphan;
+test("a same-patch-id cherry-pick wins over the release commit that merely covers every file (#450)", () => {
+  let base = "";
+  let orphan = "";
+  let picked = "";
+  let release = "";
+  const repo = repoWith((root, commit) => {
+    base = commit("base", { "CHANGELOG.md": "# Changelog\n", "src/a.ts": "export const a = 1;\n", "package.json": "{\"version\":\"1.0.0\"}\n" });
+    git(root, "checkout", "-q", "-b", "feature");
+    orphan = commit("feat: add build script", { "CHANGELOG.md": "# Changelog\n- add build script\n", "scripts/x.sh": "echo build\n" });
     git(root, "checkout", "-q", "main");
-    // Main moves first, so the cherry-pick can never be byte-identical to the orphan
-    // (same tree, parent, message and second) and thus the very same commit.
-    commit("unrelated", { "docs/other.md": "x\n" });
+    commit("docs: guide", { "docs/guide.md": "# Guide\n" });
     git(root, "cherry-pick", orphan);
     picked = git(root, "rev-parse", "HEAD");
-    head = commit("release", { "CHANGELOG.md": "# log\n- script\n- release\n", "src/a.ts": "2\n", "package.json": "{\"v\":1}\n" });
+    release = commit("release 1.1.0", {
+      "CHANGELOG.md": "# Changelog\n- add build script\n\n## 1.1.0\n",
+      "src/a.ts": "export const a = 2;\n",
+      "package.json": "{\"version\":\"1.1.0\"}\n",
+    });
+    git(root, "branch", "-q", "-D", "feature");
     return { commit: orphan, related: ["CHANGELOG.md", "src/a.ts"] };
   });
   try {
-    const run = runCliRaw(fixture.root, "repair-provenance", "--range", `${base}..${head}`);
+    const run = runCli(repo.root, "repair-provenance", "--range", `${base}..${release}`);
     assert.equal(run.status, 0, run.stderr);
-    const queued = readActivePendingRepairs(fixture.root);
+    const queued = readActivePendingRepairs(repo.root);
     assert.equal(queued.length, 1, run.stdout);
-    assert.ok(picked.startsWith(queued[0]!.to), `the cherry-picked commit, not the release commit (got ${queued[0]!.to})`);
-    assert.match(run.stdout, /same patch-id: identical change/);
-    // An unresolvable sha (a withheld queue entry) must not wipe out every other patch-id.
-    assert.ok(commitPatchIds([orphanSha, "deadbeefdeadbeef"], fixture.root).has(orphanSha));
-  } finally { fixture.cleanup(); }
+    assert.equal(queued[0]!.to, git(repo.root, "rev-parse", "--short", picked));
+    assert.notEqual(queued[0]!.to, git(repo.root, "rev-parse", "--short", release));
+    assert.ok(run.stdout.includes("same patch-id: identical change"), run.stdout);
+    assert.ok(commitPatchIds([orphan, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"], repo.root).has(orphan), "an unresolvable sha does not cost the orphan its patch-id");
+  } finally { repo.cleanup(); }
 });

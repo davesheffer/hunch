@@ -16,8 +16,8 @@ const git = (root: string, ...args: string[]) => execFileSync("git", ["-C", root
 function repo(root: string) {
   mkdirSync(join(root, ".hunch"), { recursive: true });
   git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.email", "test@example.com");
-  git(root, "config", "user.name", "Test");
+  git(root, "config", "user.email", "report-capture@test.invalid");
+  git(root, "config", "user.name", "Report Capture Test");
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n.hunch/local.json\n.hunch/hunch.sqlite*\n");
   git(root, "add", ".gitignore"); git(root, "commit", "-qm", `fixture ${root}`);
 }

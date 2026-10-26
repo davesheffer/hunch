@@ -272,7 +272,7 @@ test("parseSource extracts Python symbols, imports, calls", () => {
   assert.ok(p, "python file did not parse");
   assert.equal(p.parseable, true);
   assert.deepEqual(p.symbols.map((s) => s.name).sort(), ["Service", "async_helper", "run", "verify_session"].sort());
-  const kindOf = (n: string) => p.symbols.find((s) => s.name === n)!.kind;
+  const kindOf = (name: string) => p.symbols.find((s) => s.name === name)?.kind;
   assert.equal(kindOf("verify_session"), "function");
   assert.equal(kindOf("async_helper"), "function");
   assert.equal(kindOf("Service"), "class");
@@ -371,7 +371,7 @@ test("parseSource extracts Go symbols, imports, calls", () => {
   assert.ok(p.parseable, "go file should be parseable");
   const names = p.symbols.map((s) => s.name).sort();
   assert.deepEqual(names, ["Handler", "Run", "Service", "UserID", "VerifySession"].sort());
-  const kindOf = (n: string) => p.symbols.find((s) => s.name === n)!.kind;
+  const kindOf = (name: string) => p.symbols.find((s) => s.name === name)?.kind;
   assert.equal(kindOf("VerifySession"), "function");
   assert.equal(kindOf("Run"), "method");
   assert.equal(kindOf("Service"), "class");
@@ -402,7 +402,7 @@ test("Go stdlib method/function names (Println/TrimSpace/...) do NOT become call
 test("a struct type_spec classifies as class, not the generic type kind (first-classification contract)", () => {
   const src = "package m\n\ntype OnlyStruct struct {\n\ta int\n}\n\ntype OnlyIface interface {\n\tA() int\n}\n\ntype Plain int\n";
   const p = parseSource("t.go", src)!;
-  const kindOf = (n: string) => p.symbols.find((s) => s.name === n)?.kind;
+  const kindOf = (name: string) => p.symbols.find((s) => s.name === name)?.kind;
   assert.equal(kindOf("OnlyStruct"), "class");
   assert.equal(kindOf("OnlyIface"), "interface");
   assert.equal(kindOf("Plain"), "type");
