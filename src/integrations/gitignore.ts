@@ -15,9 +15,10 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { writeFileAtomic } from "../core/io.js";
 import { lineContent } from "../core/eol.js";
-import { memoryPolicy, readConfig } from "../core/config.js";
+import { memoryPolicy, memoryPolicyProblem, parseConfigText, readConfig } from "../core/config.js";
 import { hunchPaths } from "../core/paths.js";
 import { gitTrackedPaths, gitUntrackCached, isGitRepoRoot } from "../extractors/git.js";
 
@@ -271,7 +272,11 @@ export interface MemoryIgnoreRule {
  *  the committed memory policy homes decisions in the overlay. Unknown git state
  *  yields null: the caller then says nothing rather than guessing. */
 export function memoryIgnoreRule(root: string): MemoryIgnoreRule | null {
-  const policy = memoryPolicy(readConfig(hunchPaths(root)));
+  const paths = hunchPaths(root);
+  // An unreadable or typo'd policy is unknown (doctor reports it as blocking): readConfig
+  // would fall back to defaults and advise un-ignoring memory the policy may home in the overlay.
+  if (memoryPolicyProblem(paths)) return null;
+  const policy = memoryPolicy(readConfig(paths));
   if (policy.home === "overlay" && !policy.publicKinds.has("decisions")) return null;
   const probe = ".hunch/decisions/dec_0000000000.json";
   const r = spawnSync("git", ["check-ignore", "-v", "--no-index", "--", probe], { cwd: root, encoding: "utf8", windowsHide: true });
@@ -291,6 +296,81 @@ export function memoryIgnoreRule(root: string): MemoryIgnoreRule | null {
 /** One line telling the user their memory will not reach Git, and how to fix it. */
 export function describeMemoryIgnoreRule(rule: MemoryIgnoreRule): string {
   return `${rule.source} line ${rule.line} (\`${rule.pattern}\`) ignores .hunch/, so captured memory is never committed or shared and is lost on a fresh clone. Remove that line, or keep memory in a private repository with \`hunch private --repo <url>\`.`;
+}
+
+export type PolicyNotCommitted =
+  | { reason: "untracked" }
+  | { reason: "modified" }
+  | { reason: "ignored"; rule: MemoryIgnoreRule; dirIgnored: boolean };
+
+/** The `memory` block of config.json text, or undefined when it has none or cannot be parsed. */
+function memoryBlockOf(text: string): unknown {
+  try {
+    const parsed = parseConfigText(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as { memory?: unknown }).memory : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Why the memory home policy in `.hunch/config.json` is not committed, or null.
+ *  The policy is meant to travel with the repository: an untracked or ignored file,
+ *  or a policy edit not yet committed, routes only this checkout, while worktrees,
+ *  clones and CI use the committed policy (or the default home). Null when there is
+ *  no policy, the committed policy matches, or git state is unknown. */
+export function policyNotCommitted(root: string): PolicyNotCommitted | null {
+  const config = hunchPaths(root).config;
+  let working: unknown;
+  try { working = existsSync(config) ? memoryBlockOf(readFileSync(config, "utf8")) : undefined; } catch { return null; }
+  const file = ".hunch/config.json";
+  const git = (...args: string[]) => spawnSync("git", args, { cwd: root, encoding: "utf8", windowsHide: true });
+  const tracked = git("ls-files", "--error-unmatch", "--", file);
+  if (tracked.error) return null;
+  if (tracked.status === 0) {
+    // Tracked is not committed: compare the policy, not the file, so an unrelated local
+    // edit (firmness) says nothing, while a policy removed here but still committed does.
+    // Staged-only in a repo with no commit yet is not committed.
+    const head = git("show", `HEAD:./${file}`);
+    if (head.error) return null;
+    if (head.status !== 0) {
+      if (!setsPolicy(working)) return null;
+      const hasHead = git("rev-parse", "--verify", "-q", "HEAD");
+      if (hasHead.error) return null;
+      return hasHead.status === 0 ? { reason: "modified" } : { reason: "untracked" };
+    }
+    const committed = memoryBlockOf(head.stdout);
+    if (!setsPolicy(working) && !setsPolicy(committed)) return null;
+    return isDeepStrictEqual(committed, working) ? null : { reason: "modified" };
+  }
+  if (!setsPolicy(working)) return null;
+  // ls-files also fails outside a work tree: only an answer from inside one is trusted.
+  const inside = git("rev-parse", "--is-inside-work-tree");
+  if (inside.error || inside.status !== 0 || inside.stdout.trim() !== "true") return null;
+  // -z (stdin only): the source path comes back unquoted (a core.excludesFile path is otherwise C-quoted).
+  const ignored = spawnSync("git", ["check-ignore", "-z", "-v", "--stdin"], { cwd: root, encoding: "utf8", windowsHide: true, input: `${file}\0` });
+  const [source, line, pattern] = !ignored.error && ignored.status === 0 ? (ignored.stdout ?? "").split("\0") : [];
+  if (source && line && pattern && !pattern.startsWith("!")) {
+    // A rule that excludes `.hunch` itself cannot be undone by a `!.hunch/config.json` line.
+    const dir = git("check-ignore", "-q", "--", ".hunch");
+    return { reason: "ignored", rule: { source, line: Number(line), pattern }, dirIgnored: !dir.error && dir.status === 0 };
+  }
+  return { reason: "untracked" };
+}
+
+/** Whether a `memory` block sets anything (home, public_kinds, min_version, a newer key). */
+function setsPolicy(memory: unknown): boolean {
+  return !!memory && typeof memory === "object" && !Array.isArray(memory) && Object.keys(memory).length > 0;
+}
+
+/** One warning line for doctor and `memory-policy status`. */
+export function describePolicyNotCommitted(p: PolicyNotCommitted): string {
+  const routes = "it routes only this checkout; other checkouts, clones and CI use the committed policy or the default home.";
+  if (p.reason === "modified") return `memory policy: ⚠ the policy change in .hunch/config.json is not committed — ${routes} Commit it.`;
+  if (p.reason === "untracked") return `memory policy: ⚠ .hunch/config.json is not committed — ${routes} Commit it.`;
+  const fix = p.dirIgnored
+    ? "add it anyway with `git add -f .hunch/config.json` (a `!` line cannot re-include a file inside an ignored directory)"
+    : "re-include it with `!.hunch/config.json`";
+  return `memory policy: ⚠ .hunch/config.json is gitignored (${p.rule.source} line ${p.rule.line}: \`${p.rule.pattern}\`) — ${routes} Commit it: ${fix}.`;
 }
 
 /** `.gitignore` text with both managed Hunch blocks removed (markers inclusive),

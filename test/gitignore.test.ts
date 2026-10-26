@@ -14,6 +14,8 @@ import {
   HUNCH_MEMORY_DIRS,
   memoryIgnoreRule,
   describeMemoryIgnoreRule,
+  policyNotCommitted,
+  describePolicyNotCommitted,
 } from "../src/integrations/gitignore.js";
 import { ENTITY_KINDS } from "../src/core/types.js";
 
@@ -342,6 +344,12 @@ test("memoryIgnoreRule stays quiet when the memory policy homes decisions in the
     assert.equal(memoryIgnoreRule(root), null, "ignoring overlay-homed memory is the policy");
     writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memory: { home: "overlay", public_kinds: ["decisions"] } }));
     assert.notEqual(memoryIgnoreRule(root), null, "decisions are public under this policy, so ignoring them loses them");
+    // An unreadable policy is reported as blocking elsewhere; the ignore hint must not
+    // guess from defaults and tell the user to un-ignore memory meant for the overlay.
+    writeFileSync(join(root, ".hunch", "config.json"), "{ not json");
+    assert.equal(memoryIgnoreRule(root), null, "unparseable config.json: policy unknown, no ignore advice");
+    writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memorys: { home: "overlay" } }));
+    assert.equal(memoryIgnoreRule(root), null, "typo'd policy: unknown, no ignore advice");
   });
 });
 
@@ -349,5 +357,101 @@ test("memoryIgnoreRule returns null outside a git repository", () => {
   inTmp((root) => {
     writeFileSync(join(root, ".gitignore"), ".hunch/\n");
     assert.equal(memoryIgnoreRule(root), null);
+  });
+});
+
+test("policyNotCommitted says when the committed memory policy is not committed", () => {
+  inTmp((root) => {
+    mkdirSync(join(root, ".hunch"));
+    const config = join(root, ".hunch", "config.json");
+    writeFileSync(config, JSON.stringify({ memory: { home: "overlay" } }));
+    assert.equal(policyNotCommitted(root), null, "not a git repo: unknown, say nothing");
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    assert.deepEqual(policyNotCommitted(root), { reason: "untracked" });
+    writeFileSync(join(root, ".gitignore"), "# local\n.hunch/\n");
+    const ignored = policyNotCommitted(root);
+    assert.equal(ignored?.reason, "ignored");
+    assert.equal(ignored?.reason === "ignored" && ignored.rule.line, 2);
+    assert.equal(ignored?.reason === "ignored" && ignored.rule.pattern, ".hunch/");
+    writeFileSync(join(root, ".gitignore"), "");
+    execFileSync("git", ["add", ".hunch/config.json"], { cwd: root });
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "policy"], { cwd: root });
+    assert.equal(policyNotCommitted(root), null, "committed: other checkouts see it");
+    writeFileSync(join(root, ".gitignore"), ".hunch/\n");
+    assert.equal(policyNotCommitted(root), null, "tracked wins over a later ignore rule");
+    rmSync(join(root, ".git"), { recursive: true, force: true });
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    writeFileSync(config, JSON.stringify({ firmness: "strict" }));
+    assert.equal(policyNotCommitted(root), null, "no memory policy: nothing to commit");
+    writeFileSync(config, JSON.stringify({ memory: {} }));
+    assert.equal(policyNotCommitted(root), null, "an empty memory block sets no policy");
+  });
+});
+
+test("policyNotCommitted tells an ignored directory from an ignored file", () => {
+  inTmp((root) => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    mkdirSync(join(root, ".hunch"));
+    writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memory: { home: "overlay" } }));
+    writeFileSync(join(root, ".gitignore"), ".hunch/\n");
+    const dir = policyNotCommitted(root);
+    assert.ok(dir?.reason === "ignored" && dir.dirIgnored, `directory rule: ${JSON.stringify(dir)}`);
+    assert.match(describePolicyNotCommitted(dir!), /git add -f \.hunch\/config\.json/);
+    assert.doesNotMatch(describePolicyNotCommitted(dir!), /re-include it with `!/, "a negation cannot re-include a file under an ignored directory");
+    writeFileSync(join(root, ".gitignore"), "*.json\n");
+    const file = policyNotCommitted(root);
+    assert.ok(file?.reason === "ignored" && !file.dirIgnored, `file rule: ${JSON.stringify(file)}`);
+    assert.match(describePolicyNotCommitted(file!), /re-include it with `!\.hunch\/config\.json`/);
+    writeFileSync(join(root, ".gitignore"), ".hunch/*\n!.hunch/config.json\n");
+    assert.deepEqual(policyNotCommitted(root), { reason: "untracked" }, "re-included by a negation: merely uncommitted");
+  });
+});
+
+test("policyNotCommitted flags a committed file whose policy edit is not committed", () => {
+  inTmp((root) => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    mkdirSync(join(root, ".hunch"));
+    const config = join(root, ".hunch", "config.json");
+    const commit = () => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "c"], { cwd: root });
+    writeFileSync(config, JSON.stringify({ firmness: "advisory", memory: { home: "overlay" } }));
+    execFileSync("git", ["add", ".hunch/config.json"], { cwd: root });
+    assert.deepEqual(policyNotCommitted(root), { reason: "untracked" }, "staged in a repo with no commit yet: not committed");
+    commit();
+    assert.equal(policyNotCommitted(root), null);
+    writeFileSync(config, JSON.stringify({ firmness: "strict", memory: { home: "overlay" } }, null, 2));
+    assert.equal(policyNotCommitted(root), null, "an uncommitted edit elsewhere in the file leaves the policy committed");
+    writeFileSync(config, JSON.stringify({ firmness: "strict", memory: { home: "overlay", public_kinds: ["constraints"] } }));
+    assert.deepEqual(policyNotCommitted(root), { reason: "modified" });
+    execFileSync("git", ["add", ".hunch/config.json"], { cwd: root });
+    assert.deepEqual(policyNotCommitted(root), { reason: "modified" }, "staged is still not committed");
+    assert.match(describePolicyNotCommitted({ reason: "modified" }), /policy change in \.hunch\/config\.json is not committed/);
+    // The dominant real path: init commits a config.json with no policy, the policy is added by hand.
+    writeFileSync(config, JSON.stringify({ firmness: "strict" }));
+    execFileSync("git", ["add", ".hunch/config.json"], { cwd: root });
+    commit();
+    writeFileSync(config, JSON.stringify({ firmness: "strict", memory: { home: "overlay" } }));
+    assert.deepEqual(policyNotCommitted(root), { reason: "modified" }, "policy added to a committed file without one");
+    execFileSync("git", ["add", ".hunch/config.json"], { cwd: root });
+    commit();
+    writeFileSync(config, JSON.stringify({ firmness: "strict" }));
+    assert.deepEqual(policyNotCommitted(root), { reason: "modified" }, "policy removed here but still committed: this checkout routes differently");
+    rmSync(config);
+    assert.deepEqual(policyNotCommitted(root), { reason: "modified" }, "config.json deleted here");
+  });
+});
+
+test("policyNotCommitted counts a min_version-only block and names a global excludes file plainly", () => {
+  inTmp((root) => {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    mkdirSync(join(root, ".hunch"));
+    writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ memory: { min_version: "1.47.0" } }));
+    assert.deepEqual(policyNotCommitted(root), { reason: "untracked" }, "doctor enforces min_version, so it is a policy");
+    const excludes = join(root, "global excludes");
+    writeFileSync(excludes, "*.json\n");
+    execFileSync("git", ["config", "core.excludesFile", excludes], { cwd: root });
+    const p = policyNotCommitted(root);
+    assert.ok(p?.reason === "ignored", JSON.stringify(p));
+    assert.equal(p.rule.source.replace(/\\/g, "/"), excludes.replace(/\\/g, "/"), "unquoted source path");
+    assert.equal(p.rule.pattern, "*.json");
   });
 });

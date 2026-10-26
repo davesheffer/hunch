@@ -20,7 +20,7 @@ import { join, relative, dirname, basename, resolve, isAbsolute } from "node:pat
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { hunchPaths, hunchPathsForDir, findRoot, toPosixTarget, isDir, realpathNorm, repoRelativeTarget } from "../core/paths.js";
+import { hunchPaths, hunchPathsForDir, type HunchPaths, findRoot, toPosixTarget, isDir, realpathNorm, repoRelativeTarget } from "../core/paths.js";
 import { writeFileAtomic } from "../core/io.js";
 import { boundedSpawnSync } from "../core/boundedSpawn.js";
 import { looksLikeCorrection, CORRECTION_NUDGE } from "../core/correction.js";
@@ -72,7 +72,7 @@ import { installPostCommitHook, installPreCommitHook, installPostMergeHook, inst
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
 import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, sharedRemoteFor, type MemoryHome } from "../integrations/sync.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
-import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade, memoryIgnoreRule, describeMemoryIgnoreRule } from "../integrations/gitignore.js";
+import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade, memoryIgnoreRule, describeMemoryIgnoreRule, policyNotCommitted, describePolicyNotCommitted } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optOutMarkerAt, optOutMessage, planUninstall } from "../integrations/uninstall.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
@@ -538,9 +538,13 @@ program
       const ignored = memoryIgnoreRule(root);
       if (ignored) say(`  ⚠ ${describeMemoryIgnoreRule(ignored)}`);
       // The same refusal doctor reports, so a fresh clone does not read init's success as "ready".
+      // A config.json that is not a JSON object aborts init below (writeConfig refuses to
+      // clobber it), so its line prints now; any other refusal joins the summary's
+      // warnings, above "Next:".
       const policyProblem = memoryPolicyProblem(paths);
-      if (policyProblem) console.log(unreadablePolicyLine(policyProblem));
-      else if (store.memoryPolicy.home === "overlay") console.log(NO_OVERLAY_POLICY_LINE);
+      if (policyProblem && configAbortsInit(paths)) console.log(unreadablePolicyLine(policyProblem));
+      else if (policyProblem) lines.push({ text: unreadablePolicyLine(policyProblem), warn: true });
+      else if (store.memoryPolicy.home === "overlay") lines.push({ text: NO_OVERLAY_POLICY_LINE, warn: true });
     }
 
     // A fresh clone resolved its overlay from this machine's profile: persist it in the
@@ -1746,6 +1750,8 @@ memoryPolicyCmd
       ? `memory policy: home=overlay; public kinds: ${[...policy.publicKinds].join(", ")}`
       : "memory policy: home=repo");
     if (policy.unknownKinds.length) console.log(unknownPublicKindsWarning(policy.unknownKinds));
+    const notCommitted = problem ? null : policyNotCommitted(root);
+    if (notCommitted) console.log(describePolicyNotCommitted(notCommitted));
     const store = new HunchStore(hunchPaths(root));
     try {
       console.log(store.privateDir
@@ -7322,6 +7328,8 @@ program
         ? `memory policy: home=overlay; public kinds: ${[...store.memoryPolicy.publicKinds].join(", ")}`
         : "memory policy: home=repo");
       if (store.memoryPolicy.unknownKinds.length) console.log(unknownPublicKindsWarning(store.memoryPolicy.unknownKinds));
+      const notCommitted = policyNotCommitted(root);
+      if (notCommitted) console.log(describePolicyNotCommitted(notCommitted));
       if (store.memoryPolicy.home === "overlay" && !store.privateDir) {
         console.log(NO_OVERLAY_POLICY_LINE);
         process.exitCode = 1;
@@ -7394,6 +7402,16 @@ const NO_OVERLAY_POLICY_LINE = "memory policy: ⛔ requires an overlay but none 
 
 function unreadablePolicyLine(problem: string): string {
   return `memory policy: ⛔ ${problem} — captures are REFUSED (their home is unknown; nothing is written public). Fix the file, then re-run hunch doctor`;
+}
+
+/** Whether writeConfig will refuse `.hunch/config.json` (unreadable, unparseable, not an object). */
+function configAbortsInit(paths: HunchPaths): boolean {
+  try {
+    const parsed = parseConfigText(readFileSync(paths.config, "utf8"));
+    return !parsed || typeof parsed !== "object" || Array.isArray(parsed);
+  } catch {
+    return true;
+  }
 }
 
 function unknownPublicKindsWarning(names: string[]): string {

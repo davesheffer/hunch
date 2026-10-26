@@ -301,6 +301,37 @@ test("§7 hunch init under an overlay policy with no overlay says captures are r
     setPolicy(f.root, { home: "overlay" });
     const r = cli(f, ["init", "--no-index", "--no-providers", "--no-agent-hooks", "--no-enforce"]);
     assert.ok(r.out.includes(NO_OVERLAY_LINE), `init did not print the refusal line:\n${r.out}`);
+    // The refusal belongs with the summary's warnings, right above the next step —
+    // not above "Hunch is set up", where the success summary buries it.
+    const refusal = r.out.indexOf(NO_OVERLAY_LINE);
+    assert.ok(refusal > r.out.indexOf("Hunch is set up"), `refusal printed above the summary:\n${r.out}`);
+    assert.ok(refusal < r.out.indexOf("\nNext:"), `refusal printed below the next step:\n${r.out}`);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§7 hunch init with an unparseable config.json prints the refusal and stops without a success summary", () => {
+  const f = fixture("init-broken-policy", null);
+  try {
+    mkdirSync(join(f.root, ".hunch"), { recursive: true });
+    writeFileSync(join(f.root, ".hunch", "config.json"), "{ not json");
+    const r = cli(f, ["init", "--no-index", "--no-providers", "--no-agent-hooks", "--no-enforce"]);
+    assert.match(r.out, /memory policy: ⛔ \.hunch\/config\.json cannot be parsed[^\n]*captures are REFUSED/, r.out);
+    assert.match(r.out, /refusing to overwrite unparseable/, r.out);
+    assert.ok(!r.out.includes("Hunch is set up"), `a refused init printed the success summary:\n${r.out}`);
+    assert.notEqual(r.status, 0, r.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§7 hunch init with a parseable but typo'd policy finishes and prints the refusal with the summary's warnings", () => {
+  const f = fixture("init-typo-policy", null);
+  try {
+    mkdirSync(join(f.root, ".hunch"), { recursive: true });
+    writeFileSync(join(f.root, ".hunch", "config.json"), JSON.stringify({ memorys: { home: "overlay" } }));
+    const r = cli(f, ["init", "--no-index", "--no-providers", "--no-agent-hooks", "--no-enforce"]);
+    const refusal = r.out.search(/memory policy: ⛔ \.hunch\/config\.json has `memorys`[^\n]*captures are REFUSED/);
+    assert.ok(refusal >= 0, `init did not print the refusal line:\n${r.out}`);
+    assert.ok(refusal > r.out.indexOf("Hunch is set up"), `refusal printed above the summary:\n${r.out}`);
+    assert.ok(refusal < r.out.indexOf("\nNext:"), `refusal printed below the next step:\n${r.out}`);
   } finally { cleanupDir(f.base); }
 });
 
@@ -340,6 +371,38 @@ test("§8 doctor: policy with an overlay prints the policy line and passes; home
     const repoHome = cli(f, ["doctor"]);
     assert.match(repoHome.out, /memory policy: home=repo/, `doctor printed no home=repo policy line:\n${repoHome.out}`);
     assert.equal(repoHome.status, 0, repoHome.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§8 doctor + status warn when the policy file is not committed, so other checkouts and CI never see it", () => {
+  const f = fixture("doctor-uncommitted", null);
+  try {
+    const overlay = join(f.base, "overlay", ".hunch");
+    mkdirSync(overlay, { recursive: true });
+    setPolicy(f.root, { home: "overlay" });
+    const untracked = /memory policy: ⚠ \.hunch\/config\.json is not committed[^\n]*other checkouts, clones and CI/;
+    for (const args of [["doctor"], ["memory-policy", "status"]]) {
+      const r = cli(f, args, { HUNCH_PRIVATE_DIR: overlay });
+      assert.match(r.out, untracked, `${args.join(" ")}:\n${r.out}`);
+      assert.equal(r.status, 0, `a warning, not a failure: ${r.out}`);
+    }
+    writeFileSync(join(f.root, ".gitignore"), ".hunch/\n");
+    for (const args of [["doctor"], ["memory-policy", "status"]]) {
+      const ignored = cli(f, args, { HUNCH_PRIVATE_DIR: overlay });
+      assert.match(ignored.out, /memory policy: ⚠ \.hunch\/config\.json is gitignored \(\.gitignore line 1: `\.hunch\/`\)[^\n]*git add -f/, `${args.join(" ")}:\n${ignored.out}`);
+    }
+    writeFileSync(join(f.root, ".gitignore"), "");
+    git(f.root, f.env, "add", ".hunch/config.json");
+    git(f.root, f.env, "commit", "-qm", "policy");
+    for (const args of [["doctor"], ["memory-policy", "status"]]) {
+      const r = cli(f, args, { HUNCH_PRIVATE_DIR: overlay });
+      assert.ok(!r.out.includes("config.json is not committed") && !r.out.includes("config.json is gitignored") && !r.out.includes("policy change"), `${args.join(" ")}:\n${r.out}`);
+    }
+    setPolicy(f.root, { home: "overlay", public_kinds: ["constraints"] });
+    for (const args of [["doctor"], ["memory-policy", "status"]]) {
+      const r = cli(f, args, { HUNCH_PRIVATE_DIR: overlay });
+      assert.match(r.out, /memory policy: ⚠ the policy change in \.hunch\/config\.json is not committed/, `${args.join(" ")}:\n${r.out}`);
+    }
   } finally { cleanupDir(f.base); }
 });
 
