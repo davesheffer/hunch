@@ -911,6 +911,32 @@ export class JsonStore {
     return count;
   }
 
+  /** Every non-tombstone file rawRecordCount counts, unparsed: the absolute path and
+   *  text of each non-empty `.json` file of a per-record kind (sorted by name), or the
+   *  index file of a single-file kind. Read-only and never creates a directory. Lets a
+   *  caller rescuing records (src/store/strays.ts) find the files the validating loader
+   *  skipped instead of silently leaving them behind (con_947c578b2c). A file the
+   *  containment check refuses (hard link, special file, oversized) comes back with
+   *  `error` and empty text, so it never hides its siblings. */
+  rawRecordFiles(kind: EntityKind): Array<{ file: string; text: string; error?: string }> {
+    const directory = this.safeKindDirectory(kind, false);
+    if (!directory) return [];
+    const single = SINGLE_FILE[kind];
+    const out: Array<{ file: string; text: string; error?: string }> = [];
+    for (const name of single ? [single] : this.jsonFileNames(kind)) {
+      const file = join(directory.lexical, name);
+      let text: string | null;
+      try {
+        text = this.readContainedFile(directory, file, this.maxBytes(kind));
+      } catch (error) {
+        out.push({ file, text: "", error: (error as Error).message });
+        continue;
+      }
+      if (text !== null && text.trim() !== "") out.push({ file, text });
+    }
+    return out;
+  }
+
   /** Whether the store holds ANY copy of this id, valid or not: for a per-record
    *  kind a file at the canonical name (an invalid, corrupt, oversized or 0-byte
    *  tombstone file counts), for a single-file kind a raw index entry (a

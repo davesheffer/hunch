@@ -12,7 +12,7 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { cleanupDir, isolatedCliEnv, tempDir, writeLocalPointer } from "./fixtures.js";
@@ -1233,4 +1233,83 @@ test("§12 ship-memory refuses to ship under an unreadable config.json: exit 1, 
     assert.equal(run.status, 1, `${run.stdout}${run.stderr}`);
     assert.equal(s.git(s.work, "ls-remote", "origin", "refs/heads/memory/*"), "", "the shipper pushed nothing");
   } finally { cleanupDir(s.base); }
+});
+
+// ---------------------------------------------------------------- §13 strays + worktree hazards
+
+/** migrateFixture plus a linked worktree holding an untracked overlay-homed finding. */
+function strayFixture(label: string): { f: Fx; overlay: string; wt: string; stray: string } {
+  const { f, overlay } = migrateFixture(label);
+  const wt = join(f.base, "wt");
+  git(f.root, f.env, "worktree", "add", "-q", "-b", `wt-${label}`, wt);
+  const stray = writeRecord(wt, "findings", FINDING("fnd_mpcstray01"));
+  return { f, overlay, wt, stray };
+}
+
+test("§13 memory-policy strays lists a worktree's record the overlay lacks; --import rescues it and leaves the source", () => {
+  const { f, overlay, stray } = strayFixture("mp-strays");
+  try {
+    const listed = cli(f, ["memory-policy", "strays"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.equal(listed.status, 0, listed.out);
+    assert.match(listed.out, /\[missing\] findings fnd_mpcstray01/, listed.out);
+    assert.match(listed.out, /committed record\(s\) of overlay-homed kinds — hunch memory-policy migrate moves them/, "the committed public finding is pointed at migrate, not listed");
+    assert.doesNotMatch(listed.out, /fnd_mpcmove01/, "a committed record is not a stray");
+    assert.equal(overlayFiles(overlay).length, 0, "listing writes nothing");
+
+    const imported = cli(f, ["memory-policy", "strays", "--import"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.equal(imported.status, 0, imported.out);
+    assert.match(imported.out, /imported 1/, imported.out);
+    assert.equal(existsSync(stray), true, "the source is never deleted");
+    const store = open(f.root, overlay);
+    try {
+      assert.equal(store.getPrivateRec("findings", "fnd_mpcstray01")?.id, "fnd_mpcstray01");
+    } finally { store.close(); }
+
+    const again = cli(f, ["memory-policy", "strays"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.equal(again.status, 0, again.out);
+    assert.match(again.out, /no strays/, again.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§13 memory-policy strays: home=repo has nothing overlay-homed; an overlay policy with no overlay is exit 1", () => {
+  const f = fixture("mp-strays-none", null);
+  try {
+    setPolicy(f.root, { home: "repo" });
+    const repo = cli(f, ["memory-policy", "strays"]);
+    assert.equal(repo.status, 0, repo.out);
+    assert.match(repo.out, /nothing is overlay-homed/, repo.out);
+
+    setPolicy(f.root, { home: "overlay" });
+    const none = cli(f, ["memory-policy", "strays"]);
+    assert.equal(none.status, 1, none.out);
+    assert.match(none.out, /no overlay is configured/, none.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§13 memory-policy strays --import exits 1 when a stray cannot be rescued", () => {
+  const { f, overlay } = strayFixture("mp-strays-fail");
+  try {
+    // A file standing where the overlay's quarantine directory goes makes the copy fail.
+    writeRecord(join(f.base, "wt"), "findings", { ...FINDING("fnd_mpcclash01"), title: "worktree copy" } as { id: string });
+    const store = open(f.root, overlay);
+    try { store.putPrivate("findings", { ...FINDING("fnd_mpcclash01"), title: "overlay copy" } as never); } finally { store.close(); }
+    writeFileSync(join(overlay, "strays"), "not a directory\n");
+    const r = cli(f, ["memory-policy", "strays", "--import"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.match(r.out, /\[differs\] findings fnd_mpcclash01/, r.out);
+    assert.match(r.out, /failed 1/, r.out);
+    assert.equal(r.status, 1, r.out);
+  } finally { cleanupDir(f.base); }
+});
+
+test("§13 doctor names a worktree's strays and the outward link to unlink before git worktree remove", () => {
+  const { f, overlay, wt } = strayFixture("mp-doctor-wt");
+  try {
+    const target = join(f.base, "shared-deps");
+    mkdirSync(target, { recursive: true });
+    symlinkSync(target, join(wt, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+    const r = cli(f, ["doctor"], { HUNCH_PRIVATE_DIR: overlay });
+    assert.match(r.out, /1 record\(s\) in worktree .*wt not in the home — hunch memory-policy strays --import/, r.out);
+    assert.match(r.out, /before git worktree remove: (cmd \/c rmdir|rm) ".*node_modules" \(removes the link, not the target\)/, r.out);
+    assert.equal(existsSync(target), true);
+  } finally { cleanupDir(f.base); }
 });

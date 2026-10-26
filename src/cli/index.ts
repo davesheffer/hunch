@@ -54,7 +54,7 @@ import {
   normalizeProviderName,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, fileAtRef, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeFilesOrNull, rangeGateDiff, rangeCommits, revExists, revParse, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, fileAtRef, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeFilesOrNull, rangeGateDiff, rangeCommits, revExists, revParse, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, worktreePaths, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
 import { runbookDraft } from "../core/runbookDraft.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
@@ -99,7 +99,9 @@ import { diffProjectDna } from "../core/projectDnaDelta.js";
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
 import { readConfig, writeConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, memoryPolicyProblem, memoryConfigTextProblem, type HunchConfig } from "../core/config.js";
 import { readRepoProfile, resolveRepoProfile, removeRepoProfile, repoIdForgetConflict, repoProfileKey, repoIdOf, ensureRepoId, writeRepoProfileOrWarn, repoProfileFile } from "../core/repoProfile.js";
-import { canonicalize } from "../core/stateCanonical.js";
+import { sameCanonical } from "../core/stateCanonical.js";
+import { outwardLinks, unlinkHint } from "../core/worktreeHazards.js";
+import { findStrays, importStrays } from "../store/strays.js";
 import { loadOrCreateMachine, setMachineLabel, machineFile, labelLeaksIdentity } from "../core/machine.js";
 import { worktreeRows, branchRows, publicWorkspaceRemovalRecipe } from "../core/workspace.js";
 import { workspaceLedgerView, recordWorkspaceSnapshot, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, prunePlanFor, renderPrunePlan, applyPrune, confirmPrune, pruneConfirmQuestion } from "../integrations/workspaceLedger.js";
@@ -1975,6 +1977,40 @@ memoryPolicyCmd
       if (leftovers) console.log(`⛔ ${leftovers} record(s) still have a public copy in a misnamed file`);
       if (skipped) console.log(`⛔ ${skipped} public file(s) the loader skipped stay public`);
       if (conflicts || leftovers || skipped) process.exitCode = 1;
+    } finally {
+      store.close();
+    }
+  });
+
+memoryPolicyCmd
+  .command("strays")
+  .description("List records of overlay-homed kinds held in this checkout's or a worktree's .hunch/ that the overlay lacks or holds differently. --import rescues them into the overlay; sources are never modified or deleted.")
+  .option("--import", "copy missing records into the overlay; quarantine differing or unreadable files under <overlay>/strays/ for a human")
+  .action((opts: { import?: boolean }) => {
+    const root = findRoot();
+    const store = new HunchStore(hunchPaths(root));
+    try {
+      if (store.memoryPolicyProblem) return fail(`refused: ${store.memoryPolicyProblem}`);
+      if (store.memoryPolicy.home !== "overlay") {
+        console.log("no overlay memory policy — nothing is overlay-homed");
+        return;
+      }
+      if (!store.privateDir) {
+        return fail("Refused: the memory policy homes records in an overlay, but no overlay is configured. Configure one with `hunch private <dir>`, `hunch shared --repo <url>`, or HUNCH_PRIVATE_DIR.");
+      }
+      const scan = findStrays(store, root);
+      if (scan.refused) return fail(`refused: ${scan.refused}`);
+      for (const s of scan.strays) {
+        console.log(`• [${s.status}] ${s.kind} ${s.id ?? "(no id)"}  ${s.source}${s.note ? ` — ${s.note}` : ""}`);
+      }
+      if (!scan.strays.length) console.log(`no strays — every overlay-homed record in this repo's checkouts is in ${scan.home}`);
+      if (scan.tracked) console.log(`${scan.tracked} committed record(s) of overlay-homed kinds — hunch memory-policy migrate moves them`);
+      if (!opts.import || !scan.strays.length) return;
+      const result = importStrays(store, scan);
+      for (const q of result.quarantined) console.log(`  quarantined ${q.stray.kind} ${q.stray.id ?? "(no id)"} → ${q.file}`);
+      for (const x of result.failed) console.error(`  ⛔ ${x.stray.kind} ${x.stray.id ?? "(no id)"}: ${x.error}`);
+      console.log(`imported ${result.imported.length}, quarantined ${result.quarantined.length}, failed ${result.failed.length}`);
+      if (result.failed.length) process.exitCode = 1;
     } finally {
       store.close();
     }
@@ -7377,6 +7413,22 @@ program
         ? `worktree:   linked — sharing the repo's memory${sharedPtr ? " via the git common dir" : ""}`
         : dim(`worktree:   linked, but no overlay resolved here — run \`hunch shared\` (or \`hunch private\`) once (any worktree) so all worktrees share it`));
     }
+    // Removing a worktree destroys what only it holds: overlay-homed records stranded in
+    // its .hunch/, and (on Windows) the TARGET of a junction git follows. Advisory only.
+    try {
+      const scan = findStrays(store, root);
+      const byCheckout = new Map<string, number>();
+      for (const s of scan.strays) byCheckout.set(s.checkout, (byCheckout.get(s.checkout) ?? 0) + 1);
+      for (const [checkout, count] of byCheckout) {
+        const where = samePathLoose(checkout, root) ? "this checkout" : `worktree ${checkout}`;
+        console.log(`strays:     ⚠ ${count} record(s) in ${where} not in the home — hunch memory-policy strays --import`);
+      }
+    } catch { /* a scan failure must not break doctor; `hunch memory-policy strays` reports it */ }
+    for (const worktree of worktreePaths(root).slice(1)) {
+      for (const link of outwardLinks(worktree)) {
+        console.log(`worktree:   ⚠ ${link.path} links outside the worktree (→ ${link.target}); before git worktree remove: ${unlinkHint(link.path)} (removes the link, not the target)`);
+      }
+    }
     // Semantic search is opt-in and local. Report availability + coverage without
     // loading the model (selectEmbedder only probes; embeddingStats just counts rows).
     const emb = await selectEmbedder();
@@ -7406,16 +7458,6 @@ program
 
 function rel(root: string, p: string): string {
   return p.startsWith(root) ? p.slice(root.length + 1) : p;
-}
-
-/** Whether two records are the same once canonicalized; one that cannot be
- *  canonicalized counts as different, so migrate keeps both copies. */
-function sameCanonical(a: unknown, b: unknown): boolean {
-  try {
-    return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
-  } catch {
-    return false;
-  }
 }
 
 const NO_OVERLAY_POLICY_LINE = "memory policy: ⛔ requires an overlay but none is configured — captures are REFUSED (nothing is written public). Fix: hunch private <dir> | hunch shared --repo <url> | HUNCH_PRIVATE_DIR";
