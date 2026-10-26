@@ -16,7 +16,8 @@ else:
 
     I have read the CLA Document and I hereby sign the CLA
 
-The check then turns green (if it doesn't, comment `recheck` or push a commit). You sign once, and it covers your later pull requests,
+Copy it exactly, with no trailing period: the check matches the whole comment
+character for character. The check then turns green (if it doesn't, comment `recheck` or push a commit). You sign once, and it covers your later pull requests,
 until a new version of the CLA asks everyone to sign again.
 If you contribute as part of your job, your employer also signs the
 [Corporate CLA](CCLA.md). Don't submit code you don't have the right to license this
