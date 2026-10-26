@@ -9,7 +9,7 @@
   },
   "homepage": "https://www.hunchmemory.com",
   "repository": "https://github.com/davesheffer/hunch",
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "keywords": ["engineering-memory", "architectural-conformance", "decisions", "invariants", "mcp", "knowledge-graph"],
   "mcpServers": "./.mcp.json",
   "skills": "./skills/"

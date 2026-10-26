@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@davesheffer/hunch?color=2742ff&label=npm)](https://www.npmjs.com/package/@davesheffer/hunch)
 [![GitHub stars](https://img.shields.io/github/stars/davesheffer/hunch?color=2742ff&label=%E2%98%85%20star)](https://github.com/davesheffer/hunch)
-[![license](https://img.shields.io/npm/l/@davesheffer/hunch?color=2742ff)](LICENSE)
+[![license](https://img.shields.io/badge/license-FSL--1.1--ALv2-2742ff)](LICENSE)
 
 A new agent session should not mean explaining the project all over again. A second agent should be able to check a recorded decision, see the evidence behind completed work, and find an outstanding commitment.
 
@@ -196,4 +196,4 @@ Profiles retain their revision, sources, confidence, and freshness.
 - [VS Code extension](vscode-extension/README.md)
 - [Contributing](CONTRIBUTING.md)
 
-Apache-2.0
+[FSL-1.1-ALv2](LICENSE) (Functional Source License). Use it, modify it, and run it for your own work, internal or commercial; you can't make it available to others in a commercial product or service that competes with Hunch or with services built on it (see Permitted Purpose in [LICENSE](LICENSE)). Each release converts to Apache-2.0 two years after it ships. Releases before this change keep the license they shipped with.
