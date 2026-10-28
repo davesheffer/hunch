@@ -10,6 +10,8 @@
 
 ▶ **[Watch Hunch Memory in 2 minutes](https://www.youtube.com/watch?v=m2PM6pV7D9Y)**, then the [7-episode series](https://www.youtube.com/playlist?list=PLIXqtdE0LcNI) on setup, hooks, memory capture, delivery, rules, drift and teams.
 
+![Hunch refuses a staged change that imports lodash, citing the blocking rule it breaks](site/assets/hunch-blocks-it.gif)
+
 A new agent session should not mean explaining the project all over again. A second agent should be able to check a recorded decision, see the evidence behind completed work, and find an outstanding commitment.
 
 Hunch keeps that record in Git and makes the relevant parts available to your agents. It started with **engineering memory**: why code exists, which approach failed before, and which rules a change must preserve. It also ships a **state server** for sharing decisions, action records, and commitments across authorized organization, team, user, and repository scopes.
