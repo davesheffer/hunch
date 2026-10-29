@@ -5,11 +5,14 @@ import {
   extractJsonObjects,
   decisionDraftFromText,
   bugDraftFromText,
+  jsonInstruction,
+  classifyUnusableOutput,
+  UnusableOutputError,
   type SynthProvider,
   type CommitInput,
   type FailureInput,
 } from "../src/synthesis/provider.js";
-import { draftDecisionSafe, draftBugSafe, shouldPromoteConstraint } from "../src/synthesis/synthesize.js";
+import { draftDecisionSafe, draftBugSafe, shouldPromoteConstraint, UNUSABLE_OUTPUT_RETRIES } from "../src/synthesis/synthesize.js";
 
 // ---------------------------------------------------------------------------
 // extractJson / extractJsonObjects — robust, string-aware extraction.
@@ -291,4 +294,81 @@ test("draftDecisionSafe passes a successful provider draft through unchanged", a
   assert.equal(d.source, "llm_draft");
   assert.equal(d.decision, "D");
   assert.equal(d.fellBackTo, undefined, "a successful draft never carries a fallback marker");
+});
+
+// ---------------------------------------------------------------------------
+// Issue #561: the model echoed the pasted JSON Schema back as its answer, and the
+// safe wrapper replaced the draft with the heuristic without a second sample.
+// ---------------------------------------------------------------------------
+
+test("jsonInstruction describes keys in plain words instead of pasting a JSON Schema", () => {
+  const text = jsonInstruction({
+    properties: {
+      title: { type: "string", description: "Imperative, specific." },
+      severity: { type: "string", enum: ["low", "high"] },
+      consequences: { type: "array", items: { type: "string" } },
+      duplicate_of: { type: ["string", "null"] },
+    },
+  });
+  assert.doesNotMatch(text, /"properties"|"type"\s*:|"required"/, "no schema keywords left to echo");
+  assert.match(text, /- "title" \(string\): Imperative, specific\./);
+  assert.match(text, /- "severity" \(string, one of "low", "high"\)/);
+  assert.match(text, /- "consequences" \(list of strings\)/);
+  assert.match(text, /- "duplicate_of" \(string or null\)/);
+  assert.match(text, /Do not output a JSON Schema/);
+});
+
+test("classifyUnusableOutput names why the output held no record, without quoting it", () => {
+  assert.equal(classifyUnusableOutput('{"type":"object","properties":{"title":{"type":"string"}},"required":["title"]}'), "echoed-schema");
+  assert.equal(classifyUnusableOutput('{"properties":{"title":{}},"required":["title"]}'), "echoed-schema");
+  assert.equal(classifyUnusableOutput("Sorry, no JSON today."), "no-json");
+  assert.equal(classifyUnusableOutput("   "), "empty");
+  assert.equal(classifyUnusableOutput('{"title":"only a title"}'), "missing-fields");
+});
+
+function flakyProvider(failures: number, error: () => Error): SynthProvider & { calls: () => number } {
+  let calls = 0;
+  const draft = { title: "T", context: "C", decision: "D", consequences: [], alternatives_rejected: [], confidence: 0.65, source: "llm_draft" };
+  return {
+    name: "stub-flaky",
+    available: async () => true,
+    draftDecision: async () => { if (calls++ < failures) throw error(); return draft; },
+    draftBug: async () => { if (calls++ < failures) throw error(); return { title: "T", symptom: "S", root_cause: "R", severity: "high", confidence: 0.6, source: "llm_draft" }; },
+    calls: () => calls,
+  };
+}
+
+const echoed = () => new UnusableOutputError("stub-flaky", "decision", "echoed-schema");
+
+test("draftDecisionSafe samples again when the output was unusable, and keeps the second answer", async () => {
+  const p = flakyProvider(1, echoed);
+  const d = await draftDecisionSafe(p, COMMIT);
+  assert.equal(d.source, "llm_draft");
+  assert.equal(d.fellBackTo, undefined);
+  assert.equal(p.calls(), 2);
+});
+
+test("draftDecisionSafe stops after the bounded retries and reports the cause and attempt count", async () => {
+  const p = flakyProvider(Infinity, echoed);
+  const d = await draftDecisionSafe(p, COMMIT);
+  assert.equal(d.source, "inferred");
+  assert.equal(p.calls(), UNUSABLE_OUTPUT_RETRIES + 1);
+  assert.equal(d.fallbackReason, `stub-flaky: no usable decision JSON in output (echoed the schema instead of an answer), ${UNUSABLE_OUTPUT_RETRIES + 1} attempts`);
+  assert.equal(d.fallbackKind, "echoed-schema");
+});
+
+test("draftDecisionSafe does not retry a transport failure such as a timeout", async () => {
+  const p = flakyProvider(1, () => new Error("claude timed out after 300000ms"));
+  const d = await draftDecisionSafe(p, COMMIT);
+  assert.equal(d.fellBackTo, "deterministic");
+  assert.equal(d.fallbackReason, "claude timed out after 300000ms");
+  assert.equal(d.fallbackKind, "provider-error");
+  assert.equal(p.calls(), 1, "a second hang would only double the wait");
+});
+
+test("draftBugSafe gets the same bounded retry on unusable output", async () => {
+  const p = flakyProvider(1, () => new UnusableOutputError("stub-flaky", "bug", "no-json"));
+  const b = await draftBugSafe(p, FAILURE);
+  assert.equal(b.source, "llm_draft");
+  assert.equal(p.calls(), 2);
 });

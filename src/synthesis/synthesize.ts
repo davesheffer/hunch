@@ -10,7 +10,7 @@
 import type { HunchStore } from "../store/hunchStore.js";
 import { commitMeta, commitDiff, headSha, currentBranch } from "../extractors/git.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
-import { selectProvider, selectEnsemble, selectVerifier, verifyDecisionSafe, DeterministicProvider, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
+import { selectProvider, selectEnsemble, selectVerifier, verifyDecisionSafe, DeterministicProvider, UnusableOutputError, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
 import { decisionId, bugId, constraintId } from "../core/ids.js";
 import { commitCoveredBy } from "../core/dupdetect.js";
 import { pathMatchesGlob } from "../core/glob.js";
@@ -31,6 +31,9 @@ export interface SyncResult {
   reason?: string;
   decision?: Decision;
   provider?: string;
+  // Set when the selected provider failed and the deterministic draft was written
+  // instead: why it failed, so callers can say so rather than tally it silently.
+  fallbackReason?: string;
 }
 
 // Below this many changed code lines, a commit with no structural change and no
@@ -178,6 +181,7 @@ export async function syncCommit(
   // (no schema change → respects forward-migration invariant con_947c578b2c).
   const synthBits: string[] = [`provider=${actualProvider}`];
   if (input.pr) synthBits.push(`pr=#${input.pr.number}${input.pr.thread ? "+thread" : ""}`);
+  if (draft.fallbackKind) synthBits.push(`fallback=${draft.fallbackKind}`);
   if (draft.samples) synthBits.push(`samples=${draft.samples}`);
   if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
   if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
@@ -264,7 +268,7 @@ export async function syncCommit(
   // which read as an accidental bypass and invited exactly that wrong fix.
   if (home === "private") store.putPrivate("decisions", decision);
   else store.json.put("decisions", decision);
-  return { status: "written", decision, provider: actualProvider };
+  return { status: "written", decision, provider: actualProvider, ...(draft.fallbackReason ? { fallbackReason: draft.fallbackReason } : {}) };
 }
 
 export interface FailureResult {
@@ -596,9 +600,36 @@ function recentDiffFor(root: string): string {
   return head ? commitDiff(head, root, 12_000) : "";
 }
 
+/** Extra samples when a provider answered but its output held no usable record
+ *  (issue #561): a model that echoed the schema usually answers properly on the
+ *  next sample. Transport failures (timeout, crash, auth) are not retried, since a
+ *  second hang would only double the wait before the same fallback. */
+export const UNUSABLE_OUTPUT_RETRIES = 1;
+
+async function sampleUntilUsable<T>(draft: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await draft();
+    } catch (err) {
+      if (!(err instanceof UnusableOutputError) || attempt >= UNUSABLE_OUTPUT_RETRIES) throw err;
+    }
+  }
+}
+
+/** Short, print-safe label for the `synth:` evidence line, so a fallback from the
+ *  quiet post-commit hook still leaves a trace `hunch review` can show. */
+function fallbackKindOf(err: unknown): string {
+  return err instanceof UnusableOutputError ? err.kind : "provider-error";
+}
+
+function fallbackReasonOf(err: unknown): string {
+  if (err instanceof UnusableOutputError) return `${err.message}, ${UNUSABLE_OUTPUT_RETRIES + 1} attempts`;
+  return err instanceof Error ? err.message : String(err);
+}
+
 export async function draftDecisionSafe(provider: SynthProvider, input: CommitInput): Promise<DecisionDraft> {
   try {
-    return await provider.draftDecision(input);
+    return await sampleUntilUsable(() => provider.draftDecision(input));
   } catch (err) {
     // A provider failure (network, bad creds, CLI crash, unparseable output) must
     // never abort the learning loop — fall back to the deterministic heuristic
@@ -606,16 +637,16 @@ export async function draftDecisionSafe(provider: SynthProvider, input: CommitIn
     // Tell the caller a fallback happened (and why) so it reports the provider that
     // actually drafted the record rather than the one that was selected.
     const fallback = await new DeterministicProvider().draftDecision(input);
-    return { ...fallback, fellBackTo: "deterministic", fallbackReason: err instanceof Error ? err.message : String(err) };
+    return { ...fallback, fellBackTo: "deterministic", fallbackReason: fallbackReasonOf(err), fallbackKind: fallbackKindOf(err) };
   }
 }
 
 export async function draftBugSafe(provider: SynthProvider, input: FailureInput): Promise<BugDraft> {
   try {
-    return await provider.draftBug(input);
+    return await sampleUntilUsable(() => provider.draftBug(input));
   } catch (err) {
     // Same contract as draftDecisionSafe: surface the fallback and its cause.
     const fallback = await new DeterministicProvider().draftBug(input);
-    return { ...fallback, fellBackTo: "deterministic", fallbackReason: err instanceof Error ? err.message : String(err) };
+    return { ...fallback, fellBackTo: "deterministic", fallbackReason: fallbackReasonOf(err) };
   }
 }
