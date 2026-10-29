@@ -366,6 +366,16 @@
       }
     ]
   },
+  "HUNCH_PR_CONTEXT": {
+    "class": "hunch-synthesis",
+    "purpose": "Set to 0 to stop fetching the merged PR description during commit synthesis",
+    "tests": [
+      {
+        "file": "test/pr-context.test.ts",
+        "title": "prContextFor degrades to null offline, without gh, without a GitHub origin, or when opted out"
+      }
+    ]
+  },
   "HUNCH_PULL_GIT_TIMEOUT_MS": {
     "class": "hunch-config",
     "purpose": "Timeout for git calls in pull",
