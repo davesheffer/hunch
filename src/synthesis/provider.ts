@@ -254,7 +254,13 @@ const DECISION_TOOL = {
       context: { type: "string", description: "Why this change was needed." },
       decision: { type: "string", description: "What was actually decided/changed." },
       consequences: { type: "array", items: { type: "string" } },
-      alternatives_rejected: { type: "array", items: { type: "string" } },
+      // Unguided, this field drew ~2/3 of the errors in an audit of 30 synthesized PRs:
+      // the model invented plausible options. Invented alternatives also scaffold tripwires.
+      alternatives_rejected: {
+        type: "array",
+        items: { type: "string" },
+        description: "Only alternatives the INPUT shows were considered and not taken: named in the commit/PR text, or code the diff removes or replaces. Each entry says where it came from. Use [] when the input names none; never invent plausible options, and never list the old behavior being fixed as an alternative.",
+      },
       nontrivial: { type: "boolean", description: "Is this a real design decision worth remembering?" },
     },
     required: ["title", "context", "decision", "consequences", "alternatives_rejected", "nontrivial"],
