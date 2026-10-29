@@ -73,7 +73,7 @@ export async function syncCommit(
   opts: {
     force?: boolean; private?: boolean; home?: "public" | "private"; localOnly?: boolean; deep?: boolean; verify?: boolean; samples?: number;
     /** Injectable for tests; defaults to the `gh`-backed lookup. */
-    prContext?: (root: string, commit: { sha: string; subject: string }) => PrContext | null;
+    prContext?: (root: string, commit: { sha: string; subject: string }) => Promise<PrContext | null>;
   } = {},
 ): Promise<SyncResult> {
   const target = sha || headSha(root);
@@ -159,7 +159,7 @@ export async function syncCommit(
   // it only when a model will read it: never for a local-only capture (no PR text goes
   // to any provider) and not for the free deterministic draft.
   if (!localOnly && provider.name !== "deterministic") {
-    const pr = (opts.prContext ?? prContextFor)(root, { sha: meta.sha, subject: meta.subject });
+    const pr = await (opts.prContext ?? prContextFor)(root, { sha: meta.sha, subject: meta.subject });
     if (pr) input.pr = pr;
   }
   let draft = await draftDecisionSafe(provider, input);
