@@ -31,7 +31,7 @@ import { cochangeFor } from "../core/cochange.js";
 import { withServedDatabase } from "../core/served.js";
 import { normalizePath, rankTaskRecords, recordIdsOf, selectLatestTasks, selectTaskSlots, type RankingContext, type RankingQuery, type RankingWeights, type SlotOptions, type TaskSelection } from "../core/taskRanking.js";
 import { resolveTaskRankingMode } from "../core/taskRankingMode.js";
-import { currentForTopic, isInForce } from "../core/topics.js";
+import { currentForTopic, isInForce, isLive, liveForTopic } from "../core/topics.js";
 import { edgeId } from "../core/ids.js";
 import { WHY_GENERATED_ID, WHY_RECORD_ID, type WhyById, type WhyChainLink, type WhyRecord } from "../core/whyRecord.js";
 import { isStrictBlocker, isVetoBlocker, type VetoTier } from "../core/strictgate.js";
@@ -980,10 +980,11 @@ export class HunchStore {
   }
 
   /** Post-fusion rerank by graph PRIORS (dec_25e277f479): relevance ordering, not
-   *  just reachability. Trust weight w = liveness × provenance × recency: liveness 0.6
-   *  for superseded/retired/rejected, provenance 1.0 / 0.85 / 0.75 for
-   *  human_confirmed / llm_draft / extracted-inferred, recency 0.7 + 0.3·½^(age/90d),
-   *  and proven anchored-file staleness 0.8. Every factor is ranking-only.
+   *  just reachability. Trust weight w = provenance × recency: provenance 1.0 / 0.9 /
+   *  0.85 / 0.75 for human_confirmed / agent_recorded / llm_draft / extracted-inferred,
+   *  recency 0.7 + 0.3·½^(age/90d), and proven anchored-file staleness 0.8. Liveness
+   *  (superseded/retired/rejected) is a separate DEAD_PRIOR_SHIFT, and a superseded
+   *  decision always lands just below its live successor. Every factor is ranking-only.
    *  Runbook trigger phrases matching the query boost ×1.5 (exact intent beats
    *  keyword luck). Structural refs (symbols/components/edges) stay neutral.
    *
@@ -1001,36 +1002,41 @@ export class HunchStore {
    *  they were the #1 fused hit, and 88% from fused rank 8. Both retrieval layers
    *  ranked the record first and the rerank alone threw it away.
    *
-   *  A shift of at most ±MAX_PRIOR_SHIFT positions restores the intended semantics:
+   *  A shift of at most ±MAX_PRIOR_SHIFT positions (+DEAD_PRIOR_SHIFT for history)
+   *  restores the intended semantics:
    *  a stale or low-provenance record visibly dims, an exact runbook-trigger match
    *  visibly promotes, and neither can leapfrog the whole pool. Same measurement
-   *  after: 0% evicted from fused ranks 0–8. Deterministic; ties keep fused order. */
+   *  after: 0% of live records evicted from fused ranks 0–8 (a dead record is meant to
+   *  sink; only from fused #0/#1 is it guaranteed to stay on an 8-hit page).
+   *  Deterministic; ties keep fused order. */
   private rerankByPriors(hits: SearchHit[], limit: number, query?: string, freshnessRoot = this.paths.root): SearchHit[] {
     if (!hits.length) return hits; // a SINGLE hit still runs — topic-chain promotion must fire for the lone stale match
     const now = Date.now();
     const q = query?.toLowerCase();
-    // Topic-chain promotion: for every superseded decision in the pool whose topic
-    // has a live successor NOT already in the pool, inject the successor at the
-    // predecessor's rank — the reader asked about the topic, and the graph's one
-    // live answer must be reachable even when only history matches lexically.
+    const decisionsById = new Map(this.recs("decisions").map((decision) => [decision.id, decision]));
+    // Successor promotion: for every superseded decision in the pool whose live
+    // successor (its topic's current decision, or the open end of its superseded_by
+    // chain) is NOT already in the pool, inject the successor — the reader asked about
+    // the subject, and the graph's one live answer must be reachable even when only
+    // history matches lexically. Where it lands is settled after scoring, below.
     const present = new Set(hits.map((h) => h.ref));
-    // Each candidate carries its fused POSITION; an injected successor inherits its
-    // predecessor's position + a half step, so it lands immediately after it and an
-    // exact-match live record already in the pool is never displaced by an injection.
     const pool = hits.map((h, i) => ({ h, pos: i }));
-    for (const [i, h] of hits.entries()) {
+    const successorOf = new Map<string, string>(); // superseded ref -> live successor ref
+    for (const h of hits) {
       if (h.kind !== "decisions") continue;
-      const d = this.recs("decisions").find((x) => x.id === h.ref);
-      if (!d?.topic || !(d.status === "superseded" || d.superseded_by)) continue;
-      const cur = currentForTopic(this.recs("decisions"), d.topic);
-      if (!cur || cur.id === h.ref || present.has(cur.id)) continue;
+      const d = decisionsById.get(h.ref);
+      if (!d || !(d.status === "superseded" || d.superseded_by)) continue;
+      const succ = liveSuccessor(d, decisionsById, this.recs("decisions"));
+      const cur = succ?.decision;
+      if (!succ || !cur || cur.id === h.ref) continue;
+      successorOf.set(h.ref, cur.id);
+      if (present.has(cur.id)) continue;
       present.add(cur.id);
       pool.push({
-        h: { ref: cur.id, kind: "decisions", title: cur.title, snippet: `current for topic "${d.topic}" (supersedes ${h.ref})`, score: h.score },
-        pos: i + 0.5,
+        h: { ref: cur.id, kind: "decisions", title: cur.title, snippet: succ.via === "topic" ? `current for topic "${d.topic}" (supersedes ${h.ref})` : `live end of the supersede chain from ${h.ref}`, score: h.score },
+        pos: Infinity, // it matched nothing itself: placed only by its predecessor, below
       });
     }
-    const decisionsById = new Map(this.recs("decisions").map((decision) => [decision.id, decision]));
     const staleDecisionIds = this.staleDecisionIds(
       pool.filter(({ h }) => h.kind === "decisions")
         .map(({ h }) => decisionsById.get(h.ref))
@@ -1041,7 +1047,6 @@ export class HunchStore {
       const m = this.priorMeta(h.ref, h.kind);
       let w = 1;
       if (m) {
-        if (m.dead) w *= 0.6;
         // agent_recorded sits BETWEEN human_confirmed and llm_draft. It is testimony —
         // a human directed the capture but did not countersign it through /capture — so
         // it must not carry human authority (strict/veto gates key on human_confirmed).
@@ -1062,14 +1067,42 @@ export class HunchStore {
         if (h.kind === "decisions" && staleDecisionIds.has(h.ref)) w *= STALE_DECISION_PRIOR_WEIGHT;
         if (q && m.triggers?.some((tr) => q.includes(tr) || tr.includes(q))) w *= 1.5;
       }
-      // w > 1 (a trigger match) shifts UP, w < 1 shifts DOWN, both clamped.
-      const shift = Math.max(-MAX_PRIOR_SHIFT, Math.min(MAX_PRIOR_SHIFT, (1 - w) * PRIOR_SHIFT_SCALE));
+      // w > 1 (a trigger match) shifts UP, w < 1 shifts DOWN, both clamped. A dead record
+      // (superseded/retired/rejected) takes the full bound PLUS DEAD_PRIOR_SHIFT: folded
+      // into w, liveness was a no-op exactly where it mattered — an old or non-human
+      // live record already reaches the clamp on provenance × recency, so its superseded
+      // twin landed at the same position and fused order alone decided which one
+      // answered "what is the rule now". Never below the bound, so a dead memory record
+      // cannot leapfrog any live memory record that fused ahead of it.
+      const shift = m?.dead ? MAX_PRIOR_SHIFT + DEAD_PRIOR_SHIFT
+        : Math.max(-MAX_PRIOR_SHIFT, Math.min(MAX_PRIOR_SHIFT, (1 - w) * PRIOR_SHIFT_SCALE));
       // Recorded intent outranks code that merely shares the query's vocabulary. Applied
       // OUTSIDE the clamp above: that bound keeps the trust dimmer from becoming the sort
       // key, whereas this is a kind-level tie-break between two different answer types.
       const memory = MEMORY_KINDS.has(h.kind) ? -MEMORY_PRIOR_SHIFT : 0;
-      return { h, pos: pos + shift + memory };
+      return { h, fused: pos, shift, memory, dead: !!m?.dead, pos: pos + shift + memory };
     });
+    // A superseded decision never outranks its own live successor, whatever the
+    // provenance tiers or fused order (dec_e622668785: promotion ADDS the current truth
+    // above the stale hit, never erases the trail). The successor takes the
+    // predecessor's FUSED rank weighed by its OWN trust — the query matched the subject
+    // there — bounded on both sides: never above a live record that fused ahead of the
+    // predecessor (it does not borrow a match it never made), always above the
+    // predecessor itself. The floor is taken in memory-neutral space: the kind-level
+    // memory shift is not part of the match, and mixing it in let one code symbol fused
+    // ahead (shift 0 vs memory's −16) pin the successor to just above its dead
+    // predecessor, behind code and behind live records the predecessor outranked. Dead
+    // records never raise the floor — a closed record does not shield the live answer.
+    // The bounds cannot cross: a live record fused ahead sits at most at (f − 1) + MAX,
+    // below the predecessor's f + MAX + DEAD − 0.5.
+    const at = new Map(scored.map((x) => [x.h.ref, x]));
+    for (const [oldRef, curRef] of successorOf) {
+      const prev = at.get(oldRef), cur = at.get(curRef);
+      if (!prev || !cur) continue;
+      let floor = -Infinity;
+      for (const x of scored) if (x !== cur && !x.dead && x.fused < prev.fused) floor = Math.max(floor, x.pos - x.memory);
+      cur.pos = Math.min(cur.pos, Math.max(prev.fused + cur.shift - 0.5, floor + 0.25) + cur.memory, prev.pos - 0.5);
+    }
     scored.sort((a, b) => a.pos - b.pos);
     return scored.slice(0, limit).map((x) => x.h);
   }
@@ -2543,6 +2576,27 @@ function supersessionChain(d: Decision, decs: ReadonlyMap<string, Decision>): Wh
   }
   return [...back, d, ...fwd].map((x) => ({ id: x.id, status: x.status, title: x.title }));
 }
+/** The decision that answers "what is the rule now" for a superseded `d`: its topic's
+ *  single live decision when it has a topic, otherwise the end of its superseded_by
+ *  chain when that end is still in force. Null when the graph has no unambiguous one. */
+function liveSuccessor(d: Decision, byId: ReadonlyMap<string, Decision>, all: readonly Decision[]): { decision: Decision; via: "topic" | "chain" } | null {
+  if (d.topic) {
+    const cur = currentForTopic(all, d.topic);
+    if (cur) return { decision: cur, via: "topic" };
+    // A collision has no single answer; an empty topic just means the successor was
+    // recorded without one, so its superseded_by link is still the authority.
+    if (liveForTopic(all, d.topic).length > 1) return null;
+  }
+  const seen = new Set([d.id]);
+  let end: Decision | undefined;
+  for (let cur = d.superseded_by ? byId.get(d.superseded_by) : undefined; cur && !seen.has(cur.id); cur = cur.superseded_by ? byId.get(cur.superseded_by) : undefined) {
+    seen.add(cur.id); end = cur;
+  }
+  if (!end || !isLive(end)) return null;
+  // The chain end is one side of its own topic's collision: still no single answer.
+  if (end.topic && liveForTopic(all, end.topic).length > 1) return null;
+  return { decision: end, via: "chain" };
+}
 function round(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -2574,6 +2628,13 @@ const GRAPH_TOKEN_CAP = boundedWhole(numEnv("HUNCH_GRAPH_TOKEN_CAP", 2_000), 2_0
  *  rerankByPriors for the measurement that fixed it at 4. */
 const PRIOR_SHIFT_SCALE = numEnv("HUNCH_PRIOR_SHIFT_SCALE", 12);
 const MAX_PRIOR_SHIFT = numEnv("HUNCH_MAX_PRIOR_SHIFT", 4);
+/** Positions a superseded/retired/rejected record drops BEYOND the trust clamp. Inside the
+ *  clamp, liveness (×0.6 → 4.8) always saturated it, so a dead record got the same +4 as
+ *  any old or non-human live record and fused order alone decided between them. A dead
+ *  record now shifts MAX_PRIOR_SHIFT + this (6): 2 breaks that tie by one fused rank, and
+ *  the own-successor case is handled separately by successor placement. Still well inside
+ *  an 8-hit page. Set HUNCH_DEAD_PRIOR_SHIFT=0 to restore the old flat +4. */
+const DEAD_PRIOR_SHIFT = numEnv("HUNCH_DEAD_PRIOR_SHIFT", 2);
 /** A stale anchored decision stays visible and authoritative; it moves down by at most the shared prior clamp. */
 const STALE_DECISION_PRIOR_WEIGHT = Math.min(1, numEnv("HUNCH_STALE_DECISION_PRIOR_WEIGHT", 0.8));
 const DECISION_FRESHNESS_SCOPE_QUERY_CAP = 256;
