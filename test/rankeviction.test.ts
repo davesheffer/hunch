@@ -97,9 +97,11 @@ test("the prior's authority is BOUNDED — it cannot move a hit past the whole p
   // apply is clamped, so a top-fused hit can never be pushed out of a full result page.
   const SCALE = Number(process.env.HUNCH_PRIOR_SHIFT_SCALE ?? 12);
   const MAX = Number(process.env.HUNCH_MAX_PRIOR_SHIFT ?? 4);
+  const DEAD = Number(process.env.HUNCH_DEAD_PRIOR_SHIFT ?? 2);
   const shift = (w: number): number => Math.max(-MAX, Math.min(MAX, (1 - w) * SCALE));
-  // Worst reachable trust weight: dead (0.6) × extracted (0.75) × oldest recency (0.7).
-  assert.equal(shift(0.6 * 0.75 * 0.7), MAX, "even the worst prior is clamped to the bound");
+  // Worst reachable trust weight: extracted (0.75) × oldest recency (0.7) × stale anchor (0.8);
+  // liveness is a separate fixed demotion on top of the clamp.
+  assert.equal(shift(0.75 * 0.7 * 0.8), MAX, "even the worst trust prior is clamped to the bound");
   assert.equal(shift(1.5), -MAX, "and a runbook trigger boost is clamped symmetrically");
-  assert.ok(MAX < 12, "the bound must be smaller than a default result page, or it could still evict");
+  assert.ok(MAX + DEAD < 8, "the history demotion keeps a dead record fused #0/#1 on an 8-hit hunch_query page");
 });

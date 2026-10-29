@@ -215,6 +215,16 @@
       }
     ]
   },
+  "HUNCH_DEAD_PRIOR_SHIFT": {
+    "class": "hunch-ranking",
+    "purpose": "Extra positions a superseded, retired or rejected record drops beyond the prior clamp (0 restores the flat clamp)",
+    "tests": [
+      {
+        "file": "test/env-surface.test.ts",
+        "title": "env surface: HUNCH_MAX_PRIOR_SHIFT and HUNCH_PRIOR_SHIFT_SCALE bound how far a dead hit's rank drops"
+      }
+    ]
+  },
   "HUNCH_EMBEDDER": {
     "class": "hunch-config",
     "purpose": "Selects/disables the optional local embedder",

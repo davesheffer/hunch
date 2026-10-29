@@ -12,12 +12,22 @@ export function formatContext(ctx: AssembledContext, options: DeliveryOptions = 
 /** One search hit as `hunch query` / hunch_query print it (headline + indented detail line).
  *  Graph records keep their `[kind] id — title` shape; a nuryel.state/1 hit renders through
  *  renderStateLine (`[commitment/in_force] customer:Site:7 — "send report" due … (owner …)`)
- *  with the record id on the detail line, so both readers say the same thing. */
+ *  with the record id on the detail line, so both readers say the same thing. A decision that
+ *  is no longer accepted says so in its tag (`[decisions · superseded → dec_new]`), so a
+ *  reader never takes a history hit for the current rule. */
 export function formatSearchHit(hit: SearchHit, record: unknown): string {
   if (isStateKind(hit.kind) && record) {
     return `• ${renderStateLine(hit.kind, record as StateRecord)}\n    ${hit.ref}`;
   }
-  return `• [${hit.kind}] ${hit.ref} — ${hit.title}\n    ${hit.snippet}`;
+  return `• [${hit.kind}${decisionStatusTag(hit.kind, record)}] ${hit.ref} — ${hit.title}\n    ${hit.snippet}`;
+}
+
+function decisionStatusTag(kind: string, record: unknown): string {
+  if (kind !== "decisions" || !record) return "";
+  const { status, superseded_by, valid_to } = record as { status?: string; superseded_by?: string | null; valid_to?: string | null };
+  if (superseded_by) return ` · superseded → ${superseded_by}`;
+  if (status && status !== "accepted") return ` · ${status}`;
+  return valid_to ? ` · closed ${valid_to.slice(0, 10)}` : "";
 }
 
 /** Render a StructureView as a compact orientation brief (hunch_structure). */
