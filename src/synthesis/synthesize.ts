@@ -73,7 +73,7 @@ export async function syncCommit(
   opts: {
     force?: boolean; private?: boolean; home?: "public" | "private"; localOnly?: boolean; deep?: boolean; verify?: boolean; samples?: number;
     /** Injectable for tests; defaults to the `gh`-backed lookup. */
-    prContext?: (root: string, commit: { sha: string; subject: string }) => Promise<PrContext | null>;
+    prContext?: (root: string, commit: { sha: string; subject: string }, opts?: { thread?: boolean }) => Promise<PrContext | null>;
   } = {},
 ): Promise<SyncResult> {
   const target = sha || headSha(root);
@@ -158,8 +158,9 @@ export async function syncCommit(
   // The merged PR's description often holds the why a squash commit drops (#562). Fetch
   // it only when a model will read it: never for a local-only capture (no PR text goes
   // to any provider) and not for the free deterministic draft.
+  // The review thread feeds only the Critic-verified path (gated by a noise audit).
   if (!localOnly && provider.name !== "deterministic") {
-    const pr = await (opts.prContext ?? prContextFor)(root, { sha: meta.sha, subject: meta.subject });
+    const pr = await (opts.prContext ?? prContextFor)(root, { sha: meta.sha, subject: meta.subject }, { thread: wantVerify });
     if (pr) input.pr = pr;
   }
   let draft = await draftDecisionSafe(provider, input);
@@ -176,7 +177,7 @@ export async function syncCommit(
   // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
   // (no schema change → respects forward-migration invariant con_947c578b2c).
   const synthBits: string[] = [`provider=${actualProvider}`];
-  if (input.pr) synthBits.push(`pr=#${input.pr.number}`);
+  if (input.pr) synthBits.push(`pr=#${input.pr.number}${input.pr.thread ? "+thread" : ""}`);
   if (draft.samples) synthBits.push(`samples=${draft.samples}`);
   if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
   if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
