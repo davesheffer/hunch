@@ -49,7 +49,12 @@ process.stdin.on("end", () => {
   const draft = { title: "Route billing through the fake ledger", context: "FAKE_CONTEXT from " + name,
     decision: "FAKE_DECISION from " + name, consequences: ["fake consequence"],
     alternatives_rejected: ["direct ledger writes"], nontrivial: true };
-  const text = mode === "malformed" ? "Sorry, I cannot produce JSON today." : JSON.stringify(draft);
+  // "schema" echoes the output contract back as the answer (issue #561); "schema-once"
+  // does so only on the first call of the run, so a retry can succeed.
+  const callNo = fs.readFileSync(process.env.FAKE_LOG, "utf8").split("\n").filter(Boolean).length;
+  const echo = mode === "schema" || (mode === "schema-once" && callNo === 1);
+  const schemaEcho = { type: "object", properties: { title: { type: "string" }, decision: { type: "string" } }, required: ["title", "decision"] };
+  const text = mode === "malformed" ? "Sorry, I cannot produce JSON today." : JSON.stringify(echo ? schemaEcho : draft);
   if (name === "claude") process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: text }));
   else if (name === "codex") process.stdout.write(JSON.stringify({ type: "thread.started" }) + "\n" + JSON.stringify({ type: "item.completed", item: { type: "agent_message", text } }) + "\n");
   else process.stdout.write(text);
@@ -170,10 +175,45 @@ for (const mode of ["malformed", "exit"] as const) {
       assert.equal(result.decision!.provenance.source, "inferred");
       assert.ok(result.decision!.provenance.evidence.includes("synth:provider=deterministic"));
     }
-    assert.equal(fx.calls().length, 3, "each selected CLI was actually tried once");
+    // Unusable output gets one more sample before the fallback; a crashed CLI does not.
+    assert.equal(fx.calls().length, mode === "malformed" ? 6 : 3, "each selected CLI was tried the expected number of times");
     assert.equal(fx.fetches(), 0);
   });
 }
+
+// Issue #561: about 1 in 5 claude-cli drafts came back as the JSON Schema itself and
+// were silently replaced by the heuristic draft.
+test("external:provider: a schema echo is retried once and the second answer is kept", { timeout: 60_000 }, async (t) => {
+  const fx = providerFixture(t);
+  const result = await fx.sync("claude-cli", "schema-once");
+  assert.equal(result.provider, "claude-cli");
+  assert.equal(result.fallbackReason, undefined);
+  assert.equal(result.decision!.provenance.source, "llm_draft");
+  assert.equal(fx.calls().length, 2, "one echo, one retry");
+  assert.doesNotMatch(fx.calls()[0]!.stdin, /"properties"\s*:/, "the prompt no longer pastes a JSON Schema to echo");
+});
+
+test("external:provider: a persistent schema echo falls back with a reason that names it", { timeout: 60_000 }, async (t) => {
+  const fx = providerFixture(t);
+  const result = await fx.sync("claude-cli", "schema");
+  assert.equal(result.provider, "deterministic");
+  assert.equal(result.decision!.provenance.source, "inferred", "the fallback stays honestly labeled");
+  assert.match(result.fallbackReason ?? "", /claude-cli: no usable decision JSON in output \(echoed the schema instead of an answer\), 2 attempts/);
+  assert.equal(fx.calls().length, 2);
+});
+
+test("external:provider: backfill reports each provider fallback and counts it apart from gated heuristics", { timeout: 90_000 }, async (t) => {
+  const fx = providerFixture(t);
+  const run = spawnSync(process.execPath, ["--import", tsxLoaderUrl(), hookCli, "backfill", "--since", "3650d"], {
+    cwd: fx.root,
+    env: isolatedCliEnv({ HUNCH_SYNTH_PROVIDER: "claude-cli", FAKE_MODE: "schema", HUNCH_PIPELINE: "0", PATH: process.env.PATH, FAKE_LOG: process.env.FAKE_LOG }),
+    encoding: "utf8", timeout: 80_000, windowsHide: true,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /⚠ [0-9a-f]{8} /, "the fallen-back commit is flagged, not ticked");
+  assert.match(run.stdout, /heuristic draft instead: claude-cli: no usable decision JSON in output \(echoed the schema instead of an answer\)/);
+  assert.match(run.stdout, /Done: 1 decision\(s\) seeded \(0 via LLM, 0 heuristic, 1 heuristic after the LLM failed\)/);
+});
 
 test("external:provider: a hung CLI times out (tree killed) and the safe wrapper falls back to the heuristic", { timeout: 60_000 }, async (t) => {
   const fx = providerFixture(t);

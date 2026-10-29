@@ -353,7 +353,7 @@ abstract class PromptSynthProvider implements SynthProvider {
     // No usable LLM JSON (truncation, refusal, prose-only, or a CLI whose output
     // shape we misread) → THROW so the safe wrapper falls back to the deterministic
     // provider, whose draft is honestly labeled ("inferred", low confidence).
-    if (!draft) throw new Error(`${this.name}: no usable decision JSON in output`);
+    if (!draft) throw unusable(this.name, "decision", text);
     // For a LARGE diff the model only saw the structured summary + a sample — haircut
     // the confidence and tag the source so provenance stays honest.
     if (input.diff.length > LARGE_DIFF_CHARS) {
@@ -366,7 +366,7 @@ abstract class PromptSynthProvider implements SynthProvider {
     assertInitiatorProvider(this.name);
     const text = await this.run(`${SYSTEM}\n\n${failurePrompt(input)}\n\n${jsonInstruction(BUG_TOOL.input_schema)}`, "json");
     const draft = bugDraftFromText(text, input.test, input.message);
-    if (!draft) throw new Error(`${this.name}: no usable bug JSON in output`);
+    if (!draft) throw unusable(this.name, "bug", text);
     return draft;
   }
 
@@ -388,7 +388,7 @@ abstract class PromptSynthProvider implements SynthProvider {
     assertInitiatorProvider(this.name);
     const text = await this.run(`${VERIFY_SYSTEM}\n\n${verifyPrompt(input, draft)}\n\n${jsonInstruction(VERIFY_TOOL.input_schema)}`, "json");
     const verdict = verdictFromText(text);
-    if (!verdict) throw new Error(`${this.name}: no usable verdict JSON in output`);
+    if (!verdict) throw unusable(this.name, "verdict", text);
     return verdict;
   }
 
@@ -399,7 +399,7 @@ abstract class PromptSynthProvider implements SynthProvider {
     assertInitiatorProvider(this.name);
     const text = await this.run(`${RELEVANCE_SYSTEM}\n\n${relevancePrompt(draft, existing)}\n\n${jsonInstruction(RELEVANCE_TOOL.input_schema)}`, "json");
     const verdict = relevanceFromText(text);
-    if (!verdict) throw new Error(`${this.name}: no usable relevance JSON in output`);
+    if (!verdict) throw unusable(this.name, "relevance", text);
     return verdict;
   }
 }
@@ -1294,8 +1294,47 @@ function failurePrompt(input: FailureInput): string {
   ].filter(Boolean).join("\n\n");
 }
 
-function jsonInstruction(schema: object): string {
-  return `Respond with ONLY a single JSON object matching this schema (no prose, no code fence):\n${JSON.stringify(schema)}`;
+type FieldSchema = { type: string | readonly string[]; description?: string; items?: { type: string }; enum?: readonly string[] };
+
+/** The output contract for a prompt-only provider. A JSON Schema pasted verbatim
+ *  gets echoed back as the answer: claude-cli on haiku returned the schema itself
+ *  for about 1 in 5 commit drafts (issue #561), which then fell back to the
+ *  heuristic. So describe each key in plain words and ask for the filled-in object. */
+export function jsonInstruction(schema: { properties: Record<string, FieldSchema> }): string {
+  const fields = Object.entries(schema.properties).map(([key, f]) => {
+    const type = Array.isArray(f.type) ? f.type.join(" or ") : f.type === "array" ? `list of ${f.items?.type ?? "string"}s` : f.type;
+    const allowed = f.enum ? `, one of ${f.enum.map((v) => `"${v}"`).join(", ")}` : "";
+    return `- "${key}" (${type}${allowed})${f.description ? `: ${f.description}` : ""}`;
+  });
+  return [
+    "Respond with ONLY one JSON object (no prose, no code fence) with these keys, each filled with your actual answer for the input above:",
+    ...fields,
+    "Output the filled-in object itself. Do not output a JSON Schema or repeat these key descriptions.",
+  ].join("\n");
+}
+
+/** A provider answered, but its output held no usable record. Distinct from a
+ *  transport failure (timeout, crash, auth) because a second sample can succeed:
+ *  the safe wrappers retry this kind only. `detail` names what was wrong without
+ *  quoting the model output, so the reason is safe to print. */
+export class UnusableOutputError extends Error {
+  constructor(provider: string, what: string, readonly detail: string) {
+    super(`${provider}: no usable ${what} JSON in output (${detail})`);
+    this.name = "UnusableOutputError";
+  }
+}
+
+/** Why `text` produced no record: no object at all, the schema echoed back, or
+ *  objects that lack the fields the mapper needs. */
+export function classifyUnusableOutput(text: string): string {
+  const objects = extractJsonObjects(text);
+  if (!objects.length) return text.trim() ? "no JSON object" : "empty output";
+  const echoed = objects.some((o) => o.properties !== null && typeof o.properties === "object" && (o.type === "object" || Array.isArray(o.required)));
+  return echoed ? "echoed the schema instead of an answer" : "JSON lacked the required fields";
+}
+
+function unusable(provider: string, what: string, text: string): UnusableOutputError {
+  return new UnusableOutputError(provider, what, classifyUnusableOutput(text));
 }
 
 /** Index of the `}` that closes the balanced object opened at `start`, or -1.
