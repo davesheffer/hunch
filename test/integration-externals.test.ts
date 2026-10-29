@@ -173,7 +173,8 @@ for (const mode of ["malformed", "exit"] as const) {
       assert.equal(result.status, "written", selected);
       assert.equal(result.provider, "deterministic", `${selected} ${mode} → heuristic`);
       assert.equal(result.decision!.provenance.source, "inferred");
-      assert.ok(result.decision!.provenance.evidence.includes("synth:provider=deterministic"));
+      const kind = mode === "malformed" ? "no-json" : "provider-error";
+      assert.ok(result.decision!.provenance.evidence.includes(`synth:provider=deterministic fallback=${kind}`));
     }
     // Unusable output gets one more sample before the fallback; a crashed CLI does not.
     assert.equal(fx.calls().length, mode === "malformed" ? 6 : 3, "each selected CLI was tried the expected number of times");
@@ -198,6 +199,7 @@ test("external:provider: a persistent schema echo falls back with a reason that 
   const result = await fx.sync("claude-cli", "schema");
   assert.equal(result.provider, "deterministic");
   assert.equal(result.decision!.provenance.source, "inferred", "the fallback stays honestly labeled");
+  assert.ok(result.decision!.provenance.evidence.includes("synth:provider=deterministic fallback=echoed-schema"), "the cause survives a quiet hook run");
   assert.match(result.fallbackReason ?? "", /claude-cli: no usable decision JSON in output \(echoed the schema instead of an answer\), 2 attempts/);
   assert.equal(fx.calls().length, 2);
 });

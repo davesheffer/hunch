@@ -109,6 +109,9 @@ export interface DecisionDraft {
   // must report the actual drafting provider from these fields.
   fellBackTo?: string;
   fallbackReason?: string;
+  // Print-safe slug of the cause (an UnusableKind, or "provider-error"), carried
+  // into the `synth:` evidence line so a quiet hook fallback is still visible.
+  fallbackKind?: string;
 }
 
 /** A skeptical audit of a DecisionDraft against the commit it was derived from.
@@ -1090,17 +1093,26 @@ export class EnsembleProvider implements SynthProvider {
     if (!this.workers.length) throw new Error("ensemble: no LLM provider workers available");
     const settled = await Promise.allSettled(this.decisionTasks(input).map((t) => t()));
     const drafts = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-    if (!drafts.length) throw new Error("ensemble: all workers failed");
+    // Keep the first cause in the message. A plain Error on purpose: an
+    // UnusableOutputError would make the safe wrapper re-run every sample.
+    if (!drafts.length) throw new Error(`ensemble: all workers failed (${firstFailure(settled)})`);
     return drafts.length === 1 ? drafts[0]! : mergeDecisionDrafts(drafts);
   }
 
   async draftBug(input: FailureInput): Promise<BugDraft> {
     // Bug ensembling is deferred — use the first worker that succeeds.
+    let first: unknown;
     for (const w of this.workers) {
-      try { return await w.draftBug(input); } catch { /* try next */ }
+      try { return await w.draftBug(input); } catch (err) { first ??= err; /* try next */ }
     }
-    throw new Error("ensemble: all workers failed for bug");
+    throw new Error(`ensemble: all workers failed for bug (${first instanceof Error ? first.message : String(first)})`);
   }
+}
+
+function firstFailure(settled: PromiseSettledResult<unknown>[]): string {
+  const rejected = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");
+  const reason: unknown = rejected?.reason;
+  return reason instanceof Error ? reason.message : String(reason);
 }
 
 /** Build the Deep-Synthesis provider, or null if no LLM provider is available
@@ -1313,24 +1325,32 @@ export function jsonInstruction(schema: { properties: Record<string, FieldSchema
   ].join("\n");
 }
 
+const UNUSABLE_DETAIL = {
+  "echoed-schema": "echoed the schema instead of an answer",
+  "no-json": "no JSON object",
+  "empty": "empty output",
+  "missing-fields": "JSON lacked the required fields",
+} as const;
+export type UnusableKind = keyof typeof UNUSABLE_DETAIL;
+
 /** A provider answered, but its output held no usable record. Distinct from a
  *  transport failure (timeout, crash, auth) because a second sample can succeed:
- *  the safe wrappers retry this kind only. `detail` names what was wrong without
- *  quoting the model output, so the reason is safe to print. */
+ *  the safe wrappers retry this kind only. `kind` names what was wrong without
+ *  quoting the model output, so the reason is safe to print and to persist. */
 export class UnusableOutputError extends Error {
-  constructor(provider: string, what: string, readonly detail: string) {
-    super(`${provider}: no usable ${what} JSON in output (${detail})`);
+  constructor(provider: string, what: string, readonly kind: UnusableKind) {
+    super(`${provider}: no usable ${what} JSON in output (${UNUSABLE_DETAIL[kind]})`);
     this.name = "UnusableOutputError";
   }
 }
 
 /** Why `text` produced no record: no object at all, the schema echoed back, or
  *  objects that lack the fields the mapper needs. */
-export function classifyUnusableOutput(text: string): string {
+export function classifyUnusableOutput(text: string): UnusableKind {
   const objects = extractJsonObjects(text);
-  if (!objects.length) return text.trim() ? "no JSON object" : "empty output";
+  if (!objects.length) return text.trim() ? "no-json" : "empty";
   const echoed = objects.some((o) => o.properties !== null && typeof o.properties === "object" && (o.type === "object" || Array.isArray(o.required)));
-  return echoed ? "echoed the schema instead of an answer" : "JSON lacked the required fields";
+  return echoed ? "echoed-schema" : "missing-fields";
 }
 
 function unusable(provider: string, what: string, text: string): UnusableOutputError {

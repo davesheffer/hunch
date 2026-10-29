@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Relicensed to the Functional Source License (FSL-1.1-ALv2).** You can use, modify and run Hunch for your own work, internal or commercial; you can't offer it to others in a commercial product or service that competes with Hunch. Each release converts to Apache-2.0 two years after it ships. Releases before this change keep the license they shipped with (Apache-2.0 from v0.15.2, MIT before that); `clients/python` stays Apache-2.0 and `vscode-extension` stays MIT. See `LICENSE` and `NOTICE` (#556).
+- **Commit drafts no longer fall back to the heuristic when the model echoes the output format.** About 1 in 5 `claude-cli` drafts came back as the JSON Schema from the prompt instead of an answer and were silently replaced by the heuristic draft. The prompt now lists the keys in plain words, an unusable answer gets one more try (timeouts and CLI failures do not), and any fallback that remains is reported: `backfill` and `sync` print the cause, `backfill` counts these commits apart from the ones it drafts with the heuristic on purpose, and the decision's `synth:` evidence records `fallback=<cause>` (#561).
 - **Third-party contributions rewritten clean-room.** Every line range attributed to a former contributor was replaced by an independent rewrite with the same behaviour and test coverage (#555).
 
 ## 1.47.2 — 2026-10-25

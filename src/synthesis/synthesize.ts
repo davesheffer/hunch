@@ -167,6 +167,7 @@ export async function syncCommit(
   // were reconciled, their agreement, and the verifier's grounding. Rides in `evidence`
   // (no schema change → respects forward-migration invariant con_947c578b2c).
   const synthBits: string[] = [`provider=${actualProvider}`];
+  if (draft.fallbackKind) synthBits.push(`fallback=${draft.fallbackKind}`);
   if (draft.samples) synthBits.push(`samples=${draft.samples}`);
   if (draft.agreement != null) synthBits.push(`agreement=${draft.agreement}`);
   if (draft.grounded != null) synthBits.push(`grounded=${draft.grounded}`);
@@ -601,6 +602,12 @@ async function sampleUntilUsable<T>(draft: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Short, print-safe label for the `synth:` evidence line, so a fallback from the
+ *  quiet post-commit hook still leaves a trace `hunch review` can show. */
+function fallbackKindOf(err: unknown): string {
+  return err instanceof UnusableOutputError ? err.kind : "provider-error";
+}
+
 function fallbackReasonOf(err: unknown): string {
   if (err instanceof UnusableOutputError) return `${err.message}, ${UNUSABLE_OUTPUT_RETRIES + 1} attempts`;
   return err instanceof Error ? err.message : String(err);
@@ -616,7 +623,7 @@ export async function draftDecisionSafe(provider: SynthProvider, input: CommitIn
     // Tell the caller a fallback happened (and why) so it reports the provider that
     // actually drafted the record rather than the one that was selected.
     const fallback = await new DeterministicProvider().draftDecision(input);
-    return { ...fallback, fellBackTo: "deterministic", fallbackReason: fallbackReasonOf(err) };
+    return { ...fallback, fellBackTo: "deterministic", fallbackReason: fallbackReasonOf(err), fallbackKind: fallbackKindOf(err) };
   }
 }
 

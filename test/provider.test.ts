@@ -319,11 +319,11 @@ test("jsonInstruction describes keys in plain words instead of pasting a JSON Sc
 });
 
 test("classifyUnusableOutput names why the output held no record, without quoting it", () => {
-  assert.equal(classifyUnusableOutput('{"type":"object","properties":{"title":{"type":"string"}},"required":["title"]}'), "echoed the schema instead of an answer");
-  assert.equal(classifyUnusableOutput('{"properties":{"title":{}},"required":["title"]}'), "echoed the schema instead of an answer");
-  assert.equal(classifyUnusableOutput("Sorry, no JSON today."), "no JSON object");
-  assert.equal(classifyUnusableOutput("   "), "empty output");
-  assert.equal(classifyUnusableOutput('{"title":"only a title"}'), "JSON lacked the required fields");
+  assert.equal(classifyUnusableOutput('{"type":"object","properties":{"title":{"type":"string"}},"required":["title"]}'), "echoed-schema");
+  assert.equal(classifyUnusableOutput('{"properties":{"title":{}},"required":["title"]}'), "echoed-schema");
+  assert.equal(classifyUnusableOutput("Sorry, no JSON today."), "no-json");
+  assert.equal(classifyUnusableOutput("   "), "empty");
+  assert.equal(classifyUnusableOutput('{"title":"only a title"}'), "missing-fields");
 });
 
 function flakyProvider(failures: number, error: () => Error): SynthProvider & { calls: () => number } {
@@ -338,7 +338,7 @@ function flakyProvider(failures: number, error: () => Error): SynthProvider & { 
   };
 }
 
-const echoed = () => new UnusableOutputError("stub-flaky", "decision", "echoed the schema instead of an answer");
+const echoed = () => new UnusableOutputError("stub-flaky", "decision", "echoed-schema");
 
 test("draftDecisionSafe samples again when the output was unusable, and keeps the second answer", async () => {
   const p = flakyProvider(1, echoed);
@@ -354,6 +354,7 @@ test("draftDecisionSafe stops after the bounded retries and reports the cause an
   assert.equal(d.source, "inferred");
   assert.equal(p.calls(), UNUSABLE_OUTPUT_RETRIES + 1);
   assert.equal(d.fallbackReason, `stub-flaky: no usable decision JSON in output (echoed the schema instead of an answer), ${UNUSABLE_OUTPUT_RETRIES + 1} attempts`);
+  assert.equal(d.fallbackKind, "echoed-schema");
 });
 
 test("draftDecisionSafe does not retry a transport failure such as a timeout", async () => {
@@ -361,11 +362,12 @@ test("draftDecisionSafe does not retry a transport failure such as a timeout", a
   const d = await draftDecisionSafe(p, COMMIT);
   assert.equal(d.fellBackTo, "deterministic");
   assert.equal(d.fallbackReason, "claude timed out after 300000ms");
+  assert.equal(d.fallbackKind, "provider-error");
   assert.equal(p.calls(), 1, "a second hang would only double the wait");
 });
 
 test("draftBugSafe gets the same bounded retry on unusable output", async () => {
-  const p = flakyProvider(1, () => new UnusableOutputError("stub-flaky", "bug", "no JSON object"));
+  const p = flakyProvider(1, () => new UnusableOutputError("stub-flaky", "bug", "no-json"));
   const b = await draftBugSafe(p, FAILURE);
   assert.equal(b.source, "llm_draft");
   assert.equal(p.calls(), 2);
