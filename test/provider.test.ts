@@ -5,6 +5,7 @@ import {
   extractJsonObjects,
   decisionDraftFromText,
   bugDraftFromText,
+  OpenAICompatProvider,
   jsonInstruction,
   classifyUnusableOutput,
   UnusableOutputError,
@@ -13,6 +14,7 @@ import {
   type FailureInput,
 } from "../src/synthesis/provider.js";
 import { draftDecisionSafe, draftBugSafe, shouldPromoteConstraint, UNUSABLE_OUTPUT_RETRIES } from "../src/synthesis/synthesize.js";
+import { withInitiator } from "../src/synthesis/initiator.js";
 
 // ---------------------------------------------------------------------------
 // extractJson / extractJsonObjects — robust, string-aware extraction.
@@ -294,6 +296,29 @@ test("draftDecisionSafe passes a successful provider draft through unchanged", a
   assert.equal(d.source, "llm_draft");
   assert.equal(d.decision, "D");
   assert.equal(d.fellBackTo, undefined, "a successful draft never carries a fallback marker");
+});
+
+/** Captures the prompt; replies with a fixed draft. */
+class PromptSpy extends OpenAICompatProvider {
+  prompts: string[] = [];
+  protected override async run(prompt: string): Promise<string> {
+    this.prompts.push(prompt);
+    return JSON.stringify({ title: "T", context: "C", decision: "D", consequences: [], alternatives_rejected: [], nontrivial: true });
+  }
+}
+
+test("the commit prompt carries the evidence rules and the grounded-alternatives contract", async () => {
+  const spy = new PromptSpy();
+  const big: CommitInput = { subject: "s", body: "b", files: ["a.ts"], diff: "x".repeat(25_000) };
+  for (const input of [COMMIT, big]) await withInitiator({ provider: "openai-compat", source: "explicit" }, () => spy.draftDecision(input));
+  assert.equal(spy.prompts.length, 2);
+  for (const prompt of spy.prompts) {
+    assert.match(prompt, /EVIDENCE RULES:/);
+    assert.match(prompt, /a partial DIFF does not contradict text about code it does not show/);
+    assert.match(prompt, /Only alternatives the INPUT shows were considered and not taken/);
+    assert.match(prompt, /never invent plausible options/);
+  }
+  assert.match(spy.prompts[1]!, /DIFF \(large patch/, "the large-diff path still gets the rules");
 });
 
 // ---------------------------------------------------------------------------
