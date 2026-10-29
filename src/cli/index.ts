@@ -862,7 +862,7 @@ program
       const ctxWarning = await maybeWarnOllamaContext(ctxProvider.name, process.env);
       if (ctxWarning !== null) console.log(ctxWarning);
     }
-    let written = 0, skipped = 0, llm = 0, heuristic = 0;
+    let written = 0, skipped = 0, llm = 0, heuristic = 0, fellBack = 0;
     const home = store.captureHome(false);
     // The per-commit cost is the Claude synthesis spawn; run several at once. Safe:
     // each commit drafts independently and writes its OWN decision file atomically,
@@ -874,8 +874,12 @@ program
       if (r.status === "written") {
         written++;
         // Any non-deterministic provider (claude/codex/cursor/ensemble) is an LLM draft.
-        if (r.provider && r.provider !== "deterministic") llm++; else heuristic++;
-        process.stdout.write(`  ✓ ${sha.slice(0, 8)} ${r.decision?.title.slice(0, 64) ?? ""}\n`);
+        // A provider failure that fell back is counted apart from the commits the
+        // significance gate sent to the heuristic on purpose (issue #561).
+        if (r.fallbackReason) fellBack++;
+        else if (r.provider && r.provider !== "deterministic") llm++; else heuristic++;
+        process.stdout.write(`  ${r.fallbackReason ? "⚠" : "✓"} ${sha.slice(0, 8)} ${r.decision?.title.slice(0, 64) ?? ""}\n`);
+        if (r.fallbackReason) process.stdout.write(`      heuristic draft instead: ${r.fallbackReason}\n`);
       } else skipped++;
     });
     store.reindex();
@@ -883,7 +887,8 @@ program
     if (written) pumpMemoryHome(store, root, home, `hunch: backfill ${written} decision(s)`);
     // Honest tally of where the tokens went: trivial commits are seeded by the
     // free deterministic heuristic, only substantive ones spend the LLM.
-    console.log(`Done: ${written} decision(s) seeded (${llm} via LLM, ${heuristic} heuristic), ${skipped} skipped (trivial/not substantive/already-captured).`);
+    const fellBackNote = fellBack ? `, ${fellBack} heuristic after the LLM failed` : "";
+    console.log(`Done: ${written} decision(s) seeded (${llm} via LLM, ${heuristic} heuristic${fellBackNote}), ${skipped} skipped (trivial/not substantive/already-captured).`);
     store.close();
   });
 
@@ -940,6 +945,7 @@ program
     if (r.status === "written") {
       store.reindex();
       if (!opts.quiet) console.log(`✓ captured decision ${r.decision?.id} via ${r.provider}: "${r.decision?.title}"`);
+      if (!opts.quiet && r.fallbackReason) console.log(`  ⚠ heuristic draft instead: ${r.fallbackReason}`);
     } else if (!opts.quiet) {
       console.log(`· skipped: ${r.reason}`);
     }
@@ -2016,7 +2022,7 @@ program
       console.log(`No matches for "${q}".`);
     } else {
       console.log(`Top matches for "${q}"${how}:\n`);
-      for (const h of hits) console.log(formatSearchHit(h, isStateKind(h.kind) ? store.resolve(h.ref)?.record : undefined));
+      for (const h of hits) console.log(formatSearchHit(h, isStateKind(h.kind) || h.kind === "decisions" ? store.resolve(h.ref)?.record : undefined));
     }
     store.close();
   });
