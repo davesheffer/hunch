@@ -259,7 +259,7 @@ const DECISION_TOOL = {
       alternatives_rejected: {
         type: "array",
         items: { type: "string" },
-        description: "Only alternatives the INPUT shows were considered and not taken: named in the commit/PR text, or code the diff removes or replaces. Each entry says where it came from. Use [] when the input names none; never invent plausible options, and never list the old behavior being fixed as an alternative.",
+        description: "Only alternatives the INPUT shows were considered and not taken: named in the commit/PR text, or code the diff replaces with a different approach to the same goal (not the defect being fixed). Use [] when the input names none; never invent plausible options.",
       },
       nontrivial: { type: "boolean", description: "Is this a real design decision worth remembering?" },
     },
@@ -1291,11 +1291,11 @@ function commitPrompt(input: CommitInput): string {
   ].filter(Boolean).join("\n\n");
 }
 
-// Commit text can narrate earlier iterations (squashed PR descriptions, review threads);
+// Commit text can narrate earlier iterations (squashed commit lists, PR descriptions);
 // most contradicted claims in PR-context drafts came from reading a superseded proposal,
 // or a review request the diff already satisfied, as the final state.
 const COMMIT_EVIDENCE_RULES = `EVIDENCE RULES:
-- The DIFF is the code as merged. Commit or PR text may describe earlier iterations; a discussion runs oldest to newest, and a later message or the diff overrides an earlier proposal. Where text and diff disagree, follow the diff.
+- The DIFF and STRUCTURED CHANGES are the merged state. Commit or PR text may describe earlier iterations (a squashed commit list may run in either order); a later dated message overrides an earlier proposal. Where text and the shown code disagree, follow the code; a partial DIFF does not contradict text about code it does not show.
 - A change a reviewer asked for that the diff contains was made. Never describe review state (approvals, open requests, unresolved threads).
 - A bug found and fixed during review is not a rejected alternative.
 - Attribute a reason only to someone the text shows giving it, with its original direction; copy names and numbers from the input, not from memory.`;
