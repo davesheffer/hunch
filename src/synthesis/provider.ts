@@ -1287,8 +1287,18 @@ function commitPrompt(input: CommitInput): string {
     `FILES CHANGED (${input.files.length}):\n${input.files.slice(0, 40).join("\n")}`,
     renderDiff(input),
     `\nDistill the single most important design decision this commit represents.`,
+    COMMIT_EVIDENCE_RULES,
   ].filter(Boolean).join("\n\n");
 }
+
+// Commit text can narrate earlier iterations (squashed PR descriptions, review threads);
+// most contradicted claims in PR-context drafts came from reading a superseded proposal,
+// or a review request the diff already satisfied, as the final state.
+const COMMIT_EVIDENCE_RULES = `EVIDENCE RULES:
+- The DIFF is the code as merged. Commit or PR text may describe earlier iterations; a discussion runs oldest to newest, and a later message or the diff overrides an earlier proposal. Where text and diff disagree, follow the diff.
+- A change a reviewer asked for that the diff contains was made. Never describe review state (approvals, open requests, unresolved threads).
+- A bug found and fixed during review is not a rejected alternative.
+- Attribute a reason only to someone the text shows giving it, with its original direction; copy names and numbers from the input, not from memory.`;
 
 function failurePrompt(input: FailureInput): string {
   return [
