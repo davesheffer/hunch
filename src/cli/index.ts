@@ -2022,7 +2022,7 @@ program
       console.log(`No matches for "${q}".`);
     } else {
       console.log(`Top matches for "${q}"${how}:\n`);
-      for (const h of hits) console.log(formatSearchHit(h, isStateKind(h.kind) ? store.resolve(h.ref)?.record : undefined));
+      for (const h of hits) console.log(formatSearchHit(h, isStateKind(h.kind) || h.kind === "decisions" ? store.resolve(h.ref)?.record : undefined));
     }
     store.close();
   });

@@ -215,6 +215,16 @@
       }
     ]
   },
+  "HUNCH_DEAD_PRIOR_SHIFT": {
+    "class": "hunch-ranking",
+    "purpose": "Extra positions a superseded, retired or rejected record drops beyond the prior clamp (0 restores the flat clamp)",
+    "tests": [
+      {
+        "file": "test/env-surface.test.ts",
+        "title": "env surface: HUNCH_MAX_PRIOR_SHIFT and HUNCH_PRIOR_SHIFT_SCALE bound how far a dead hit's rank drops"
+      }
+    ]
+  },
   "HUNCH_EMBEDDER": {
     "class": "hunch-config",
     "purpose": "Selects/disables the optional local embedder",
@@ -363,6 +373,16 @@
       {
         "file": "test/behavior-workspace.test.ts",
         "title": "CLI, MCP, and check share one non-blocking working-snapshot receipt without public leakage"
+      }
+    ]
+  },
+  "HUNCH_PR_CONTEXT": {
+    "class": "hunch-synthesis",
+    "purpose": "Set to 0 to stop fetching the merged PR description during commit synthesis",
+    "tests": [
+      {
+        "file": "test/pr-context.test.ts",
+        "title": "prContextFor degrades to null offline, without gh, without a GitHub origin, or when opted out"
       }
     ]
   },

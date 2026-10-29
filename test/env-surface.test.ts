@@ -302,17 +302,19 @@ function runInChild(script: string, overrides: Record<string, string>): string {
 const modUrl = (rel: string) => JSON.stringify(pathToFileURL(join(ROOT, rel)).href);
 
 test("env surface: HUNCH_MAX_PRIOR_SHIFT and HUNCH_PRIOR_SHIFT_SCALE bound how far a dead hit's rank drops", () => {
-  const script = `
+  const rank = (dead: boolean, env: Record<string, string>): string => runInChild(`
     const { HunchStore } = await import(${modUrl("src/store/hunchStore.ts")});
     const s = Object.create(HunchStore.prototype);
     s.recs = () => []; s.staleDecisionIds = () => new Set();
-    s.priorMeta = (ref) => (ref === "h0" ? { dead: true, provenance: [] } : null);
+    s.priorMeta = (ref) => (ref === "h0" ? { dead: ${dead}, provenance: [] } : null);
     const hits = Array.from({ length: 8 }, (_, i) => ({ ref: "h" + i, kind: "symbols", title: "", snippet: "", score: 1 }));
     console.log(JSON.stringify(s.rerankByPriors(hits, 10, undefined, ".").findIndex((h) => h.ref === "h0")));
-  `;
-  assert.equal(runInChild(script, {}), "3", "defaults clamp the shift at 4 positions (rank 0 lands behind three hits)");
-  assert.equal(runInChild(script, { HUNCH_MAX_PRIOR_SHIFT: "2" }), "1");
-  assert.equal(runInChild(script, { HUNCH_PRIOR_SHIFT_SCALE: "1" }), "0", "a tiny scale never moves the hit a whole position");
+  `, env);
+  assert.equal(rank(true, {}), "5", "a dead hit drops the clamp (4) plus HUNCH_DEAD_PRIOR_SHIFT (2)");
+  assert.equal(rank(true, { HUNCH_DEAD_PRIOR_SHIFT: "0" }), "3", "0 restores the flat clamp");
+  assert.equal(rank(true, { HUNCH_MAX_PRIOR_SHIFT: "2" }), "3");
+  assert.equal(rank(false, {}), "2", "a live unconfirmed hit is shifted by the scaled prior");
+  assert.equal(rank(false, { HUNCH_PRIOR_SHIFT_SCALE: "1" }), "0", "a tiny scale never moves the hit a whole position");
 });
 
 test("env surface: HUNCH_SIG_MIN_LINES sets the churn threshold for model synthesis", () => {
