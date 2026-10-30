@@ -126,8 +126,10 @@ function workerLimit(value: number | undefined): number {
 }
 
 function replayWorkerUrl(): URL {
-  const source = new URL("./replayWorker.ts", import.meta.url);
-  return existsSync(fileURLToPath(source)) ? source : new URL("./replayWorker.js", import.meta.url);
+  // Via ../constitution/ so the published bundle (dist/cli/index.bundle.js)
+  // still finds the unbundled dist/constitution/replayWorker.js.
+  const source = new URL("../constitution/replayWorker.ts", import.meta.url);
+  return existsSync(fileURLToPath(source)) ? source : new URL("../constitution/replayWorker.js", import.meta.url);
 }
 
 function replayWorkerArgs(taskFile: string, resultFile: string): string[] {

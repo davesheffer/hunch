@@ -226,7 +226,7 @@ export function scheduleUpdateCheck(opts: ScheduleUpdateCheckOptions = {}): Upda
     }
     if (!claimed) return notice;
 
-    const workerFile = opts.workerFile ?? fileURLToPath(import.meta.url);
+    const workerFile = opts.workerFile ?? workerModuleFile();
     try {
       const child = (opts.spawnImpl ?? spawn)(process.execPath, [workerFile, WORKER_FLAG, cacheFile], {
         detached: true,
@@ -277,9 +277,16 @@ export function formatUpdateNotice(result: UpdateCheckResult): string {
   );
 }
 
+/** This module's own file. Spelled relative to `../core/` because the published
+ * CLI runs it from the bundle (dist/cli/index.bundle.js); the worker must start
+ * the small unbundled dist/core/updatecheck.js, not re-enter the whole CLI. */
+function workerModuleFile(): string {
+  return fileURLToPath(new URL(`../core/updatecheck.${import.meta.url.endsWith(".ts") ? "ts" : "js"}`, import.meta.url));
+}
+
 function isWorkerInvocation(): boolean {
   if (process.argv[2] !== WORKER_FLAG || !process.argv[1]) return false;
-  try { return resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url)); }
+  try { return resolve(process.argv[1]) === resolve(workerModuleFile()); }
   catch { return false; }
 }
 
