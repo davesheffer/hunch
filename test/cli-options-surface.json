@@ -804,6 +804,78 @@
       }
     ]
   },
+  "derive-rules --accept": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --accept-changes": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
+  "derive-rules --check": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
+  "derive-rules --drop": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --dry-run": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
+  "derive-rules --expect": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --private": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules on a subtree with no tracked markdown fails clearly"
+      }
+    ]
+  },
+  "derive-rules --proposals": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --propose": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
   "dna context --json": {
     "tests": [
       {

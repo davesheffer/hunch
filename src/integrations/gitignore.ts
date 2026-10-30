@@ -38,6 +38,8 @@ const ENTRIES = [
   ".hunch/pending-commit-repairs.json",
   // Tombstones for matches rejected via `--drop` — clone-local, never committed.
   ".hunch/dropped-commit-repairs.json",
+  // `hunch derive-rules --propose` drafts awaiting human review — clone-local, never committed.
+  ".hunch/pending-doc-rules.json",
   // A local PRIVATE overlay store (HUNCH_PRIVATE_DIR) for sensitive memory — never
   // committed. This is the conventional in-repo path; point the env elsewhere for a
   // fully separate private repo.
