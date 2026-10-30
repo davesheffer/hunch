@@ -135,6 +135,26 @@ test("delivery envelope: abstains from low-authority decisions when given only a
   assert.doesNotMatch(envelope.text, /dec_file_only/);
 });
 
+test("delivery envelope: a task-selected low-authority decision is delivered on a file-only target", () => {
+  const weak = fixtureDecision(
+    "dec_selected",
+    "src/x.ts",
+    "Centralize an adjacent helper used by this file.",
+    modelProvenance(0.65),
+  );
+  const floor = fixtureDecision("dec_floor", "src/x.ts", "Below the advisory floor.", modelProvenance(0.4));
+  const envelope = buildDeliveryEnvelope(context({ decisions: [weak, floor] as never }), {
+    symbols: [{ id: "sym_x", name: "x", file: "src/x.ts" }],
+    commitReachability: () => "reachable",
+    taskSelected: new Set(["dec_selected", "dec_floor"]),
+  });
+
+  assert.deepEqual(envelope.delivered.map((item) => item.record_id), ["dec_selected"]);
+  assert.match(envelope.text, /dec_selected/);
+  // Selection answers relevance, never authority: the confidence floor still holds.
+  assert.deepEqual(envelope.omitted.map((item) => [item.record_id, item.reason]), [["dec_floor", "low-confidence"]]);
+});
+
 test("delivery envelope: a low-authority decision is delivered when task evidence matches", () => {
   const relevant = {
     ...fixtureDecision(
