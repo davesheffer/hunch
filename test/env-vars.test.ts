@@ -13,6 +13,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { __resetAvailabilityCacheForTests, resolveSynthesisProvider } from "../src/synthesis/provider.js";
+import { readAgentCliConfig } from "../src/synthesis/cliAdapter.js";
 import { compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations } from "../src/core/pipeline.js";
 
 const IS_WIN = process.platform === "win32";
@@ -186,7 +187,10 @@ test("HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing
       traversal: join(dir, "..", "..", "..", "..", "..", "..", "..", "..", "package.json"),
     };
     for (const [label, path] of Object.entries(cases)) {
-      await assert.rejects(resolveFor({ HUNCH_CLI_CONFIG: path }), Error, label);
+      assert.throws(() => readAgentCliConfig(path), Error, label);
+      const resolved = await resolveFor({ HUNCH_CLI_CONFIG: path });
+      assert.equal(resolved.provider.name, "deterministic", label);
+      assert.equal(resolved.source, "unavailable-initiator", label);
     }
     assert.equal(existsSync(marker), false, "no adapter from a refused config was ever spawned");
   });
@@ -203,7 +207,9 @@ test("HUNCH_REVIEW_CLI_CONFIG is honoured as the adapter config fallback, and HU
     assert.equal(review.source, "initiator");
     const cliWins = await resolveFor({ HUNCH_CLI_CONFIG: other, HUNCH_REVIEW_CLI_CONFIG: good });
     assert.equal(cliWins.source, "unavailable-initiator", "HUNCH_CLI_CONFIG shadows the review config");
-    await assert.rejects(resolveFor({ HUNCH_REVIEW_CLI_CONFIG: join(dir, "missing.json") }), Error);
+    const missing = await resolveFor({ HUNCH_REVIEW_CLI_CONFIG: join(dir, "missing.json") });
+    assert.equal(missing.provider.name, "deterministic");
+    assert.equal(missing.source, "unavailable-initiator");
   });
 });
 

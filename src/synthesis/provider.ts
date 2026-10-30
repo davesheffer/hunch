@@ -978,7 +978,14 @@ export async function resolveSynthesisProvider(opts: ProviderSelectionOptions = 
     let provider = providers.find(p => p.name === origin.provider);
     const config = opts.cliConfig ?? env.HUNCH_CLI_CONFIG ?? env.HUNCH_REVIEW_CLI_CONFIG;
     if (!provider && !opts.providers && config) {
-      const adapters = readAgentCliConfig(config);
+      let adapters: AgentCliAdapter[];
+      try {
+        adapters = readAgentCliConfig(config);
+      } catch {
+        // Parser errors can contain private config values; never echo them.
+        console.warn("hunch: unable to read CLI adapter config; using deterministic synthesis.");
+        return { provider: fallback, source: "unavailable-initiator", preference: "auto", statuses, initiator: origin.provider };
+      }
       if (adapters.some(a => a.name === origin.provider)) provider = new AdapterCliProvider(origin.provider, adapters);
     }
     if (provider && await isAvailable(provider)) {
