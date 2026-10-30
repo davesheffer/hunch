@@ -2402,6 +2402,15 @@ export class HunchStore {
     return undefined;
   }
 
+  /** Reviewed landscape slice for `target`. A relationship only counts when both
+   *  ends are readable resources, so with none there is nothing to connect and the
+   *  edges file (the code graph: tens of MB on a large repo) is not loaded at
+   *  all. The pre-edit hook calls this on every edit. */
+  private landscapeFor(target: string, canRead: (record: unknown) => boolean = () => true) {
+    const resources = this.recs("resources").filter(canRead);
+    return selectReviewedLandscape(resources, resources.length ? this.recs("edges").filter(canRead) : [], target);
+  }
+
   /** All edges (for graph export). */
   allEdges(): Edge[] {
     return this.recs("edges");
@@ -2462,9 +2471,7 @@ export class HunchStore {
       // Landscape records do not yet carry a valid-time window. A historical
       // query therefore withholds them instead of mixing current graph state
       // into an as-of memory envelope.
-      landscape: opts.asOf
-        ? undefined
-        : selectReviewedLandscape(this.recs("resources").filter(opts.canRead ?? (() => true)), this.recs("edges").filter(opts.canRead ?? (() => true)), target),
+      landscape: opts.asOf ? undefined : this.landscapeFor(target, opts.canRead),
       budget_tokens: budget,
     };
     return ctx;
