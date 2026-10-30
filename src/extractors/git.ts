@@ -944,7 +944,8 @@ function isDerivedStoreArtifact(relativeName: string): boolean {
     || relativeName === "write.lock"
     // Clone-local scratch that must never ride a public flush or an overlay force-add into shared memory.
     || relativeName === "pending-commit-repairs.json"
-    || relativeName === "dropped-commit-repairs.json";
+    || relativeName === "dropped-commit-repairs.json"
+    || relativeName === "pending-doc-rules.json";
 }
 
 /** Enumerate ordinary JSON files already contained under an overlay. Push-capable
