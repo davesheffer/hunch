@@ -68,7 +68,7 @@ import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
-import { parseDocRules, planDocRules, docRulePlanIsDirty, withoutMarkedRules, recordedDocRuleKey, recordedDocRuleSource, type DocRule, type DocRuleIssue } from "../extractors/docRules.js";
+import { parseDocRules, planDocRules, docRulePlanIsDirty, withoutMarkedRules, recordedDocRuleKey, recordedDocRuleSource, recordedDocRuleHash, docRuleHash, type DocRule, type DocRuleIssue } from "../extractors/docRules.js";
 import { trackedFiles } from "../extractors/git.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
 import { proposalPrompt, validateProposals, readProposalQueue, writeProposalQueue, enqueueProposals, acceptProposal, type DocRuleProposal } from "../core/docRuleProposals.js";
@@ -2353,7 +2353,10 @@ program
       for (const { rule, next } of plan.create) console.log(`  + ${next.id} [${next.severity}] ${rule.file}:${rule.line} — ${next.statement}  (scope: ${next.scope.join(", ")})`);
       for (const { rule, next } of plan.held) {
         const vanished = plan.orphaned.filter((c) => !recordedDocRuleKey(c) && recordedDocRuleSource(c) === rule.file).map((c) => c.id).join(", ");
-        console.log(`  ~ ${next.id} ${rule.file}:${rule.line} new rule while ${vanished} vanished from the same doc — likely an edit; add id=<key> to track it, or run with --accept-changes to add it`);
+        const renamedFrom = plan.orphaned.find((c) => recordedDocRuleHash(c) === docRuleHash(rule));
+        const src = renamedFrom && recordedDocRuleSource(renamedFrom);
+        if (src && src !== rule.file) console.log(`  ~ ${next.id} ${rule.file}:${rule.line} probably renamed from ${src} (same rule text as orphaned ${renamedFrom!.id}) — add id=<key> to track it, or run with --accept-changes to add it and then retire the old one`);
+        else console.log(`  ~ ${next.id} ${rule.file}:${rule.line} new rule while ${vanished} vanished from the same doc — likely an edit; add id=<key> to track it, or run with --accept-changes to add it`);
       }
       for (const { rule, next, from } of plan.moved) console.log(`  → ${next.id} source moved${from && from !== rule.file ? ` from ${from}` : ""} to ${rule.file}:${rule.line}`);
       for (const { rule, next, prev } of plan.changed) {
@@ -2364,13 +2367,14 @@ program
         if (prev.type !== next.type) console.log(dim(`      type: ${prev.type} → ${next.type}`));
       }
       for (const c of plan.orphaned) console.log(`  ? ${c.id} marker gone from its doc — retire with \`hunch retire-constraint ${c.id}\` or restore the marker: ${c.statement}`);
+      for (const c of plan.malformed) console.log(`  ? ${c.id} marker present but malformed (see issue above) — fix the marker: ${c.statement}`);
       for (const { rule, reason } of plan.conflicts) console.log(`  ✗ ${rule.file}:${rule.line} ${reason}`);
 
       const dirty = docRulePlanIsDirty(plan);
       if (opts.check) {
         if (dirty) {
           process.exitCode = 1;
-          console.log(`✗ docs and graph disagree: ${plan.create.length} new, ${plan.held.length} held, ${plan.changed.length} changed, ${plan.orphaned.length} orphaned, ${plan.conflicts.length} conflict(s), ${plan.issues.length} malformed — run \`hunch derive-rules\``);
+          console.log(`✗ docs and graph disagree: ${plan.create.length} new, ${plan.held.length} held, ${plan.changed.length} changed, ${plan.orphaned.length} orphaned, ${plan.malformed.length} malformed-source, ${plan.conflicts.length} conflict(s), ${plan.issues.length} malformed — run \`hunch derive-rules\``);
         } else console.log(`✓ ${rules.length} doc rule(s) in sync with the graph`);
         return;
       }
@@ -2397,6 +2401,9 @@ program
           process.exitCode = 1;
         }
       }
+      // Conflicts and malformed markers are unresolved disagreements: the other records
+      // are still written above, but the run must not look clean to a script.
+      if (plan.conflicts.length || plan.issues.length) process.exitCode = 1;
       if (written.size) {
         store.reindex();
         if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
@@ -2405,7 +2412,7 @@ program
       const applied = opts.acceptChanges ? plan.changed.filter((x) => written.has(x.next.id)).length : 0;
       const created = plan.create.filter((x) => written.has(x.next.id)).length + (opts.acceptChanges ? plan.held.filter((x) => written.has(x.next.id)).length : 0);
       console.log(`✓ ${created} new, ${applied} updated, ${plan.moved.length} moved, ${plan.unchanged.length} unchanged${opts.private ? " [private overlay]" : ""}`);
-      if (plan.changed.length > applied || (!opts.acceptChanges && plan.held.length) || plan.orphaned.length || plan.conflicts.length) console.log(dim("  pending items above need a human call; nothing was applied for them."));
+      if (plan.changed.length > applied || (!opts.acceptChanges && plan.held.length) || plan.orphaned.length || plan.malformed.length || plan.conflicts.length) console.log(dim("  pending items above need a human call; nothing was applied for them."));
       if (writes.some((c) => c.severity === "blocking" && c.scope.includes("**"))) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
       if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
     } finally {

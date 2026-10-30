@@ -443,3 +443,65 @@ test("hunch derive-rules rejects contradictory flag combinations", () => {
     cleanupDir(root);
   }
 });
+
+test("parseDocRules: an unclosed marker never swallows the next one; `>` inside an attribute is not silent", () => {
+  const { rules, issues } = parseDocRules("<!-- hunch:rule scope=a/**\nfirst body\n\n<!-- hunch:rule scope=b/** id=ok -->\nSecond body.\n", "A.md");
+  assert.deepEqual(rules.map((r) => [r.line, r.key, r.statement]), [[4, "ok", "Second body."]]);
+  assert.deepEqual(issues.map((i) => [i.line, /unterminated/.test(i.detail)]), [[1, true]]);
+  const gt = parseDocRules('<!-- hunch:rule scope="a>b/**" id=gt -->\nBody.\n', "A.md");
+  assert.ok(gt.rules.length + gt.issues.length > 0, "never silent");
+  assert.deepEqual(gt.rules.map((r) => r.key), ["gt"]);
+  // an example in a fence is still skipped by the lenient pass
+  assert.deepEqual(parseDocRules("```md\n<!-- hunch:rule scope=a/**\n```\n", "A.md").issues, []);
+});
+
+test("parseDocRules: the statement stops at a code fence or an HTML closing tag", () => {
+  const a = parseDocRules("<!-- hunch:rule scope=a/** id=f -->\n```js\nconst x = 1;\n```\n", "A.md");
+  assert.deepEqual(a.rules, []);
+  assert.deepEqual(a.issues.map((i) => i.detail), ["no paragraph follows the marker"]);
+  const b = parseDocRules("<details>\n\n<!-- hunch:rule scope=a/** id=d -->\nKeep it small.\n</details>\n", "A.md");
+  assert.deepEqual(b.rules.map((r) => r.statement), ["Keep it small."]);
+  const c = parseDocRules("<!-- hunch:rule scope=a/** id=c -->\nKeep it small.\n```js\ncode\n```\n", "A.md");
+  assert.deepEqual(c.rules.map((r) => r.statement), ["Keep it small."]);
+});
+
+test("planDocRules: a renamed doc's key-less rules are held (not duplicated); a malformed source doc's orphan is not offered for retirement", () => {
+  const old = docRuleToConstraint(rule({ file: "docs/old.md" }), undefined, NOW);
+  const plan = planDocRules({ rules: [rule({ file: "docs/new.md" })], issues: [] }, [old], () => true, new Set(), NOW);
+  assert.equal(plan.create.length, 0);
+  assert.deepEqual(plan.held.map((x) => x.rule.file), ["docs/new.md"]);
+  assert.deepEqual(plan.orphaned.map((c) => c.id), [old.id]);
+  const bad = planDocRules({ rules: [], issues: [{ file: "docs/old.md", line: 3, detail: "severity must be one of advisory|warning|blocking" }] }, [old], () => true, new Set(), NOW);
+  assert.deepEqual(bad.orphaned, []);
+  assert.deepEqual(bad.malformed.map((c) => c.id), [old.id]);
+  assert.equal(docRulePlanIsDirty(bad), true);
+});
+
+test("hunch derive-rules: rename holds until --accept-changes; malformed marker is not a retire hint; write mode exits 1 on issues", () => {
+  const { root, run, git, doc, conFiles } = mkRepo("hunch-docrules-rename-");
+  try {
+    mkdirSync(join(root, "docs"));
+    doc("docs/old.md", "# G\n\n<!-- hunch:rule scope=src/** -->\nValidate input.\n");
+    let r = run(".");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(conFiles(), 1);
+
+    git("mv", "docs/old.md", "docs/new.md");
+    r = run(".");
+    assert.match(r.stdout, /probably renamed from docs\/old\.md/);
+    assert.equal(conFiles(), 1, "rename is held, not duplicated");
+    assert.equal(run(".", "--check").status, 1);
+    r = run(".", "--accept-changes");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(conFiles(), 2);
+
+    doc("docs/new.md", "# G\n\n<!-- hunch:rule scope=src/** severity=high -->\nValidate input.\n");
+    r = run(".");
+    assert.equal(r.status, 1, "write mode exits 1 when a marker is malformed");
+    assert.match(r.stdout, /marker present but malformed/);
+    assert.doesNotMatch(r.stdout.match(/^.*malformed.*$/gm)!.join(" "), /retire/);
+    assert.equal(run(".", "--check").status, 1);
+  } finally {
+    cleanupDir(root);
+  }
+});

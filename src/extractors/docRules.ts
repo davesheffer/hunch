@@ -19,7 +19,10 @@ import { constraintId } from "../core/ids.js";
 import { markdownExampleRanges } from "../core/docanchors.js";
 import { normalizeEol } from "../core/eol.js";
 
-const MARKER = /<!--\s*hunch:rule\b([^>]*?)-->/g;
+// One line only: a marker missing its `-->` must not swallow the next marker, and a
+// `>` inside an attribute value (scope="a>b/**") is fine.
+const MARKER = /<!--\s*hunch:rule\b([^\n]*?)-->/g;
+const MARKER_OPEN = /<!--\s*hunch:rule\b/g;
 const ATTR = /([a-z]+)=("[^"]*"|\S+)/g;
 const SEVERITIES = ["advisory", "warning", "blocking"] as const;
 const TYPES = ["security", "performance", "correctness", "architecture", "compliance"] as const;
@@ -60,12 +63,15 @@ export function parseDocRules(raw: string, file: string): { rules: DocRule[]; is
   MARKER.lastIndex = 0;
   let m: RegExpExecArray | null;
   let hidden = 0;
+  const consumed: Array<[number, number]> = [];
   while ((m = MARKER.exec(text))) {
     const at = m.index;
+    consumed.push([at, at + m[0].length]);
     if (unclosed && at > unclosed.start) hidden++;
     if (skip.some(([s, e]) => at >= s && at <= e)) continue;
     const line = text.slice(0, at).split("\n").length;
     const issue = (detail: string) => issues.push({ file, line, detail });
+    if (m[1]!.includes("<!--")) { issue("malformed marker: a second `<!--` before the closing `-->`"); continue; }
     const attrs = new Map<string, string>();
     ATTR.lastIndex = 0;
     let a: RegExpExecArray | null;
@@ -86,6 +92,14 @@ export function parseDocRules(raw: string, file: string): { rules: DocRule[]; is
     if (statement.startsWith("<")) { issue("statement looks like raw HTML"); continue; }
     rules.push({ file, line, key, statement, scope, severity: severity as DocRule["severity"], type: type as DocRule["type"] });
   }
+  // Lenient second pass: an opener the strict match did not consume has no `-->` on
+  // its line. Report it rather than letting the rule vanish silently.
+  MARKER_OPEN.lastIndex = 0;
+  while ((m = MARKER_OPEN.exec(text))) {
+    const at = m.index;
+    if (consumed.some(([s, e]) => at >= s && at < e) || skip.some(([s, e]) => at >= s && at <= e)) continue;
+    issues.push({ file, line: text.slice(0, at).split("\n").length, detail: "unterminated hunch:rule marker (no closing `-->` on the same line)" });
+  }
   if (unclosed && hidden) issues.push({ file, line: unclosed.line, detail: `unclosed code fence hides ${hidden} hunch:rule marker(s) below it` });
   return { rules, issues };
 }
@@ -105,7 +119,7 @@ export function withoutMarkedRules(raw: string, file: string): string {
     if (!inline) while (i < lines.length && !unquote(lines[i]!)) i++;
     for (; i < lines.length; i++) {
       const l = unquote(lines[i]!);
-      if (!l || /^#{1,6}\s/.test(l) || /^<!--\s*hunch:/.test(l)) break;
+      if (!l || endsParagraph(l)) break;
       lines[i] = "";
     }
   }
@@ -114,6 +128,10 @@ export function withoutMarkedRules(raw: string, file: string): string {
 
 /** A line without its leading blockquote `>` run (`> `, `>> `). */
 const unquote = (line: string): string => line.trim().replace(/^(?:>\s*)+/, "");
+
+/** A line that ends a marker's paragraph: heading, another hunch marker, a code
+ *  fence, or an HTML closing tag (`</details>`). Takes an already-unquoted line. */
+const endsParagraph = (l: string): boolean => /^#{1,6}\s/.test(l) || /^<!--\s*hunch:/.test(l) || /^(?:`{3,}|~{3,})/.test(l) || /^<\/[a-z]/i.test(l);
 
 /** What is left of the marker's own line, up to the next hunch marker. */
 const markerRemainder = (rest: string): string => rest.replace(/<!--\s*hunch:[\s\S]*$/, "").trim();
@@ -131,7 +149,7 @@ function paragraphAfter(text: string, from: number): string {
   if (!out.length) while (i < lines.length && !unquote(lines[i]!)) i++;
   for (; i < lines.length; i++) {
     const l = unquote(lines[i]!);
-    if (!l || /^#{1,6}\s/.test(l) || /^<!--\s*hunch:/.test(l)) break;
+    if (!l || endsParagraph(l)) break;
     out.push(l);
   }
   return out.join(" ").replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(/\s+/g, " ").trim();
@@ -193,6 +211,9 @@ export interface DocRulePlan {
   changed: Array<{ rule: DocRule; next: Constraint; prev: Constraint }>;
   /** marker removed from (or its doc gone from) a covered path → surface, never auto-retire */
   orphaned: Constraint[];
+  /** orphan-looking, but its source doc has a malformed marker in this run: probably a
+   *  typo in the marker, not a removal → never offered for retirement */
+  malformed: Constraint[];
   /** id clashes with a constraint that did not come from a doc, or lives in the other home */
   conflicts: Array<{ rule: DocRule; existing: Constraint | null; reason: string }>;
   unchanged: DocRule[];
@@ -211,7 +232,7 @@ export function planDocRules(
   otherHomeIds: ReadonlySet<string>,
   now: string,
 ): DocRulePlan {
-  const plan: DocRulePlan = { create: [], held: [], moved: [], changed: [], orphaned: [], conflicts: [], unchanged: [], issues: [...parsed.issues] };
+  const plan: DocRulePlan = { create: [], held: [], moved: [], changed: [], orphaned: [], malformed: [], conflicts: [], unchanged: [], issues: [...parsed.issues] };
   const byId = new Map(existing.map((c) => [c.id, c]));
   const seen = new Map<string, DocRule>();
   for (const rule of parsed.rules) {
@@ -256,13 +277,17 @@ export function planDocRules(
   for (const c of existing) {
     if (c.status !== "active" || !isDocRuleConstraint(c) || seen.has(c.id)) continue;
     const src = recordedDocRuleSource(c);
-    if (src && covers(src)) plan.orphaned.push(c);
+    if (!src || !covers(src)) continue;
+    (parsed.issues.some((i) => i.file === src) ? plan.malformed : plan.orphaned).push(c);
   }
   // An implicit id derives from path + statement, so an edited key-less paragraph
-  // reads as "new rule + vanished rule". Hold such creations for explicit acceptance.
+  // reads as "new rule + vanished rule", and a renamed doc as N of them. Hold such
+  // creations for explicit acceptance: same doc as a vanished key-less rule, or the
+  // same meaning as ANY orphan (a rename).
   const editedDocs = new Set(plan.orphaned.filter((c) => !recordedDocRuleKey(c)).map((c) => recordedDocRuleSource(c)!));
-  if (editedDocs.size) {
-    const held = plan.create.filter((x) => !x.rule.key && editedDocs.has(x.rule.file));
+  const orphanHashes = new Set(plan.orphaned.map(recordedDocRuleHash));
+  if (editedDocs.size || orphanHashes.size) {
+    const held = plan.create.filter((x) => !x.rule.key && (editedDocs.has(x.rule.file) || orphanHashes.has(docRuleHash(x.rule))));
     plan.create = plan.create.filter((x) => !held.includes(x));
     plan.held = held;
   }
@@ -272,5 +297,5 @@ export function planDocRules(
 /** True when the doc and graph disagree in a way a human must settle. A move
  *  (line shift, renamed doc) is provenance-only and never dirties a CI check. */
 export function docRulePlanIsDirty(plan: DocRulePlan): boolean {
-  return !!(plan.create.length || plan.held.length || plan.changed.length || plan.orphaned.length || plan.conflicts.length || plan.issues.length);
+  return !!(plan.create.length || plan.held.length || plan.changed.length || plan.orphaned.length || plan.malformed.length || plan.conflicts.length || plan.issues.length);
 }
