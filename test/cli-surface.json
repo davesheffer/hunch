@@ -1194,6 +1194,14 @@
       }
     ]
   },
+  "sibling-warm": {
+    "tests": [
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "sibling-warm fills the cache the hook then serves, quietly and with exit 0"
+      }
+    ]
+  },
   "sync": {
     "tests": [
       {

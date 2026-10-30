@@ -157,7 +157,7 @@ import { pendingEscalations, policyEscalations, commitRepairEscalations, actiona
 import { premiseEscalations } from "../core/premises.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
-import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
+import { SIBLING_HEADING, functionBodyHash, siblingGrounding, warmSiblingCache } from "../core/siblingfix.js";
 import { refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
 import { compareCandidates } from "../core/compare.js";
 import { compareCodeUnits } from "../core/canonicalOrder.js";
@@ -258,7 +258,7 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
 // (`hook` silently: its stdout is the agent's context). The merge drivers still
 // run: a leftover driver that exits without writing %A would let git drop `theirs`.
 const OPT_OUT_ALLOWED = new Set(["uninstall", "doctor", "help", "merge-driver", "merge-driver-grounding"]);
-const OPT_OUT_QUIET = new Set(["hook", "sync", "check", "grounding", "repair-provenance", "workspaces"]);
+const OPT_OUT_QUIET = new Set(["hook", "sync", "check", "grounding", "repair-provenance", "workspaces", "sibling-warm"]);
 /** Locations a command writes to (#488), keyed by command path: an opted-out repository
  *  must never receive them, so their repository is gated IN ADDITION to the cwd's.
  *  `base` is what the command itself resolves a relative value against: the cwd's
@@ -4942,6 +4942,18 @@ program
     }
   });
 
+// Internal: the detached worker the pre-edit hook spawns on a sibling-cache miss.
+program
+  .command("sibling-warm", { hidden: true })
+  .description("Internal: compute and cache sibling-fix lessons for one file (background worker; silent, always exits 0).")
+  .argument("<file>", "repo-relative file")
+  .action((file: string) => {
+    // HEAD alone, no store: storeFor() can pull the team overlay over the
+    // network and take its lock, a side effect an edit hook must never start.
+    // The HEAD inventory already supplies the candidates; indexed names only add.
+    try { warmSiblingCache(findRoot(), file, []); } catch { /* silent */ }
+  });
+
 program
   .command("hook")
   .description("Agent-agnostic hook handler: normalizes Claude, VS Code, Cursor, Windsurf, and Antigravity events into Hunch context and strict policy checks. Reads hook JSON on stdin.")
@@ -7345,7 +7357,8 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
   // Sibling fixes: a same-shaped function elsewhere was fixed and this copy
   // never was — the concrete lesson a scoped constraint cannot carry.
   const siblings = siblingGrounding(root, target, store.recs("symbols"),
-    ctx.constraints.filter((c) => c.severity === "blocking" && c.scope.some((g) => pathMatchesGlob(target, g))).map((c) => ({ id: c.id, statement: c.statement })));
+    ctx.constraints.filter((c) => c.severity === "blocking" && c.scope.some((g) => pathMatchesGlob(target, g))).map((c) => ({ id: c.id, statement: c.statement })),
+    { cacheOnly: true });
   // Remember what was delivered, so the first check the agent runs can follow
   // up if the function is still untouched (pipeline.ts lessonReminder).
   if (siblings.lessons.length && evt.session_id && pipelineEnabled()) {
