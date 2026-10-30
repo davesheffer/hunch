@@ -7401,6 +7401,7 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
     components: store.recs("components"),
     decisionCorpus: store.recs("decisions"),
     supplements,
+    ...(selected ? { taskSelected: selected } : {}),
   });
   // Outside the envelope's budget on purpose: the lesson is a code change, not a
   // one-line supplement, and memory records must not crowd it out.
