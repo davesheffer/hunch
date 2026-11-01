@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { verificationLauncherFor } from "../src/mcp/taskReportTools.js";
 import { runningNodeOnPath, verificationLauncher, verificationLauncherFor as fromCore } from "../src/core/verifyLauncher.js";
 import { devMergeDriverShell, mergeDriverShell, resolveInvocation } from "../src/cli/invocation.js";
+import { cleanupDir } from "./fixtures.js";
 
 test("the verification launcher never resolves tsx on the published path, where it is not installed (#261)", () => {
   const missing = (specifier: string): string => { throw Object.assign(new Error(`Cannot find package '${specifier}'`), { code: "ERR_MODULE_NOT_FOUND" }); };
@@ -86,7 +87,7 @@ test("the Windows hint is PowerShell-quoted and says how to use it in a POSIX sh
 
 test("bare node counts as the running node only when it is the first node on PATH", t => {
   const base = mkdtempSync(join(tmpdir(), "hunch-nodepath-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  t.after(() => cleanupDir(base));
   // Mixed case: a case-sensitive filesystem must still find the entry's node.
   const mine = join(base, "NodeJS"), other = join(base, "nvm"), empty = join(base, "empty"), bin = join(base, "bin");
   for (const d of [mine, other, empty, bin]) mkdirSync(d);
