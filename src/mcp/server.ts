@@ -1,5 +1,6 @@
 import { conventionSupplements } from '../core/conventionDelivery.js';
 import { fieldCitationText } from "../core/fieldProvenance.js";
+import { canonicalJson } from "../constitution/canonical.js";
 import { siblingGrounding } from "../core/siblingfix.js";
 import type { DerivedState } from "../core/stateRecords.js";
 /**
@@ -1007,12 +1008,13 @@ const clipForPrompt = (s: string, max = 400): string => (s.length > max ? `${s.s
 
 /** Whether a re-record changes what a human signed: every field except bookkeeping
  *  (provenance, date, valid_from). Fails closed: a field added to Decision later counts
- *  as substance until it is named here. Absent, null and empty-array values are equal. */
+ *  as substance until it is named here. Absent, null and empty-array values are equal;
+ *  compared as canonical JSON, so nested key order never counts (#460). */
 const DECISION_BOOKKEEPING = new Set(["provenance", "date", "valid_from"]);
 export function decisionSubstanceChanged(before: Decision, after: Decision): boolean {
   const norm = (v: unknown): unknown => (v === undefined || (Array.isArray(v) && v.length === 0) ? null : v);
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => !DECISION_BOOKKEEPING.has(k)).sort();
-  const substance = (d: Decision) => JSON.stringify(keys.map((k) => [k, norm((d as Record<string, unknown>)[k])]));
+  const substance = (d: Decision) => canonicalJson(keys.map((k) => [k, norm((d as Record<string, unknown>)[k])]));
   return substance(before) !== substance(after);
 }
 
