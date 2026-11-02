@@ -181,7 +181,7 @@
       },
       {
         "file": "test/env-vars.test.ts",
-        "title": "HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing and traversal paths are refused before any adapter runs"
+        "title": "HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing and traversal paths fall back to deterministic with a warning before any adapter runs"
       }
     ]
   },

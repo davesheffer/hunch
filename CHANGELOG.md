@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.48.1 — 2026-11-02
+
+- **`task verify` hints parse in PowerShell and Git Bash.** On Windows the prompt hook printed the verify command as `& '<node.exe>' '<cli>' task verify …`, and a leading `&` is a parse error in Git Bash, the shell Claude Code's Bash tool runs. When the first `node` on `PATH` is the running Node, the hint is now `node '<cli>' task verify …`, which both shells read the same way; otherwise the previous form is kept. In a paired benchmark, Bash parse errors went from 6 to 0 and turns per session from 9.3 to 7.5 (#574).
+- **Re-recording a human-confirmed decision is a no-op when only nested key order differs.** The substance check compared nested objects as raw JSON, so the same content with keys in another order counted as a change and the write was refused. It now compares canonical JSON (#575, fixes #460).
+- **A missing or malformed `HUNCH_CLI_CONFIG` falls back to deterministic synthesis.** A bad `HUNCH_CLI_CONFIG`, `HUNCH_REVIEW_CLI_CONFIG` or `--cli-config` made synthesis fail with no adapter run. It now uses the deterministic local provider and `hunch doctor` prints why (#576, fixes #508).
+- Fixed a macOS-only flake in the `task verify` output-hash test: the test's child process could exit before its own output was written (#577, fixes #514).
+
 ## 1.48.0 — 2026-10-29
 
 - **Relicensed to the Functional Source License (FSL-1.1-ALv2).** You can use, modify and run Hunch for your own work, internal or commercial; you can't offer it to others in a commercial product or service that competes with Hunch. Each release converts to Apache-2.0 two years after it ships. Releases before this change keep the license they shipped with (Apache-2.0 from v0.15.2, MIT before that); `clients/python` stays Apache-2.0 and `vscode-extension` stays MIT. See `LICENSE` and `NOTICE` (#556).

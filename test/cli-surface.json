@@ -187,6 +187,14 @@
       }
     ]
   },
+  "derive-rules": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
   "dna": {
     "tests": [
       {
