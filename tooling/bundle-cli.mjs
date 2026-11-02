@@ -39,8 +39,16 @@ await build({
   // no require, so give the bundle one.
   banner: { js: "import { createRequire as __hunchCreateRequire } from \"node:module\"; const require = __hunchCreateRequire(import.meta.url);" },
   legalComments: "inline",
+  // Keep module paths as seen from the project. Resolving a symlinked
+  // node_modules (the Matrix release verifier links the workspace's into its
+  // clone) to its real path changes every `// <path>` comment, so the clone's
+  // bundle would differ from the tagged workspace's and fail the release.
+  preserveSymlinks: true,
   logLevel: "warning",
 });
+if (/^\/\/ \.\.\//m.test(readFileSync(`${bundle}.tmp`, "utf8"))) {
+  throw new Error("bundle references a module outside the project; the build would not be byte-reproducible");
+}
 renameSync(`${bundle}.tmp`, bundle);
 
 // The gate must run before the bundle is even linked (the bundle imports
