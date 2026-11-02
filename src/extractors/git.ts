@@ -46,16 +46,28 @@ export function foreignRepoEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 function machineCommitEnv(repoRoot: string, source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env = foreignRepoEnv(source);
-  const configured = (key: "user.name" | "user.email"): string => {
-    try {
-      return execFileSync("git", ["-C", repoRoot, "config", "--get", key], {
-        encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: 2_000,
-      }).trim();
-    } catch { return ""; }
-  };
-  const name = configured("user.name");
-  const email = configured("user.email");
+  return applyMachineIdentity(repoRoot, foreignRepoEnv(source));
+}
+
+/** Fill a fallback author/committer into `env` (in place) when the repo has no
+ *  identity configured. Only a commit needs it, so callers that may stage
+ *  nothing apply it right before committing: one `git config` spawn, not two
+ *  on every flush. */
+function applyMachineIdentity(repoRoot: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  let listed = "";
+  try {
+    listed = execFileSync("git", ["-C", repoRoot, "config", "--get-regexp", "^user\\.(name|email)$"], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: 2_000,
+    });
+  } catch { /* exit 1: neither key is set */ }
+  // `--get` answers with the last value of a multi-valued key; keep the last line per key too.
+  const values = new Map<string, string>();
+  for (const line of listed.split(/\r?\n/)) {
+    const match = /^(user\.(?:name|email))\s+(.*)$/i.exec(line);
+    if (match) values.set(match[1]!.toLowerCase(), match[2]!.trim());
+  }
+  const name = values.get("user.name") ?? "";
+  const email = values.get("user.email") ?? "";
   if (!env.GIT_AUTHOR_NAME && !name) env.GIT_AUTHOR_NAME = "Hunch Memory";
   if (!env.GIT_COMMITTER_NAME && !name) env.GIT_COMMITTER_NAME = "Hunch Memory";
   if (!env.GIT_AUTHOR_EMAIL && !email) env.GIT_AUTHOR_EMAIL = "hunch-memory@localhost";
@@ -667,7 +679,8 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
   if (firstLockAttempt.state !== "acquired"
     && !waitForCommitLockHandoff(lock, firstLockAttempt, CAPTURE_LOCK_HANDOFF_MS)) return null;
   try {
-    const env = machineCommitEnv(hunchDir, {
+    // Identity is applied below, once there is a memory commit to make.
+    const env = foreignRepoEnv({
       ...process.env,
       HUNCH_SYNC: "1",
       GIT_TERMINAL_PROMPT: "0",
@@ -792,6 +805,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     const hooksDir = disabledHooksDir(hunchDir);
     if (!hooksDir) return null;
     const commitPaths = [...memoryPaths, ...(opts.alsoStage ?? [])];
+    applyMachineIdentity(hunchDir, env);
     // One retry after healing a stranded index.lock (issue #53): a lock left by
     // a timeout-killed or crashed git otherwise fails EVERY later flush fast and
     // silently — captures keep reporting success while nothing commits.
