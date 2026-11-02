@@ -223,6 +223,8 @@ export interface ProviderResolution {
   initiator?: string | null;
   preference: SynthPreference;
   statuses: ProviderStatus[];
+  /** Set when a configured input was unusable and selection degraded to the deterministic fallback. */
+  warning?: string;
 }
 
 export interface ProviderSelectionOptions {
@@ -976,15 +978,21 @@ export async function resolveSynthesisProvider(opts: ProviderSelectionOptions = 
   const origin = currentInitiator(env);
   if (origin.provider) {
     let provider = providers.find(p => p.name === origin.provider);
+    let warning: string | undefined;
     const config = opts.cliConfig ?? env.HUNCH_CLI_CONFIG ?? env.HUNCH_REVIEW_CLI_CONFIG;
     if (!provider && !opts.providers && config) {
-      const adapters = readAgentCliConfig(config);
-      if (adapters.some(a => a.name === origin.provider)) provider = new AdapterCliProvider(origin.provider, adapters);
+      // A missing/malformed adapter config must degrade to local analysis, never fail synthesis closed.
+      try {
+        const adapters = readAgentCliConfig(config);
+        if (adapters.some(a => a.name === origin.provider)) provider = new AdapterCliProvider(origin.provider, adapters);
+      } catch (err) {
+        warning = `CLI adapter config ${config} is unusable (${err instanceof Error ? err.message : String(err)}); using deterministic analysis.`;
+      }
     }
     if (provider && await isAvailable(provider)) {
       return { provider, source: "initiator", preference: "auto", statuses, initiator: origin.provider };
     }
-    return { provider: fallback, source: "unavailable-initiator", preference: "auto", statuses, initiator: origin.provider };
+    return { provider: fallback, source: "unavailable-initiator", preference: "auto", statuses, initiator: origin.provider, ...(warning ? { warning } : {}) };
   }
   // An MCP request with unknown identity must not inherit the launching terminal's preferences.
   if (origin.source === "ambiguous" || origin.source === "client" || env.HUNCH_INITIATOR === "unknown") {
