@@ -870,6 +870,40 @@ export function isGitCleanPath(root: string, rel: string): boolean {
   }
 }
 
+/** isGitCleanPath for several paths in one `git status`: the subset of `rels` that is
+ *  tracked and unchanged. Porcelain paths are toplevel-relative, so an entry marks dirty
+ *  every requested path it ends with (two requested paths sharing a suffix may both be
+ *  marked: dirty is the safe answer). */
+export function gitCleanPaths(root: string, rels: readonly string[]): Set<string> {
+  const clean = new Set<string>();
+  if (!rels.length) return clean;
+  let out: string;
+  try {
+    out = execFileSync("git", ["-C", root, "status", "--porcelain", "-z", "--", ...rels], {
+      encoding: "utf8",
+      env: foreignRepoEnv(process.env),
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return clean;
+  }
+  const fold = process.platform === "win32" || process.platform === "darwin" ? (s: string) => s.toLowerCase() : (s: string) => s;
+  const dirty: string[] = [];
+  const fields = out.split("\0");
+  for (let i = 0; i < fields.length; i++) {
+    const entry = fields[i]!;
+    if (entry.length < 4) continue;
+    dirty.push(fold(entry.slice(3)));
+    // A rename or copy is followed by its source path.
+    if (/[RC]/.test(entry.slice(0, 2))) dirty.push(fold(fields[++i] ?? ""));
+  }
+  for (const rel of rels) {
+    const r = fold(rel.replace(/\\/g, "/"));
+    if (!dirty.some((p) => p === r || p.endsWith(`/${r}`))) clean.add(rel);
+  }
+  return clean;
+}
+
 /** The committed (HEAD) content of a tracked file, or null when the path is
  *  untracked/absent at HEAD or git is unavailable. Used to decide whether a
  *  dirty grounding doc differs from HEAD ONLY inside its generated section
@@ -2013,6 +2047,55 @@ export function checkoutCommonDir(cwd: string): string {
   }
   if (!insideDirectory(cwd, top)) return "";
   return canonicalPath(common);
+}
+
+/** Every directory Git could resolve as `cwd`'s common dir, read from the filesystem
+ *  alone: for each ancestor's `.git` (a directory, or the target a `.git` file names), that
+ *  git dir and its `commondir` target, along both the given and the physical path (Git
+ *  discovers from the physical one). A superset of what checkoutCommonDir can return and
+ *  never a substitute for it: a caller may skip that probe only for a question every
+ *  candidate answers "no" to. null when the layout cannot be read (an unreadable `.git`
+ *  file or `commondir`) or `cwd` lies inside a git dir, where implicit discovery differs. */
+export function commonDirCandidates(cwd: string): string[] | null {
+  const absent = (error: unknown): boolean => {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === "ENOENT" || code === "ENOTDIR";
+  };
+  const starts = [resolve(cwd)];
+  try { starts.push(realpathSync.native(cwd)); } catch { return null; }
+  const out = new Set<string>();
+  for (const start of starts) {
+    if (start.split(/[\\/]/).includes(".git")) return null;
+    for (let dir = start; ; dir = dirname(dir)) {
+      const dotGit = join(dir, ".git");
+      let gitdir = "";
+      try {
+        const stat = statSync(dotGit);
+        if (stat.isDirectory()) gitdir = dotGit;
+        // Git walks on past a `.git` that is neither (and reading a FIFO would block).
+        else if (stat.isFile()) {
+          const named = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(dotGit, "utf8"))?.[1];
+          if (!named) return null;
+          gitdir = resolve(dir, named);
+        }
+      } catch (error) {
+        if (!absent(error)) return null;
+      }
+      if (gitdir) {
+        out.add(gitdir);
+        try {
+          // Git resolves a relative `commondir` against the physical git dir.
+          const named = readFileSync(join(gitdir, "commondir"), "utf8").trim();
+          out.add(resolve(gitdir, named));
+          out.add(resolve(realpathSync.native(gitdir), named));
+        } catch (error) {
+          if (!absent(error)) return null;
+        }
+      }
+      if (dirname(dir) === dir) break;
+    }
+  }
+  return [...out];
 }
 
 /** Whether `path` physically is `dir` or lies below it, by filesystem identity rather than

@@ -26,7 +26,7 @@ import type { Invocation } from "./scaffold.js";
 import type { HookProvider } from "../core/agenthook.js";
 import { isHunchHookCommand } from "./hookmatch.js";
 import { renderHunchSection, stripManagedSection, upsertSection, updateClaudeMd, preserveNewerTemplate } from "./claudemd.js";
-import { headFileContent, isGitCleanPath } from "../extractors/git.js";
+import { gitCleanPaths, headFileContent } from "../extractors/git.js";
 import { parseJsonc } from "../core/jsonc.js";
 import { parse as parseToml } from "smol-toml";
 import { publishedMcpInvocation } from "../cli/invocation.js";
@@ -586,11 +586,14 @@ function generatedDirtOnly(root: string, rel: string, current: string): boolean 
  *  whose USER PROSE differs from HEAD is still left completely untouched. */
 export function refreshCommittableGrounding(root: string, store: HunchStore): string[] {
   const changed: string[] = [];
-  for (const [rel, write] of groundingTargets(root, store)) {
+  const present = groundingTargets(root, store).filter(([rel]) => existsSync(join(root, rel)));
+  // One status for every doc: a spawn each was the bulk of this refresh on every flush.
+  const cleanRels = gitCleanPaths(root, present.map(([rel]) => rel));
+  for (const [rel, write] of present) {
     const file = join(root, rel);
     if (!existsSync(file)) continue;
     const before = readFileSync(file, "utf8");
-    const clean = isGitCleanPath(root, rel);
+    const clean = cleanRels.has(rel);
     if (!clean && !generatedDirtOnly(root, rel, before)) continue;
     write();
     // A doc that was stale-DIRTY must be staged even when the regeneration is a

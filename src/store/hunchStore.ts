@@ -20,6 +20,7 @@ import { selectEmbedder, type Embedder } from "./embedder.js";
 import { JsonStore } from "./jsonStore.js";
 import {
   checkoutCommonDir,
+  commonDirCandidates,
   sameFilesystemEntry,
   gitWorktreeRoot,
   isolatedHeadSha,
@@ -443,7 +444,13 @@ export class HunchStore {
     let perWorktree = perWorktreeState === "plain" ? read(perWorktreeFile) : {};
     // The shared pointer is trusted only in a repository Git reached through this
     // checkout's own `.git` entry, and only with the absolute path setup always writes.
-    const common = checkoutCommonDir(this.paths.root);
+    // Validating costs a git spawn on every store open (every hook); when no directory
+    // Git could resolve as the common dir holds a pointer, the answer is {} either way.
+    const candidates = commonDirCandidates(this.paths.root);
+    const pointerPossible = !candidates || candidates.some((dir) => {
+      try { lstatSync(join(dir, "hunch", "local.json")); return true; } catch { return false; }
+    });
+    const common = pointerPossible ? checkoutCommonDir(this.paths.root) : "";
     let registered: { privateDir?: string; autoCommit?: boolean; mode?: "private" | "shared" } = {};
     if (common) {
       const commonFile = join(common, "hunch", "local.json");
