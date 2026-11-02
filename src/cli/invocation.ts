@@ -50,6 +50,7 @@ export function shellInvocation(inv: Invocation): string {
 export function synthesisStatusLines(resolution: ProviderResolution, env: NodeJS.ProcessEnv): string[] {
   const provider = resolution.provider;
   if (resolution.source === "unavailable-initiator") {
+    if (resolution.warning) return [dim(`            ↳ warning: ${resolution.warning}`)];
     return [dim(`            ↳ initiating provider ${resolution.initiator} is unavailable; using local analysis, never another account.`)];
   }
   if (resolution.source === "unknown-initiator") {

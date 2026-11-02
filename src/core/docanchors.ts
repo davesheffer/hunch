@@ -364,6 +364,15 @@ function inlineSpanRanges(text: string): Array<[number, number]> {
   return ranges;
 }
 
+/** Character ranges a marker scanner must skip — code blocks and inline code
+ *  spans — so other `<!-- hunch:… -->` grammars (doc rules) share one notion of
+ *  "this is an example, not a declaration". `unclosed` is the fence that never
+ *  closes (it hides everything below it). Expects LF-normalized, BOM-free text. */
+export function markdownExampleRanges(text: string): { ranges: Array<[number, number]>; unclosed: { start: number; line: number } | null } {
+  const code = codeRanges(text);
+  return { ranges: [...code.ranges, ...inlineSpanRanges(text)], unclosed: code.unclosed };
+}
+
 /** Parse every hunch:topic marker out of a markdown document. Markers inside
  *  code blocks or inline code spans are examples, not declarations, and are
  *  skipped. */

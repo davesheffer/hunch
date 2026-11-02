@@ -1,8 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { verificationLauncherFor } from "../src/mcp/taskReportTools.js";
-import { verificationLauncher, verificationLauncherFor as fromCore } from "../src/core/verifyLauncher.js";
+import { runningNodeOnPath, verificationLauncher, verificationLauncherFor as fromCore } from "../src/core/verifyLauncher.js";
 import { devMergeDriverShell, mergeDriverShell, resolveInvocation } from "../src/cli/invocation.js";
+import { cleanupDir } from "./fixtures.js";
 
 test("the verification launcher never resolves tsx on the published path, where it is not installed (#261)", () => {
   const missing = (specifier: string): string => { throw Object.assign(new Error(`Cannot find package '${specifier}'`), { code: "ERR_MODULE_NOT_FOUND" }); };
@@ -39,6 +43,14 @@ test("the inline shell hint is quoted for the running platform and always maps o
   // the branch for this platform plus the argv form that holds on either.
   const launcher = verificationLauncher();
   assert.deepEqual(launcher.argv.slice(0, 1), [process.execPath]);
+  // On Windows with this node on PATH the hint starts with a bare `node`, which
+  // parses in both PowerShell and Git Bash; its first argv element is then implied.
+  const neutral = process.platform === "win32" && launcher.shell.startsWith("node '");
+  if (neutral) {
+    assert.equal(launcher.shell, ["node", ...launcher.argv.slice(1).map(a => `'${a}'`)].join(" "));
+    assert.equal(launcher.note, "");
+    return;
+  }
   // Every argv element appears in the hint, in order, and each is quoted.
   for (const part of launcher.argv) assert.ok(launcher.shell.includes(part), `${part} missing from the shell hint`);
   if (process.platform === "win32") {
@@ -57,7 +69,7 @@ test("the inline shell hint is quoted for the running platform and always maps o
 test("the Windows hint is PowerShell-quoted and says how to use it in a POSIX shell, and the POSIX hint needs no note", () => {
   const resolve = () => "file:///tools/tsx/loader.mjs";
   const meta = new URL("../src/core/verifyLauncher.ts", import.meta.url).href;
-  const win = fromCore(meta, resolve, "win32");
+  const win = fromCore(meta, resolve, "win32", false);
   assert.ok(win.shell.startsWith("& '"), "PowerShell needs the call operator before a quoted path");
   // PowerShell escapes a single quote by doubling it, never with a backslash.
   assert.equal(win.shell, `& ${win.argv.map(a => `'${a.replace(/'/g, "''")}'`).join(" ")}`);
@@ -71,6 +83,36 @@ test("the Windows hint is PowerShell-quoted and says how to use it in a POSIX sh
   assert.equal(posix.shell, posix.argv.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" "));
   assert.equal(posix.note, "", "no note where only one shell form applies");
   assert.deepEqual(win.argv, posix.argv, "only the hint varies by platform; argv is the same");
+});
+
+test("bare node counts as the running node only when it is the first node on PATH", t => {
+  const base = mkdtempSync(join(tmpdir(), "hunch-nodepath-"));
+  t.after(() => cleanupDir(base));
+  // Mixed case: a case-sensitive filesystem must still find the entry's node.
+  const mine = join(base, "NodeJS"), other = join(base, "nvm"), empty = join(base, "empty"), bin = join(base, "bin");
+  for (const d of [mine, other, empty, bin]) mkdirSync(d);
+  writeFileSync(join(mine, "node.exe"), "");
+  writeFileSync(join(other, "node.cmd"), "");
+  writeFileSync(join(bin, "node"), "");
+  const exec = join(mine, "node.exe");
+  assert.equal(runningNodeOnPath(`${bin};${mine}`, exec), false, "an extensionless node wrapper (Git Bash ~/bin) shadows it too");
+  assert.equal(runningNodeOnPath(`${empty};${mine};${other}`, exec), true);
+  assert.equal(runningNodeOnPath(`${empty};${other};${mine}`, exec), false, "an earlier node (here a .cmd shim) shadows the running one");
+  assert.equal(runningNodeOnPath(`"${mine}\\";${other}`, exec), true, "quoted entries and trailing separators still match");
+  assert.equal(runningNodeOnPath(empty, exec), false);
+});
+
+test("with the running node on PATH, the Windows hint is one form that parses in PowerShell and Git Bash", () => {
+  const resolve = () => "file:///tools/tsx/loader.mjs";
+  const meta = new URL("../src/core/verifyLauncher.ts", import.meta.url).href;
+  const win = fromCore(meta, resolve, "win32", true);
+  // A copied `& '…'` is a Bash parse error; a bare `node` needs no call operator in either shell.
+  assert.equal(win.shell, ["node", ...win.argv.slice(1).map(a => `'${a}'`)].join(" "));
+  assert.doesNotMatch(win.shell, /^&/);
+  assert.equal(win.note, "", "one form, so nothing to translate");
+  const quoted = fromCore(new URL("file:///C:/it's/src/core/verifyLauncher.js").href, resolve, "win32", true);
+  assert.ok(quoted.shell.startsWith("& '"), "a quote inside a path quotes differently per shell: keep the PowerShell form and its note");
+  assert.match(quoted.note, /Git Bash/);
 });
 
 test("the dev-mode merge driver launches Hunch's own tsx by path, never npx in the merged repo (#492)", () => {

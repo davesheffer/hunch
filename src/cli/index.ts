@@ -53,6 +53,7 @@ import {
   SYNTH_PREFERENCES,
   writeSynthesisPreference,
   normalizeProviderName,
+  extractJson,
   type SynthPreference,
 } from "../synthesis/provider.js";
 import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeGateDiff, rangeCommits, revExists, revParse, sameFilesystemEntry, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
@@ -67,6 +68,10 @@ import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
+import { parseDocRules, planDocRules, docRulePlanIsDirty, withoutMarkedRules, recordedDocRuleKey, recordedDocRuleSource, recordedDocRuleHash, docRuleHash, type DocRule, type DocRuleIssue } from "../extractors/docRules.js";
+import { trackedFiles } from "../extractors/git.js";
+import { createRepoFileReader } from "../core/safeRepoFile.js";
+import { proposalPrompt, validateProposals, readProposalQueue, writeProposalQueue, enqueueProposals, acceptProposal, type DocRuleProposal } from "../core/docRuleProposals.js";
 import { renderText, renderMarkdown, renderSarif, renderImpact, reportFailsStrict, type CheckReport, type SarifExtras } from "../core/checkreport.js";
 import { partitionReview, isReviewDraft, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook, installPostMergeHook, installPostCheckoutHook, hookStatus, hookReport, hookInvocationLines, formatHookInstall, sharedHooksNote, type HookInstall } from "../integrations/hooks.js";
@@ -2222,6 +2227,197 @@ program
     else console.log(`✓ captured ${dec} decision(s) + ${con} constraint(s) from inline comments${opts.private ? " [private overlay]" : ""}`);
     if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
     store.close();
+  });
+
+// ---- derive-rules (markdown hunch:rule markers → constraints) ---------------
+program
+  .command("derive-rules")
+  .description("Derive constraints from `<!-- hunch:rule scope=<glob> [severity=…] [type=…] [id=…] -->` markers in markdown docs; the paragraph after a marker is the rule. Deterministic + idempotent. The doc is the rule's source, the graph its authority: edited paragraphs wait for --accept-changes and removed markers are reported, never silently applied or retired.")
+  .argument("[path]", "markdown file or directory to scan (default: every tracked .md file)")
+  .option("--dry-run", "report what would change without writing")
+  .option("--check", "write nothing; exit 1 when docs and graph disagree (new, edited, or removed markers; malformed markers) — for CI")
+  .option("--accept-changes", "also apply rules whose paragraph or attributes changed since import")
+  .option("--private", "write derived rules into the private overlay (HUNCH_PRIVATE_DIR)")
+  .option("--propose", "ask your subscription coding-assistant CLI to draft rules from UNMARKED prose in <path>; drafts are queued for review, never applied")
+  .option("--proposals", "list queued rule proposals")
+  .option("--accept <id>", "accept one queued proposal as an active constraint (requires --expect)")
+  .option("--expect <hash>", "exact proposal hash printed with the proposal")
+  .option("--drop <id>", "drop one queued proposal; it is not proposed again")
+  .action(async (pathArg: string | undefined, opts: { dryRun?: boolean; check?: boolean; acceptChanges?: boolean; private?: boolean; propose?: boolean; proposals?: boolean; accept?: string; expect?: string; drop?: string }) => {
+    const { store, root } = storeFor();
+    try {
+      if (opts.private && !store.hasPrivate) return fail("--private needs HUNCH_PRIVATE_DIR set to a private store");
+      const modes = [opts.propose, opts.proposals, opts.accept, opts.drop, opts.check].filter(Boolean).length;
+      if (modes > 1) return fail("choose one of --propose, --proposals, --accept, --drop, --check");
+      if (opts.propose && opts.dryRun) return fail("--dry-run cannot be combined with --propose: drafting still bills your subscription, and proposals never apply until you --accept them");
+      if (opts.expect && !opts.accept) return fail("--expect only applies to --accept <id>");
+      if (opts.acceptChanges && modes) return fail("--accept-changes cannot be combined with --check, --propose, --proposals, --accept, or --drop");
+      if (pathArg && (opts.proposals || opts.accept || opts.drop)) return fail("--proposals, --accept, and --drop work on the queue, not a <path>");
+      const hunchDir = hunchPaths(root).hunch;
+      const printProposal = (p: DocRuleProposal) => {
+        console.log(`  ${p.id} [${p.severity}] ${p.file} — ${p.statement}  (scope: ${p.scope.join(", ")})`);
+        console.log(dim(`      “${p.quote}”`));
+        console.log(dim(`      accept: hunch derive-rules --accept ${p.id} --expect ${p.hash}${opts.private ? " --private" : ""}   drop: hunch derive-rules --drop ${p.id}`));
+      };
+      if (opts.proposals || opts.accept || opts.drop) {
+        const q = readProposalQueue(hunchDir);
+        if (opts.proposals) {
+          if (!q.pending.length) console.log("No queued rule proposals.");
+          else { console.log(`${q.pending.length} queued rule proposal(s):`); q.pending.forEach(printProposal); }
+          return;
+        }
+        const id = (opts.accept ?? opts.drop)!;
+        const p = q.pending.find((x) => x.id === id);
+        if (!p) return fail(`no queued proposal ${id} (see \`hunch derive-rules --proposals\`)`);
+        const rest = { ...q, pending: q.pending.filter((x) => x.id !== id) };
+        if (opts.drop) {
+          writeProposalQueue(hunchDir, { ...rest, dropped: [...rest.dropped, id] });
+          console.log(`✓ dropped proposal ${id}`);
+          return;
+        }
+        if (!opts.expect) return fail("--accept requires --expect <hash> (printed with the proposal)");
+        let rec: Constraint;
+        try {
+          rec = acceptProposal(p, opts.expect, createRepoFileReader(root)(p.file), new Date().toISOString());
+        } catch (error) {
+          return fail(error instanceof Error ? error.message : String(error));
+        }
+        if (store.getRec("constraints", rec.id)) return fail(`constraint ${rec.id} already exists`);
+        store.putCapture("constraints", rec, opts.private);
+        writeProposalQueue(hunchDir, rest);
+        store.reindex();
+        if (store.captureHome(!!opts.private) === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+        const flush = flushCapture(store, hunchDir, !!opts.private, `hunch: accept doc rule proposal ${rec.id}`);
+        console.log(`✓ accepted ${rec.id} [${rec.severity}] as an active constraint (scope: ${rec.scope.join(", ")})${opts.private ? " [private overlay]" : ""}`);
+        if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+        return;
+      }
+      let target = pathArg ? toPosixTarget(repoRelativeTarget(pathArg, root)).replace(/\/+$/, "") : "";
+      // "." or the repo root itself means the whole repo, not a path to look up.
+      if (target === "." || (target && (isAbsolute(target) || /^[A-Za-z]:/.test(target)) && toPosixTarget(realpathNorm(target)).replace(/\/+$/, "") === toPosixTarget(realpathNorm(root)).replace(/\/+$/, ""))) target = "";
+      // Bounded spend: proposals bill the user's subscription per doc, so they need a named target.
+      if (opts.propose && !target) return fail("--propose needs an explicit <path> (a doc or docs directory)");
+      if (target && !existsSync(join(root, target))) return fail(`path not found: ${pathArg}`);
+      const docs = trackedFiles(root, [".md"])
+        .map(toPosixTarget)
+        .filter((f) => !f.startsWith(".hunch/") && (!target || f === target || f.startsWith(`${target}/`)))
+        .sort();
+      if (target && !docs.length) return fail(`no tracked markdown under ${target} (derive-rules reads git-tracked docs only)`);
+      const read = createRepoFileReader(root);
+      if (opts.propose) {
+        const provider = await selectProvider({ root });
+        if (!provider.draftProse) return fail(`--propose needs a coding-assistant subscription CLI (selected: ${provider.name}); pick one with \`hunch provider <name>\``);
+        const now = new Date().toISOString();
+        let q = readProposalQueue(hunchDir);
+        const fresh: DocRuleProposal[] = [];
+        for (const f of docs) {
+          const text = read(f);
+          if (!text?.trim()) continue;
+          let reply: string;
+          try {
+            reply = await provider.draftProse(proposalPrompt(f, withoutMarkedRules(text, f)));
+          } catch (error) {
+            console.log(`  ⚠ ${f}: ${provider.name} failed — ${error instanceof Error ? error.message : String(error)}`);
+            continue;
+          }
+          const { proposals, rejected } = validateProposals(extractJson(reply), { file: f, text }, { provider: provider.name, now });
+          for (const r of rejected) console.log(dim(`  ✗ dropped: ${r}`));
+          fresh.push(...proposals);
+        }
+        const { queue, added } = enqueueProposals(q, fresh, store.recs("constraints"));
+        q = queue;
+        if (!opts.dryRun && added.length) writeProposalQueue(hunchDir, q);
+        if (!added.length) console.log(`No new rule proposals from ${docs.length} doc(s).`);
+        else {
+          console.log(`${opts.dryRun ? "dry run: " : ""}${added.length} new rule proposal(s) from ${docs.length} doc(s) via ${provider.name} — none are active until you accept them:`);
+          added.forEach(printProposal);
+        }
+        return;
+      }
+      const rules: DocRule[] = [];
+      const issues: DocRuleIssue[] = [];
+      for (const f of docs) {
+        const text = read(f);
+        if (text === null || !text.includes("hunch:rule")) continue;
+        const r = parseDocRules(text, f);
+        rules.push(...r.rules);
+        issues.push(...r.issues);
+      }
+      const home = store.captureHome(!!opts.private);
+      const otherHome = store.captureHome(!opts.private);
+      const otherHomeIds = new Set(otherHome === home ? [] : store.recsInHome("constraints", otherHome).map((c) => c.id));
+      const covers = (src: string) => !target || src === target || src.startsWith(`${target}/`);
+      const plan = planDocRules({ rules, issues }, store.recsInHome("constraints", home), covers, otherHomeIds, new Date().toISOString());
+
+      for (const i of plan.issues) console.log(`  ⚠ ${i.file}:${i.line} — ${i.detail}`);
+      for (const { rule, next } of plan.create) console.log(`  + ${next.id} [${next.severity}] ${rule.file}:${rule.line} — ${next.statement}  (scope: ${next.scope.join(", ")})`);
+      for (const { rule, next } of plan.held) {
+        const vanished = plan.orphaned.filter((c) => !recordedDocRuleKey(c) && recordedDocRuleSource(c) === rule.file).map((c) => c.id).join(", ");
+        const renamedFrom = plan.orphaned.find((c) => recordedDocRuleHash(c) === docRuleHash(rule));
+        const src = renamedFrom && recordedDocRuleSource(renamedFrom);
+        if (src && src !== rule.file) console.log(`  ~ ${next.id} ${rule.file}:${rule.line} probably renamed from ${src} (same rule text as orphaned ${renamedFrom!.id}) — add id=<key> to track it, or run with --accept-changes to add it and then retire the old one`);
+        else console.log(`  ~ ${next.id} ${rule.file}:${rule.line} new rule while ${vanished} vanished from the same doc — likely an edit; add id=<key> to track it, or run with --accept-changes to add it`);
+      }
+      for (const { rule, next, from } of plan.moved) console.log(`  → ${next.id} source moved${from && from !== rule.file ? ` from ${from}` : ""} to ${rule.file}:${rule.line}`);
+      for (const { rule, next, prev } of plan.changed) {
+        console.log(`  ~ ${next.id} ${rule.file}:${rule.line} changed since import${opts.acceptChanges ? "" : " — run with --accept-changes to apply"}`);
+        if (prev.statement !== next.statement) console.log(dim(`      was: ${prev.statement}\n      now: ${next.statement}`));
+        if (prev.severity !== next.severity) console.log(dim(`      severity: ${prev.severity} → ${next.severity}`));
+        if (prev.scope.join(",") !== next.scope.join(",")) console.log(dim(`      scope: ${prev.scope.join(",")} → ${next.scope.join(",")}`));
+        if (prev.type !== next.type) console.log(dim(`      type: ${prev.type} → ${next.type}`));
+      }
+      for (const c of plan.orphaned) console.log(`  ? ${c.id} marker gone from its doc — retire with \`hunch retire-constraint ${c.id}\` or restore the marker: ${c.statement}`);
+      for (const c of plan.malformed) console.log(`  ? ${c.id} marker present but malformed (see issue above) — fix the marker: ${c.statement}`);
+      for (const { rule, reason } of plan.conflicts) console.log(`  ✗ ${rule.file}:${rule.line} ${reason}`);
+
+      const dirty = docRulePlanIsDirty(plan);
+      if (opts.check) {
+        if (dirty) {
+          process.exitCode = 1;
+          console.log(`✗ docs and graph disagree: ${plan.create.length} new, ${plan.held.length} held, ${plan.changed.length} changed, ${plan.orphaned.length} orphaned, ${plan.malformed.length} malformed-source, ${plan.conflicts.length} conflict(s), ${plan.issues.length} malformed — run \`hunch derive-rules\``);
+        } else console.log(`✓ ${rules.length} doc rule(s) in sync with the graph`);
+        return;
+      }
+      if (!rules.length && !plan.orphaned.length && !plan.issues.length) {
+        console.log("No `<!-- hunch:rule … -->` markers found.");
+        return;
+      }
+      const writes = [
+        ...plan.create.map((x) => x.next),
+        ...plan.moved.map((x) => x.next),
+        ...(opts.acceptChanges ? [...plan.held, ...plan.changed].map((x) => x.next) : []),
+      ];
+      if (opts.dryRun) {
+        console.log(`✓ dry run: ${writes.length} write(s) planned, nothing written`);
+        return;
+      }
+      const written = new Set<string>();
+      for (const rec of writes) {
+        try {
+          store.putCapture("constraints", rec, opts.private);
+          written.add(rec.id);
+        } catch (error) {
+          console.log(`  ✗ ${rec.id}: ${error instanceof Error ? error.message : String(error)}`);
+          process.exitCode = 1;
+        }
+      }
+      // Conflicts and malformed markers are unresolved disagreements: the other records
+      // are still written above, but the run must not look clean to a script.
+      if (plan.conflicts.length || plan.issues.length) process.exitCode = 1;
+      if (written.size) {
+        store.reindex();
+        if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+      }
+      const flush = written.size ? flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: derive ${written.size} rule(s) from docs`) : null;
+      const applied = opts.acceptChanges ? plan.changed.filter((x) => written.has(x.next.id)).length : 0;
+      const created = plan.create.filter((x) => written.has(x.next.id)).length + (opts.acceptChanges ? plan.held.filter((x) => written.has(x.next.id)).length : 0);
+      console.log(`✓ ${created} new, ${applied} updated, ${plan.moved.length} moved, ${plan.unchanged.length} unchanged${opts.private ? " [private overlay]" : ""}`);
+      if (plan.changed.length > applied || (!opts.acceptChanges && plan.held.length) || plan.orphaned.length || plan.malformed.length || plan.conflicts.length) console.log(dim("  pending items above need a human call; nothing was applied for them."));
+      if (writes.some((c) => c.severity === "blocking" && c.scope.includes("**"))) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
+      if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+    } finally {
+      store.close();
+    }
   });
 
 // ---- conform (Architectural Conformance: does the code still satisfy recorded intent) ----
