@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.49.0 — 2026-11-02
+
+- **`hunch derive-rules` turns rules written in markdown into constraints.** Mark a rule in any doc with `<!-- hunch:rule scope=<glob> [severity=…] [id=…] -->` and the sentence that follows becomes a constraint; the doc is the rule's source and the graph stays the authority. Markers in code blocks or example ranges are ignored, and an unclosed fence or bad attribute is reported, never guessed at. An edited or renamed rule is held until `--accept-changes`, a removed marker leaves its constraint reported as orphaned (never auto-retired), and an id collision is reported as a conflict. `--check` exits 1 whenever doc and graph disagree, for CI. `--propose <path>` drafts rules with your selected subscription CLI into a local review queue (`--proposals`, `--accept <id> --expect <hash>`, `--drop <id>`); drafts are capped at `warning` and must quote the doc verbatim (#570).
+- **Faster hooks on large repos.** The compiled CLI is now bundled with esbuild and uses Node's compile cache, and context assembly skips loading edges when nothing needs them. On django, median hook time fell from 811 to 408 ms at session start, 1092 to 741 ms per prompt, 2099 to 1156 ms before an edit and 703 to 300 ms at stop, with identical hook output (#573).
+- **Sibling-fix lessons no longer stall the pre-edit hook.** The hook serves lessons from a cache and, on a miss, starts a hidden background worker to compute them, instead of computing synchronously. On django a cold edit went from about 7 s to 1.6 s, and the next edit delivers the lesson every time (it never did before, because the hook ran out of time). `HUNCH_SIBLING_WARM=0` turns the worker off (#572).
+- **The pre-edit hook delivers decisions the task already selected.** A lower-confidence decision that the prompt hook had picked for the task was withheld again at edit time, because a file-only target can't supply task context. It is now delivered; the 0.5 confidence floor still applies (#571).
+
 ## 1.48.1 — 2026-11-02
 
 - **`task verify` hints parse in PowerShell and Git Bash.** On Windows the prompt hook printed the verify command as `& '<node.exe>' '<cli>' task verify …`, and a leading `&` is a parse error in Git Bash, the shell Claude Code's Bash tool runs. When the first `node` on `PATH` is the running Node, the hint is now `node '<cli>' task verify …`, which both shells read the same way; otherwise the previous form is kept. In a paired benchmark, Bash parse errors went from 6 to 0 and turns per session from 9.3 to 7.5 (#574).
