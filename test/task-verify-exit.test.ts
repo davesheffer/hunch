@@ -5,7 +5,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startReportTask } from "../src/core/taskReport.js";
+import { createHash } from "node:crypto";
+import { reportHash, startReportTask } from "../src/core/taskReport.js";
 import { runReportCheck } from "../src/core/taskReportEvidence.js";
 
 function fixture(t: { after: (f: () => void) => void }): string {
@@ -59,13 +60,18 @@ test("a non-zero exit with a lingering helper records that exit code, never null
 
 test("output written right before exit is fully hashed, identically across runs", async t => {
   const root = fixture(t), task = startReportTask(root, "Hash output written at exit");
-  const script = "process.stdout.write('x'.repeat(100_000)+'\\n');process.exit(0)";
+  // Exit from the write callback: on macOS a stdout pipe is asynchronous and
+  // process.exit() does not flush, so the CHILD could drop its own tail (#514).
+  const script = "process.stdout.write('x'.repeat(100_000)+'\\n',()=>process.exit(0))";
   const command = [process.execPath, "-e", script];
-  const first = await runReportCheck(root, task.task_id, command, "Bulk output A", 10_000);
-  const second = await runReportCheck(root, task.task_id, command, "Bulk output B", 10_000);
-  assert.equal(first.exit_code, 0);
-  assert.equal(second.exit_code, 0);
-  assert.equal(first.output_hash, second.output_hash, "the exit path must not truncate buffered output");
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+  const expected = reportHash({ stdout: sha("x".repeat(100_000) + "\n"), stderr: sha("") });
+  for (const label of ["Bulk output A", "Bulk output B"]) {
+    let bytes = 0, errBytes = 0;
+    const result = await runReportCheck(root, task.task_id, command, label, 10_000, { onStdout: c => { bytes += c.length; }, onStderr: c => { errBytes += c.length; } });
+    assert.equal(result.exit_code, 0);
+    assert.equal(result.output_hash, expected, `${label}: read ${bytes}/100001 stdout and ${errBytes} stderr bytes; the exit path must not truncate buffered output`);
+  }
 });
 
 test("a command that outlives its budget is still recorded as a timeout with no exit code", async t => {
