@@ -170,7 +170,7 @@ test("HUNCH_CLI_CONFIG: a valid adapter file binds a non-builtin initiator; with
   });
 });
 
-test("HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing and traversal paths are refused before any adapter runs", { timeout: 60_000 }, async () => {
+test("HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing and traversal paths fall back to deterministic with a warning before any adapter runs", { timeout: 60_000 }, async () => {
   await withFakePath(async (dir) => {
     const marker = join(dir, "probe-ran");
     const probe = `require("fs").writeFileSync(${JSON.stringify(marker)}, "x")`;
@@ -186,7 +186,10 @@ test("HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing
       traversal: join(dir, "..", "..", "..", "..", "..", "..", "..", "..", "package.json"),
     };
     for (const [label, path] of Object.entries(cases)) {
-      await assert.rejects(resolveFor({ HUNCH_CLI_CONFIG: path }), Error, label);
+      const res = await resolveFor({ HUNCH_CLI_CONFIG: path });
+      assert.equal(res.provider.name, "deterministic", label);
+      assert.equal(res.source, "unavailable-initiator", label);
+      assert.match(res.warning ?? "", /unusable/, `${label}: warning is observable`);
     }
     assert.equal(existsSync(marker), false, "no adapter from a refused config was ever spawned");
   });
@@ -203,7 +206,9 @@ test("HUNCH_REVIEW_CLI_CONFIG is honoured as the adapter config fallback, and HU
     assert.equal(review.source, "initiator");
     const cliWins = await resolveFor({ HUNCH_CLI_CONFIG: other, HUNCH_REVIEW_CLI_CONFIG: good });
     assert.equal(cliWins.source, "unavailable-initiator", "HUNCH_CLI_CONFIG shadows the review config");
-    await assert.rejects(resolveFor({ HUNCH_REVIEW_CLI_CONFIG: join(dir, "missing.json") }), Error);
+    const missing = await resolveFor({ HUNCH_REVIEW_CLI_CONFIG: join(dir, "missing.json") });
+    assert.equal(missing.provider.name, "deterministic");
+    assert.ok(missing.warning);
   });
 });
 
