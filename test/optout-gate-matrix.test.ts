@@ -69,6 +69,7 @@ const EXPECTED: Record<string, Kind> = {
   "experiment stop <file>": "input",
   "import-adr <dir>": "input",
   "derive-rules <path>": "input",
+  "sibling-warm <file>": "input",
   "export-adr <dir>": "output",
   "mcp --root": "root",
   "footprint --target": "input",

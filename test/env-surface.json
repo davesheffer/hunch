@@ -436,6 +436,30 @@
     "purpose": "RRF weight for semantic results",
     "todo": "no test exercises this read yet (pre-existing gap when the gate landed)"
   },
+  "HUNCH_SIBLING_WARM_FAIL": {
+    "class": "test-hook",
+    "purpose": "Set to 1 to make the sibling-fix warm worker's compute throw, so a test can prove the spent entry is still written",
+    "tests": [
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "a worker whose compute throws leaves a spent entry, so the hook stops respawning it"
+      }
+    ]
+  },
+  "HUNCH_SIBLING_WARM": {
+    "class": "hunch-config",
+    "purpose": "Set to 0 to stop the pre-edit hook spawning the detached sibling-fix cache warm worker (the test runner sets it)",
+    "tests": [
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "HUNCH_SIBLING_WARM=0: a cold hook-path call spawns no worker and leaves no marker"
+      },
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "the real pre-edit hook on a cold cache answers without computing lessons"
+      }
+    ]
+  },
   "HUNCH_SIG_MIN_LINES": {
     "class": "hunch-synthesis",
     "purpose": "Churn threshold above which a commit is significant enough for model synthesis (default 12)",

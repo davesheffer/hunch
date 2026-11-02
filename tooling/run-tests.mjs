@@ -54,7 +54,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   let status = 1;
   try {
     const run = spawnSync(process.execPath, [tsx, "--test", ...process.argv.slice(2)], {
-      env: fixtureGitEnv({ ...process.env, GIT_CONFIG_SYSTEM: config.file }), stdio: "inherit", windowsHide: true,
+      // No detached sibling-warm workers: they would outlive the test and its fixture.
+      env: fixtureGitEnv({ HUNCH_SIBLING_WARM: "0", ...process.env, GIT_CONFIG_SYSTEM: config.file }), stdio: "inherit", windowsHide: true,
     });
     if (run.error) throw run.error;
     status = run.status ?? 1;

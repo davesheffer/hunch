@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   attributable, changeLines, codeTokens, isFixSubject, isSubstantive, nameTokens, overlap, parseLineLog,
-  renderSiblingLessons, siblingCounters, siblingLessonsFor,
+  renderSiblingLessons, siblingCounters, siblingLessonsFor, warmSiblingCache,
 } from "../src/core/siblingfix.js";
 import { emptyState, lessonReminder, onLessonsDelivered } from "../src/core/pipeline.js";
 import { tsxLoaderUrl } from "./helpers.js";
@@ -583,12 +583,19 @@ test("a tiny wall-clock budget returns promptly without throwing", t => {
   assert.ok(Array.isArray(lessons));
 });
 
+// The pre-edit hook serves the sibling cache only; the hidden worker the hook
+// spawns on a miss is what fills it, so tests run that worker before editing.
+function warm(root: string): void {
+  execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "sibling-warm", "src/claude.ts"], { cwd: root, encoding: "utf8" });
+}
+
 test("the real pre-edit hook injects the lesson even when the graph holds no record for the file", { timeout: 120_000 }, t => {
   const root = repo(t);
   writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
   commit(root, "fix(providers): a mixed hook entry keeps the user's command");
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  warm(root);
   const hook = (session: string) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
     cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0" }, encoding: "utf8",
     input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: session, cwd: root, tool_name: "Edit", tool_input: { file_path: join(root, "src", "claude.ts"), old_string: "other = 1", new_string: "other = 2" } }),
@@ -609,6 +616,7 @@ test("a file edited through a shell command gets the same grounding after the co
   commit(root, "fix(providers): a mixed hook entry keeps the user's command");
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  warm(root);
   for (const pipeline of ["0", "1"]) {
     const session = `sib-shell-${pipeline}-${process.pid}-${Date.now()}`;
     const hook = (event: object) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
@@ -649,6 +657,7 @@ test("the follow-up stays silent once the agent changed the function", { timeout
   commit(root, "fix(providers): a mixed hook entry keeps the user's command");
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  warm(root);
   const hook = (event: object) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
     cwd: root, env: { ...process.env, HUNCH_PIPELINE: "1" }, encoding: "utf8",
     input: JSON.stringify({ session_id: `sib-carried-${process.pid}-${Date.now()}`, cwd: root, ...event }),
@@ -688,3 +697,173 @@ test("the fix commit's tests are named in the lesson", t => {
   assert.match(renderSiblingLessons(lessons), /The fix came with tests in test\/providers\.test\.ts/);
 });
 
+
+test("cacheOnly: a cold call returns nothing, schedules one warm and computes/writes nothing", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `
+${fixedMatcher("isOurProviderHook")}
+export function unrelated(): number {
+  const a = 1;
+  return a + 1;
+}
+`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  let misses = 0;
+  const computes = siblingCounters.lessonComputes;
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss: () => { misses++; } }), []);
+  assert.equal(misses, 1);
+  assert.equal(siblingCounters.lessonComputes, computes, "no lesson compute on the hook path");
+  assert.ok(!existsSync(join(root, ".hunch-cache", "siblingfix")), "no cache file written");
+});
+
+test("cacheOnly: a warmed entry is served without a miss; a changed target is a miss", t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `
+${fixedMatcher("isOurProviderHook")}
+export function unrelated(): number {
+  const a = 1;
+  return a + 1;
+}
+`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  const warmed = siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  assert.equal(warmed.length, 1);
+  let misses = 0;
+  const onMiss = () => { misses++; };
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss }), warmed);
+  assert.equal(misses, 0);
+  writeFileSync(join(root, "src", "claude.ts"), readFileSync(join(root, "src", "claude.ts"), "utf8").replace("other = 1", "other = 2"));
+  commit(root, "chore: touch the target");
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss }), []);
+  assert.equal(misses, 1, "stale entry schedules a warm instead of recomputing");
+});
+
+test("sibling-warm fills the cache the hook then serves, quietly and with exit 0", { timeout: 120_000 }, t => {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `
+${fixedMatcher("isOurProviderHook")}
+export function unrelated(): number {
+  const a = 1;
+  return a + 1;
+}
+`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  mkdirSync(join(root, ".hunch"));
+  const out = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "sibling-warm", "src/claude.ts"], { cwd: root, encoding: "utf8" });
+  assert.equal(out, "");
+  let misses = 0;
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss: () => { misses++; } }).length, 1);
+  assert.equal(misses, 0);
+});
+
+function fixedRepo(t: { after: (f: () => void) => void }): string {
+  const root = repo(t);
+  writeFileSync(join(root, "src", "providers.ts"), `\n${fixedMatcher("isOurProviderHook")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  return root;
+}
+
+test("cacheOnly: a stale entry is a miss with no inventory scan, candidate retry or compute", t => {
+  const root = fixedRepo(t);
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 }).length, 1);
+  writeFileSync(join(root, "src", "claude.ts"), readFileSync(join(root, "src", "claude.ts"), "utf8").replace("other = 1", "other = 2"));
+  commit(root, "chore: touch the target");
+  const before = { ...siblingCounters };
+  let misses = 0;
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss: () => { misses++; } }), []);
+  assert.equal(misses, 1);
+  assert.deepEqual(siblingCounters, before, "the hook path never scans, retries or computes");
+});
+
+test("cacheOnly: after a commit elsewhere the worker re-stamps the entry and the hook serves it again", t => {
+  const root = fixedRepo(t);
+  const warmed = siblingLessonsFor(root, "src/claude.ts", [], { budgetMs: 60_000 });
+  assert.equal(warmed.length, 1);
+  writeFileSync(join(root, "README.md"), "unrelated\n");
+  commit(root, "docs: unrelated");
+  let misses = 0;
+  const onMiss = () => { misses++; };
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss }), []);
+  assert.equal(misses, 1, "HEAD moved: the hook leaves validation to the worker");
+  const computes = siblingCounters.lessonComputes;
+  warmSiblingCache(root, "src/claude.ts", []);
+  assert.equal(siblingCounters.lessonComputes, computes, "a descending HEAD is a cache hit for the worker, not a recompute");
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss }), warmed);
+  assert.equal(misses, 1);
+});
+
+test("a worker whose compute throws leaves a spent entry, so the hook stops respawning it", t => {
+  const root = fixedRepo(t);
+  const prior = process.env.HUNCH_SIBLING_WARM_FAIL;
+  process.env.HUNCH_SIBLING_WARM_FAIL = "1";
+  t.after(() => { if (prior === undefined) delete process.env.HUNCH_SIBLING_WARM_FAIL; else process.env.HUNCH_SIBLING_WARM_FAIL = prior; });
+  const cacheDir = join(root, ".hunch-cache", "siblingfix");
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(join(cacheDir, "marker.pending"), "0");
+  warmSiblingCache(root, "src/claude.ts", []);
+  const left = readdirSync(cacheDir);
+  assert.equal(left.filter((n) => n.endsWith(".json") && n !== "inventory.json").length, 1, "a spent entry was written");
+  let misses = 0;
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss: () => { misses++; } }), []);
+  assert.equal(misses, 0, "the spent entry is a negative cache hit, not a miss");
+});
+
+test("HUNCH_SIBLING_WARM=0: a cold hook-path call spawns no worker and leaves no marker", t => {
+  const root = fixedRepo(t);
+  const prior = process.env.HUNCH_SIBLING_WARM;
+  process.env.HUNCH_SIBLING_WARM = "0";
+  t.after(() => { if (prior === undefined) delete process.env.HUNCH_SIBLING_WARM; else process.env.HUNCH_SIBLING_WARM = prior; });
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true }), []);
+  assert.ok(!existsSync(join(root, ".hunch-cache", "siblingfix")), "no marker, no cache");
+});
+
+test("the real pre-edit hook on a cold cache answers without computing lessons", { timeout: 120_000 }, t => {
+  const root = fixedRepo(t);
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  const out = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", HUNCH_SIBLING_WARM: "0" }, encoding: "utf8",
+    input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: `sib-cold-${process.pid}-${Date.now()}`, cwd: root, tool_name: "Edit", tool_input: { file_path: join(root, "src", "claude.ts"), old_string: "other = 1", new_string: "other = 2" } }),
+  });
+  assert.doesNotMatch(out, /isOurProviderHook/, "no lesson before the cache is warm");
+  const dir = join(root, ".hunch-cache", "siblingfix");
+  const entries = existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith(".json") && !n.startsWith("inventory")) : [];
+  assert.deepEqual(entries, [], "the hook wrote no lesson entry: nothing was computed in-process");
+});
+
+test("cacheOnly: a target HEAD does not hold (untracked file, unborn HEAD) never schedules a warm", t => {
+  const root = fixedRepo(t);
+  writeFileSync(join(root, "src", "new.ts"), `${matcher("isOurNewHook")}\n`);
+  let misses = 0;
+  const onMiss = () => { misses++; };
+  for (let i = 0; i < 3; i++) assert.deepEqual(siblingLessonsFor(root, "src/new.ts", [], { cacheOnly: true, onMiss }), []);
+  const unborn = mkdtempSync(join(tmpdir(), "hunch-sibling-unborn-"));
+  t.after(() => cleanupDir(unborn));
+  execFileSync("git", ["init", "-q", unborn]);
+  mkdirSync(join(unborn, "src"));
+  writeFileSync(join(unborn, "src", "claude.ts"), `${matcher("isOurClaudeHook")}\n`);
+  assert.deepEqual(siblingLessonsFor(unborn, "src/claude.ts", [], { cacheOnly: true, onMiss }), []);
+  assert.equal(misses, 0, "no history to learn from: nothing to warm, so no respawn per edit");
+});
+
+test("the real hook's cold miss spawns the detached worker, which fills the cache and clears its marker", { timeout: 120_000 }, t => {
+  const root = fixedRepo(t);
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  const env: NodeJS.ProcessEnv = { ...process.env, HUNCH_PIPELINE: "0" };
+  delete env.HUNCH_SIBLING_WARM;
+  execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "hook"], {
+    cwd: root, env, encoding: "utf8",
+    input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: `sib-spawn-${process.pid}-${Date.now()}`, cwd: root, tool_name: "Edit", tool_input: { file_path: join(root, "src", "claude.ts"), old_string: "other = 1", new_string: "other = 2" } }),
+  });
+  const dir = join(root, ".hunch-cache", "siblingfix");
+  const settled = () => existsSync(dir) && !readdirSync(dir).some((n) => n.endsWith(".pending"))
+    && readdirSync(dir).some((n) => n.endsWith(".json") && n !== "inventory.json");
+  // Bounded wait so the worker cannot outlive the fixture.
+  const until = Date.now() + 90_000;
+  while (!settled() && Date.now() < until) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+  assert.ok(settled(), "worker wrote the entry and removed its marker");
+  let misses = 0;
+  assert.equal(siblingLessonsFor(root, "src/claude.ts", [], { cacheOnly: true, onMiss: () => { misses++; } }).length, 1);
+  assert.equal(misses, 0);
+});

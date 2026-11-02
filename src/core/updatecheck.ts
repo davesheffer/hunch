@@ -259,6 +259,7 @@ const PLUMBING_COMMANDS = new Set([
   "sync",
   "repair-provenance",
   "hook",
+  "sibling-warm",
   "ci",
   "serve",
   "update",
