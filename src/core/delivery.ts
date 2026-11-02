@@ -147,6 +147,10 @@ export interface DeliveryOptions {
   supplements?: readonly DeliverySupplement[];
   /** Time-travel contexts intentionally include records that are retired at HEAD. */
   historical?: boolean;
+  /** Record ids the task's prompt-time selection qualified (taskSelection.ts). A
+   *  selected decision has passed relevance against the task text, so it is not
+   *  withheld for lacking task context; the confidence floor still applies. */
+  taskSelected?: ReadonlySet<string>;
   /** Injectable for deterministic tests. Omit to use the local Git graph. */
   commitReachability?: (commit: string) => CommitReachability;
 }
@@ -410,6 +414,7 @@ function renderHypothesis(hypothesis: Omit<DeliveryHypothesis, "rank">, provenan
 function decisionAbstention(
   decision: Decision,
   query: QueryProfile,
+  taskSelected = false,
 ): { reason: DeliveryAbstentionReason; detail: string } | null {
   const source = decision.provenance.source ?? "";
   if (source.split("+").includes("human_confirmed")) return null;
@@ -421,6 +426,9 @@ function decisionAbstention(
     };
   }
   if (confidence >= MIN_UNCONDITIONED_CONFIDENCE) return null;
+  // The prompt-time scorer already matched this decision against the task's own
+  // text; a file-only target (the pre-edit hook) cannot repeat that check.
+  if (taskSelected) return null;
   if (!query.taskPhrase || !query.evidenceTerms.size) {
     return {
       reason: "insufficient-context",
@@ -837,7 +845,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
       true,
       canValidateAnchors,
     );
-    const abstention = decisionAbstention(decision, query);
+    const abstention = decisionAbstention(decision, query, options.taskSelected?.has(decision.id) ?? false);
     const relevanceTerms = query.taskPhrase ? decisionEvidenceMatches(decision, query) : undefined;
     const hypothesis = query.taskPhrase ? decisionHypothesis(decision, relevanceTerms ?? [], ctx.target) : undefined;
     candidates.push({
