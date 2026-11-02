@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "כללים מהתיעוד שלכם, ו-hooks מהירים יותר",
       "פקודות אימות שעובדות בכל מעטפת",
       "הסינתזה קוראת את ה-PR, והחלטות שהוחלפו כבר לא מקדימות את יורשתן",
       "הקשר שמתאים לסוכן ולהנחיה",
@@ -101,6 +102,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Правила из вашей документации и более быстрые хуки",
       "Подсказки проверки, которые работают в любой оболочке",
       "Синтез читает PR, а заменённые решения больше не обгоняют своих преемников",
       "Контекст по агенту и по запросу",
@@ -194,6 +196,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "قواعد من وثائقكم، وخطافات أسرع",
       "أوامر تحقق تعمل في كل صدفة أوامر",
       "التوليف يقرأ طلب الدمج، والقرارات المستبدلة لا تتقدم على بديلها",
       "سياق يناسب الوكيل والطلب",
@@ -287,6 +290,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Reglas desde tu documentación y hooks más rápidos",
       "Comandos de verificación que funcionan en cualquier shell",
       "La síntesis lee el PR y las decisiones reemplazadas ya no superan a su sucesora",
       "Contexto a la medida del agente y de la petición",
