@@ -132,6 +132,11 @@ test("decisionSubstanceChanged: content fields count, bookkeeping does not", () 
   ] as const) {
     assert.equal(changed!(base, { ...base, [field]: value } as Decision), true, `${field} is substance`);
   }
+
+  // #460: nested key order is not substance; a nested value change is.
+  const withRetired = (retired: unknown) => ({ ...base, retired } as unknown as Decision);
+  assert.equal(changed!(withRetired({ symbols: ["a"], deps: ["b"] }), withRetired({ deps: ["b"], symbols: ["a"] })), false, "nested key order");
+  assert.equal(changed!(withRetired({ symbols: ["a"], deps: ["b"] }), withRetired({ deps: ["b"], symbols: ["c"] })), true, "nested value change");
 });
 
 test("hunch_record_decision: an un-tokened write that changes a human_confirmed decision is refused; an identical re-record keeps the signature", async () => {
