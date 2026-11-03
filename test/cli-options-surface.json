@@ -2537,6 +2537,14 @@
       }
     ]
   },
+  "review-memory auto --no-discussions": {
+    "tests": [
+      {
+        "file": "test/cli-flags-governance.test.ts",
+        "title": "review-memory auto validates --limit, --private/--public/--dry-run and the --initiator binding before reading --from"
+      }
+    ]
+  },
   "review-memory auto --output": {
     "tests": [
       {
