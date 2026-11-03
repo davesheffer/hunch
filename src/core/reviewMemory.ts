@@ -65,7 +65,7 @@ const graphqlPull = z.object({
   comments: z.object({ totalCount: z.number(), nodes: z.array(z.object(graphqlText)) }),
   reviews: z.object({ totalCount: z.number(), nodes: z.array(z.object({ ...graphqlText,
     commit: z.object({ oid: z.string() }).nullable().optional() })) }),
-  files: z.object({ nodes: z.array(z.object({ path: z.string() })) }).nullable(),
+  files: z.object({ totalCount: z.number(), nodes: z.array(z.object({ path: z.string() })) }).nullable(),
 });
 
 /** Normalize `gh api graphql --paginate --slurp` pull-request pages. A truncated discussion is dropped, never sliced. */
@@ -76,6 +76,7 @@ export function pullDiscussionsFromGraphql(pages: unknown): { pull_requests: z.i
   let incomplete = 0;
   for (const pr of nodes) {
     if (pr.comments.totalCount > pr.comments.nodes.length || pr.reviews.totalCount > pr.reviews.nodes.length
+      || (pr.files && pr.files.totalCount > pr.files.nodes.length)
       || [...pr.comments.nodes, ...pr.reviews.nodes].some(n => n.databaseId === null)) { incomplete++; continue; }
     const entry = (kind: "comment" | "review", n: z.infer<typeof graphqlPull>["reviews"]["nodes"][number]) => ({
       id: n.databaseId ?? 0, kind, body: n.body, html_url: n.url, created_at: n.createdAt, updated_at: n.updatedAt,
@@ -87,7 +88,7 @@ export function pullDiscussionsFromGraphql(pages: unknown): { pull_requests: z.i
     const entries = [...pr.comments.nodes.map(n => entry("comment", n)), ...pr.reviews.nodes.map(n => entry("review", n))]
       .filter(e => e.body.trim());
     // Paths a literal scope cannot express are not offered as rule anchors.
-    const files = (pr.files?.nodes ?? []).map(f => f.path).filter(p => pathSchema.safeParse(p).success).slice(0, 100);
+    const files = (pr.files?.nodes ?? []).map(f => f.path).filter(p => pathSchema.safeParse(p).success);
     pull_requests.push({ number: pr.number, files, entries });
   }
   return { pull_requests, incomplete_discussions: incomplete };

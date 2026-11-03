@@ -123,7 +123,11 @@ export async function automateReviewMemory(options: {
         for (const file of discussion.files) {
           try { const text = options.readCurrent(file); if (usable(text)) current.set(file, text); } catch { /* not offered */ }
         }
-        if (!current.size) { entry.reason = "None of the pull request's files is a current bounded text file; manual review needed."; continue; }
+        // File-state dispositions are not cached: a restored or shrunk file must get its analysis.
+        if (!current.size) {
+          entry.reason = "None of the pull request's files is a current bounded text file; manual review needed.";
+          entry.retryable = true; continue;
+        }
         const discussionData = { repository: packet.repository, discussion: { ...discussion, files: [...current.keys()] } };
         if (Buffer.byteLength(JSON.stringify(discussionData)) > 120 * 1024) {
           entry.reason = "Complete evidence exceeds the analysis budget; nothing was truncated."; continue;
@@ -137,7 +141,9 @@ or {"action":"skip"|"review","reason":"..."}. Choose review when uncertain.
 DATA: ${JSON.stringify(discussionData)}`)));
         entry.reason = located.reason;
         if (located.action !== "locate") { entry.status = located.action === "skip" ? "skipped" : "review"; continue; }
-        if (!current.has(located.file)) { entry.reason = "Proposed file is not one of the pull request's current files."; continue; }
+        if (!current.has(located.file)) {
+          entry.reason = "Proposed file is not one of the pull request's current files."; entry.retryable = true; continue;
+        }
         entry.file = located.file;
         code = current.get(located.file)!;
         entry.code_hash = canonicalHash(code);
@@ -190,5 +196,7 @@ DATA: ${JSON.stringify({ ...data, proposal })}`)));
   }
   return { schema: "hunch.automatic-review-memory/1" as const, repository: packet.repository,
     provider: options.provider, providers_used: options.providersUsed?.() ?? [options.provider],
-    authority: "advisory" as const, applied: false, analyzed, entries, rules };
+    authority: "advisory" as const, applied: false, analyzed, entries, rules,
+    ...(packet.discussions ? { incomplete_discussions: packet.incomplete_discussions ?? 0 } : {}),
+    discussions_unavailable: undefined as true | undefined };
 }

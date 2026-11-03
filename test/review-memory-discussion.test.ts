@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { automateReviewMemory } from "../src/core/automaticReviewMemory.js";
+import { fetchPullDiscussions } from "../src/cli/automaticReviewMemory.js";
 import { compileReviewRules, prepareReviewMemory, pullDiscussionsFromGraphql, validateReviewPacket } from "../src/core/reviewMemory.js";
 
 const now = "2026-09-10T00:00:00Z";
@@ -135,6 +136,41 @@ test("discussion replay: cached dispositions and captured rules cost no provider
   const changed = await run([], { existing: saved.rules, readCurrent: () => code + "\n// changed" }).result;
   assert.equal(changed.entries[0]!.status, "review");
   assert.match(changed.entries[0]!.reason, /code changed/);
+});
+
+test("a pull request with more files than one page is reported incomplete, never sliced", () => {
+  const files = { totalCount: 101, nodes: Array.from({ length: 100 }, (_, i) => ({ path: `src/f${i}.ts` })) };
+  const { pull_requests, incomplete_discussions } = pullDiscussionsFromGraphql(pages(node({ files })));
+  assert.equal(incomplete_discussions, 1);
+  assert.equal(pull_requests.length, 0);
+});
+
+test("the run report surfaces incomplete discussions", async () => {
+  const packet = prepareReviewMemory("acme/app", input(node({ number: 8, comments: { totalCount: 101, nodes: [] } })));
+  const report = await automateReviewMemory({ packet, existing: [], readCurrent: () => code, provider: "fixture",
+    limit: 20, now, generate: async () => assert.fail("no candidate to analyze") });
+  assert.equal(report.incomplete_discussions, 1);
+});
+
+test("locate-stage dispositions that depend on current files stay retryable", async () => {
+  const unreadable = await run([], { readCurrent: () => { throw new Error("missing"); } }).result;
+  assert.match(unreadable.entries[0]!.reason, /None of the pull request's files/);
+  assert.equal(unreadable.entries[0]!.retryable, true);
+  const later = await run([locate, proposal, verdict], { previous: unreadable.entries }).result;
+  assert.equal(later.entries[0]!.status, "ready");
+  const outside = await run([{ ...locate, file: "src/other.ts" }]).result;
+  assert.equal(outside.entries[0]!.retryable, true);
+});
+
+test("the discussion fetch passes owner and name as strings", () => {
+  const calls: string[][] = [];
+  const result = fetchPullDiscussions("acme/2048", args => { calls.push(args); return JSON.stringify(pages(node())); });
+  assert.equal(result.pull_requests.length, 1);
+  const args = calls[0]!;
+  assert.ok(!args.includes("-F"));
+  assert.equal(args[args.indexOf("owner=acme") - 1], "-f");
+  assert.equal(args[args.indexOf("name=2048") - 1], "-f");
+  assert.match(args.find(a => a.startsWith("query="))!, /files\(first:100\)\{totalCount/);
 });
 
 test("inline-only packets keep their existing shape", () => {

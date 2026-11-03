@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { registerAutomaticReviewMemory, readReviewCode } from "../src/cli/automaticReviewMemory.js";
 import { DeterministicProvider } from "../src/synthesis/provider.js";
+import type { pullDiscussionsFromGraphql } from "../src/core/reviewMemory.js";
 import { ConstraintSchema, type Constraint } from "../src/core/types.js";
 
 test("auto CLI saves without rules.json, replays, previews and detects context changes", async () => {
@@ -108,6 +109,52 @@ test("auto CLI saves a rule from a pull request's conversation comments", async 
     assert.deepEqual(saved[0]!.scope, ["src/auth.ts"]);
     assert.equal(replies.length, 0);
   } finally {
+    assert.ok(resolve(root).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/")));
+    cleanupDir(root);
+  }
+});
+
+test("auto CLI keeps inline analysis when discussions fail, are skipped, or are incomplete", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-auto-fetch-"));
+  const out = join(root, "report.json");
+  const errors: string[] = [];
+  const original = console.error;
+  const provider = Object.assign(new DeterministicProvider(), { draftProse: async () => JSON.stringify({
+    action: "skip", reason: "A style preference, not a durable rule." }) });
+  const comment = { id: 1, body: "Prefer a guard clause here.", path: "src/auth.ts", line: 1, commit_id: "a".repeat(40),
+    html_url: "https://github.com/acme/app/pull/4#discussion_r1", created_at: "2026-09-10T00:00:00Z",
+    updated_at: "2026-09-10T00:00:00Z", user: { login: "alice", type: "User" } };
+  try {
+    execFileSync("git", ["init", root], { stdio: "ignore" });
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src/auth.ts"), "export function auth(tenant) { if (!tenant) throw new Error('missing tenant'); }");
+    execFileSync("git", ["-C", root, "add", "src/auth.ts"]);
+    console.error = (...args: unknown[]) => { errors.push(args.join(" ")); };
+    let fetched = 0;
+    const withDiscussions = (pullDiscussions: () => unknown) => {
+      const command = new Command();
+      registerAutomaticReviewMemory(command, () => ({ root, existing: [] }), () => assert.fail("nothing to save"),
+        async () => provider, { reviewComments: () => [comment],
+          pullDiscussions: () => { fetched++; return pullDiscussions() as ReturnType<typeof pullDiscussionsFromGraphql>; } });
+      return command;
+    };
+    const report = () => JSON.parse(readFileSync(out, "utf8"));
+    await withDiscussions(() => { throw new Error("GraphQL: rate limited"); })
+      .parseAsync(["auto", "--repository", "acme/app", "--output", out, "--dry-run"], { from: "user" });
+    assert.equal(report().entries.length, 1);
+    assert.equal(report().discussions_unavailable, true);
+    assert.ok(errors.some(e => /discussions unavailable/.test(e)));
+    fetched = 0;
+    await withDiscussions(() => assert.fail("must not fetch"))
+      .parseAsync(["auto", "--repository", "acme/app", "--output", out, "--dry-run", "--no-discussions"], { from: "user" });
+    assert.equal(fetched, 0);
+    assert.equal(report().entries.length, 1);
+    await withDiscussions(() => ({ pull_requests: [], incomplete_discussions: 2 }))
+      .parseAsync(["auto", "--repository", "acme/app", "--output", out, "--dry-run"], { from: "user" });
+    assert.equal(report().incomplete_discussions, 2);
+    assert.ok(errors.some(e => /2 pull request\(s\) exceeded the 100-node limit/.test(e)));
+  } finally {
+    console.error = original;
     assert.ok(resolve(root).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/")));
     cleanupDir(root);
   }
