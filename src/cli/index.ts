@@ -5190,6 +5190,7 @@ program
       // what it wrote now. Every other tool call just moves the baseline.
       let shellGround = "";
       let recall: FailureRecall = { text: "", bugs: [] };
+      const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
         const shell = evt.tool_name === "Bash" || evt.tool_name === "PowerShell";
         let stale = false;
@@ -5221,7 +5222,9 @@ program
         // A failed check that matches a recorded bug says so; anything else stays silent.
         if (shell && evt.tool_outcome?.status === "failure" && evt.tool_outcome.output) {
           try {
-            const seen = evt.session_id && pipelineEnabled() ? loadPipelineState(evt.session_id).recalled : [];
+            // Per agent, like shellWrittenFiles: a recall a subagent saw is not one the main agent saw.
+            const seen = evt.session_id && pipelineEnabled()
+              ? loadPipelineState(evt.session_id).recalled.filter((k) => k.startsWith(recallScope)).map((k) => k.slice(recallScope.length)) : [];
             // The store opens only once the output parses as a failing test report.
             recall = recallFailures(evt.tool_outcome.output, () => {
               const opened = openStore();
@@ -5232,7 +5235,7 @@ program
       }
       if (postTool && evt.session_id && pipelineEnabled()) {
         let st = loadPipelineState(evt.session_id);
-        if (recall.bugs.length) st = { ...st, recalled: [...st.recalled, ...recall.bugs] };
+        if (recall.bugs.length) st = { ...st, recalled: [...st.recalled, ...recall.bugs.map((id) => `${recallScope}${id}`)] };
         const before = st;
         let activity: Parameters<typeof proofCheckpoint>[2] | null = null;
         let lessonNote = "";

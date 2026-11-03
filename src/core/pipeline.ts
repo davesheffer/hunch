@@ -223,7 +223,7 @@ export interface PipelineState {
   proofReminders: number;
   /** Sibling-fix lessons delivered this session (see core/siblingfix.ts). */
   lessons: PendingLesson[];
-  /** Bug ids a failed check already recalled this session (see core/failureRecall.ts). */
+  /** `<agent_id|main>:<bug id>` entries a failed check already recalled this session (see core/failureRecall.ts). */
   recalled: string[];
 }
 

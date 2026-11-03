@@ -76,11 +76,11 @@ function repo(t: { after: (f: () => void) => void }): string {
   store.reindex(); store.close();
   return root;
 }
-function failed(root: string, session: string, output: string, pipeline = "1"): string {
+function failed(root: string, session: string, output: string, pipeline = "1", agent?: string): string {
   return execFileSync(process.execPath, ["--import", tsxLoaderUrl(), hookCli, "hook", "--provider", "claude"], {
     cwd: root, env: { ...process.env, HUNCH_PIPELINE: pipeline },
     input: JSON.stringify({ hook_event_name: "PostToolUseFailure", cwd: root, session_id: session, tool_name: "Bash",
-      tool_input: { command: "npm test" }, error: output }), encoding: "utf8",
+      tool_input: { command: "npm test" }, error: output, ...(agent ? { agent_id: agent } : {}) }), encoding: "utf8",
   });
 }
 
@@ -93,4 +93,33 @@ test("the failure hook recalls a seen-before test failure once per session, and 
   assert.match(first, new RegExp(bugId(TEST)));
   assert.doesNotMatch(failed(root, session, spec(TEST)), /seen before/, "the same bug is not recalled twice");
   assert.match(failed(root, `${session}-np`, spec(TEST), "0"), /seen before/, "recall does not depend on the pipeline");
+});
+
+test("a recall delivered to a subagent does not consume it for the main agent", t => {
+  const root = repo(t);
+  const session = `failrecall-agent-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  assert.match(failed(root, session, spec(TEST), "1", "agent_sub"), /seen before/);
+  assert.doesNotMatch(failed(root, session, spec(TEST), "1", "agent_sub"), /seen before/, "the subagent is not told twice");
+  assert.match(failed(root, session, spec(TEST)), /seen before/, "the main agent still gets its own recall");
+  assert.doesNotMatch(failed(root, session, spec(TEST)), /seen before/, "and only once");
+});
+
+test("a team store that throws on open keeps the failure hook silent and is not retried", t => {
+  const root = repo(t);
+  writeFileSync(join(root, ".hunch", "team.json"), "{ not json");
+  const session = `failrecall-open-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  assert.equal(failed(root, session, spec(TEST)).trim(), "");
+  assert.equal(failed(root, session, spec(TEST)).trim(), "", "a later event is still silent, never a crash");
+});
+
+test("two failures in one report matching the same bug are recalled once", () => {
+  const quoted = bug({ id: "bug_dup", symptom: `"${TEST}" and "${TEST} again" both fail` });
+  const out = `✖ ${TEST} (1ms)
+  AssertionError: a
+✖ ${TEST} (1ms)
+  AssertionError: b
+`;
+  const recall = recallFailures(out, [quoted]);
+  assert.deepEqual(recall.bugs, ["bug_dup"]);
+  assert.equal(recall.text.split("matches bug_dup").length - 1, 1);
 });
