@@ -287,6 +287,14 @@ test("team Matrix: three isolated clones share live memory, catch a bad branch, 
     const sharedSetup = expectCli(architect, ["shared", "--repo", memoryRemote, "--no-hook"]);
     assert.match(sharedSetup, /shared overlay enabled/);
     assert.match(sharedSetup, /UNIFIED/);
+    // The architect works on main and expects public index pumping (CLI and git
+    // hooks alike) to commit there, rebased below: this machine opts back in to
+    // default-branch capture commits.
+    const architectLocal = join(architect.root, ".hunch", "local.json");
+    writeFileSync(architectLocal, JSON.stringify({
+      ...JSON.parse(readFileSync(architectLocal, "utf8")) as Record<string, unknown>,
+      autoCommitDefaultBranch: true,
+    }, null, 2) + "\n");
     git(architect.root, "add", "-A");
     git(architect.root, "commit", "-qm", "chore: connect the team memory Matrix");
     git(architect.root, "push", "-q", "origin", "main");

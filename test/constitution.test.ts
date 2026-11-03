@@ -86,6 +86,7 @@ function layeredRepo(
   writeFileSync(join(root, "src/api/orders.ts"), apiBody);
   git("add", "-A");
   git("commit", "-qm", "fixture: layered orders");
+  git("checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
   const store = new HunchStore(hunchPaths(root));
   store.json.ensureDirs();
   indexRepo(store, root, { churn: false });

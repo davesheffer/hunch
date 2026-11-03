@@ -165,6 +165,30 @@ test("embed --batch embeds with the stub model; query --semantic and eval --sema
   }
 });
 
+test("eval --grounding scores the prompt hook's delivery over the live store and names each miss", () => {
+  const f = makeRepo("grounding");
+  try {
+    seed(f, decision("dec_fixture_pg0001", "Use PostgreSQL for durable orders"));
+    const golden = join(f.sandbox, "grounding.json");
+    writeFileSync(golden, JSON.stringify([
+      { name: "orders store", prompt: "store the durable orders in PostgreSQL", eligible: ["dec_fixture_pg0001"], allowed: [] },
+      { name: "needs a missing record", prompt: "rotate the signing keys", eligible: ["dec_fixture_absent"], allowed: "any" },
+    ]));
+    const out = ok(hunch(f, {}, "eval", "--grounding", "--file", golden), "eval --grounding");
+    assert.match(out, /Grounding eval over 2 case\(s\)/);
+    assert.match(out, /PRECISION\s+100\.0%\s+over 1 judged case/);
+    assert.match(out, /RECALL\s+50\.0%\s+over 2 case/);
+    assert.match(out, /needs a missing record — missed dec_fixture_absent/);
+    assert.doesNotMatch(out, /orders store —/, "a case that delivered exactly its eligible record is not listed");
+
+    writeFileSync(golden, JSON.stringify([{ name: "x", prompt: "y", eligible: [], extra: 1 }]));
+    refused(hunch(f, {}, "eval", "--grounding", "--file", golden), /grounding eval: invalid grounding case/, "an unknown case field");
+    refused(hunch(f, {}, "eval", "--grounding"), /needs --file/, "eval --grounding without a golden set");
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
 test("log --limit pages memory moves and log --diff prints one move's .hunch diff; now --recent caps the recent list", () => {
   const f = makeRepo("log");
   try {

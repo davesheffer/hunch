@@ -107,6 +107,30 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Nov 3, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.50.0</span><span class="clog-t"><b>Corrections that retire what they reverse, and failures Hunch remembers</b> — a correction can retire the rule it reverses, the hook recalls a test failure seen before, Go and Python calls through imports resolve, and hooks spawn fewer git processes.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Nov 2, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.49.0</span><span class="clog-t"><b>Rules from your docs, and faster hooks</b> — <code>hunch derive-rules</code> turns rules marked in markdown into constraints, the bundled CLI cuts hook time on large repos by a third to a half, and sibling-fix lessons move off the pre-edit path.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Nov 2, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.48.1</span><span class="clog-t"><b>Verify hints that parse in every shell</b> — the <code>task verify</code> command prints in a form PowerShell and Git Bash both accept, re-recording a decision ignores nested key order, and a bad <code>HUNCH_CLI_CONFIG</code> falls back to deterministic synthesis.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Oct 29, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.48.0</span><span class="clog-t"><b>Commit synthesis reads the PR; retired rules stop outranking their replacement</b> — synthesis now reads the merged PR's description (and review thread when verifying), superseded decisions rank below their live successor, and Hunch is relicensed under FSL-1.1-ALv2.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Oct 25, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.47.2</span><span class="clog-t"><b>Grounding that fits the agent and the prompt</b> — delegated agents are only told to call Hunch tools their role has, and host-injected blocks no longer steer which memory a prompt's task gets.</span></div>
+      </div>
+      <div class="clog-group">
+        <div class="clog-date">Oct 25, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.47.1</span><span class="clog-t"><b>Linked worktrees are grounded; no automatic commits on the default branch</b> — edits and <code>task verify</code> in a linked git worktree use that worktree's memory, and automatic memory commits are held on <code>main</code> unless you opt in.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Oct 24, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.47.0</span><span class="clog-t"><b>A clean-room rewrite</b> — the indexer and parser, the Helm and Kubernetes extractors, CLI wiring, MCP routing, synthesis provider detection, the git hook and grounding writers, escalations, provenance repair and the release tooling were rewritten from scratch, with behaviour unchanged and the existing test suite passing against the new code. The YAML grammar now installs under an npm alias like the other grammars, Kubernetes and Helm extraction fails closed on non-ASCII indentation and unterminated <code>define</code> names, and the Helm chart-root lookup stops at the filesystem root. Contributions now need a signed Contributor Assignment Agreement.</span></div>
       </div>

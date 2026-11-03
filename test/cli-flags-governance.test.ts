@@ -245,6 +245,8 @@ describe("cli flags: governance commands", { timeout: 900_000 }, () => {
     writeFileSync(cfg, "[]\n");
     writeFileSync(join(f.sandbox, "comments.json"), "[]\n");
     refused(f, /--limit must be 1\.\.100/, "review-memory", "auto", "--repository", "acme/app", "--dry-run", "--limit", "0");
+    // --no-discussions is accepted by the real CLI; its behavior is covered in automatic-review-memory-cli.
+    refused(f, /--limit must be 1\.\.100/, "review-memory", "auto", "--repository", "acme/app", "--dry-run", "--no-discussions", "--limit", "0");
     refused(f, /exactly one of --private or --public, or --dry-run/, "review-memory", "auto", "--repository", "acme/app", "--private", "--public");
     refused(f, /exactly one of --private or --public, or --dry-run/, "review-memory", "auto", "--repository", "acme/app");
     refused(f, /repository does not match this checkout's remotes/, "review-memory", "auto", "--repository", "acme/app", "--dry-run");

@@ -14,9 +14,12 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { BugSchema, ConstraintSchema, DecisionSchema, FindingSchema, type Bug, type Constraint, type Decision, type Finding } from "../src/core/types.js";
 import { lexicalTokens } from "../src/core/delivery.js";
 import { DF_CAP_RATIO, MIN_DF_CAP, identifierTokens, liveSelectionRecords, selectForTask, type TaskSelectionRecords } from "../src/core/taskSelection.js";
+import { evaluateGroundingSelection, type GroundingCase } from "../src/eval/grounding.js";
 
 // ---------------------------------------------------------------------------
 // Deterministic generator
@@ -464,4 +467,38 @@ test("aggregate metrics hold at the measured baseline (no regressions)", () => {
   }
   assert.ok(recallAt3 >= BASELINE.recallAt3, `recall@3 regressed: ${recallAt3} < ${BASELINE.recallAt3}`);
   assert.ok(falseQualifiers <= BASELINE.falseQualifiers, `false qualifiers regressed: ${falseQualifiers} > ${BASELINE.falseQualifiers}`);
+});
+
+/** Every golden prompt as a grounding case. Recall prompts name one target and leave
+ *  the rest open (precision unjudged); precision prompts require their hand-written
+ *  topical records and allow the co-mentioning generic ones; path prompts require
+ *  exactly the records anchored to the path. */
+const GROUNDING_CASES: GroundingCase[] = [
+  ...RECALL.map((r) => ({ name: `recall: ${r.prompt}`, prompt: r.prompt, eligible: [r.target], allowed: "any" as const })),
+  ...PRECISION.map((p) => ({ name: `precision: ${p.name}`, prompt: p.prompt, eligible: p.allowed.filter((id) => !/^(dec|con|bug|fnd)_g_/.test(id)), allowed: [...p.allowed] })),
+  ...PATH_PROMPTS.map((p) => ({ name: `path: ${p.path}`, prompt: p.path, eligible: [...p.expected] })),
+];
+const BENCH_FILE = join(process.cwd(), "bench", "grounding-selection-v1.json");
+
+test("grounding precision/recall on this corpus is the tracked value in bench/grounding-selection-v1.json", () => {
+  const r = evaluateGroundingSelection(corpus.records, GROUNDING_CASES, { k: 3 });
+  const round = (n: number) => Math.round(n * 10000) / 10000;
+  const measured = {
+    cases: r.aggregate.cases,
+    precision_cases: r.aggregate.precision_cases,
+    recall_cases: r.aggregate.recall_cases,
+    precision: round(r.aggregate.precision),
+    recall: round(r.aggregate.recall),
+  };
+  console.log(`# grounding: precision ${measured.precision} over ${measured.precision_cases} case(s), recall ${measured.recall} over ${measured.recall_cases} case(s)`);
+  for (const c of r.cases) {
+    if (c.false_positives.length || c.missed.length) console.log(`#   ${c.name}: fp ${JSON.stringify(c.false_positives)} missed ${JSON.stringify(c.missed)}`);
+  }
+  const tracked = JSON.parse(readFileSync(BENCH_FILE, "utf8")) as Record<string, unknown>;
+  assert.equal(tracked.schema, "hunch.grounding-bench/1");
+  assert.deepEqual(
+    { cases: tracked.cases, precision_cases: tracked.precision_cases, recall_cases: tracked.recall_cases, precision: tracked.precision, recall: tracked.recall },
+    measured,
+    "selection quality moved: update bench/grounding-selection-v1.json in the same change, so the delta is reviewed",
+  );
 });

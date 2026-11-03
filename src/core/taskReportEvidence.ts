@@ -70,6 +70,16 @@ export function reportSourceSnapshot(root: string): ReportSnapshot {
   }
 }
 
+/** The current source of `root` for report readers, as a resolver that also hashes the
+ *  sibling worktree a check ran in (its `work_root`). Each tree is hashed at most once. */
+export function currentSource(root: string): (dir?: string) => string | null {
+  const seen = new Map<string, string | null>();
+  return (dir = root) => {
+    if (!seen.has(dir)) seen.set(dir, reportSourceSnapshot(dir).hash);
+    return seen.get(dir)!;
+  };
+}
+
 /** Evaluate every delivered lesson's DECLARED rule against the files this task
  * changed (working tree vs HEAD). Deterministic and Hunch-owned: the agent
  * neither chooses the rule nor submits the verdict. A constraint is judged by its
@@ -137,10 +147,11 @@ export function runReportConformance(root: string, store: HunchStore, taskId: st
   });
 }
 
-/** A full suite is the usual check; two minutes turned passing suites into
- * recorded timeouts (#268). The bound is a safety net for an abandoned runner,
- * not a verdict. */
-export const DEFAULT_CHECK_TIMEOUT_MS = 15 * 60_000;
+/** Two minutes turned passing suites into recorded timeouts (#268), but the
+ * default must also stay under the agent host's 10-minute shell cap: a check
+ * that outlives the cap is moved to the background and waited on again (#42).
+ * Targeted tests fit; a full suite is CI's job and takes --timeout. */
+export const DEFAULT_CHECK_TIMEOUT_MS = 8 * 60_000;
 export const MAX_CHECK_TIMEOUT_MS = 6 * 60 * 60_000;
 /** After the command itself exits, everything it wrote is already in the pipe; the window only lets those buffered chunks be read before settling. */
 const EXIT_DRAIN_MS = 500;
@@ -150,6 +161,10 @@ export async function runReportCheck(root: string, taskId: string, command: stri
   signal?: AbortSignal;
   onStdout?: (chunk: Buffer) => void;
   onStderr?: (chunk: Buffer) => void;
+  /** Where the command runs and whose source is snapshotted, when the task's
+   *  ledger lives in a sibling worktree of the same repository (the hook opened
+   *  the task at the main checkout, the agent works in a linked one). */
+  workRoot?: string;
 } = {}): Promise<ReportCheck> {
   // A full suite can legitimately run for half an hour (fnd_70dd5c4034); the
   // bound exists so an abandoned runner cannot hold a task open indefinitely.
@@ -157,7 +172,8 @@ export async function runReportCheck(root: string, taskId: string, command: stri
   options.signal?.throwIfAborted();
   const task = readTaskReport(root, taskId).task;
   if (task.state !== "open" && task.closed_by !== "host") throw new Error("cannot verify a closed task");
-  const before = reportSourceSnapshot(root);
+  const workRoot = options.workRoot ?? root;
+  const before = reportSourceSnapshot(workRoot);
   // Validate sensitive arguments before executing or writing anything.
   ReportCheckSchema.parse({ label, command, exit_code: null, output_hash: reportHash(""), before_snapshot: before.hash, after_snapshot: null, snapshot_limitations: before.limitations, timed_out: false, source: "local-command-runner" });
   const checkId = beginReportCheck(root, taskId, label, timeoutMs);
@@ -175,7 +191,7 @@ export async function runReportCheck(root: string, taskId: string, command: stri
     const started = (() => {
       try {
         const resolved = resolveSpawnCommand(command);
-        return spawn(resolved.file, resolved.args, { cwd: root, shell: false, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, detached: process.platform !== "win32", windowsVerbatimArguments: resolved.windowsVerbatimArguments === true });
+        return spawn(resolved.file, resolved.args, { cwd: workRoot, shell: false, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, detached: process.platform !== "win32", windowsVerbatimArguments: resolved.windowsVerbatimArguments === true });
       } catch (error) {
         // An argument the launcher cannot carry, or a synchronous spawn refusal
         // (EINVAL for a batch file), is the same visible failure as ENOENT.
@@ -239,9 +255,10 @@ export async function runReportCheck(root: string, taskId: string, command: stri
     options.signal?.addEventListener("abort", cancel, { once: true });
     if (options.signal?.aborted) cancel();
   });
-  const after = reportSourceSnapshot(root);
+  const after = reportSourceSnapshot(workRoot);
   const check: ReportCheck = { check_id: checkId, label, command, exit_code: result.code, output_hash: result.hash, before_snapshot: before.hash, after_snapshot: after.hash,
-    snapshot_limitations: [...new Set([...before.limitations, ...after.limitations])], timed_out: result.timedOut, cancelled: result.cancelled, source: "local-command-runner" };
+    snapshot_limitations: [...new Set([...before.limitations, ...after.limitations])], timed_out: result.timedOut, cancelled: result.cancelled,
+    ...(workRoot !== root ? { work_root: workRoot } : {}), source: "local-command-runner" };
   recordReportCheck(root, taskId, check);
   return check;
 }

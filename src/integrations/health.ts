@@ -183,7 +183,7 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
     try {
       const launcher = readLauncher(root, harness);
       recordPins(spec.mcp, [launcher.command, ...launcher.args]);
-      capabilities.mcp.detail = "Configured locally; use --probe to verify a fresh server, then reconnect the host";
+      capabilities.mcp.detail = `Configured locally; run \`hunch integrations check --probe --harness ${harness}\` to verify a fresh server, then reconnect the host`;
     } catch (e) {
       // A harness can be detected here via its hooks file alone —
       // some hooks files are deliberately committed while their MCP config is

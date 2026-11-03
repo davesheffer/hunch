@@ -3,7 +3,7 @@ import { z } from "zod";
 import { verificationLauncherFor } from "../core/verifyLauncher.js";
 import { TaskIdSchema, ReportClaimSchema, LessonReferenceSchema, finishReportTask, listReportTasks, readTaskReport, readLessonHistory, recordReportClaim, reportPresentationEnabled, startReportTask } from "../core/taskReport.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
-import { reportSourceSnapshot, runReportConformance } from "../core/taskReportEvidence.js";
+import { DEFAULT_CHECK_TIMEOUT_MS, currentSource, runReportConformance } from "../core/taskReportEvidence.js";
 import { renderTaskReport, writeTaskReportHtml } from "../core/taskReportRender.js";
 import type { HunchStore } from "../store/hunchStore.js";
 
@@ -86,12 +86,12 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           // host hook). Its persisted title is authoritative; a paraphrased title
           // from the model must not fork a second report or fail the start.
           if (!task_id || !/different title/.test((error as Error).message)) throw error;
-          task = readTaskReport(root, task_id, reportSourceSnapshot(root).hash).task;
+          task = readTaskReport(root, task_id, currentSource(root)).task;
         }
         const launcher = verificationLauncher();
         // Compact by design (#370): the rules an agent needs to act, and exact
         // identities; scope, title and timestamps stay in `hunch report <id> --json`.
-        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to hunch_context and every decision/correction/finding capture (a capture is not proof of a commit or push). To claim an application, copy occurrence_id, record_id and content_hash exactly from hunch_report(task_id) application_references, with the action you took; omit applications you did not make. Before the final response, finish with hunch_task (outcome "interrupted" if cut short) and include its contribution card verbatim, Evidence line and agent-reported label included, unless presentation_enabled is false. Never rerun an expensive check only for reporting; missing evidence stays unverified. Checks, with this exact installation (a global hunch may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note} Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is 15 minutes; --timeout <seconds> before -- is only for when the whole suite is really needed.` }], structuredContent: { task: { task_id: task.task_id, state: task.state }, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
+        return { content: [{ type: "text" as const, text: `Task ${task.task_id} · ${task.state}. Pass task_id to hunch_context and every decision/correction/finding capture (a capture is not proof of a commit or push). To claim an application, copy occurrence_id, record_id and content_hash exactly from hunch_report(task_id) application_references, with the action you took; omit applications you did not make. Before the final response, finish with hunch_task (outcome "interrupted" if cut short) and include its contribution card verbatim, Evidence line and agent-reported label included, unless presentation_enabled is false. Never rerun an expensive check only for reporting; missing evidence stays unverified. Checks, with this exact installation (a global hunch may be stale): ${launcher.shell} task verify ${task.task_id} -- <command> [arguments]${launcher.note} Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is ${DEFAULT_CHECK_TIMEOUT_MS / 60_000} minutes; --timeout <seconds> before -- is only for when the whole suite is really needed.` }], structuredContent: { task: { task_id: task.task_id, state: task.state }, verification_argv: [...launcher.argv, "task", "verify", task.task_id, "--"] } };
       }
       if (!task_id) throw new Error("finish requires the exact task_id");
       for (const claim of applications ?? []) recordReportClaim(root, task_id, claim);
@@ -110,7 +110,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
           graphNote = "\nGraph     nothing to keep (no observation, or task records disabled)";
         }
       } catch (error) { graphNote = `\nGraph     not saved: ${(error as Error).message}`; }
-      const report = readTaskReport(root, task_id, reportSourceSnapshot(root).hash);
+      const report = readTaskReport(root, task_id, currentSource(root));
       const show = reportPresentationEnabled(root);
       // The HTML evidence view is rendered on demand (hunch_report(html: true),
       // `hunch report <id> --html`, or the VS Code view); finish writes no file.
@@ -146,7 +146,7 @@ export function registerTaskReportTools(server: McpServer, getRoot: () => string
         const tasks = listReportTasks(root);
         return { content: [{ type: "text" as const, text: tasks.length ? tasks.map(t => `${t.task_id} · ${t.state} · ${t.title}`).join("\n") : "No task reports yet. Start with hunch_task." }], structuredContent: { tasks } };
       }
-      const report = readTaskReport(root, task_id, reportSourceSnapshot(root).hash);
+      const report = readTaskReport(root, task_id, currentSource(root));
       const file = html ? writeTaskReportHtml(root, task_id) : null;
       return { content: [{ type: "text" as const, text: `${renderTaskReport(report)}${file ? `\nLocal evidence view: ${file}` : ""}` }], structuredContent: { ...boundedTaskReportForHost(report), application_references: applicationReferences(report), contribution_card: renderTaskReport(report), report_path: file } as unknown as Record<string, unknown> };
     } catch (error) { return { isError: true, content: [{ type: "text" as const, text: `Invalid: ${(error as Error).message}` }] }; }

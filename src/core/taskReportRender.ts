@@ -1,12 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { writeFileAtomic } from "./io.js";
 import { readTaskReport, readLessonHistory, type LessonHistory, type TaskReport } from "./taskReport.js";
-import { reportSourceSnapshot } from "./taskReportEvidence.js";
+import { currentSource } from "./taskReportEvidence.js";
 import { assertReportPath } from "./taskReportPaths.js";
 import { publicTaskReport, renderPublicTaskReportHtml } from "./taskReportPublic.js";
 
 export function writeTaskReportHtml(root: string, taskId: string, publicOnly = false): string {
-  const report = readTaskReport(root, taskId, reportSourceSnapshot(root).hash);
+  const report = readTaskReport(root, taskId, currentSource(root));
   const directory = assertReportPath(root, ".hunch-cache", "reports");
   mkdirSync(directory, { recursive: true });
   const file = assertReportPath(root, ".hunch-cache", "reports", `${report.task.task_id}${publicOnly ? ".public" : ""}.html`);

@@ -189,7 +189,7 @@ test("pre-commit framework: post-checkout snippet reads the checkout type from p
 test("pre-commit framework: a Hunch block previously appended after its exec is reported installed-but-unreachable (hookStatus + doctor)", () => {
   const r = repo();
   try {
-    writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
+    writeFileSync(join(r, "app.ts"), "export const value = 1;\n");
     git(r, "add", "-A");
     git(r, "commit", "-qm", "init");
     // Old Hunch appended after the generated hook's exec.
@@ -201,7 +201,6 @@ test("pre-commit framework: a Hunch block previously appended after its exec is 
     assert.equal(report.postCommit.manager, "pre-commit");
     assert.equal(hookStatus(r).postCommit, false, "an unreachable block is not installed");
     assert.equal(installPostCommitHook(r, "hunch").action, "managed-elsewhere");
-
     const run = spawnSync(process.execPath, [TSX, CLI, "doctor"], {
       cwd: r,
       env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic", NO_COLOR: "1" },
@@ -308,7 +307,7 @@ test("husky v9: a block an older Hunch appended into .husky/_/<hook> is reported
 test("husky v9: hunch init reports the hooks as NOT installed with the snippet, and writes nothing under .husky", { timeout: 120_000 }, () => {
   const r = repo();
   try {
-    writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
+    writeFileSync(join(r, "app.ts"), "export const value = 1;\n");
     git(r, "add", "app.ts");
     git(r, "commit", "-qm", "init");
     huskyV9(r);

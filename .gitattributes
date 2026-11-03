@@ -9,8 +9,8 @@
 # Agent instruction files carrying Hunch's generated grounding block. The
 # hunch-grounding merge driver reconciles concurrent branch edits to that block
 # instead of leaving conflicts.
-CLAUDE.md                        merge=hunch-grounding
-AGENTS.md                        merge=hunch-grounding
-.github/copilot-instructions.md  merge=hunch-grounding
-.cursor/rules/hunch.mdc          merge=hunch-grounding
-.windsurf/rules/hunch.md         merge=hunch-grounding
+CLAUDE.md merge=hunch-grounding
+AGENTS.md merge=hunch-grounding
+.github/copilot-instructions.md merge=hunch-grounding
+.cursor/rules/hunch.mdc merge=hunch-grounding
+.windsurf/rules/hunch.md merge=hunch-grounding

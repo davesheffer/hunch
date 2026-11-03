@@ -366,6 +366,21 @@ test("e2e: a host notification prompt leaves the task's selection untouched", t 
   assert.deepEqual(selectionFiles(root), before);
 });
 
+test("e2e: words inside host-injected blocks never select memory for the human's task", t => {
+  for (const prompt of [
+    "<browser_instruction>\nTelemetry sampling rate is ten percent\n</browser_instruction>\nrename a variable",
+    "<system-reminder>Telemetry sampling rate is ten percent</system-reminder>\nrename a variable",
+  ]) {
+    const root = fixture(t);
+    const out = hook(root, "UserPromptSubmit", { prompt });
+    assert.doesNotMatch(out?.hookSpecificOutput?.additionalContext ?? "", /Hunch memory for this task/);
+    assert.equal(selectionFiles(root).size, 0, "host text wrote a selection");
+  }
+  const root = fixture(t);
+  const out = hook(root, "UserPromptSubmit", { prompt: "<system-reminder>context</system-reminder>\nTelemetry sampling rate is ten percent" });
+  assert.match(out.hookSpecificOutput.additionalContext, /Hunch memory for this task: dec_other_b/, "the human's own words after a block still select");
+});
+
 test("e2e: HUNCH_TASK_SELECTION=0 writes no selection and grounds unfiltered", t => {
   const root = fixture(t);
   const off = { HUNCH_TASK_SELECTION: "0" };

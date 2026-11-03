@@ -78,6 +78,7 @@ test("init and durable index never publish dirty private source absent from comm
     writeFileSync(join(root, "src/app.ts"), "export function publicApp(){ return true; }\n");
     git(root, "add", "src/app.ts");
     git(root, "commit", "-qm", "fixture: committed public source");
+    git(root, "checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
     writeFileSync(join(root, "src/private.ts"), PRIVATE_SOURCE);
 
     const initialized = cli(root, ...initArgs());

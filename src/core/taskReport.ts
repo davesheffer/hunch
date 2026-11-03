@@ -45,6 +45,9 @@ export const ReportCheckSchema = z.object({
   snapshot_limitations: z.array(z.string().max(300)).max(16),
   timed_out: z.boolean(),
   cancelled: z.boolean().optional(),
+  /** Where the command ran, recorded only when that is not this ledger's root (a
+   *  sibling worktree): its currentness is judged against that tree's source. */
+  work_root: z.string().min(1).max(4_096).optional(),
   source: z.literal("local-command-runner"),
 }).strict();
 export type ReportCheck = z.infer<typeof ReportCheckSchema>;
@@ -583,7 +586,7 @@ export interface TaskSummary {
 
 /** One bounded summary per recent task for status lines and host views; the
  * card and evidence view remain the authoritative renderings. */
-export function summarizeTaskReport(root: string, taskId: string, currentSnapshot: string | null = null): TaskSummary {
+export function summarizeTaskReport(root: string, taskId: string, currentSnapshot: CurrentSnapshot = null): TaskSummary {
   const html = join(root, ".hunch-cache", "reports", `${taskId}.html`);
   try {
     const report = readTaskReport(root, taskId, currentSnapshot);
@@ -612,7 +615,7 @@ export function summarizeTaskReport(root: string, taskId: string, currentSnapsho
   }
 }
 
-export function listTaskSummaries(root: string, limit = 30, currentSnapshot: string | null = null): TaskSummary[] {
+export function listTaskSummaries(root: string, limit = 30, currentSnapshot: CurrentSnapshot = null): TaskSummary[] {
   if (!existsSync(join(root, ".hunch-cache", "served.db"))) return [];
   return listReportTasks(root).slice(0, Math.max(1, Math.min(limit, 30))).map(task => summarizeTaskReport(root, task.task_id, currentSnapshot));
 }
@@ -726,7 +729,13 @@ export function reportPresentationEnabled(root: string): boolean {
   try { return JSON.parse(readFileSync(join(root, ".hunch", "local.json"), "utf8")).reportPresentation !== false; }
   catch { return true; }
 }
-export function readTaskReport(root: string, taskId: string, currentSnapshot: string | null = null): TaskReport {
+/** What a reader compares evidence snapshots against: the report root's current source
+ *  hash, or a resolver that also hashes another worktree a check ran in. A plain hash
+ *  never vouches for a check that ran elsewhere. */
+export type CurrentSnapshot = string | null | ((dir?: string) => string | null);
+
+export function readTaskReport(root: string, taskId: string, currentSnapshot: CurrentSnapshot = null): TaskReport {
+  const snapshotAt = (dir?: string): string | null => typeof currentSnapshot === "function" ? currentSnapshot(dir) : dir === undefined ? currentSnapshot : null;
   const { task, events } = taskDb(root, db => transaction(db, () => {
     const task = readTask(db, root, taskId);
     const { bytes } = db.prepare("SELECT COALESCE(SUM(length(CAST(body AS BLOB))), 0) AS bytes FROM report_events WHERE task_id = ?").get(taskId) as { bytes: number };
@@ -747,7 +756,7 @@ export function readTaskReport(root: string, taskId: string, currentSnapshot: st
       } else if (event.kind === "claim") claims.push({ ...ReportClaimSchema.parse(value), at: event.at, attribution: "agent-reported", supported_by: null });
       else if (event.kind === "conformance") {
         const rule = ReportConformanceSchema.parse(value);
-        conformance.push({ ...rule, event_id: event.event_id, at: event.at, current: currentSnapshot !== null && rule.snapshot === currentSnapshot });
+        conformance.push({ ...rule, event_id: event.event_id, at: event.at, current: snapshotAt() !== null && rule.snapshot === snapshotAt() });
       }
       else if (event.kind === "save") saves.push({ ...ReportSaveSchema.parse(value), event_id: event.event_id, at: event.at, durability: "local", proofs: [] });
       else if (event.kind === "durability") {
@@ -760,7 +769,8 @@ export function readTaskReport(root: string, taskId: string, currentSnapshot: st
       else if (event.kind === "refusal") refusals.push({ ...ReportRefusalSchema.parse(value), event_id: event.event_id, at: event.at });
       else if (event.kind === "check") {
         const check = ReportCheckSchema.parse(value);
-        checks.push({ ...check, at: event.at, current: currentSnapshot !== null && check.before_snapshot === currentSnapshot && check.after_snapshot === currentSnapshot });
+        const now = snapshotAt(check.work_root);
+        checks.push({ ...check, at: event.at, current: now !== null && check.before_snapshot === now && check.after_snapshot === now });
       } else if (event.kind !== "check-start") throw new Error("unsupported report event kind; update Hunch before reading this report");
     }
     // The LAST evaluation of a record revision is its standing; a satisfied rule

@@ -161,6 +161,7 @@ test("compact --apply refuses physical deletion and leaves the additive memory p
     const decisionFile = join(root, ".hunch/decisions/dec_old_rejected.json");
     git("add", "-A");
     git("commit", "-qm", "fixture: source and rejected memory");
+    git("checkout", "-q", "-b", "feat/test"); // public memory auto-commits skip the default branch (1.47.1)
 
     const beforeHead = git("rev-parse", "HEAD");
     const beforeStatus = git("status", "--porcelain=v1", "-z", "--untracked-files=all");

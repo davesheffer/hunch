@@ -216,11 +216,13 @@ export interface ResolvedRepoProfile {
  *  Entries that name different overlays leave the home unresolved: never a guess. A dead
  *  overlay dir reads as no profile: opening a store must never invent a directory. */
 export function resolveRepoProfile(root: string, opts: { commonDir?: string } = {}): ResolvedRepoProfile {
+  // The profile file first: with no entries on this machine the answer is null either
+  // way, and the store-open path skips the common-dir probe.
+  const repos = readProfiles(repoProfileFile())?.repos as Record<string, unknown> | undefined;
+  if (!repos || !Object.keys(repos).length) return { entry: null };
   const origin = repoProfileKey(root, opts.commonDir);
   const id = repoIdOf(root);
   if (!origin && !id) return { entry: null };
-  const repos = readProfiles(repoProfileFile())?.repos as Record<string, unknown> | undefined;
-  if (!repos) return { entry: null };
   const candidates: Array<{ key: string; entry: RepoProfileEntry }> = [];
   const conflicts: string[] = [];
   if (id) {

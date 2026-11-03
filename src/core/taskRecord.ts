@@ -16,7 +16,7 @@ import { flushCapture } from "../integrations/sync.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "./paths.js";
 import { episodeTasks, isEmptyTaskReport, readTaskReport, reportHash, sessionsOverlap, type TaskReport, type TaskSummary } from "./taskReport.js";
-import { reportSourceSnapshot } from "./taskReportEvidence.js";
+import { currentSource } from "./taskReportEvidence.js";
 import { ENTITY_KINDS, TaskRecordSchema, type EntityKind, type TaskRecord } from "./types.js";
 import { refreshRankEval } from "./taskRankingMode.js";
 import { gitTouchedFiles } from "./taskTouched.js";
@@ -158,7 +158,7 @@ export function computeSupersedes(record: TaskRecord, others: readonly TaskRecor
 export interface PersistedTaskRecord {
   record: TaskRecord;
   home: TaskRecordHome;
-  flushed: "pushed" | "committed" | null;
+  flushed: "pushed" | "committed" | "held" | null;
   /** False when the same report revision was already in the graph. */
   changed: boolean;
 }
@@ -168,7 +168,7 @@ export interface PersistedTaskRecord {
  * open task, an empty report, or when task records are disabled locally. */
 export function persistTaskRecord(root: string, store: HunchStore, taskId: string, options: { flush?: boolean } = {}): PersistedTaskRecord | null {
   if (!taskRecordsEnabled(root)) return null;
-  const snapshot = reportSourceSnapshot(root).hash;
+  const snapshot = currentSource(root);
   const own = readTaskReport(root, taskId, snapshot);
   if (own.task.state === "open") return null;
   // The record covers the whole episode: this prompt and the prompts of the

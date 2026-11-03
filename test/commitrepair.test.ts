@@ -71,7 +71,7 @@ test("planCommitRepair: a same-patch-id candidate beats the unique file-superset
   const orphaned = [D({ id: "dec_1", commit: "sha_old", related_files: ["CHANGELOG.md", "src/a.ts"] })];
   const candidates: CommitCandidate[] = [
     { sha: "sha_release", files: ["CHANGELOG.md", "src/a.ts", "package.json"] },
-    { sha: "sha_true", files: ["CHANGELOG.md", "scripts/x.sh"] },
+    { sha: "sha_true", files: ["src/a.ts", "scripts/build.mjs"] },
   ];
   const patch = new Map([["sha_old", "p1"], ["sha_true", "p1"], ["sha_release", "p2"]]);
   const patchIdOf = (sha: string) => patch.get(sha) ?? null;

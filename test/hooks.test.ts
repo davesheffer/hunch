@@ -171,55 +171,55 @@ const mergeHookText = (r: string): string => readFileSync(join(r, ".git", "hooks
 /** A repo with one commit, so the CLI has a HEAD to index. */
 function committedRepo(): string {
   const r = repo();
-  writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
-  execFileSync("git", ["config", "user.email", "t@t.co"], { cwd: r });
-  execFileSync("git", ["config", "user.name", "T"], { cwd: r });
-  execFileSync("git", ["add", "-A"], { cwd: r });
-  execFileSync("git", ["commit", "-qm", "init"], { cwd: r });
+  const g = (...args: string[]) => execFileSync("git", args, { cwd: r, stdio: "ignore" });
+  g("config", "user.email", "hooks-test@example.invalid");
+  g("config", "user.name", "Hooks Test");
+  writeFileSync(join(r, "app.ts"), "export const answer = 42;\n");
+  g("add", "app.ts");
+  g("commit", "-q", "-m", "fixture: initial commit");
   return r;
 }
 const cliEnv = (): NodeJS.ProcessEnv => ({ ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" });
 const runCli = (r: string, ...args: string[]) =>
   spawnSync(process.execPath, [TSX, CLI, ...args], { cwd: r, env: cliEnv(), encoding: "utf8" });
 
-test("post-merge hook: invokes repair-provenance from the hook, quietly, WITHOUT --apply (detect-and-queue only)", () => {
+test("post-merge hook: queues repair-provenance in quiet hook mode, never applies, and is loop-guarded", () => {
   const r = repo();
   try {
     installPostMergeHook(r, "hunch");
     const h = mergeHookText(r);
     assert.match(h, /hunch repair-provenance --from-hook --quiet >/);
-    assert.doesNotMatch(h, /--apply/);
+    assert.doesNotMatch(h, /--apply/, "the hook only detects and queues; a human confirms with --apply");
     assert.match(h, /HUNCH_MERGE_SYNC/);
   } finally { cleanupDir(r); }
 });
 
-test("post-merge hook: re-install is idempotent (managed block replaced, not duplicated)", () => {
+test("post-merge hook: a repeated install replaces the managed block rather than stacking a second one", () => {
   const r = repo();
   try {
     installPostMergeHook(r, "hunch");
     installPostMergeHook(r, "hunch");
-    assert.equal(mergeHookText(r).match(/>>> hunch post-merge >>>/g)?.length, 1);
+    assert.equal(mergeHookText(r).match(/# >>> hunch post-merge >>>/g)?.length, 1);
   } finally { cleanupDir(r); }
 });
 
-test("post-merge hook: appended to an existing hook file without clobbering it", () => {
+test("post-merge hook: a hand-written hook already in place survives, with the managed block added after it", () => {
   const r = repo();
   try {
     mkdirSync(join(r, ".git", "hooks"), { recursive: true });
-    writeFileSync(join(r, ".git", "hooks", "post-merge"), "#!/bin/sh\necho user-hook-ran\n");
+    writeFileSync(join(r, ".git", "hooks", "post-merge"), "#!/bin/sh\necho my-own-post-merge\n");
     installPostMergeHook(r, "hunch");
     const h = mergeHookText(r);
-    assert.match(h, /echo user-hook-ran/);
-    assert.match(h, />>> hunch post-merge >>>/);
+    assert.match(h, /echo my-own-post-merge/);
+    assert.match(h, /# >>> hunch post-merge >>>/);
   } finally { cleanupDir(r); }
 });
 
-test("post-merge hook: unchanged action when re-installed identically", () => {
+test("post-merge hook: re-installing with the same invocation reports unchanged", () => {
   const r = repo();
   try {
     installPostMergeHook(r, "hunch");
-    const second = installPostMergeHook(r, "hunch");
-    assert.equal(second.action, "unchanged");
+    assert.equal(installPostMergeHook(r, "hunch").action, "unchanged");
   } finally { cleanupDir(r); }
 });
 
@@ -253,32 +253,20 @@ test("hunch index installs/upgrades the post-merge hook for a repo that already 
   } finally { cleanupDir(r); }
 });
 
-test("hunch index self-heals the missing hooks when the post-commit block is STALE — it still proves hunch init ran (issue #315)", () => {
-  const r = repo();
+test("hunch index heals a missing post-merge hook even when the post-commit block is stale (#315)", () => {
+  const r = committedRepo();
   try {
-    writeFileSync(join(r, "app.ts"), "export const x = 1;\n");
-    execFileSync("git", ["config", "user.email", "t@t.co"], { cwd: r });
-    execFileSync("git", ["config", "user.name", "T"], { cwd: r });
-    execFileSync("git", ["add", "-A"], { cwd: r });
-    execFileSync("git", ["commit", "-qm", "init"], { cwd: r });
     installPostCommitHook(r, "hunch");
-    // The launcher this machine was installed with is gone after a reinstall —
-    // rewritten in place, never executed.
-    const gone = join(r, "gone");
-    const postCommit = join(r, ".git", "hooks", "post-commit");
-    writeFileSync(postCommit, readFileSync(postCommit, "utf8").split("\n")
-      .map((l) => (/sync\s+--from-hook/.test(l) ? `  ( ${JSON.stringify(join(gone, "node"))} ${JSON.stringify(join(gone, "cli", "index.js"))} sync --from-hook --quiet >/dev/null 2>&1 || true ) &` : l))
-      .join("\n"));
-
-    const run = spawnSync(process.execPath, [TSX, CLI, "index", "--no-auto-commit"], {
-      cwd: r,
-      env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" },
-      encoding: "utf8",
-    });
+    // Point the sync line at a launcher that does not exist. The hook is only
+    // read by hunch here, never run.
+    const gone = join(r, "no-such-dir");
+    const pc = join(r, ".git", "hooks", "post-commit");
+    const dead = `  ( ${JSON.stringify(join(gone, "node"))} ${JSON.stringify(join(gone, "cli", "index.js"))} sync --from-hook --quiet >/dev/null 2>&1 || true ) &`;
+    writeFileSync(pc, readFileSync(pc, "utf8").split("\n").map((l) => (/sync\s+--from-hook/.test(l) ? dead : l)).join("\n"));
+    const run = runCli(r, "index", "--no-auto-commit");
     assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
-    const hookPath = join(r, ".git", "hooks", "post-merge");
-    assert.equal(existsSync(hookPath), true, "a stale post-commit block must not block the post-merge upgrade");
-    assert.match(readFileSync(hookPath, "utf8"), /grounding --refresh/);
+    assert.equal(existsSync(join(r, ".git", "hooks", "post-merge")), true, "a stale post-commit block still proves init ran");
+    assert.match(mergeHookText(r), /grounding --refresh/);
   } finally { cleanupDir(r); }
 });
 
@@ -422,22 +410,23 @@ test("post-merge hook: inside Hunch's own checkout, the grounding-refresh half c
   } finally { cleanupDir(r); }
 });
 
-test("post-merge hook: a Hunch-named checkout with no in-tree src/ falls back to the passed invocation for grounding refresh too", () => {
+test("post-merge hook: a package named like Hunch but with no in-tree src/ keeps the given invocation for grounding refresh", () => {
   const r = repo();
   try {
     writeFileSync(join(r, "package.json"), JSON.stringify({ name: HUNCH_PACKAGE_NAME }));
     installPostMergeHook(r, "hunch");
     const h = mergeHookText(r);
     assert.match(h, /hunch grounding --refresh/);
-    assert.doesNotMatch(h, /tsx\/dist\/cli\.mjs/);
+    assert.ok(!h.includes(join("tsx", "dist", "cli.mjs")), "no in-tree build exists to call back into");
+    assert.doesNotMatch(h, /cli\.mjs/);
   } finally { cleanupDir(r); }
 });
 
-test("post-merge hook: inside Hunch's own checkout, the repair-provenance half is UNCHANGED — only the doc-regenerating grounding half is affected", () => {
+test("post-merge hook: in Hunch's own checkout the repair-provenance half still uses the plain invocation", () => {
   const r = selfRepo();
   try {
     installPostMergeHook(r, "hunch");
-    const h = mergeHookText(r);
-    assert.match(h, /hunch repair-provenance --from-hook --quiet/, "repair-provenance keeps the passed invocation — it does no doc regeneration");
+    // Only the grounding refresh regenerates docs, so only it is redirected at the in-tree build.
+    assert.match(mergeHookText(r), /hunch repair-provenance --from-hook --quiet/);
   } finally { cleanupDir(r); }
 });

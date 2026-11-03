@@ -9,6 +9,7 @@ import { finishReportTask, listReportTasks, listTaskSummaries, readTaskReport, r
 import type { HookProvider } from "../src/core/agenthook.js";
 import { promptTaskId, taskInstruction } from "../src/core/taskReportHook.js";
 import { verificationLauncher } from "../src/core/verifyLauncher.js";
+import { DEFAULT_CHECK_TIMEOUT_MS } from "../src/core/taskReportEvidence.js";
 import { buildDeliveryEnvelope } from "../src/core/delivery.js";
 import type { AssembledContext } from "../src/store/hunchStore.js";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -441,4 +442,16 @@ test("the task instruction fails open: a launcher that throws falls back to the 
   assert.match(text, /show its card/);
   // The fallback applies whatever the provider is.
   assert.match(taskInstruction(task, cwd, "windsurf", broken), /action: "start"/);
+});
+
+test("the default verify budget stays under the 10-minute agent shell cap, and the hints state it (#42)", () => {
+  // A full suite that outlives the host's Bash cap is moved to the background
+  // and waited on again; the budget must make it fail fast instead.
+  const BASH_CAP_MS = 10 * 60_000;
+  assert.ok(DEFAULT_CHECK_TIMEOUT_MS < BASH_CAP_MS, `default ${DEFAULT_CHECK_TIMEOUT_MS} ms is not under the ${BASH_CAP_MS} ms cap`);
+  const minutes = DEFAULT_CHECK_TIMEOUT_MS / 60_000;
+  const text = taskInstruction({ task_id: "htask_0123456789abcdef01234567", title: "t" }, "\"/repo\"", "claude", () => ({ shell: "hunch" }));
+  assert.ok(text.includes(`default budget is ${minutes} min`), `hook hint does not state the ${minutes}-minute default: ${text}`);
+  const tools = readFileSync(resolve("src/mcp/taskReportTools.ts"), "utf8");
+  assert.doesNotMatch(tools, /default budget is \d+ minutes/, "the MCP hint must derive its number from DEFAULT_CHECK_TIMEOUT_MS, not hard-code it");
 });

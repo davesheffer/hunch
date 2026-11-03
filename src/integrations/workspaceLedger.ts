@@ -55,7 +55,7 @@ export type SnapshotOutcome =
    *  `git rebase --continue` abort, or a commit no branch owns. Nothing is lost: the next
    *  branch checkout or ledger read records this machine. */
   | { status: "deferred"; record: Workspace; reason: "git-operation-in-progress" | "detached-head" }
-  | { status: "written"; record: Workspace; home: "private" | "public"; flushed: "pushed" | "committed" | null };
+  | { status: "written"; record: Workspace; home: "private" | "public"; flushed: "pushed" | "committed" | "held" | null };
 
 /** Record this machine's snapshot. Honors `workspaces.publish`, skips a write when the
  *  content is unchanged and the stored record is under a day old (an idle machine's hooks

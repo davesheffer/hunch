@@ -198,6 +198,7 @@ function publishablePublicText(root: string): string {
 
 test("MD-1a black-box journey: CLI capture, durable retry, P3 review, MCP parity, guard, and tamper-safe strict CI", { timeout: 120_000 }, async () => {
   const fixture = codeFixture("public");
+  git(fixture.root, "checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
   let client: Client | null = null;
   try {
     const transport = new StdioClientTransport({

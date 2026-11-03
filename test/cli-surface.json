@@ -187,6 +187,14 @@
       }
     ]
   },
+  "derive-rules": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
   "dna": {
     "tests": [
       {
@@ -231,7 +239,7 @@
     "tests": [
       {
         "file": "test/hook-invocation-health.test.ts",
-        "title": "hunch doctor's stale hint names the init options that keep the block's flags"
+        "title": "hunch doctor flags a dead strict pre-commit launcher as stale and says how to keep --strict"
       },
       {
         "file": "test/hook-managers.test.ts",
@@ -1191,6 +1199,14 @@
       {
         "file": "test/review-cli.test.ts",
         "title": "review accept, duplicate rejection, and verified batch update each pump the public home"
+      }
+    ]
+  },
+  "sibling-warm": {
+    "tests": [
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "sibling-warm fills the cache the hook then serves, quietly and with exit 0"
       }
     ]
   },

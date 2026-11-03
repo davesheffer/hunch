@@ -251,6 +251,18 @@ const PY_BUILTIN_METHODS = new Set([
   "wait", "poll", "communicate",
 ]);
 
+/** Module bindings: \`import a [as m]\`, \`from X import name [as alias]\` (name may be a
+ *  submodule or a member; joinSubmodule records the submodule reading). A dotted
+ *  \`import a.b\` binds \`a\`, not \`a.b\`, so it gets no default local. */
+const PY_BINDING_QUERY = `
+  (import_statement name: (dotted_name) @bind.src)
+  (import_statement name: (aliased_import name: (dotted_name) @bind.src alias: (identifier) @bind.local))
+  (import_from_statement module_name: [(dotted_name) (relative_import)] @bind.src name: (dotted_name) @bind.name)
+  (import_from_statement
+     module_name: [(dotted_name) (relative_import)] @bind.src
+     name: (aliased_import name: (dotted_name) @bind.name alias: (identifier) @bind.local))
+`;
+
 const PYTHON: LanguageSpec = {
   id: "python",
   extensions: [".py", ".pyi"],
@@ -261,6 +273,9 @@ const PYTHON: LanguageSpec = {
   defKindOf: { "fn.def": "function", "method.def": "method", "class.def": "class" },
   nameToDef: { "fn.name": "fn.def", "method.name": "method.def", "class.name": "class.def" },
   builtinMethods: PY_BUILTIN_METHODS,
+  bindingQuery: PY_BINDING_QUERY,
+  defaultBindingLocal: (src) => (/^[A-Za-z_]\w*$/.test(src) ? src : null),
+  joinSubmodule: (src, name) => (src.endsWith(".") ? `${src}${name}` : `${src}.${name}`),
 };
 
 const GO_QUERY = `
@@ -296,6 +311,13 @@ const GO_BUILTIN_METHODS = new Set([
   "Since", "Sleep", "Unix", "Exec", "Query", "QueryRow", "Begin", "Commit", "Rollback",
 ]);
 
+/** Package bindings: an aliased import binds its alias; a plain one binds the
+ *  default package name. Blank (`_`) and dot imports bind nothing. */
+const GO_BINDING_QUERY = `
+  (import_spec name: (package_identifier) @bind.local path: [(interpreted_string_literal) (raw_string_literal)] @bind.src)
+  (import_spec !name path: [(interpreted_string_literal) (raw_string_literal)] @bind.src)
+`;
+
 const GO: LanguageSpec = {
   id: "go",
   extensions: [".go"],
@@ -312,6 +334,14 @@ const GO: LanguageSpec = {
     "iface.name": "iface.def", "type.name": "type.def",
   },
   builtinMethods: GO_BUILTIN_METHODS,
+  bindingQuery: GO_BINDING_QUERY,
+  // Package name defaults to the last path segment (a `/vN` major-version suffix
+  // names the segment before it); a non-identifier segment binds nothing.
+  defaultBindingLocal: (src) => {
+    const parts = src.split("/");
+    const last = parts.length > 1 && /^v\d+$/.test(parts[parts.length - 1]!) ? parts[parts.length - 2]! : parts[parts.length - 1]!;
+    return /^[A-Za-z_]\w*$/.test(last) ? last : null;
+  },
 };
 
 const PHP_QUERY = `

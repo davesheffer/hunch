@@ -8,6 +8,12 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "תיקונים שמבטלים את הכלל שהם הופכים, וכשלים ש-Hunch זוכר",
+      "כללים מהתיעוד שלכם, ו-hooks מהירים יותר",
+      "פקודות אימות שעובדות בכל מעטפת",
+      "הסינתזה קוראת את ה-PR, והחלטות שהוחלפו כבר לא מקדימות את יורשתן",
+      "הקשר שמתאים לסוכן ולהנחיה",
+      "עצי עבודה מקושרים מקבלים הקשר, ואין קומיטים אוטומטיים לענף הראשי",
       "שכתוב נקי מאפס",
       "בדיקות לפי השינוי, טווח השפעה רחב יותר וכתיבות בטוחות יותר",
       "הוק מהיר יותר, איתור טוב יותר, נעילות בטוחות יותר",
@@ -97,6 +103,12 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Исправления, которые отменяют прежнее правило, и сбои, которые Hunch помнит",
+      "Правила из вашей документации и более быстрые хуки",
+      "Подсказки проверки, которые работают в любой оболочке",
+      "Синтез читает PR, а заменённые решения больше не обгоняют своих преемников",
+      "Контекст по агенту и по запросу",
+      "Связанные worktree получают контекст; без автокоммитов в основную ветку",
       "Код переписан с нуля",
       "Тесты по изменению, более широкий радиус влияния и более надёжная запись",
       "Быстрее хук, точнее поиск, надёжнее блокировки",
@@ -186,6 +198,12 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "تصحيحات تُلغي القاعدة التي تعكسها، وإخفاقات يتذكرها Hunch",
+      "قواعد من وثائقكم، وخطافات أسرع",
+      "أوامر تحقق تعمل في كل صدفة أوامر",
+      "التوليف يقرأ طلب الدمج، والقرارات المستبدلة لا تتقدم على بديلها",
+      "سياق يناسب الوكيل والطلب",
+      "أشجار العمل المرتبطة تحصل على السياق، ولا التزامات تلقائية على الفرع الرئيسي",
       "إعادة كتابة نظيفة من الصفر",
       "اختبارات بحسب التغيير، ونطاق تأثير أوسع، وكتابة أكثر أمانًا",
       "خطاف أسرع، استرجاع أدق، أقفال أكثر أمانًا",
@@ -275,6 +293,12 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Correcciones que retiran la regla que revierten y fallos que Hunch recuerda",
+      "Reglas desde tu documentación y hooks más rápidos",
+      "Comandos de verificación que funcionan en cualquier shell",
+      "La síntesis lee el PR y las decisiones reemplazadas ya no superan a su sucesora",
+      "Contexto a la medida del agente y de la petición",
+      "Worktrees enlazados con contexto y sin commits automáticos en la rama principal",
       "Una reescritura desde cero",
       "Pruebas según el cambio, mayor radio de impacto y escrituras más seguras",
       "Hook más rápido, mejor recuperación, bloqueos más seguros",

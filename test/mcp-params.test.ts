@@ -112,6 +112,7 @@ const EXPECTED_PARAMS = [
   "hunch_record_correction.source_decision string",
   "hunch_record_correction.private boolean",
   "hunch_record_correction.capture_token string",
+  "hunch_record_correction.supersedes array",
   "hunch_record_correction.task_id string",
   "hunch_record_correction.cwd string",
   "hunch_record_finding.finding object required",
@@ -400,6 +401,14 @@ const EFFECT: Record<string, Effect> = {
   "hunch_record_correction.source_decision": { v: (c) => c.decisionId },
   "hunch_record_correction.private": { v: () => true },
   "hunch_record_correction.capture_token": { v: () => captureToken() },
+  // A fresh same-scope rule to reverse, so the retirement shows in the answer.
+  "hunch_record_correction.supersedes": {
+    with: async (c) => {
+      const old = await call("hunch_record_correction", { rule: `return order lists unpaged ${nz()}`, scope_hint_file: "src/orders.ts" });
+      const id = old instanceof Error ? undefined : /constraint (con_[a-f0-9]+)/.exec(text(old))?.[1];
+      return { ...BASE.hunch_record_correction!(c), supersedes: [id] };
+    },
+  },
   "hunch_record_correction.task_id": { v: (c) => c.taskId },
   "hunch_record_correction.cwd": cwdEffect,
   "hunch_record_finding.task_id": { v: (c) => c.taskId },
@@ -532,7 +541,9 @@ const normalize = (s: string): string => s
   .replace(/\bHEX(-[0-9a-f]{4})+-HEX\b/g, "UUID")
   .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+(Z|[+-]\d{2}:\d{2})?/g, "TS")
   .replace(/\d+(\.\d+)?\s?(ms|s|seconds?|minutes?)\b/g, "DUR")
-  .replace(/"(seq|version|head|after_seq|next_seq|elapsed\w*)"\s*:\s*\d+/g, '"$1":N');
+  .replace(/"(seq|version|head|after_seq|next_seq|elapsed\w*)"\s*:\s*\d+/g, '"$1":N')
+  // hunch_record_correction lists the other active rules on its scope, which grow with every call.
+  .replace(/\n\nSame scope: [^\n]*/g, "");
 /** What a call observably did: its answer plus any record it wrote that carries this call's nonce. */
 function observe(r: ToolResult | Error, args: Args): string {
   const answer = r instanceof Error ? `ERROR ${r.message}` : `${r.isError ? "ISERROR " : ""}${text(r)}\n${JSON.stringify(r.structuredContent ?? null)}`;
@@ -607,6 +618,8 @@ before(async () => {
   ctx.decisionId = String(records(root, "decisions").find((d) => d.topic === "orders.listing")?.id);
   ctx.constraintId = String(records(root, "constraints").find((c) => c.statement === "orders must always be tenant-scoped")?.id);
   ctx.findingId = String(records(root, "findings").find((f) => f.title === "Seed finding")?.id);
+  // An MCP correction is agent testimony; only a human countersign makes it upgradable (#493).
+  execFileSync(process.execPath, [TSX, CLI, "review", "--confirm", ctx.constraintId], { cwd: root, env: spawnEnv("all"), stdio: "ignore", timeout: 120_000 });
   git(root, "add", "-A"); git(root, "commit", "-qm", "seed memory");
   ctx.taskId = await freshTask();
   const caps = await call("nuryel_capabilities", {});

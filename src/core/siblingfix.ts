@@ -18,8 +18,8 @@
  * a content-keyed cache under .hunch-cache (a commit that touches neither the
  * file nor its candidate siblings, and renames no function, keeps the answer;
  * an incomplete run is cached as no answer), and any failure yields no lessons — never an error. */
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { writeFileAtomic } from "./io.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -61,6 +61,11 @@ export interface SiblingOptions {
   cache?: boolean;
   /** Clock for the incomplete-run retry window (tests). */
   now?: number;
+  /** Hook path: serve the cached answer only; a miss schedules a background
+   *  warm and returns no lessons (the edit hook must never pay for git history). */
+  cacheOnly?: boolean;
+  /** Called on a cacheOnly miss (test seam); default spawns the background warm worker. */
+  onMiss?: () => void;
 }
 interface IndexedSymbol { file: string; name: string; kind: string }
 interface FnRange { name: string; start: number; end: number; body: string }
@@ -92,13 +97,17 @@ const MAX_CHANGE_LINES = 12;
  *  half of a two-commit fix (trap-310 v5 carried one commit, missed the other). */
 const MAX_FIX_CHANGE_LINES = 32;
 /** Bumped when the cached lesson shape changes. */
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 /** Cached answers kept; past it the least recently written go (pruned on write). */
 const MAX_CACHE_ENTRIES = 256;
 const INVENTORY_FILE = "inventory.json";
 const INVENTORY_VERSION = 1;
 /** Candidate files whose bodies are parsed (best name match first). */
 const MAX_CANDIDATE_FILES = 8;
+/** Same-named files across this many sibling directories, each defining the
+ *  name, make it a per-variant interface (see `candidatesFor`). Two copies
+ *  stay a copy. */
+const MIN_VARIANT_IMPLEMENTERS = 3;
 /** Words too common in code to count as shared shape. */
 const STOP = new Set([
   "const", "let", "var", "return", "function", "if", "else", "for", "while", "new", "this", "true", "false",
@@ -139,6 +148,17 @@ function mentions(body: string, name: string): boolean {
   return new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`).test(body.slice(body.indexOf("\n") + 1));
 }
 
+
+/** `git log -L` follows lines, not names: a function written over another
+ *  one's lines arrives as a change. It adds the definition line while no
+ *  removed line names the function, so it is a creation. */
+export function writtenOver(commit: LineLogCommit, fn: Pick<FnRange, "name" | "body">): boolean {
+  const signature = (fn.body.split("\n", 1)[0] ?? "").trim();
+  const escaped = fn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`);
+  return signature !== "" && commit.added.some((l) => l.trim() === signature)
+    && !commit.removed.some((l) => named.test(l));
+}
 
 export function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   if (!a.size || !b.size) return 0;
@@ -215,8 +235,10 @@ function git(root: string, args: string[], env: NodeJS.ProcessEnv, budget: Budge
   const ms = Math.min(budget.timeoutMs, budget.deadline - Date.now());
   if (ms <= 0) { budget.exhausted = true; return null; }
   try {
+    // windowsHide (CREATE_NO_WINDOW): the detached warm worker has no console, so
+    // without it Windows builds a console host per git call — 4x slower (28-37s vs 8s).
     return execFileSync("git", ["-C", root, ...args], {
-      env, timeout: ms, encoding: "utf8", maxBuffer: 16_000_000, stdio: ["ignore", "pipe", "ignore"],
+      env, timeout: ms, encoding: "utf8", maxBuffer: 16_000_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
   } catch (error) {
     const e = error as { signal?: unknown; code?: unknown };
@@ -346,6 +368,7 @@ interface InventoryCache { version: number; files: Record<string, { blob: string
  *  keeps what it parsed (nearest the target first) and the next call carries
  *  on from there. */
 function functionInventory(root: string, target: string, blobs: ReadonlyMap<string, string>, budget: Budget, scanMs: number, useCache = true): IndexedSymbol[] {
+  siblingCounters.inventoryScans++;
   const cacheFile = join(root, ".hunch-cache", "siblingfix", INVENTORY_FILE);
   let cached: InventoryCache["files"] = {};
   if (useCache) {
@@ -385,7 +408,7 @@ function functionInventory(root: string, target: string, blobs: ReadonlyMap<stri
 interface Candidates { files: string[]; names: Map<string, Set<string>> }
 
 /** Candidate scans run (tests: a cache hit must not run one). */
-export const siblingCounters = { candidateScans: 0, lessonComputes: 0 };
+export const siblingCounters = { candidateScans: 0, lessonComputes: 0, inventoryScans: 0 };
 
 /** Whether a symbol can ever be matched by `candidatesFor`: shared with
  *  `inventoryDigest` so the two can't drift — a symbol the scan ignores must
@@ -426,12 +449,32 @@ function candidatesFor(ownNames: readonly string[], target: string, inventory: r
     if (!matchable(s)) continue;
     pool.push({ s, tokens: tokenize(s.name) });
   }
+  // A name every variant directory implements in its same-named file
+  // (backends/{base,mysql,postgresql}/schema.py: quote_value) is an interface,
+  // overridden per variant, not a copy: each variant's fixes are its own.
+  const variantKey = (file: string, name: string): string | null => {
+    const parts = file.split("/");
+    return parts.length < 3 ? null : `${parts.slice(0, -2).join("/")}\0${parts[parts.length - 1]}\0${name}`;
+  };
+  const implementers = new Map<string, Set<string>>();
+  for (const { s } of pool) {
+    const key = variantKey(s.file, s.name);
+    if (!key || s.file === target) continue;
+    const files = implementers.get(key) ?? new Set<string>();
+    files.add(s.file);
+    implementers.set(key, files);
+  }
+  const isOverride = (name: string, file: string): boolean => {
+    const key = variantKey(target, name);
+    return key !== null && key === variantKey(file, name) && (implementers.get(key)?.size ?? 0) + 1 >= MIN_VARIANT_IMPLEMENTERS;
+  };
   for (const name of ownNames) {
     const tokens = tokenize(name);
     if (tokens.size < 2) continue;
     for (const { s, tokens: other } of pool) {
       if (late()) { budget.exhausted = true; return null; }
       if (s.file === target && s.name === name) continue;
+      if (s.name === name && isOverride(name, s.file)) continue;
       let shared = 0;
       for (const t of tokens) if (other.has(t)) shared++;
       const nameSim = jaccard(tokens, other);
@@ -481,7 +524,107 @@ function pruneCache(cacheDir: string): void {
   } catch { /* cache is a convenience */ }
 }
 
+const PENDING_TTL_MS = 180_000;
+const DEFAULT_MAX_PAIRS = 4;
+const DEFAULT_MAX_LESSONS = 2;
+const MAX_LIVE_WARMS = 2;
+/** Detached background warm of one file's cache via the hidden `sibling-warm`
+ *  command. A `.pending` marker dedupes: one worker per key per TTL. Never throws.
+ *  HUNCH_SIBLING_WARM=0 turns it off (the test runner sets it: a detached worker
+ *  would outlive the test and its fixture). */
+/** A marker dated in the future (a skewed mount clock) counts as stale, so an
+ *  orphan can never block warming forever. */
+function markerLive(path: string): boolean {
+  const age = Date.now() - statSync(path).mtimeMs;
+  return age >= 0 && age < PENDING_TTL_MS;
+}
+
+function spawnWarm(root: string, target: string, cacheDir: string, cacheFile: string): void {
+  if (process.env.HUNCH_SIBLING_WARM === "0") return;
+  try {
+    const entry = process.argv[1];
+    if (!entry) return;
+    const pending = cacheFile.replace(/\.json$/, ".pending");
+    try { if (markerLive(pending)) return; } catch { /* no marker */ }
+    // A multi-file edit after a commit misses on every file: cap live workers per repo.
+    try {
+      const live = readdirSync(cacheDir).filter((n) => n.endsWith(".pending")
+        && markerLive(join(cacheDir, n))).length;
+      if (live >= MAX_LIVE_WARMS) return;
+    } catch { /* no cache dir yet */ }
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(pending, String(Date.now()));
+    // execArgv carries the tsx loader in dev, so the same entry runs the same way.
+    const child = spawn(process.execPath, [...process.execArgv, entry, "sibling-warm", target], {
+      cwd: root, env: gitEnv(), detached: true, stdio: "ignore", windowsHide: true,
+    });
+    child.once("error", () => {});
+    child.unref();
+  } catch { /* warming is a convenience */ }
+}
+
+/** The worker runs off the edit path, so it can afford the history a large,
+ *  long-lived file needs (the hook-path default exhausts on such files). A fully
+ *  cold django checkout (inventory plus lessons) takes ~8s; the margin is for
+ *  larger repos. Budget plus one last git call stays under PENDING_TTL_MS. */
+const WARM_BUDGET_MS = 90_000;
+const WARM_TIMEOUT_MS = 10_000;
+
+/** Worker body: compute (budgeted, synchronous) and cache, then drop the marker.
+ *  A failed or slow compute leaves an incomplete entry, whose attempt count is
+ *  the negative cache that stops the hook from respawning it. */
+export function warmSiblingCache(root: string, file: string, symbols: readonly IndexedSymbol[]): void {
+  const target = file.replace(/\\/g, "/");
+  const cacheDir = join(root, ".hunch-cache", "siblingfix");
+  const cacheFile = join(cacheDir, `${cacheKeyFor(target, DEFAULT_MAX_PAIRS, DEFAULT_MAX_LESSONS)}.json`);
+  try {
+    if (process.env.HUNCH_SIBLING_WARM_FAIL === "1") throw new Error("injected warm failure");
+    siblingLessonsFor(root, target, symbols, { budgetMs: WARM_BUDGET_MS, timeoutMs: WARM_TIMEOUT_MS });
+  } catch { /* best effort */ } finally {
+    // A run that bailed or threw before its write (a tree listing too big or too
+    // slow, a parser that will not load) leaves a spent entry for this HEAD and
+    // blob, so the hook stops respawning a worker that fails the same way.
+    try { if (!existsSync(cacheFile)) writeSpent(root, target, cacheDir, cacheFile); } catch { /* best effort */ }
+    try { unlinkSync(cacheFile.replace(/\.json$/, ".pending")); } catch { /* best effort */ }
+  }
+}
+
+function writeSpent(root: string, target: string, cacheDir: string, cacheFile: string): void {
+  const [head, targetBlob] = (git(root, ["rev-parse", "HEAD", `HEAD:${target}`], gitEnv(), { deadline: Date.now() + WARM_TIMEOUT_MS, timeoutMs: WARM_TIMEOUT_MS, exhausted: false }) ?? "").trim().split(/\r?\n/);
+  if (!head || !targetBlob) return;
+  const spent: LessonCache = { head, targetBlob, ownNames: [], inventory: "", candidates: {}, complete: false, lessons: [], attempts: MAX_INCOMPLETE_ATTEMPTS, at: Date.now() };
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileAtomic(cacheFile, JSON.stringify(spent));
+  pruneCache(cacheDir);
+}
+
+function cacheKeyFor(target: string, maxPairs: number, maxLessons: number): string {
+  return createHash("sha256").update(`${CACHE_VERSION}
+${target}
+${maxPairs}
+${maxLessons}`).digest("hex").slice(0, 16);
+}
+
 interface Pair { target: FnRange; sibling: FnRange; siblingFile: string; similarity: number }
+
+/** The hook's read of the cache: one git call, no inventory scan, no candidate
+ *  retry, no ancestry walk. Served only when computed at this exact HEAD for
+ *  this exact target blob (same HEAD: same candidates and history); anything
+ *  else is the worker's job, and the worker re-stamps a still-valid entry.
+ *  A target HEAD does not hold (new untracked file, unborn HEAD) has no history
+ *  to learn from and no entry the worker could write, so it never schedules one. */
+function cachedOnly(root: string, target: string, cacheFile: string, env: NodeJS.ProcessEnv, budget: Budget, now: number, miss: () => SiblingLesson[]): SiblingLesson[] {
+  const [head, targetBlob] = (git(root, ["rev-parse", "HEAD", `HEAD:${target}`], env, budget) ?? "").trim().split(/\r?\n/);
+  if (!head || !targetBlob) return [];
+  let cached: LessonCache;
+  try { cached = JSON.parse(readFileSync(cacheFile, "utf8")) as LessonCache; } catch { return miss(); }
+  if (cached.head !== head || cached.targetBlob !== targetBlob) return miss();
+  if (cached.complete) return Array.isArray(cached.lessons) ? cached.lessons : [];
+  // Incomplete at this HEAD: the full path's retry window and attempt cap.
+  const attempts = cached.attempts ?? MAX_INCOMPLETE_ATTEMPTS;
+  if (attempts >= MAX_INCOMPLETE_ATTEMPTS || now - (cached.at ?? 0) < INCOMPLETE_RETRY_MS) return [];
+  return miss();
+}
 
 /** Sibling-fix lessons for one repo-relative file. */
 export function siblingLessonsFor(
@@ -490,18 +633,25 @@ export function siblingLessonsFor(
   symbols: readonly IndexedSymbol[],
   options: SiblingOptions = {},
 ): SiblingLesson[] {
-  const maxPairs = options.maxPairs ?? 4;
-  const maxLessons = options.maxLessons ?? 2;
+  const maxPairs = options.maxPairs ?? DEFAULT_MAX_PAIRS;
+  const maxLessons = options.maxLessons ?? DEFAULT_MAX_LESSONS;
   const budget: Budget = { deadline: Date.now() + (options.budgetMs ?? TOTAL_BUDGET_MS), timeoutMs: options.timeoutMs ?? 2_000, exhausted: false };
   const target = file.replace(/\\/g, "/");
   if (TEST_PATH.test(target)) return [];
+  const cacheDir = join(root, ".hunch-cache", "siblingfix");
+  const cacheFile = join(cacheDir, `${cacheKeyFor(target, maxPairs, maxLessons)}.json`);
+  // The worker warms the default-limits key only, so only that key may schedule it.
+  const warmable = maxPairs === DEFAULT_MAX_PAIRS && maxLessons === DEFAULT_MAX_LESSONS;
+  const miss = (): SiblingLesson[] => {
+    if (options.onMiss) options.onMiss(); else if (warmable) spawnWarm(root, target, cacheDir, cacheFile);
+    return [];
+  };
   const env = gitEnv();
+  if (options.cacheOnly) return cachedOnly(root, target, cacheFile, env, budget, options.now ?? Date.now(), miss);
   const head = git(root, ["rev-parse", "HEAD"], env, budget)?.trim();
   const blobs = head ? headBlobs(root, env, budget) : null;
   const targetBlob = blobs?.get(target);
   if (!head || !blobs || !targetBlob) return [];
-  const cacheDir = join(root, ".hunch-cache", "siblingfix");
-  const cacheFile = join(cacheDir, `${createHash("sha256").update(`${CACHE_VERSION}\n${target}\n${maxPairs}\n${maxLessons}`).digest("hex").slice(0, 16)}.json`);
   const scanMs = Math.min(options.inventoryBudgetMs ?? INVENTORY_BUDGET_MS, budget.deadline - Date.now());
   // HEAD is scanned even when an index exists: a derived index can lag HEAD
   // or hold a partial subset, and a missing sibling means a missed lesson.
@@ -523,7 +673,13 @@ export function siblingLessonsFor(
         && Object.entries(cached.candidates).every(([f, blob]) => (blobs.get(f) ?? "") === blob);
       const descends = targetOk && contentSame && typeof cached.head === "string"
         && (cached.head === head || git(root, ["merge-base", "--is-ancestor", cached.head, head], env, budget) !== null);
-      if (descends && digestSame && cached.complete) return cached.lessons;
+      if (descends && digestSame && cached.complete) {
+        // Re-stamp a forward-moved HEAD so the hook's exact-HEAD read serves it.
+        if (cached.head !== head) {
+          try { writeFileAtomic(cacheFile, JSON.stringify({ ...cached, head })); } catch { /* cache is a convenience */ }
+        }
+        return cached.lessons;
+      }
       // The digest moved (some function, anywhere matchable, was added,
       // removed or renamed) but the candidate set it actually drives may not
       // have: fall back ONCE to recomputing candidates and compare the result
@@ -535,7 +691,7 @@ export function siblingLessonsFor(
         if (retried) {
           const retriedBlobs = candidateBlobs(retried.files, blobs);
           if (JSON.stringify(retriedBlobs) === JSON.stringify(cached.candidates)) {
-            const healed: LessonCache = { ...cached, inventory: inventoryDigest(cached.ownNames, inventory) };
+            const healed: LessonCache = { ...cached, head, inventory: inventoryDigest(cached.ownNames, inventory) };
             try {
               mkdirSync(cacheDir, { recursive: true });
               writeFileAtomic(cacheFile, JSON.stringify(healed));
@@ -634,7 +790,7 @@ function computeLessons(
     // Divergence: substantive changes to the sibling that never touched the
     // target. Shared commits already carried their change to both copies.
     // The sibling's creation is not a change made to it.
-    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && isSubstantive(c));
+    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c));
     // A reverted fix is no longer in the sibling, and its revert carries the
     // fix's subject: the pair cancels out.
     if (divergent.some((c) => isFixSubject(c.subject))) {
@@ -825,11 +981,11 @@ export interface SiblingGrounding { text: string; identity: string; lessons: Sib
 /** Grounding-path entry: the rendered block plus its dedupe identity for one
  *  repo-relative file. Never throws — a parser load failure or a git error
  *  means no sibling lessons, not a failed edit hook. */
-export function siblingGrounding(root: string, file: string, symbols: readonly IndexedSymbol[], invariants: readonly SiblingInvariant[] = []): SiblingGrounding {
+export function siblingGrounding(root: string, file: string, symbols: readonly IndexedSymbol[], invariants: readonly SiblingInvariant[] = [], options: SiblingOptions = {}): SiblingGrounding {
   const none: SiblingGrounding = { text: "", identity: "", lessons: [], callers: new Map() };
   try {
     if (!existsSync(join(root, file))) return none;
-    const lessons = siblingLessonsFor(root, file, symbols);
+    const lessons = siblingLessonsFor(root, file, symbols, options);
     if (!lessons.length) return none;
     const fns = workingFunctions(root, file);
     const callers = new Map(lessons.map((l) => [l.symbol, callersIn(fns, l.symbol)]));

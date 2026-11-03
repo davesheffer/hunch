@@ -804,6 +804,78 @@
       }
     ]
   },
+  "derive-rules --accept": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --accept-changes": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
+  "derive-rules --check": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
+  "derive-rules --drop": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --dry-run": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1"
+      }
+    ]
+  },
+  "derive-rules --expect": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --private": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules on a subtree with no tracked markdown fails clearly"
+      }
+    ]
+  },
+  "derive-rules --proposals": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
+  "derive-rules --propose": {
+    "tests": [
+      {
+        "file": "test/docrules.test.ts",
+        "title": "hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip"
+      }
+    ]
+  },
   "dna context --json": {
     "tests": [
       {
@@ -933,6 +1005,14 @@
       {
         "file": "test/integration-cli-commands-b.test.ts",
         "title": "cli:eval: --guards scores a generated golden set through the real gate and refuses a missing or malformed set"
+      }
+    ]
+  },
+  "eval --grounding": {
+    "tests": [
+      {
+        "file": "test/cli-flags-misc.test.ts",
+        "title": "embed --batch embeds with the stub model; query --semantic and eval --semantic switch streams; eval --kind scopes scoring"
       }
     ]
   },
@@ -2233,7 +2313,7 @@
     "tests": [
       {
         "file": "test/repair-provenance.test.ts",
-        "title": "repair-provenance --range --apply repairs the commit and evidence, commits, and clears the queue"
+        "title": "--from-hook queues the match silently and never auto-commits"
       }
     ]
   },
@@ -2478,6 +2558,14 @@
       {
         "file": "test/cli-flags-governance.test.ts",
         "title": "review-memory auto validates --limit"
+      }
+    ]
+  },
+  "review-memory auto --no-discussions": {
+    "tests": [
+      {
+        "file": "test/cli-flags-governance.test.ts",
+        "title": "review-memory auto validates --limit, --private/--public/--dry-run and the --initiator binding before reading --from"
       }
     ]
   },

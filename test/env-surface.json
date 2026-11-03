@@ -161,6 +161,16 @@
       }
     ]
   },
+  "HUNCH_AUTO_COMMIT_DEFAULT_BRANCH": {
+    "class": "hunch-config",
+    "purpose": "Set to 1 to restore automatic public memory commits while the default branch is checked out (same as autoCommitDefaultBranch in .hunch/local.json)",
+    "tests": [
+      {
+        "file": "test/worktree-field-regressions.test.ts",
+        "title": "B11: a capture never auto-commits onto the default branch; a feature branch and the explicit opt-in still commit"
+      }
+    ]
+  },
   "HUNCH_CLI_CONFIG": {
     "class": "hunch-config",
     "purpose": "Path to a local agent-CLI adapter config (also set by --cli-config) for non-builtin initiators",
@@ -171,7 +181,7 @@
       },
       {
         "file": "test/env-vars.test.ts",
-        "title": "HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing and traversal paths are refused before any adapter runs"
+        "title": "HUNCH_CLI_CONFIG: malformed, schema-invalid, oversized, directory, missing and traversal paths fall back to deterministic with a warning before any adapter runs"
       }
     ]
   },
@@ -202,6 +212,16 @@
       {
         "file": "test/env-vars.test.ts",
         "title": "HUNCH_CURSOR_MODEL reaches cursor-agent as -m; an unsafe id or no value omits the flag"
+      }
+    ]
+  },
+  "HUNCH_DEAD_PRIOR_SHIFT": {
+    "class": "hunch-ranking",
+    "purpose": "Extra positions a superseded, retired or rejected record drops beyond the prior clamp (0 restores the flat clamp)",
+    "tests": [
+      {
+        "file": "test/env-surface.test.ts",
+        "title": "env surface: HUNCH_MAX_PRIOR_SHIFT and HUNCH_PRIOR_SHIFT_SCALE bound how far a dead hit's rank drops"
       }
     ]
   },
@@ -356,6 +376,16 @@
       }
     ]
   },
+  "HUNCH_PR_CONTEXT": {
+    "class": "hunch-synthesis",
+    "purpose": "Set to 0 to stop fetching the merged PR description during commit synthesis",
+    "tests": [
+      {
+        "file": "test/pr-context.test.ts",
+        "title": "prContextFor degrades to null offline, without gh, without a GitHub origin, or when opted out"
+      }
+    ]
+  },
   "HUNCH_PULL_GIT_TIMEOUT_MS": {
     "class": "hunch-config",
     "purpose": "Timeout for git calls in pull",
@@ -405,6 +435,30 @@
     "class": "hunch-ranking",
     "purpose": "RRF weight for semantic results",
     "todo": "no test exercises this read yet (pre-existing gap when the gate landed)"
+  },
+  "HUNCH_SIBLING_WARM_FAIL": {
+    "class": "test-hook",
+    "purpose": "Set to 1 to make the sibling-fix warm worker's compute throw, so a test can prove the spent entry is still written",
+    "tests": [
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "a worker whose compute throws leaves a spent entry, so the hook stops respawning it"
+      }
+    ]
+  },
+  "HUNCH_SIBLING_WARM": {
+    "class": "hunch-config",
+    "purpose": "Set to 0 to stop the pre-edit hook spawning the detached sibling-fix cache warm worker (the test runner sets it)",
+    "tests": [
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "HUNCH_SIBLING_WARM=0: a cold hook-path call spawns no worker and leaves no marker"
+      },
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "the real pre-edit hook on a cold cache answers without computing lessons"
+      }
+    ]
   },
   "HUNCH_SIG_MIN_LINES": {
     "class": "hunch-synthesis",
@@ -466,7 +520,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.available() requires explicit opt-in for any public remote endpoint"
+        "title": "HUNCH_SYNTH_API_KEY is sent as a Bearer Authorization header"
       },
       {
         "file": "test/doctor.test.ts",
@@ -480,7 +534,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.available() is false unless BOTH HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL are set"
+        "title": "OpenAICompatProvider is unavailable until both the base URL and the model are configured"
       },
       {
         "file": "test/doctor.test.ts",
@@ -494,7 +548,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.draftDecision honors HUNCH_SYNTH_MAX_TOKENS"
+        "title": "HUNCH_SYNTH_MAX_TOKENS overrides the max_tokens sent to the endpoint"
       }
     ]
   },
@@ -504,7 +558,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.available() is false unless BOTH HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL are set"
+        "title": "OpenAICompatProvider is unavailable until both the base URL and the model are configured"
       },
       {
         "file": "test/doctor.test.ts",
@@ -532,7 +586,7 @@
     "tests": [
       {
         "file": "test/cliproviders.test.ts",
-        "title": "OpenAICompatProvider.draftDecision rejects when the endpoint exceeds HUNCH_SYNTH_TIMEOUT_MS"
+        "title": "a reply slower than HUNCH_SYNTH_TIMEOUT_MS aborts the draft"
       }
     ]
   },

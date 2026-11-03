@@ -263,7 +263,9 @@ const refsFrom = (edges: Array<{ type: string; from: string }>, id: string) =>
 const refsTo = (edges: Array<{ type: string; to: string }>, id: string) =>
   edges.filter((e) => e.type === "references" && e.to === id);
 
-const deploymentYaml = (name: string, labels: string[], extra = "") => `apiVersion: apps/v1
+/** An apps/v1 Deployment whose pod template carries `labels` ("key: value" each);
+ *  `extra` is spliced in raw after the container's image line (pre-indented). */
+const deploymentYaml = (name: string, labels: string[], extra = ""): string => `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ${name}
@@ -271,11 +273,10 @@ spec:
   template:
     metadata:
       labels:
-${labels.map((l) => `        ${l}`).join("\n")}
-    spec:
+${labels.map((label) => `        ${label}\n`).join("")}    spec:
       containers:
         - name: app
-          image: example/app:1
+          image: example/app:1.0
 ${extra}`;
 
 const serviceYaml = (name: string, selectorBlock: string) => `apiVersion: v1
@@ -289,7 +290,8 @@ ${selectorBlock}
 `;
 
 const helmDefine = (name: string) => `{{- define "${name}" -}}\napp: demo\n{{- end -}}\n`;
-const helmDeployment = (include: string) => `apiVersion: apps/v1
+/** A Deployment named "app" whose labels come from a Helm include of `include`. */
+const helmDeployment = (include: string): string => `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app
@@ -890,14 +892,13 @@ test("indexRepo resolves module-prefixed Go imports across component boundaries"
   assert.deepEqual(comps.map((c) => c.name).sort(), ["Auth", "Billing"]);
   const auth = comps.find((c) => c.name === "Auth")!;
   const billing = comps.find((c) => c.name === "Billing")!;
-
   // "example.com/demo/src/billing" strips the go.mod module prefix to the
   // src/billing directory and must land a depends_on edge; the stdlib "fmt"
   // import resolves to nothing and must not fabricate one.
   const edges = store.json.loadAll("edges");
   assert.ok(
     edges.some((e) => e.type === "depends_on" && e.from === auth.id && e.to === billing.id),
-    "Auth depends_on Billing via the module-prefixed import",
+    "Auth depends on Billing through the module-prefixed import",
   );
 
   store.close();
@@ -1020,381 +1021,155 @@ test("mergeScannedEdges keeps the carried edge on an id collision", () => {
 // MISSING namespace is UNKNOWN and matches anything; two DIFFERENT literal
 // namespaces block the edge.
 
-test("same-named ConfigMaps in namespaces a and b: a Deployment in a resolves only to the one in a", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-pick-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap-a.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n  namespace: a\n`);
-  writeFileSync(join(root, "templates/configmap-b.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n  namespace: b\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: a
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: shared-name
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
+/** Container-level envFrom pulling every key of ConfigMap `name`. */
+const envFromConfigMap = (name: string) => `          envFrom:\n            - configMapRef:\n                name: ${name}\n`;
+/** A minimal ConfigMap, optionally pinned to a namespace. */
+const nsConfigMap = (name: string, namespace: string | null) =>
+  `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ${name}\n${namespace === null ? "" : `  namespace: ${namespace}\n`}data:\n  k: v\n`;
+/** Insert `namespace:` right after a manifest's top-level metadata name line. */
+const inNamespace = (manifest: string, namespace: string) =>
+  manifest.replace(/^( {2}name: .*\n)/m, (line) => `${line}  namespace: ${namespace}\n`);
 
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const cmA = syms.find((s) => s.name === "ConfigMap/shared-name" && s.file === "templates/configmap-a.yaml");
-  const cmB = syms.find((s) => s.name === "ConfigMap/shared-name" && s.file === "templates/configmap-b.yaml");
-  assert.ok(deployment && cmA && cmB, "all three resource symbols indexed");
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === cmA!.id && e.type === "references"), "namespace a disambiguates what was previously an ambiguous 2-candidate match");
-  assert.equal(edges.some((e) => e.from === deployment!.id && e.to === cmB!.id), false, "the same-named ConfigMap in namespace b is never targeted");
+test("a namespace picks the matching ConfigMap out of two same-named ones", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/cm-a.yaml": nsConfigMap("shared-config", "a"),
+    "templates/cm-b.yaml": nsConfigMap("shared-config", "b"),
+    "templates/deployment.yaml": inNamespace(deploymentYaml("my-app", ["app: my-app"], envFromConfigMap("shared-config")), "a"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const inA = symbols.find((s) => s.name === "ConfigMap/shared-config" && s.file === "templates/cm-a.yaml")!;
+  const inB = symbols.find((s) => s.name === "ConfigMap/shared-config" && s.file === "templates/cm-b.yaml")!;
+  assert.ok(dep && inA && inB, "all three resources indexed");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === inA.id), "namespace a disambiguates to cm-a");
+  assert.ok(!edges.some((e) => e.to === inB.id), "nothing links into the namespace-b ConfigMap");
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Deployment with no namespace still resolves to a single ConfigMap in namespace b (unknown matches anything)", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-unknown-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n  namespace: b\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: my-config
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "an unknown namespace must not start blocking edges that resolved before");
+test("a referrer without a namespace still resolves to a namespaced ConfigMap", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/configmap.yaml": nsConfigMap("my-config", "b"),
+    "templates/deployment.yaml": deploymentYaml("my-app", ["app: my-app"], envFromConfigMap("my-config")),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const cm = symbols.find((s) => s.name === "ConfigMap/my-config")!;
+  assert.ok(dep && cm);
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === cm.id));
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Deployment in namespace a does NOT resolve to the only ConfigMap when that ConfigMap is in namespace b", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-cross-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n  namespace: b\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: a
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: my-config
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
-  assert.ok(deployment && configMap, "both resource symbols indexed");
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id), false, "two different literal namespaces block the edge");
+test("different literal namespaces on referrer and target produce no edge", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/configmap.yaml": nsConfigMap("my-config", "b"),
+    "templates/deployment.yaml": inNamespace(deploymentYaml("my-app", ["app: my-app"], envFromConfigMap("my-config")), "a"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const cm = symbols.find((s) => s.name === "ConfigMap/my-config")!;
+  assert.ok(dep && cm, "both resources indexed");
+  assert.ok(!edges.some((e) => e.from === dep.id && e.to === cm.id), "a cross-namespace reference never binds");
 
   store.close();
   cleanupDir(root);
 });
 
-test("a reference in namespace a with one candidate in a and one with no namespace is ambiguous -- no edge", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-ambig-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap-a.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n  namespace: a\n`);
-  writeFileSync(join(root, "templates/configmap-unknown.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shared-name\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: a
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: shared-name
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.filter((e) => e.type === "references" && e.from === deployment!.id).length, 0, "an unknown-namespace candidate stays compatible, so two candidates survive the filter and the existing don't-guess rule declines");
+test("two candidates surviving the namespace filter still yield no guess", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/cm-a.yaml": nsConfigMap("my-config", "a"),
+    "templates/cm-any.yaml": nsConfigMap("my-config", null),
+    "templates/deployment.yaml": inNamespace(deploymentYaml("my-app", ["app: my-app"], envFromConfigMap("my-config")), "a"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  assert.ok(dep);
+  assert.equal(refsFrom(edges, dep.id).length, 0);
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Service's selector in namespace a binds a label-matching workload with no namespace but NOT one in namespace b", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-sel-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/service.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-service
-  namespace: a
-spec:
-  selector:
-    app: my-app
-`);
-  writeFileSync(join(root, "manifests/deployment-b.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: app-in-b
-  namespace: b
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-      - name: app
-`);
-  writeFileSync(join(root, "manifests/deployment-unknown.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: app-no-ns
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const service = syms.find((s) => s.name === "Service/my-service");
-  const inB = syms.find((s) => s.name === "Deployment/app-in-b");
-  const noNs = syms.find((s) => s.name === "Deployment/app-no-ns");
-  assert.ok(service && inB && noNs, "all three resource symbols indexed");
-
-  const edges = store.json.loadAll("edges");
-  assert.equal(edges.some((e) => e.from === service!.id && e.to === inB!.id), false, "a Service never selects pods in another namespace, however well the labels match");
-  assert.ok(edges.some((e) => e.from === service!.id && e.to === noNs!.id && e.type === "references"), "an unknown-namespace workload still matches");
+test("a Service selector never reaches a workload in another namespace", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "manifests/service.yaml": inNamespace(serviceYaml("web-svc", "  selector:\n    app: web"), "a"),
+    "manifests/web-b.yaml": inNamespace(deploymentYaml("web-b", ["app: web"]), "b"),
+    "manifests/web-any.yaml": deploymentYaml("web-any", ["app: web"]),
+  });
+  const svc = symbols.find((s) => s.name === "Service/web-svc")!;
+  const inB = symbols.find((s) => s.name === "Deployment/web-b")!;
+  const unscoped = symbols.find((s) => s.name === "Deployment/web-any")!;
+  assert.ok(svc && inB && unscoped, "all three resources indexed");
+  assert.ok(!edges.some((e) => e.from === svc.id && e.to === inB.id), "label match across namespaces is not a selection");
+  assert.ok(edges.some((e) => e.type === "references" && e.from === svc.id && e.to === unscoped.id));
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Deployment in namespace a resolves to the only ConfigMap when that ConfigMap has NO namespace", () => {
-  // The mirror of the cross-namespace block above: unknown matches anything in
-  // BOTH directions, so a literal-namespace reference still reaches a target
-  // whose namespace this scanner could not name.
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-lit-unknown-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: my-config\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: a
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: my-config
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const configMap = syms.find((s) => s.name === "ConfigMap/my-config");
-  assert.ok(deployment && configMap, "both resource symbols indexed");
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "a literal-namespace reference still reaches an unknown-namespace target");
+test("a namespaced referrer still resolves to a ConfigMap without a namespace", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/configmap.yaml": nsConfigMap("my-config", null),
+    "templates/deployment.yaml": inNamespace(deploymentYaml("my-app", ["app: my-app"], envFromConfigMap("my-config")), "a"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const cm = symbols.find((s) => s.name === "ConfigMap/my-config")!;
+  assert.ok(dep && cm);
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === cm.id));
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Service with NO namespace selects a label-matching workload in namespace b, and a Service in b selects the one in b", () => {
-  // The selector-side mirrors of the test above: unknown on the SELECTOR side
-  // matches anything, and two matching literals still bind.
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-sel-unknown-"));
-  mkdirSync(join(root, "manifests"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "manifests/service-unknown.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: svc-no-ns
-spec:
-  selector:
-    app: my-app
-`);
-  writeFileSync(join(root, "manifests/service-b.yaml"), `
-apiVersion: v1
-kind: Service
-metadata:
-  name: svc-in-b
-  namespace: b
-spec:
-  selector:
-    app: my-app
-`);
-  writeFileSync(join(root, "manifests/deployment-b.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: app-in-b
-  namespace: b
-spec:
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-      - name: app
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const svcNoNs = syms.find((s) => s.name === "Service/svc-no-ns");
-  const svcInB = syms.find((s) => s.name === "Service/svc-in-b");
-  const inB = syms.find((s) => s.name === "Deployment/app-in-b");
-  assert.ok(svcNoNs && svcInB && inB, "all three resource symbols indexed");
-
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === svcNoNs!.id && e.to === inB!.id && e.type === "references"), "an unknown-namespace Service still selects a literal-namespace workload");
-  assert.ok(edges.some((e) => e.from === svcInB!.id && e.to === inB!.id && e.type === "references"), "two identical literal namespaces bind");
+test("unscoped and same-namespace Service selectors both bind to a namespaced workload", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "manifests/svc-any.yaml": serviceYaml("svc-any", "  selector:\n    app: web"),
+    "manifests/svc-b.yaml": inNamespace(serviceYaml("svc-b", "  selector:\n    app: web"), "b"),
+    "manifests/deployment.yaml": inNamespace(deploymentYaml("web", ["app: web"]), "b"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/web")!;
+  assert.ok(dep);
+  for (const name of ["Service/svc-any", "Service/svc-b"]) {
+    const svc = symbols.find((s) => s.name === name)!;
+    assert.ok(svc, `${name} indexed`);
+    assert.ok(edges.some((e) => e.type === "references" && e.from === svc.id && e.to === dep.id), `${name} selects the workload`);
+  }
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Deployment whose namespace is PARTIALLY templated still resolves to the only ConfigMap in namespace app-prod", () => {
-  // `app-{{ .Values.env }}` is not a namespace this scanner can compare, so it
-  // must read as unknown -- reading it as the literal text would block the
-  // very edge it renders to, a regression against what resolved before #297.
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-parttpl-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n  namespace: app-prod\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: app-{{ .Values.env }}
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: cfg
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const configMap = syms.find((s) => s.name === "ConfigMap/cfg");
-  assert.ok(deployment && configMap, "both resource symbols indexed");
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "a partially templated namespace is unknown, and unknown never blocks an edge");
+test("a namespace mixing literal text with a template expression is treated as unknown", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/configmap.yaml": nsConfigMap("my-config", "app-prod"),
+    "templates/deployment.yaml": inNamespace(deploymentYaml("my-app", ["app: my-app"], envFromConfigMap("my-config")), "app-{{ .Values.env }}"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const cm = symbols.find((s) => s.name === "ConfigMap/my-config")!;
+  assert.ok(dep && cm);
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === cm.id), "a partly templated namespace must not block the edge");
 
   store.close();
   cleanupDir(root);
 });
 
-test("a Deployment whose namespace is the YAML null word still resolves to the only ConfigMap in namespace app-prod", () => {
-  const root = mkdtempSync(join(tmpdir(), "hunch-idx-k8sns-null-"));
-  mkdirSync(join(root, "templates"), { recursive: true });
-  writeFileSync(join(root, "Chart.yaml"), `apiVersion: v2\nname: mychart\nversion: 0.1.0\n`);
-  writeFileSync(join(root, "templates/configmap.yaml"), `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n  namespace: app-prod\n`);
-  writeFileSync(join(root, "templates/deployment.yaml"), `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: null
-spec:
-  template:
-    spec:
-      containers:
-      - name: app
-        envFrom:
-        - configMapRef:
-            name: cfg
-`);
-  const store = new HunchStore(hunchPaths(root));
-  store.json.ensureDirs();
-  indexRepo(store, root, { churn: false });
-  store.reindex();
-
-  const syms = store.json.loadAll("symbols");
-  const deployment = syms.find((s) => s.name === "Deployment/my-app");
-  const configMap = syms.find((s) => s.name === "ConfigMap/cfg");
-  assert.ok(deployment && configMap, "both resource symbols indexed");
-  const edges = store.json.loadAll("edges");
-  assert.ok(edges.some((e) => e.from === deployment!.id && e.to === configMap!.id && e.type === "references"), "`namespace: null` is the same empty value as an absent key, so it must not block");
+test("a null namespace behaves like no namespace at all", () => {
+  const { root, store, symbols, edges } = indexTree({
+    "Chart.yaml": CHART_YAML,
+    "templates/configmap.yaml": nsConfigMap("my-config", "app-prod"),
+    "templates/deployment.yaml": inNamespace(deploymentYaml("my-app", ["app: my-app"], envFromConfigMap("my-config")), "null"),
+  });
+  const dep = symbols.find((s) => s.name === "Deployment/my-app")!;
+  const cm = symbols.find((s) => s.name === "ConfigMap/my-config")!;
+  assert.ok(dep && cm);
+  assert.ok(edges.some((e) => e.type === "references" && e.from === dep.id && e.to === cm.id));
 
   store.close();
   cleanupDir(root);

@@ -63,6 +63,9 @@ export interface ParsedFile {
   symbols: ParsedSymbol[];
   imports: string[];
   calls: ParsedCall[];
+  /** Builtin-named member calls on a plain identifier (`pkg.New()`): kept out of
+   *  `calls`, they resolve only through an import binding of that identifier. */
+  builtinMemberCalls?: ParsedCall[];
   relations: ParsedRelation[];
   bindings: ParsedBinding[];
   namespace: string | null;
@@ -151,6 +154,7 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
   const symbols: ParsedSymbol[] = [];
   const imports: string[] = [];
   const calls: ParsedCall[] = [];
+  const builtinMemberCalls: ParsedCall[] = [];
   const relations: ParsedRelation[] = [];
   const bindings: ParsedBinding[] = [];
   let namespace: string | null = null;
@@ -188,11 +192,11 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     } else if (cname === "call.member") {
       // skip builtin method names to avoid false edges to similarly-named symbols
       const text = originalText(node);
-      if (!spec.builtinMethods.has(text)) {
-        const object = node.parent?.childForFieldName("object") ?? node.parent?.childForFieldName("operand");
-        const qualifier = object?.type === "identifier" ? originalText(object) : undefined;
-        calls.push({ callee: text, atByte: node.startIndex, endByte: node.endIndex, member: true, qualifier });
-      }
+      const object = node.parent?.childForFieldName("object") ?? node.parent?.childForFieldName("operand");
+      const qualifier = object?.type === "identifier" || object?.type === "package_identifier" ? originalText(object) : undefined;
+      const call = { callee: text, atByte: node.startIndex, endByte: node.endIndex, member: true, qualifier };
+      if (!spec.builtinMethods.has(text)) calls.push(call);
+      else if (qualifier) builtinMemberCalls.push(call);
     } else if (spec.relationKindOf?.[cname]) {
       const relation = spec.relationKindOf[cname]!;
       relations.push({
@@ -244,7 +248,7 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     });
   }
   symbols.sort((a, b) => a.startByte - b.startByte);
-  return { symbols, imports, calls, relations, bindings, namespace, parseable: templated || parseable };
+  return { symbols, imports, calls, builtinMemberCalls, relations, bindings, namespace, parseable: templated || parseable };
 }
 
 /** True when every ERROR/MISSING node in the tree sits in an ancestor shape this
@@ -297,6 +301,19 @@ function ascendToDef(node: SyntaxNode, defNodeTypes: Set<string>): SyntaxNode | 
   return null;
 }
 
+/** Index in `symbols` of the narrowest symbol whose [startByte, endByte) range
+ *  holds `at`; on equal spans the earlier symbol wins. -1 when nothing encloses it. */
+function innermostSymbolAt(symbols: ParsedSymbol[], at: number): number {
+  let found = -1;
+  let narrowest = Infinity;
+  symbols.forEach((sym, i) => {
+    if (at < sym.startByte || at >= sym.endByte) return;
+    const span = sym.endByte - sym.startByte;
+    if (span < narrowest) { narrowest = span; found = i; }
+  });
+  return found;
+}
+
 /** Map each call site to the innermost symbol whose byte-range contains it.
  *  The result is keyed by the symbol's INDEX in `parsed.symbols`, not its start
  *  byte: two distinct symbols can share a start byte (a synthetic whole-file root
@@ -307,17 +324,8 @@ function ascendToDef(node: SyntaxNode, defNodeTypes: Set<string>): SyntaxNode | 
 export function attributeCalls(parsed: ParsedFile): Map<number, Map<string, boolean>> {
   const out = new Map<number, Map<string, boolean>>();
   for (const call of parsed.calls) {
-    let best: ParsedSymbol | null = null;
-    let bestIndex = -1;
-    for (let i = 0; i < parsed.symbols.length; i++) {
-      const s = parsed.symbols[i]!;
-      if (call.atByte >= s.startByte && call.atByte < s.endByte) {
-        if (!best || s.endByte - s.startByte < best.endByte - best.startByte) {
-          best = s;
-          bestIndex = i;
-        }
-      }
-    }
+    const bestIndex = innermostSymbolAt(parsed.symbols, call.atByte);
+    const best = bestIndex >= 0 ? parsed.symbols[bestIndex] : undefined;
     if (best && best.name !== call.callee) {
       let m = out.get(bestIndex);
       if (!m) { m = new Map(); out.set(bestIndex, m); }
@@ -345,7 +353,7 @@ export function attributeQualifiedCalls(parsed: ParsedFile): Map<number, Qualifi
   const aliases = unique(parsed.bindings.filter((b) => b.imported !== null).map((b) => [b.local, { callee: b.imported!, module: b.module }]));
   const out = new Map<number, QualifiedCall[]>();
   if (modules.size === 0 && aliases.size === 0) return out;
-  for (const call of parsed.calls) {
+  for (const call of [...parsed.calls, ...(parsed.builtinMemberCalls ?? [])]) {
     let target: QualifiedCall | null = null;
     if (call.member && call.qualifier) {
       const binding = modules.get(call.qualifier);
@@ -354,15 +362,7 @@ export function attributeQualifiedCalls(parsed: ParsedFile): Map<number, Qualifi
       target = aliases.get(call.callee) ?? null;
     }
     if (!target) continue;
-    let best: ParsedSymbol | null = null;
-    let bestIndex = -1;
-    for (let i = 0; i < parsed.symbols.length; i++) {
-      const s = parsed.symbols[i]!;
-      if (call.atByte >= s.startByte && call.atByte < s.endByte && (!best || s.endByte - s.startByte < best.endByte - best.startByte)) {
-        best = s;
-        bestIndex = i;
-      }
-    }
+    const bestIndex = innermostSymbolAt(parsed.symbols, call.atByte);
     if (bestIndex < 0) continue;
     const list = out.get(bestIndex) ?? [];
     if (!list.some((t) => t.callee === target!.callee && t.module === target!.module)) list.push(target);
@@ -377,16 +377,7 @@ export function attributeQualifiedCalls(parsed: ParsedFile): Map<number, Qualifi
 export function attributeRelations(parsed: ParsedFile): Map<number, ParsedRelation[]> {
   const out = new Map<number, ParsedRelation[]>();
   for (const relation of parsed.relations) {
-    let best: ParsedSymbol | null = null;
-    let bestIndex = -1;
-    for (let index = 0; index < parsed.symbols.length; index++) {
-      const symbol = parsed.symbols[index]!;
-      if (relation.atByte >= symbol.startByte && relation.atByte < symbol.endByte
-        && (!best || symbol.endByte - symbol.startByte < best.endByte - best.startByte)) {
-        best = symbol;
-        bestIndex = index;
-      }
-    }
+    const bestIndex = innermostSymbolAt(parsed.symbols, relation.atByte);
     if (bestIndex < 0) continue;
     const list = out.get(bestIndex) ?? [];
     list.push(relation);

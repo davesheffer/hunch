@@ -202,6 +202,7 @@ test("recordWorkspaceSnapshot: off / no-home / written / unchanged / dry-run, on
       } finally { store.close(); }
 
       writeFileSync(join(repo, ".hunch", "config.json"), JSON.stringify({ workspaces: { publish_public: true } }));
+      g(repo, "checkout", "-q", "-b", "feat/test"); // capture auto-commits skip the default branch (1.47.1)
       store = open();
       try {
         const pub = recordWorkspaceSnapshot(store, repo);

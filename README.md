@@ -4,17 +4,19 @@
 
 [![npm version](https://img.shields.io/npm/v/@davesheffer/hunch?color=2742ff&label=npm)](https://www.npmjs.com/package/@davesheffer/hunch)
 [![GitHub stars](https://img.shields.io/github/stars/davesheffer/hunch?color=2742ff&label=%E2%98%85%20star)](https://github.com/davesheffer/hunch)
-[![license](https://img.shields.io/npm/l/@davesheffer/hunch?color=2742ff)](LICENSE)
+[![license](https://img.shields.io/badge/license-FSL--1.1--ALv2-2742ff)](LICENSE)
+
+[![Watch: Hunch Memory in 2 minutes](https://img.youtube.com/vi/m2PM6pV7D9Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=m2PM6pV7D9Y)
+
+▶ **[Watch Hunch Memory in 2 minutes](https://www.youtube.com/watch?v=m2PM6pV7D9Y)**, then the [7-episode series](https://www.youtube.com/playlist?list=PLIXqtdE0LcNI) on setup, hooks, memory capture, delivery, rules, drift and teams.
+
+![Hunch refuses a staged change that imports lodash, citing the blocking rule it breaks](site/assets/hunch-blocks-it.gif)
 
 A new agent session should not mean explaining the project all over again. A second agent should be able to check a recorded decision, see the evidence behind completed work, and find an outstanding commitment.
 
 Hunch keeps that record in Git and makes the relevant parts available to your agents. It started with **engineering memory**: why code exists, which approach failed before, and which rules a change must preserve. It also ships a **state server** for sharing decisions, action records, and commitments across authorized organization, team, user, and repository scopes.
 
 The goal is simple: agents working from the same maintained record, with sources they can inspect. Hunch supplies memory and checks; the assistant still does the work.
-
-[![Watch: Hunch Memory in 2 minutes](https://img.youtube.com/vi/m2PM6pV7D9Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=m2PM6pV7D9Y)
-
-▶ **[Watch Hunch Memory in 2 minutes](https://www.youtube.com/watch?v=m2PM6pV7D9Y)**, then the [7-episode series](https://www.youtube.com/playlist?list=PLIXqtdE0LcNI) on setup, hooks, memory capture, delivery, rules, drift and teams.
 
 ## Start with your coding assistant
 
@@ -196,4 +198,4 @@ Profiles retain their revision, sources, confidence, and freshness.
 - [VS Code extension](vscode-extension/README.md)
 - [Contributing](CONTRIBUTING.md)
 
-Apache-2.0
+[FSL-1.1-ALv2](LICENSE) (Functional Source License). Use it, modify it, and run it for your own work, internal or commercial; you can't make it available to others in a commercial product or service that competes with Hunch or with services built on it (see Permitted Purpose in [LICENSE](LICENSE)). Each release converts to Apache-2.0 two years after it ships. Releases before this change keep the license they shipped with.

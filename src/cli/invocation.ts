@@ -50,6 +50,7 @@ export function shellInvocation(inv: Invocation): string {
 export function synthesisStatusLines(resolution: ProviderResolution, env: NodeJS.ProcessEnv): string[] {
   const provider = resolution.provider;
   if (resolution.source === "unavailable-initiator") {
+    if (resolution.warning) return [dim(`            ↳ warning: ${resolution.warning}`)];
     return [dim(`            ↳ initiating provider ${resolution.initiator} is unavailable; using local analysis, never another account.`)];
   }
   if (resolution.source === "unknown-initiator") {
@@ -100,7 +101,10 @@ export function classifyEntry(entry: string): { isDev: boolean; installed: boole
 }
 
 export function resolveInvocation(): ResolvedInvocation {
-  const entry = fileURLToPath(import.meta.url).replace(/invocation\.(js|ts)$/, "index.$1");
+  // Resolve the public entry relative to THIS module's directory, not by
+  // renaming the file: in the published build this code runs from
+  // dist/cli/index.bundle.js, and hooks must point at dist/cli/index.js.
+  const entry = fileURLToPath(new URL(`./index.${import.meta.url.endsWith(".ts") ? "ts" : "js"}`, import.meta.url));
   const { isDev, installed } = classifyEntry(entry);
   // JSON.stringify yields a double-quoted, backslash-escaped token /bin/sh
   // accepts — so install paths with spaces don't break the hook command.

@@ -16,8 +16,8 @@ const git = (root: string, ...args: string[]) => execFileSync("git", ["-C", root
 function repo(root: string) {
   mkdirSync(join(root, ".hunch"), { recursive: true });
   git(root, "init", "-q", "-b", "main");
-  git(root, "config", "user.email", "test@example.com");
-  git(root, "config", "user.name", "Test");
+  git(root, "config", "user.email", "report-capture@test.invalid");
+  git(root, "config", "user.name", "Report Capture Test");
   writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n.hunch/local.json\n.hunch/hunch.sqlite*\n");
   git(root, "add", ".gitignore"); git(root, "commit", "-qm", `fixture ${root}`);
 }
@@ -61,6 +61,7 @@ test("public capture proof is commit-only", t => {
   const base = mkdtempSync(join(tmpdir(), "hunch-save-local-"));
   t.after(() => cleanupDir(base));
   const root = join(base, "code"); repo(root);
+  git(root, "checkout", "-q", "-b", "feat/test"); // captures are not auto-committed onto the default branch
   const store = new HunchStore(hunchPaths(root)); t.after(() => store.close());
   const task = startReportTask(root, "Save public memory");
   const record = store.putCapture("constraints", mkConstraint({ id: "con_public_save" }));

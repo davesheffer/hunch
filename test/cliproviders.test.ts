@@ -12,6 +12,7 @@ import {
   probeOllamaNumCtx,
   meteredHostsAllowed,
   __resetAvailabilityCacheForTests,
+  type CommitInput,
 } from "../src/synthesis/provider.js";
 import { withInitiator } from "../src/synthesis/initiator.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -151,21 +152,50 @@ async function startFakeServer(
 const decisionReply = (decision: string, context: string): string =>
   JSON.stringify({ choices: [{ message: { content: JSON.stringify({ decision, context, nontrivial: true }) } }] });
 
-test("OpenAICompatProvider.available() is false unless BOTH HUNCH_SYNTH_BASE_URL and HUNCH_SYNTH_MODEL are set", async () => {
-  delete process.env.HUNCH_SYNTH_BASE_URL;
-  delete process.env.HUNCH_SYNTH_MODEL;
-  assert.equal(await new OpenAICompatProvider().available(), false);
-  process.env.HUNCH_SYNTH_BASE_URL = "http://127.0.0.1:1/v1";
+/** Env vars the openai-compat provider reads; tests snapshot and restore them. */
+const COMPAT_ENV = [
+  "HUNCH_SYNTH_BASE_URL",
+  "HUNCH_SYNTH_MODEL",
+  "HUNCH_SYNTH_API_KEY",
+  "HUNCH_SYNTH_ALLOW_METERED",
+  "HUNCH_SYNTH_MAX_TOKENS",
+  "HUNCH_SYNTH_TIMEOUT_MS",
+] as const;
+
+/** Clear every openai-compat env var, returning a function that puts the originals back. */
+function isolateCompatEnv(): () => void {
+  const saved = new Map(COMPAT_ENV.map((key) => [key, process.env[key]] as const));
+  for (const key of COMPAT_ENV) delete process.env[key];
+  return () => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+/** A small commit to draft from; its content is irrelevant to the fake endpoints. */
+const sampleCommit = (): CommitInput => ({
+  subject: "Switch the cache to an LRU policy",
+  body: "",
+  files: ["src/cache.ts"],
+  diff: "--- a/src/cache.ts\n+++ b/src/cache.ts\n@@ -1 +1 @@\n-const policy = \"fifo\";\n+const policy = \"lru\";\n",
+});
+
+const lruReply = () => decisionReply("Adopt LRU eviction for the cache", "FIFO evicted hot keys under load");
+
+test("OpenAICompatProvider is unavailable until both the base URL and the model are configured", async () => {
+  const restore = isolateCompatEnv();
   try {
-    assert.equal(await new OpenAICompatProvider().available(), false);
-  } finally {
+    const provider = new OpenAICompatProvider();
+    assert.equal(await provider.available(), false, "nothing configured");
+    process.env.HUNCH_SYNTH_BASE_URL = "http://127.0.0.1:11434/v1";
+    assert.equal(await provider.available(), false, "base URL without a model");
     delete process.env.HUNCH_SYNTH_BASE_URL;
-  }
-  process.env.HUNCH_SYNTH_MODEL = "m";
-  try {
-    assert.equal(await new OpenAICompatProvider().available(), false);
+    process.env.HUNCH_SYNTH_MODEL = "llama3";
+    assert.equal(await provider.available(), false, "model without a base URL");
   } finally {
-    delete process.env.HUNCH_SYNTH_MODEL;
+    restore();
   }
 });
 
@@ -175,244 +205,247 @@ test("meteredHostsAllowed is true only when HUNCH_SYNTH_ALLOW_METERED=1", () => 
   assert.equal(meteredHostsAllowed({ HUNCH_SYNTH_ALLOW_METERED: "1" }), true);
 });
 
-test("OpenAICompatProvider refuses public remotes in both availability and execution unless explicitly allowed", async () => {
-  process.env.HUNCH_SYNTH_MODEL = "gpt-4o-mini";
-  delete process.env.HUNCH_SYNTH_ALLOW_METERED;
+test("known paid endpoints are refused without the metered opt-in, and accepted with it", async () => {
+  const restore = isolateCompatEnv();
   try {
-    for (const baseUrl of ["https://api.openai.com/v1", "https://api.groq.com/openai/v1"]) {
-      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
-      const provider = new OpenAICompatProvider();
-      assert.equal(await provider.available(), false, `${baseUrl} blocked by default`);
+    process.env.HUNCH_SYNTH_MODEL = "gpt-4o-mini";
+    const provider = new OpenAICompatProvider();
+    for (const paid of ["https://api.openai.com/v1", "https://api.groq.com/openai/v1"]) {
+      process.env.HUNCH_SYNTH_BASE_URL = paid;
+      assert.equal(await provider.available(), false, paid);
       await assert.rejects(
-        runAsOpenAi(() => provider.draftDecision({ subject: "s", body: "", files: [], diff: "" })),
+        runAsOpenAi(() => provider.draftDecision(sampleCommit())),
         /refusing to call public remote/,
+        paid,
       );
     }
-
     process.env.HUNCH_SYNTH_ALLOW_METERED = "1";
-    assert.equal(await new OpenAICompatProvider().available(), true, "the explicit opt-in allows a public remote");
+    assert.equal(await provider.available(), true);
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
-    delete process.env.HUNCH_SYNTH_ALLOW_METERED;
+    restore();
   }
 });
 
-test("OpenAICompatProvider.available() requires explicit opt-in for any public remote endpoint", async () => {
-  process.env.HUNCH_SYNTH_MODEL = "llama-3.3-70b-versatile";
-  process.env.HUNCH_SYNTH_API_KEY = "paid-provider-key";
-  delete process.env.HUNCH_SYNTH_ALLOW_METERED;
+test("every public remote fails closed even with an API key, until metered hosts are allowed", async () => {
+  const restore = isolateCompatEnv();
   try {
-    for (const baseUrl of [
-      "https://api.groq.com/openai/v1", // an unlisted paid provider
-      "https://api.openai.com./v1", // fully-qualified trailing dot is the same public host
-      "https://my-llm.example.com/v1", // public self-hosted still needs deliberate trust
-    ]) {
-      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
-      assert.equal(await new OpenAICompatProvider().available(), false, `${baseUrl} must fail closed`);
+    process.env.HUNCH_SYNTH_MODEL = "some-model";
+    process.env.HUNCH_SYNTH_API_KEY = "sk-test-key";
+    const provider = new OpenAICompatProvider();
+    const publicRemotes = [
+      "https://api.unlisted-llm-vendor.example.com/v1",
+      "https://api.openai.com./v1",
+      "https://llm.my-own-server.dev/v1",
+    ];
+    for (const remote of publicRemotes) {
+      process.env.HUNCH_SYNTH_BASE_URL = remote;
+      assert.equal(await provider.available(), false, remote);
     }
-
     process.env.HUNCH_SYNTH_ALLOW_METERED = "1";
-    assert.equal(await new OpenAICompatProvider().available(), true, "the named opt-in authorizes a public remote");
+    assert.equal(await provider.available(), true);
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
-    delete process.env.HUNCH_SYNTH_API_KEY;
-    delete process.env.HUNCH_SYNTH_ALLOW_METERED;
+    restore();
   }
 });
 
-test("OpenAICompatProvider.available() accepts local/LAN endpoints without the metered opt-in", async () => {
-  process.env.HUNCH_SYNTH_MODEL = "m";
-  delete process.env.HUNCH_SYNTH_ALLOW_METERED;
+test("local and private-network endpoints are available without any metered opt-in", async () => {
+  const restore = isolateCompatEnv();
   try {
-    for (const baseUrl of [
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
+    const provider = new OpenAICompatProvider();
+    for (const local of [
       "http://localhost:11434/v1",
-      "http://127.0.0.1:11434/v1",
-      "http://10.0.0.8:8000/v1",
-      "http://192.168.1.8:8000/v1",
-      "http://ollama:11434/v1",
-      "http://model.home.arpa:11434/v1",
+      "http://127.0.0.1:8000/v1",
+      "http://10.1.2.3:8000/v1",
+      "http://192.168.0.20:1234/v1",
+      "http://gpubox:8080/v1",
+      "http://inference.home.arpa:8080/v1",
       "http://[::1]:11434/v1",
-      "http://[fd00::8]:8000/v1",
+      "http://[fd12:3456:789a::1]:8000/v1",
     ]) {
-      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
-      assert.equal(await new OpenAICompatProvider().available(), true, baseUrl);
+      process.env.HUNCH_SYNTH_BASE_URL = local;
+      assert.equal(await provider.available(), true, local);
     }
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
+    restore();
   }
 });
 
-test("OpenAICompatProvider.available() rejects malformed and non-HTTP base URLs", async () => {
-  process.env.HUNCH_SYNTH_MODEL = "m";
+test("malformed or unsupported base URLs leave the provider unavailable and fail the draft", async () => {
+  const restore = isolateCompatEnv();
   try {
-    for (const baseUrl of ["not a url", "file:///tmp/model", "ftp://localhost/model", "http://user:pass@localhost:11434/v1", "http://localhost:11434/v1?token=secret"]) {
-      process.env.HUNCH_SYNTH_BASE_URL = baseUrl;
-      assert.equal(await new OpenAICompatProvider().available(), false, baseUrl);
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
+    const provider = new OpenAICompatProvider();
+    for (const bad of [
+      "just some words",
+      "file:///etc/passwd",
+      "ftp://127.0.0.1/v1",
+      "http://user:secret@127.0.0.1:11434/v1",
+      "http://127.0.0.1:11434/v1?key=abc",
+    ]) {
+      process.env.HUNCH_SYNTH_BASE_URL = bad;
+      assert.equal(await provider.available(), false, bad);
     }
-    process.env.HUNCH_SYNTH_BASE_URL = "not a url";
+    process.env.HUNCH_SYNTH_BASE_URL = "not a url at all";
     await assert.rejects(
-      runAsOpenAi(() => new OpenAICompatProvider().draftDecision({ subject: "s", body: "", files: [], diff: "" })),
+      runAsOpenAi(() => provider.draftDecision(sampleCommit())),
       /must be an http\(s\) base URL/,
     );
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
+    restore();
   }
 });
 
-test("OpenAICompatProvider.draftDecision permits a metered host when HUNCH_SYNTH_ALLOW_METERED=1", async () => {
+test("draftDecision still works against a local endpoint when metered hosts are allowed", async () => {
+  const restore = isolateCompatEnv();
   const server = await startFakeServer((_req, res) => {
     res.setHeader("content-type", "application/json");
-    res.end(decisionReply("use a hosted model", "opted in"));
+    res.end(lruReply());
   });
-  process.env.HUNCH_SYNTH_BASE_URL = server.url;
-  process.env.HUNCH_SYNTH_MODEL = "m";
-  process.env.HUNCH_SYNTH_ALLOW_METERED = "1";
   try {
-    const draft = await runAsOpenAi(() => new OpenAICompatProvider().draftDecision({ subject: "s", body: "", files: [], diff: "" }));
+    process.env.HUNCH_SYNTH_ALLOW_METERED = "1";
+    process.env.HUNCH_SYNTH_BASE_URL = `${server.url}/v1`;
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
+    const draft = await runAsOpenAi(() => new OpenAICompatProvider().draftDecision(sampleCommit()));
     assert.ok(draft);
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
-    delete process.env.HUNCH_SYNTH_ALLOW_METERED;
     await server.close();
+    restore();
   }
 });
 
-test("OpenAICompatProvider.draftDecision POSTs {baseUrl}/chat/completions with model/messages/response_format and maps choices[0].message.content", async () => {
-  const seen: { method?: string; path?: string; auth?: string; body?: Record<string, any> } = {};
+test("draftDecision POSTs a JSON-mode chat completion and maps the first choice into the draft", async () => {
+  const restore = isolateCompatEnv();
+  let method: string | undefined;
+  let path: string | undefined;
+  let authorization: string | undefined;
+  let sent: Record<string, unknown> = {};
   const server = await startFakeServer((req, res, body) => {
-    seen.method = req.method;
-    seen.path = req.url;
-    seen.auth = req.headers.authorization;
-    seen.body = JSON.parse(body);
+    method = req.method;
+    path = req.url;
+    authorization = req.headers.authorization;
+    sent = JSON.parse(body) as Record<string, unknown>;
     res.setHeader("content-type", "application/json");
-    res.end(decisionReply("use a local model", "self-hosted"));
+    res.end(lruReply());
   });
-  process.env.HUNCH_SYNTH_BASE_URL = server.url;
-  process.env.HUNCH_SYNTH_MODEL = "qwen2.5:7b";
-  delete process.env.HUNCH_SYNTH_API_KEY;
   try {
+    process.env.HUNCH_SYNTH_BASE_URL = server.url;
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder:7b";
     const provider = new OpenAICompatProvider();
     assert.equal(await provider.available(), true);
-    const draft = await runAsOpenAi(() => provider.draftDecision({ subject: "feat: x", body: "", files: ["a.py"], diff: "+def a(): pass" }));
-    assert.equal(draft.decision, "use a local model");
-    assert.equal(seen.method, "POST");
-    assert.equal(seen.path, "/chat/completions");
-    assert.equal(seen.body?.model, "qwen2.5:7b");
-    assert.equal(seen.body?.response_format.type, "json_object");
-    assert.equal(seen.body?.stream, false);
-    assert.equal(seen.body?.max_tokens, 2048);
-    assert.ok(Array.isArray(seen.body?.messages));
-    assert.equal(seen.auth, undefined);
+    const draft = await runAsOpenAi(() => provider.draftDecision(sampleCommit()));
+    assert.equal(draft.decision, "Adopt LRU eviction for the cache");
+    assert.equal(method, "POST");
+    assert.equal(path, "/chat/completions");
+    assert.equal(sent.model, "qwen2.5-coder:7b");
+    assert.deepEqual(sent.response_format, { type: "json_object" });
+    assert.equal(sent.stream, false);
+    assert.equal(sent.max_tokens, 2048);
+    assert.ok(Array.isArray(sent.messages), "messages array is sent");
+    assert.equal(authorization, undefined, "no API key → no Authorization header");
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
     await server.close();
+    restore();
   }
 });
 
-test("OpenAICompatProvider.draftProse requests free-form text instead of JSON mode", async () => {
-  let responseFormat: unknown = "not observed";
+test("draftProse sends no response_format and returns the reply text as-is", async () => {
+  const restore = isolateCompatEnv();
+  let format: unknown = "not captured";
   const server = await startFakeServer((_req, res, body) => {
-    responseFormat = (JSON.parse(body) as Record<string, unknown>).response_format;
+    format = (JSON.parse(body) as { response_format?: unknown }).response_format;
     res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify({ choices: [{ message: { content: "A grounded Markdown overview." } }] }));
+    res.end(JSON.stringify({ choices: [{ message: { content: "The cache now evicts least-recently-used keys." } }] }));
   });
-  process.env.HUNCH_SYNTH_BASE_URL = server.url;
-  process.env.HUNCH_SYNTH_MODEL = "m";
   try {
-    const prose = await runAsOpenAi(() => new OpenAICompatProvider().draftProse("Write one Markdown paragraph."));
-    assert.equal(responseFormat, undefined, "free-form prose must not be constrained to a JSON object");
-    assert.equal(prose, "A grounded Markdown overview.");
+    process.env.HUNCH_SYNTH_BASE_URL = server.url;
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
+    const prose = await runAsOpenAi(() => new OpenAICompatProvider().draftProse("Describe the cache."));
+    assert.equal(format, undefined);
+    assert.equal(prose, "The cache now evicts least-recently-used keys.");
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
     await server.close();
+    restore();
   }
 });
 
-test("OpenAICompatProvider sends a Bearer Authorization header only when HUNCH_SYNTH_API_KEY is set", async () => {
-  let auth: string | undefined;
+test("HUNCH_SYNTH_API_KEY is sent as a Bearer Authorization header", async () => {
+  const restore = isolateCompatEnv();
+  let authorization: string | undefined;
   const server = await startFakeServer((req, res) => {
-    auth = req.headers.authorization;
+    authorization = req.headers.authorization;
     res.setHeader("content-type", "application/json");
-    res.end(decisionReply("d", "c"));
+    res.end(lruReply());
   });
-  process.env.HUNCH_SYNTH_BASE_URL = server.url;
-  process.env.HUNCH_SYNTH_MODEL = "m";
-  process.env.HUNCH_SYNTH_API_KEY = "sk-local-123";
   try {
-    await runAsOpenAi(() => new OpenAICompatProvider().draftDecision({ subject: "s", body: "", files: [], diff: "" }));
-    assert.equal(auth, "Bearer sk-local-123");
+    process.env.HUNCH_SYNTH_BASE_URL = server.url;
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
+    process.env.HUNCH_SYNTH_API_KEY = "local-secret-123";
+    await runAsOpenAi(() => new OpenAICompatProvider().draftDecision(sampleCommit()));
+    assert.equal(authorization, "Bearer local-secret-123");
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
-    delete process.env.HUNCH_SYNTH_API_KEY;
     await server.close();
+    restore();
   }
 });
 
-test("OpenAICompatProvider.draftDecision honors HUNCH_SYNTH_MAX_TOKENS", async () => {
+test("HUNCH_SYNTH_MAX_TOKENS overrides the max_tokens sent to the endpoint", async () => {
+  const restore = isolateCompatEnv();
   let maxTokens: unknown;
   const server = await startFakeServer((_req, res, body) => {
-    maxTokens = (JSON.parse(body) as Record<string, unknown>).max_tokens;
+    maxTokens = (JSON.parse(body) as { max_tokens?: unknown }).max_tokens;
     res.setHeader("content-type", "application/json");
-    res.end(decisionReply("d", "c"));
+    res.end(lruReply());
   });
-  process.env.HUNCH_SYNTH_BASE_URL = server.url;
-  process.env.HUNCH_SYNTH_MODEL = "m";
-  process.env.HUNCH_SYNTH_MAX_TOKENS = "512";
   try {
-    await runAsOpenAi(() => new OpenAICompatProvider().draftDecision({ subject: "s", body: "", files: [], diff: "" }));
+    process.env.HUNCH_SYNTH_BASE_URL = server.url;
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
+    process.env.HUNCH_SYNTH_MAX_TOKENS = "512";
+    await runAsOpenAi(() => new OpenAICompatProvider().draftDecision(sampleCommit()));
     assert.equal(maxTokens, 512);
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
-    delete process.env.HUNCH_SYNTH_MAX_TOKENS;
     await server.close();
+    restore();
   }
 });
 
-test("OpenAICompatProvider.draftDecision throws on a non-2xx response (caller falls back to deterministic)", async () => {
+// Callers fall back to the deterministic provider on a throw, so a non-2xx reply
+// must reject (naming the status) rather than yield an empty draft.
+test("an HTTP 500 from the endpoint rejects with the status in the message", async () => {
+  const restore = isolateCompatEnv();
   const server = await startFakeServer((_req, res) => {
     res.statusCode = 500;
-    res.end("internal error");
+    res.end("internal failure");
   });
-  process.env.HUNCH_SYNTH_BASE_URL = server.url;
-  process.env.HUNCH_SYNTH_MODEL = "m";
   try {
+    process.env.HUNCH_SYNTH_BASE_URL = server.url;
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
     await assert.rejects(
-      runAsOpenAi(() => new OpenAICompatProvider().draftDecision({ subject: "s", body: "", files: [], diff: "" })),
+      runAsOpenAi(() => new OpenAICompatProvider().draftDecision(sampleCommit())),
       /500/,
     );
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
     await server.close();
+    restore();
   }
 });
 
-test("OpenAICompatProvider.draftDecision rejects when the endpoint exceeds HUNCH_SYNTH_TIMEOUT_MS", async () => {
+test("a reply slower than HUNCH_SYNTH_TIMEOUT_MS aborts the draft", async () => {
+  const restore = isolateCompatEnv();
   const server = await startFakeServer((_req, res) => {
     setTimeout(() => {
       res.setHeader("content-type", "application/json");
-      res.end(decisionReply("d", "c"));
+      res.end(lruReply());
     }, 500);
   });
-  process.env.HUNCH_SYNTH_BASE_URL = server.url;
-  process.env.HUNCH_SYNTH_MODEL = "m";
-  process.env.HUNCH_SYNTH_TIMEOUT_MS = "50";
   try {
-    await assert.rejects(runAsOpenAi(() => new OpenAICompatProvider().draftDecision({ subject: "s", body: "", files: [], diff: "" })));
+    process.env.HUNCH_SYNTH_BASE_URL = server.url;
+    process.env.HUNCH_SYNTH_MODEL = "qwen2.5-coder";
+    process.env.HUNCH_SYNTH_TIMEOUT_MS = "50";
+    await assert.rejects(runAsOpenAi(() => new OpenAICompatProvider().draftDecision(sampleCommit())));
   } finally {
-    delete process.env.HUNCH_SYNTH_BASE_URL;
-    delete process.env.HUNCH_SYNTH_MODEL;
-    delete process.env.HUNCH_SYNTH_TIMEOUT_MS;
     await server.close();
+    restore();
   }
 });
 

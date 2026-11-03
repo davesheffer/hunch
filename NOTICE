@@ -1,6 +1,13 @@
 Hunch — Engineering Memory and Change Gate
 Copyright 2026 Dave Sheffer
 
-This product is licensed under the Apache License, Version 2.0.
-See the LICENSE file for the full license text, or
-http://www.apache.org/licenses/LICENSE-2.0
+This product is licensed under the Functional Source License, Version 1.1,
+ALv2 Future License (FSL-1.1-ALv2). See the LICENSE file for the full text,
+or https://fsl.software. Each version becomes available under the Apache
+License, Version 2.0 on the second anniversary of its release.
+
+Versions released before the switch to FSL-1.1-ALv2 remain available under
+the license they shipped with (Apache-2.0 from v0.15.2, MIT before that).
+
+The Python client in clients/python is licensed separately under the Apache
+License, Version 2.0; see clients/python/LICENSE.
