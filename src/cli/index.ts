@@ -148,6 +148,7 @@ import { planAutoReview, planMutations, type AutoReviewPlan, type AutoReviewEntr
 import type { RelevanceVerdict, ExistingDecisionRef } from "../synthesis/provider.js";
 import { loadGoldenSet, evaluateRetrieval, evaluateTraversalLift } from "../eval/harness.js";
 import { loadGuardCases, evalGuards, generateGuardCases } from "../eval/guards.js";
+import { loadGroundingCases, evaluateGroundingSelection } from "../eval/grounding.js";
 import { DRIFT_KINDS, computeDrift } from "../core/drift.js";
 import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/scorecard.js";
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, unconfirmedRoadmapMarker, type WikiPack } from "../wiki/wiki.js";
@@ -2035,16 +2036,56 @@ program
 // ---- eval (retrieval quality; measures the graph-stream lift) --------------
 program
   .command("eval")
-  .description("Measure quality over a golden set: retrieval (Recall@k, MRR) or, with --guards, ENFORCEMENT (block/warn/pass precision & recall).")
-  .option("--file <path>", "golden set JSON — retrieval: [{ query, expected }]; guards: [{ name, files, expect }]")
+  .description("Measure quality over a golden set: retrieval (Recall@k, MRR); with --guards, ENFORCEMENT (block/warn/pass precision & recall); with --grounding, prompt-time GROUNDING delivery (precision & recall).")
+  .option("--file <path>", "golden set JSON — retrieval: [{ query, expected }]; guards: [{ name, files, expect }]; grounding: [{ name, prompt, eligible, allowed? }]")
   .option("--guards", "score the GUARDS instead of retrieval: did the gate block the bad changes and pass the good ones?")
+  .option("--grounding", "score what the prompt hook DELIVERS per task: precision (delivered records that belong) and recall (needed records delivered)")
   .option("--generate", "with --guards: scaffold a starter golden set from the live graph (and run it)")
   .option("--k <n>", "top-k cutoff", "10")
   .option("--semantic", "also blend the semantic stream (requires `hunch embed`; default is deterministic FTS + graph)")
   .option("--kind <kind>", "restrict scoring to one record kind (e.g. runbooks) — scoped retrieval")
-  .action(async (opts: { file?: string; guards?: boolean; generate?: boolean; k: string; semantic?: boolean; kind?: string }) => {
-    const { store } = storeFor();
+  .action(async (opts: { file?: string; guards?: boolean; grounding?: boolean; generate?: boolean; k: string; semantic?: boolean; kind?: string }) => {
+    const { store, root } = storeFor();
     store.reindex(); // reflect any out-of-band JSON edits before scoring
+
+    // ── Grounding eval: replay each prompt through the SAME selectForTask call the
+    //    prompt hook makes, over the live records, and score what it qualifies. ──
+    if (opts.grounding) {
+      if (opts.guards) { store.close(); return fail("--grounding and --guards are separate evals; pass one"); }
+      if (!opts.file) { store.close(); return fail("grounding eval needs --file <golden.json>"); }
+      let gcases;
+      try {
+        gcases = loadGroundingCases(readFileSync(opts.file, "utf8"));
+      } catch (e) {
+        store.close();
+        return fail(`grounding eval: ${(e as Error).message}`);
+      }
+      if (!gcases.length) { store.close(); return fail("golden set is empty"); }
+      const r = evaluateGroundingSelection(liveSelectionRecords({
+        decisions: store.recs("decisions"),
+        bugs: store.recs("bugs"),
+        constraints: store.recs("constraints"),
+        findings: store.recs("findings"),
+      }), gcases, { root, pathExists: (p) => existsSync(join(root, p)) });
+      const a = r.aggregate;
+      const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+      console.log(`Grounding eval over ${a.cases} case(s) — what the prompt hook delivers for each task\n`);
+      console.log(`  PRECISION  ${pct(a.precision).padStart(6)}  over ${a.precision_cases} judged case(s) — delivered records that belong`);
+      console.log(`  RECALL     ${pct(a.recall).padStart(6)}  over ${a.recall_cases} case(s) — needed records delivered\n`);
+      const off = r.cases.filter((c) => c.missed.length || c.false_positives.length);
+      if (off.length) {
+        console.log(`  ${off.length} case(s) to review (curate the case, or tune the selector):`);
+        for (const c of off.slice(0, 12)) {
+          const parts = [c.missed.length ? `missed ${c.missed.join(", ")}` : "", c.false_positives.length ? `unexpected ${c.false_positives.join(", ")}` : ""].filter(Boolean);
+          console.log(`    · ${c.name} — ${parts.join("; ")}`);
+        }
+        if (off.length > 12) console.log(`    … +${off.length - 12} more`);
+      } else {
+        console.log(`  ✓ every case delivered exactly its eligible records.`);
+      }
+      store.close();
+      return;
+    }
 
     // ── Guard eval: did the gate BLOCK the bad changes and PASS the good ones? Runs each
     //    case through the SAME buildCheckReport → verdict path the live guards use. ──
