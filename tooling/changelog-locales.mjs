@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "תיקונים שמבטלים את הכלל שהם הופכים, וכשלים ש-Hunch זוכר",
       "כללים מהתיעוד שלכם, ו-hooks מהירים יותר",
       "פקודות אימות שעובדות בכל מעטפת",
       "הסינתזה קוראת את ה-PR, והחלטות שהוחלפו כבר לא מקדימות את יורשתן",
@@ -102,6 +103,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Исправления, которые отменяют прежнее правило, и сбои, которые Hunch помнит",
       "Правила из вашей документации и более быстрые хуки",
       "Подсказки проверки, которые работают в любой оболочке",
       "Синтез читает PR, а заменённые решения больше не обгоняют своих преемников",
@@ -196,6 +198,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "تصحيحات تُلغي القاعدة التي تعكسها، وإخفاقات يتذكرها Hunch",
       "قواعد من وثائقكم، وخطافات أسرع",
       "أوامر تحقق تعمل في كل صدفة أوامر",
       "التوليف يقرأ طلب الدمج، والقرارات المستبدلة لا تتقدم على بديلها",
@@ -290,6 +293,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Correcciones que retiran la regla que revierten y fallos que Hunch recuerda",
       "Reglas desde tu documentación y hooks más rápidos",
       "Comandos de verificación que funcionan en cualquier shell",
       "La síntesis lee el PR y las decisiones reemplazadas ya no superan a su sucesora",
