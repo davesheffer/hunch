@@ -2765,6 +2765,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // serves both. Every target is checked before any write: a refusal leaves both
         // homes as they were. Same-home only, like a decision supersede.
         const toRetire: Constraint[] = [];
+        const alreadyRetired: string[] = [];
         const supersedes = new Set(input.supersedes ?? []);
         if (supersedes.size && home === "private" && !store.hasPrivate) {
           return refused("No private store configured — set HUNCH_PRIVATE_DIR before a private correction can supersede a rule; nothing was written.");
@@ -2787,7 +2788,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
                 `The human retires it outside the agent channel: hunch retire-constraint ${target}`,
             );
           }
-          if (found.status === "retired") continue;
+          if (found.status === "retired") { alreadyRetired.push(target); continue; }
           // Retiring a rule is as much a change to it as rewriting it: an agent write may
           // retire only agent testimony, never a rule a human signed or Hunch derived.
           if (!isAgentTestimony(found.provenance.source)) {
@@ -2799,10 +2800,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           }
           toRetire.push(found);
         }
-        // Consumed only once nothing above can refuse: a refusal must not burn the token.
-        const gated = consumeCaptureToken(input.capture_token);
         // Same cross-home twin guard as the decision path above.
         const stored = store.putCapture("constraints", rec, !!input.private);
+        // Consumed only once the rule has landed: a refusal or a refused write must not
+        // burn the token.
+        const gated = consumeCaptureToken(input.capture_token);
         const observed = observeReportCapture(root, input.task_id, "constraints", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
         // Invalidate, don't delete: the retired rule keeps its why-it-changed trail.
         for (const old of toRetire) store.putCapture("constraints", { ...old, status: "retired", valid_to: now }, !!input.private);
@@ -2838,7 +2840,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
 
 ⚠ ${why} — this rule is agent_recorded TESTIMONY${capped ? ` and was capped from "${requested.severity}" to "${rec.severity}"` : ""}. It IS enforced: the pre-edit hook and CI surface it on every matching edit from now on. What it cannot do is DENY an edit — only a rule a human confirmed outside the agent channel may block. The human confirms it by running: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`;
         const dest = destinationNote(destinationRoot(home, store, root));
-        const retiredNote = retiredIds ? ` Retired ${retiredIds} (superseded by ${rec.id}; window closed at ${now}).` : "";
+        const retiredNote = (retiredIds ? ` Retired ${retiredIds} (superseded by ${rec.id}; window closed at ${now}).` : "") +
+          (alreadyRetired.length ? ` Already retired, left as is: ${alreadyRetired.join(", ")}.` : "");
         // Exact scope match only — deterministic, no similarity guessing. The caller
         // decides whether this correction reverses one of them. This write's home only:
         // those are the rules supersedes can retire, and a public write never echoes

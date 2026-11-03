@@ -194,6 +194,17 @@ test("a refused supersede does not burn the capture token", async () => {
   } finally { s.cleanup(); }
 });
 
+test("a supersede target that is already retired is named, not silently dropped", async () => {
+  const s = await setup();
+  try {
+    await s.call({ rule: PALETTE_OLD, scope_hint_file: "site/dna-hero.js" });
+    const oldId = constraintId(PALETTE_OLD);
+    await s.call({ rule: PALETTE_NEW, scope_hint_file: "site/dna-hero.js", supersedes: [oldId] });
+    const out = await s.call({ rule: "keep the hero palette green", scope_hint_file: "site/dna-hero.js", supersedes: [oldId] });
+    assert.match(out, new RegExp(`Already retired, left as is: ${oldId}`));
+  } finally { s.cleanup(); }
+});
+
 test("private supersedes with no overlay configured says so", async () => {
   const s = await setup();
   try {
