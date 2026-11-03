@@ -134,9 +134,9 @@ async function connectMcp(actor: Actor): Promise<Client> {
 type Result = { isError: boolean; text: string };
 async function mcpResult(client: Client, name: string, args: Record<string, unknown>): Promise<Result> {
   const response = await client.callTool({ name, arguments: args });
-  const payload = response.content.find((part): part is { type: "text"; text: string } => part.type === "text");
-  assert.ok(payload, `${name} returned no text payload`);
-  return { isError: response.isError === true, text: payload.text };
+  const texts = response.content.filter((part): part is { type: "text"; text: string } => part.type === "text");
+  assert.ok(texts.length, `${name} returned no text payload`);
+  return { isError: response.isError === true, text: texts.map((part) => part.text).join("\n") };
 }
 
 async function mcpOk(client: Client, name: string, args: Record<string, unknown>): Promise<string> {
@@ -241,7 +241,7 @@ const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // tool routes its miss through confirmSharedMiss.
 const TODO: Record<string, string> = {};
 
-test("team absence claims: id-taking MCP tools never present local absence as team absence", { timeout: 330_000 }, async (t) => {
+test("team absence claims: id-taking MCP tools never present local absence as team absence", { timeout: 360_000 }, async (t) => {
   const sandbox = mkdtempSync(join(tmpdir(), "hunch-absence-claims-"));
   const clients: Client[] = [];
   const remoteObjects = (remote: string) => join(remote, "objects");
@@ -287,7 +287,7 @@ test("team absence claims: id-taking MCP tools never present local absence as te
 
     // Policies are compiled artifacts, not MCP captures: the teammate pushes them from
     // a plain memory clone, exactly as a CLI compile + memory push would.
-    const policies = compiledPolicies(sandbox, 5);
+    const policies = compiledPolicies(sandbox, 6);
     const staging = join(sandbox, "teammate-memory");
     git(sandbox, "clone", "-q", memoryRemote, staging);
     configureRepo(staging, "PolicyTeammate", sandbox);
@@ -407,26 +407,45 @@ test("team absence claims: id-taking MCP tools never present local absence as te
     };
 
     // -- Propagation: A pushes, B (stale, inside backoff) queries immediately -------
+    // Steps 1-4 above; returns what A created, with B stale and inside its backoff.
+    const staleAfterTeammatePush = async (label: string, n: number, create: (n: number) => Promise<string>): Promise<string> => {
+      const reset = await mcpResult(b, "hunch_current_decision", { topic: `absence.reset-${n}` });
+      assert.equal(reset.isError, false, `reset pull must succeed: ${reset.text}`);
+      const subject = await create(n);
+      // B's backoff runs from when its failed pull FINISHED (pullBackoff), so the
+      // window is measured from the last failing call's return, not its start:
+      // a slow call under load must not eat the window.
+      let lastFailureFinishedAt = 0;
+      takeRemoteDown();
+      try {
+        for (const wait of [1_100, 1_100, 2_100]) {
+          await sleep(wait);
+          await mcpResult(b, "hunch_now", {});
+          lastFailureFinishedAt = Date.now();
+        }
+      } finally {
+        bringRemoteUp();
+      }
+      assert.ok(Date.now() - lastFailureFinishedAt < 3_500, `${label} query must start inside B's 4s pull backoff`);
+      return subject;
+    };
     let n = 0;
+    // Evaluating ALL policies makes no absence claim, but a set silently missing a
+    // teammate's just-pushed policy reads as complete (#493): it must include the
+    // policy or say the shared refresh could not be confirmed.
+    n++;
+    await t.test("hunch_policy_evaluate (all policies): teammate's just-pushed policy is included or staleness is disclosed", async () => {
+      const subject = await staleAfterTeammatePush("hunch_policy_evaluate (all)", n, async () => pushPolicy());
+      const result = await mcpResult(b, "hunch_policy_evaluate", {});
+      assert.equal(result.isError, false, result.text);
+      if (!ABSTAIN.test(result.text)) assert.match(result.text, new RegExp(esc(subject)), `evaluate-all omitted ${subject} without disclosing stale shared memory: ${result.text}`);
+    });
+
     for (const c of cases) {
       n++;
       await t.test(`${c.tool}: teammate's just-pushed record is returned or abstained on`, TODO[c.tool] ? { todo: TODO[c.tool] } : {}, async () => {
         // The correction upgrade runs last: it re-indexes and flushes B's memory homes.
-        const reset = await mcpResult(b, "hunch_current_decision", { topic: `absence.reset-${n}` });
-        assert.equal(reset.isError, false, `reset pull must succeed: ${reset.text}`);
-        const subject = await c.create(n);
-        let lastFailureStartedAt = 0;
-        takeRemoteDown();
-        try {
-          for (const wait of [1_100, 1_100, 2_100]) {
-            await sleep(wait);
-            lastFailureStartedAt = Date.now();
-            await mcpResult(b, "hunch_now", {});
-          }
-        } finally {
-          bringRemoteUp();
-        }
-        assert.ok(Date.now() - lastFailureStartedAt < 3_500, `${c.tool} query must start inside B's 4s pull backoff`);
+        const subject = await staleAfterTeammatePush(c.tool, n, c.create);
         const result = await mcpResult(b, c.tool, c.args(subject));
         assertContract(c, subject, result);
       });
