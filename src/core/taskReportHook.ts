@@ -7,7 +7,7 @@ import { findRoot } from "./paths.js";
 import { canonicalReportRoot } from "./taskReportPaths.js";
 import { isCredentialFreeText } from "./types.js";
 import { aliasReportTask, continuationLinks, finishReportTask, isEmptyTaskReport, latestSessionTask, readTaskReport, recordReportRefusal, reportHash, reportPresentationEnabled, reportTaskExists, resolveReportTask, settleSessionTasks, startReportTask, type TaskLinks } from "./taskReport.js";
-import { currentSource } from "./taskReportEvidence.js";
+import { DEFAULT_CHECK_TIMEOUT_MS, currentSource } from "./taskReportEvidence.js";
 import { renderTaskReport } from "./taskReportRender.js";
 import { verificationLauncher } from "./verifyLauncher.js";
 import { injectionMode } from "./hookcache.js";
@@ -180,7 +180,7 @@ export function taskInstruction(task: { task_id: string; title: string }, cwdLit
       const finishRule = HOST_CLOSES_TASK.has(provider) ? "finish only if this task used Hunch" : `finish it yourself with hunch_task(action: "finish", task_id, cwd)`;
       return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}). Use it instead of any earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Same rules as this session's first report; ${finishRule}.`;
     }
-    verify = ` Never call hunch_task start for it. For checks, run: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is 15 min; add --timeout <seconds> before -- only if the whole suite is really needed.`;
+    verify = ` Never call hunch_task start for it. For checks, run: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is ${DEFAULT_CHECK_TIMEOUT_MS / 60_000} min; add --timeout <seconds> before -- only if the whole suite is really needed.`;
   }
   catch { return `${head} Call hunch_task(action: "start", task_id: "${task.task_id}", title: ${JSON.stringify(task.title)}, cwd: ${cwdLiteral}) to obtain verification_argv, and finish with hunch_task(action: "finish", task_id, cwd) before responding and show its card.`; }
   const used = `this task used Hunch (a hunch_* call on this ID, a task verify check, Hunch hook context you acted on, or an application to claim)`;

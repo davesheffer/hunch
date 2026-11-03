@@ -64,6 +64,14 @@ export interface CorrectionPolicyUpgrade {
   activation: "not_available_in_this_operation";
 }
 
+export const NOT_UPGRADABLE_REASON = "Only an active human-confirmed correction can be upgraded.";
+
+/** The one eligibility rule for an upgrade. A sweep counts the rest as
+ * legacy_only; a single-correction caller is told it asked for the wrong record. */
+export function isUpgradableCorrection(correction: Constraint): boolean {
+  return correction.status === "active" && !correction.valid_to && isHumanConfirmed(correction.provenance.source);
+}
+
 export interface CorrectionPolicySweep {
   scanned: number;
   proved: number;
@@ -405,8 +413,8 @@ export function materializeCorrectionPolicy(
   const prior = repository.getEvidence(base.id, homeView);
   const evidence = prior ?? repository.putEvidence(base, { private: home === "private", public: home === "public" });
 
-  if (correction.status !== "active" || correction.valid_to || !isHumanConfirmed(correction.provenance.source)) {
-    return result("legacy_only", correction, "Only an active human-confirmed correction can be upgraded.", evidence);
+  if (!isUpgradableCorrection(correction)) {
+    return result("legacy_only", correction, NOT_UPGRADABLE_REASON, evidence);
   }
   const scope = concreteScope(correction);
   if (scope.file === null) {

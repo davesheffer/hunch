@@ -607,6 +607,8 @@ before(async () => {
   ctx.decisionId = String(records(root, "decisions").find((d) => d.topic === "orders.listing")?.id);
   ctx.constraintId = String(records(root, "constraints").find((c) => c.statement === "orders must always be tenant-scoped")?.id);
   ctx.findingId = String(records(root, "findings").find((f) => f.title === "Seed finding")?.id);
+  // An MCP correction is agent testimony; only a human countersign makes it upgradable (#493).
+  execFileSync(process.execPath, [TSX, CLI, "review", "--confirm", ctx.constraintId], { cwd: root, env: spawnEnv("all"), stdio: "ignore", timeout: 120_000 });
   git(root, "add", "-A"); git(root, "commit", "-qm", "seed memory");
   ctx.taskId = await freshTask();
   const caps = await call("nuryel_capabilities", {});

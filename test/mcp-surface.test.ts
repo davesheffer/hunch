@@ -269,6 +269,8 @@ before(async () => {
   ctx.constraintId = String(records(root, "constraints").find((c) => c.statement === "orders must always be tenant-scoped")?.id);
   ctx.findingId = String(records(root, "findings").find((f) => f.title === "Seed finding")?.id);
   assert.match(ctx.decisionId, /^dec_/); assert.match(ctx.constraintId, /^con_/); assert.match(ctx.findingId, /^fnd_/);
+  // An MCP correction is agent testimony; only a human countersign makes it upgradable (#493).
+  execFileSync(process.execPath, [TSX, CLI, "review", "--confirm", ctx.constraintId], { cwd: root, env: spawnEnv(), stdio: "ignore", timeout: 120_000 });
   git(root, "add", "-A"); git(root, "commit", "-qm", "seed memory");
   tools = (await mcp.client.listTools()).tools as typeof tools;
 });

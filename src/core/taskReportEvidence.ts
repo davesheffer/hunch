@@ -147,10 +147,11 @@ export function runReportConformance(root: string, store: HunchStore, taskId: st
   });
 }
 
-/** A full suite is the usual check; two minutes turned passing suites into
- * recorded timeouts (#268). The bound is a safety net for an abandoned runner,
- * not a verdict. */
-export const DEFAULT_CHECK_TIMEOUT_MS = 15 * 60_000;
+/** Two minutes turned passing suites into recorded timeouts (#268), but the
+ * default must also stay under the agent host's 10-minute shell cap: a check
+ * that outlives the cap is moved to the background and waited on again (#42).
+ * Targeted tests fit; a full suite is CI's job and takes --timeout. */
+export const DEFAULT_CHECK_TIMEOUT_MS = 8 * 60_000;
 export const MAX_CHECK_TIMEOUT_MS = 6 * 60 * 60_000;
 /** After the command itself exits, everything it wrote is already in the pipe; the window only lets those buffered chunks be read before settling. */
 const EXIT_DRAIN_MS = 500;
