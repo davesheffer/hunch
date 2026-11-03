@@ -426,17 +426,29 @@ if __name__ == "__main__":
   malformedSkipped(g, "pkg/broken.py");
 });
 
-// Known gaps: module-attribute calls (`m.helper()`) to a top-level function in another
-// file are dropped by the member gate; aliased from-imports (`decorated as deco`) are not followed.
-test("python: module-attribute and aliased-import calls resolve cross-file", { todo: "indexer member gate drops m.fn(); `from x import a as b` alias not mapped" }, (t) => {
+// Module-attribute calls (`m.helper()`) to a top-level function in another file pass
+// the member gate only through an import binding; aliased from-imports bind the alias.
+test("python: module-attribute and aliased-import calls resolve cross-file", (t) => {
   const g = indexFixture(t, "py-alias", {
     "pkg/__init__.py": "",
     "pkg/models.py": "def helper():\n    return 1\n",
+    "pkg/other.py": "def helper():\n    return 2\n",
     "pkg/service.py": "from . import models as m\nfrom .models import helper as h\n\ndef viaModule():\n    return m.helper()\n\ndef viaAlias():\n    return h()\n",
+    "pkg/plain.py": "from . import models\nimport pkg.other as po\n\ndef viaSubmodule():\n    return models.helper()\n\ndef viaImportAs():\n    return po.helper()\n",
+    "app.py": "import util\n\ndef main():\n    return util.helper()\n",
+    "util.py": "def helper():\n    return 3\n",
   });
   assert.equal(g.status, 0, g.output);
-  assert.ok(g.calls(["viaModule", "pkg/service.py"], ["helper", "pkg/models.py"]), "module attribute call");
-  assert.ok(g.calls(["viaAlias", "pkg/service.py"], ["helper", "pkg/models.py"]), "aliased import call");
+  const S = "pkg/service.py", P = "pkg/plain.py";
+  assert.ok(g.calls(["viaModule", S], ["helper", "pkg/models.py"]), "module attribute call");
+  assert.ok(g.calls(["viaAlias", S], ["helper", "pkg/models.py"]), "aliased import call");
+  assert.ok(g.calls(["viaSubmodule", P], ["helper", "pkg/models.py"]), "unaliased submodule from-import");
+  assert.ok(g.calls(["viaImportAs", P], ["helper", "pkg/other.py"]), "import a.b as m");
+  assert.ok(g.calls(["main", "app.py"], ["helper", "util.py"]), "plain import module call");
+  // The binding pins the module: never an edge to the same-named function elsewhere.
+  assert.ok(!g.calls(["viaModule", S], ["helper", "pkg/other.py"]), "no edge outside the bound module");
+  assert.ok(!g.calls(["viaImportAs", P], ["helper", "pkg/models.py"]), "no edge outside the bound module (import as)");
+  assert.ok(!g.calls(["main", "app.py"], ["helper", "pkg/models.py"]), "no edge outside the bound module (plain import)");
 });
 
 // ---------------------------------------------------------------- Go
@@ -500,16 +512,25 @@ func helper() {}
   malformedSkipped(g, "broken.go");
 });
 
-// Known gap: package-qualified calls (`g.NewRect()`) are selector expressions, so the
-// member gate drops every cross-package FUNCTION call - the dominant Go call form.
-test("go: package-qualified function calls resolve cross-package", { todo: "indexer member gate drops pkg.Func() to non-method symbols in other files" }, (t) => {
+// Package-qualified calls (`g.NewRect()`) are selector expressions, the dominant Go
+// call form; the member gate drops them, so they resolve through the import binding
+// to any file of the imported package directory.
+test("go: package-qualified function calls resolve cross-package", (t) => {
   const g = indexFixture(t, "go-pkg", {
     "go.mod": "module example.com/app\n\ngo 1.22\n",
     "geo/geo.go": "package geo\n\nfunc NewRect() int { return 1 }\n",
-    "main.go": "package main\n\nimport g \"example.com/app/geo\"\n\nfunc main() { g.NewRect() }\n",
+    "geo/util.go": "package geo\n\nfunc Area2() int { return 2 }\n\nfunc New() int { return 3 }\n",
+    "other/other.go": "package other\n\nfunc NewRect() int { return 4 }\n",
+    "main.go": "package main\n\nimport g \"example.com/app/geo\"\n\nfunc main() { g.NewRect(); g.Area2(); g.New() }\n",
+    "cmd/run.go": "package cmd\n\nimport (\n\t\"fmt\"\n\t\"example.com/app/geo\"\n)\n\nfunc Run() { fmt.Println(geo.NewRect()) }\n",
   });
   assert.equal(g.status, 0, g.output);
-  assert.ok(g.calls(["main", "main.go"], ["NewRect", "geo/geo.go"]));
+  assert.ok(g.calls(["main", "main.go"], ["NewRect", "geo/geo.go"]), "aliased package call");
+  assert.ok(g.calls(["main", "main.go"], ["Area2", "geo/util.go"]), "call into a non-first file of the package");
+  assert.ok(g.calls(["main", "main.go"], ["New", "geo/util.go"]), "builtin-named function through a package binding");
+  assert.ok(g.calls(["Run", "cmd/run.go"], ["NewRect", "geo/geo.go"]), "unaliased import binds the last path segment");
+  assert.ok(!g.calls(["main", "main.go"], ["NewRect", "other/other.go"]), "no edge outside the bound package");
+  assert.ok(!g.calls(["Run", "cmd/run.go"], ["NewRect", "other/other.go"]), "no edge outside the bound package (unaliased)");
 });
 
 // ---------------------------------------------------------------- PHP
