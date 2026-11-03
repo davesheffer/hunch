@@ -86,6 +86,7 @@ import { EdgeSchema, ResourceSchema, type Runbook } from "../core/types.js";
 import { compareCandidates } from "../core/compare.js";
 import { checkConformance } from "../core/conformance.js";
 import { ConstitutionService, policyEvaluationEnvelope } from "../constitution/service.js";
+import { NOT_UPGRADABLE_REASON, isUpgradableCorrection } from "../constitution/correctionPolicyMaterializer.js";
 import { sourceGraphSnapshot } from "../constitution/evaluator.js";
 import { G2_RUNBOOK_CATEGORIES } from "../constitution/g2.js";
 import { renderMarkdown, renderImpact, verdict } from "../core/checkreport.js";
@@ -3167,6 +3168,12 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const artifactHome = public_only ? "public"
           : private_only ? "private"
             : store.getPrivateRec("constraints", constraint_id) ? "private" : "public";
+        // Asking to upgrade a record that can never be upgraded is a caller error,
+        // not a classification (#493): refuse it before any index or evidence write.
+        const held = artifactHome === "private" ? store.getPrivateRec("constraints", constraint_id) : store.json.get("constraints", constraint_id);
+        if (held && !isUpgradableCorrection(held)) {
+          return err(`${NOT_UPGRADABLE_REASON} ${constraint_id} is ${held.status}${held.valid_to ? ", retired" : ""}, from ${held.provenance.source}; its legacy guard is unchanged.`);
+        }
         // Keep parity with the CLI: publish only immutable HEAD-derived graph
         // data, while allowing upgradeCorrection to classify its exact dirty
         // correction scope as pending evidence.

@@ -193,6 +193,7 @@ test("MCP private correction upgrade pumps the public index and the exact privat
   let client: Client | null = null;
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "Keep the order module straightforward for the support team.",
       scope_hint_file: "src/orders.ts",
       severity: "warning",
@@ -256,6 +257,7 @@ test("MCP shared mode keeps a legacy public correction upgrade in its actual pub
   let overlayRoot: string | null = null;
   try {
     const correction = buildCorrectionConstraint({
+      vouched: true,
       rule: "Keep the public migration note next to the public source graph.",
       scope_hint_file: "src/orders.ts",
       severity: "warning",
@@ -300,6 +302,41 @@ test("MCP shared mode keeps a legacy public correction upgrade in its actual pub
   } finally {
     if (client) await client.close();
     if (overlayRoot) cleanupDir(overlayRoot);
+    fixture.cleanup();
+  }
+});
+
+test("MCP correction upgrade refuses an un-vouched correction as an error, before any write (#493)", async () => {
+  const fixture = publicFixture("unvouched-upgrade");
+  let client: Client | null = null;
+  try {
+    const correction = buildCorrectionConstraint({
+      rule: "Keep the order module straightforward for the support team.",
+      scope_hint_file: "src/orders.ts",
+      severity: "warning",
+      type: "architecture",
+      rationale: "Captured without a human vouch, so it can never become a policy.",
+      knownDeps: [],
+    }, "2026-07-19T10:10:00.000Z");
+    const store = new HunchStore(hunchPaths(fixture.root));
+    store.json.put("constraints", correction);
+    store.close();
+    commitAll(fixture.root, "fixture: un-vouched correction");
+    const before = git(fixture.root, "rev-parse", "HEAD");
+
+    client = await connect(fixture.root);
+    const response = await client.callTool({ name: "hunch_policy_upgrade_correction", arguments: { constraint_id: correction.id } });
+    assert.equal(response.isError, true, JSON.stringify(response));
+    const text = (response.content as { type: string; text: string }[]).map((part) => part.text).join("\n");
+    assert.match(text, /Only an active human-confirmed correction can be upgraded/);
+    assert.match(text, new RegExp(correction.id));
+    await client.close();
+    client = null;
+
+    assert.equal(git(fixture.root, "rev-parse", "HEAD"), before, "a refused upgrade commits nothing");
+    assert.equal(git(fixture.root, "status", "--porcelain", "--", ".hunch/evidence"), "", "a refused upgrade writes no evidence");
+  } finally {
+    if (client) await client.close();
     fixture.cleanup();
   }
 });
