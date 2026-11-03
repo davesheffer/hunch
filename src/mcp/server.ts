@@ -30,7 +30,7 @@ import { ReadRequestSchema, ReadResponseSchema, WriteRequestSchema, WriteResultS
 import { selectEmbedder } from "../store/embedder.js";
 import { decisionId, findingId } from "../core/ids.js";
 import { buildCorrectionConstraint } from "../core/correction.js";
-import { confirmCommand } from "../core/countersign.js";
+import { confirmCommand, isAgentTestimony } from "../core/countersign.js";
 import { knownRepoDeps } from "../synthesis/tripwires.js";
 import { refreshExistingGrounding } from "../integrations/providers.js";
 import { workspaceLedgerView, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, snapshotHasHome, recordWorkspaceSnapshot, branchRows, worktreeRows } from "../integrations/workspaceLedger.js";
@@ -92,7 +92,7 @@ import { renderMarkdown, renderImpact, verdict } from "../core/checkreport.js";
 import { nowData, wikiStatus, publicHome, readWikiManifestAt } from "../wiki/wiki.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import { assertCompleteRepoScan, indexRepo, scanRepo } from "../extractors/indexer.js";
-import type { Decision, Finding, Symbol } from "../core/types.js";
+import type { Constraint, Decision, Finding, Symbol } from "../core/types.js";
 import { liveForTopic, historyForTopic, rejectedForTopic, captureConflicts } from "../core/topics.js";
 import { formatWhyRecord, more, WHY_CAP, WHY_RECORD_ID } from "../core/whyRecord.js"; // WHY_CAP: per record-type cap in hunch_why
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, escalationHeadline, type Escalation } from "../core/escalations.js";
@@ -2695,7 +2695,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Capture a correction as an enforced constraint (Never Twice)",
       description:
-        "When a human corrects the agent ('never call X here'), persist it as a SCOPED Constraint with provenance, so the pre-edit hook and CI Constraint Guard hold every assistant to it. severity:'blocking' only when the human said never/must; applies_to_all:true only for a genuinely repo-wide rule (else scoped to scope_hint_file). Returns the constraint id and scope. Not for a design choice (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
+        "When a human corrects the agent ('never call X here'), persist it as a SCOPED Constraint with provenance, so the pre-edit hook and CI Constraint Guard hold every assistant to it. severity:'blocking' only when the human said never/must; applies_to_all:true only for a genuinely repo-wide rule (else scoped to scope_hint_file). supersedes:[con_*] retires a rule this one reverses. Returns the constraint id, scope, and other active rules on that scope. Not for a design choice (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
       inputSchema: {
         rule: z.string().describe("The invariant in the human's words, e.g. \"never call the pay-per-token API here\"."),
         scope_hint_file: z.string().optional().describe("File the correction was about; scopes the constraint to it (conservative default). Prefer a repo-relative path — an absolute one is relativized, and one outside the repo is discarded rather than scoped to a path that could never match."),
@@ -2706,6 +2706,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         source_decision: z.string().optional().describe("id of a decision this correction derives from."),
         private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR), not the committed repo — enforced locally (pre-edit hook + check), never in a public PR comment. Errors if no private store is configured."),
         capture_token: z.string().optional().describe("token from hunch_capture_decision. Recorded and enforced either way, as agent testimony capped at severity 'warning'. A token never lets it DENY: blocking authority needs a human running the printed `hunch review --confirm <id> --severity <s>`."),
+        supersedes: z.array(z.string()).max(16).optional().describe("con_* ids of earlier rules this correction REVERSES. Each is retired (status retired + valid_to, never deleted) in the same memory home, so the edit hook stops serving it. Only agent testimony can be retired here; a human-confirmed rule is retired by the human: `hunch retire-constraint <id>`. Any bad target refuses the whole write."),
         task_id: saveTaskIdField,
         cwd: cwdHintField,
       },
@@ -2738,7 +2739,6 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // authority comes only from a human running `hunch review --confirm <id> --severity <s>`
         // outside the agent channel. The write is capped below blocking rather than refused:
         // Never Twice still lands immediately and is surfaced at edit time and in CI.
-        const gated = consumeCaptureToken(input.capture_token);
         const now = new Date().toISOString();
         const knownDeps = knownRepoDeps(root);
         // What a human confirmation would grant: the severity the caller requested, after
@@ -2761,9 +2761,51 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
               `A change needs the human, outside the agent channel: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`,
           );
         }
+        // A correction that REVERSES an earlier one retires it, so the edit hook never
+        // serves both. Every target is checked before any write: a refusal leaves both
+        // homes as they were. Same-home only, like a decision supersede.
+        const toRetire: Constraint[] = [];
+        const supersedes = new Set(input.supersedes ?? []);
+        if (supersedes.size && home === "private" && !store.hasPrivate) {
+          return refused("No private store configured — set HUNCH_PRIVATE_DIR before a private correction can supersede a rule; nothing was written.");
+        }
+        for (const target of supersedes) {
+          if (target === rec.id) return refused(`supersedes names ${target}, the rule being recorded; nothing was written.`);
+          const found = home === "private" ? store.getPrivateRec("constraints", target) : store.json.get("constraints", target);
+          const elsewhere = home === "private" ? store.json.get("constraints", target) : store.getPrivateRec("constraints", target);
+          if (!found) {
+            return refused(
+              `supersedes target ${target} ${elsewhere ? `lives in the other memory home, where this ${home} write cannot retire it` : "does not exist"}; nothing was written.`,
+            );
+          }
+          // A legacy twin: retiring only this home's copy would report "Retired" while the
+          // other copy stays enforced (the merged read serves the overlay first; public CI
+          // reads the public copy).
+          if (elsewhere && elsewhere.status !== "retired") {
+            return refused(
+              `supersedes target ${target} exists in both memory homes; retiring one copy would leave the other enforced, so nothing was written. ` +
+                `The human retires it outside the agent channel: hunch retire-constraint ${target}`,
+            );
+          }
+          if (found.status === "retired") continue;
+          // Retiring a rule is as much a change to it as rewriting it: an agent write may
+          // retire only agent testimony, never a rule a human signed or Hunch derived.
+          if (!isAgentTestimony(found.provenance.source)) {
+            const tier = found.provenance.source.split("+").includes("human_confirmed") ? "human-confirmed" : `not agent testimony (${found.provenance.source})`;
+            return refused(
+              `Constraint ${target} is ${tier}; an agent write cannot retire it, so nothing was written. ` +
+                `The human retires it outside the agent channel: hunch retire-constraint ${target}`,
+            );
+          }
+          toRetire.push(found);
+        }
+        // Consumed only once nothing above can refuse: a refusal must not burn the token.
+        const gated = consumeCaptureToken(input.capture_token);
         // Same cross-home twin guard as the decision path above.
         const stored = store.putCapture("constraints", rec, !!input.private);
         const observed = observeReportCapture(root, input.task_id, "constraints", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
+        // Invalidate, don't delete: the retired rule keeps its why-it-changed trail.
+        for (const old of toRetire) store.putCapture("constraints", { ...old, status: "retired", valid_to: now }, !!input.private);
         store.reindex();
         // Propagate the new rule to EVERY assistant's ambient grounding (Cursor/Copilot/
         // Windsurf/AGENTS.md/CLAUDE.md), so a correction captured in one assistant is held
@@ -2774,7 +2816,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // selector to skip them and leave successful captures with stale HEAD plus
         // dirty AGENTS/assistant docs. Manual mode still refreshes in place.
         if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}`, startupTeamRoute ?? undefined, observed.observe);
+        const retiredIds = toRetire.map((c) => c.id).join(", ");
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}${retiredIds ? `, retire ${retiredIds}` : ""}`, startupTeamRoute ?? undefined, observed.observe);
         const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
@@ -2795,7 +2838,21 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
 
 ⚠ ${why} — this rule is agent_recorded TESTIMONY${capped ? ` and was capped from "${requested.severity}" to "${rec.severity}"` : ""}. It IS enforced: the pre-edit hook and CI surface it on every matching edit from now on. What it cannot do is DENY an edit — only a rule a human confirmed outside the agent channel may block. The human confirms it by running: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`;
         const dest = destinationNote(destinationRoot(home, store, root));
-        return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where}${dest} It now ${enforce}.${reviewNote}${tierNote}`);
+        const retiredNote = retiredIds ? ` Retired ${retiredIds} (superseded by ${rec.id}; window closed at ${now}).` : "";
+        // Exact scope match only — deterministic, no similarity guessing. The caller
+        // decides whether this correction reverses one of them. This write's home only:
+        // those are the rules supersedes can retire, and a public write never echoes
+        // overlay rules.
+        const scopes = new Set(rec.scope);
+        const sameScope = store.recsInHome("constraints", home).filter((c) => c.id !== rec.id && c.status === "active" && c.scope.some((g) => scopes.has(g)));
+        const SAME_SCOPE_SHOWN = 8;
+        const sameScopeNote = sameScope.length
+          ? `\n\nSame scope: ${sameScope.length} other active rule(s) on ${rec.scope.join(", ")}: ` +
+            sameScope.slice(0, SAME_SCOPE_SHOWN).map((c) => `${c.id} ("${c.statement.slice(0, 80)}")`).join("; ") +
+            (sameScope.length > SAME_SCOPE_SHOWN ? `; +${sameScope.length - SAME_SCOPE_SHOWN} more` : "") +
+            `. If this correction REVERSES one, re-record it with supersedes:["<id>"] so the reversed rule is retired instead of served beside this one.`
+          : "";
+        return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where}${dest}${retiredNote} It now ${enforce}.${reviewNote}${tierNote}${sameScopeNote}`);
       } catch (e) {
         return err(`Failed to record correction: ${(e as Error).message}`);
       }
