@@ -3519,6 +3519,12 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           const abstention = confirmSharedPolicy(policy_id, public_only);
           if (abstention) return err(abstention);
         }
+        // Evaluating every policy claims no absence, but a set silently missing a
+        // teammate's just-pushed policy reads as complete (#493): confirm shared
+        // memory as for a miss, and disclose it when the refresh could not be.
+        const stale = !policy_id && !public_only && store.mode === "shared" && store.privateDir
+          ? confirmSharedMiss("this evaluated set includes every policy in shared team memory", "policy set")
+          : null;
         const exactCommit = commit ? revParse(`${commit}^{commit}`, root) : undefined;
         const behavior = workspace ? { workspace }
           : exactCommit ? { commit: exactCommit }
@@ -3536,7 +3542,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const receipts = new ConstitutionService(store, root)
           .evaluate({ id: policy_id, activeOnly: active_only, publicOnly: public_only, behavior, snapshot })
           .map(policyEvaluationEnvelope);
-        return ok(JSON.stringify(receipts, null, 2));
+        const result = ok(JSON.stringify(receipts, null, 2));
+        if (stale) result.content.push({ type: "text", text: stale });
+        return result;
       } catch (e) {
         return err(`Failed to evaluate policy: ${(e as Error).message}`);
       }
