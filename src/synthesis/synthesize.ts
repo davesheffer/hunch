@@ -34,6 +34,8 @@ export interface SyncResult {
   // Set when the selected provider failed and the deterministic draft was written
   // instead: why it failed, so callers can say so rather than tally it silently.
   fallbackReason?: string;
+  // Where a written decision was homed, so callers commit that home and no other.
+  home?: "public" | "private";
 }
 
 // Below this many changed code lines, a commit with no structural change and no
@@ -268,7 +270,7 @@ export async function syncCommit(
   // which read as an accidental bypass and invited exactly that wrong fix.
   if (home === "private") store.putPrivate("decisions", decision);
   else store.json.put("decisions", decision);
-  return { status: "written", decision, provider: actualProvider, ...(draft.fallbackReason ? { fallbackReason: draft.fallbackReason } : {}) };
+  return { status: "written", decision, provider: actualProvider, home, ...(draft.fallbackReason ? { fallbackReason: draft.fallbackReason } : {}) };
 }
 
 export interface FailureResult {

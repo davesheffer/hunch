@@ -1053,8 +1053,11 @@ program
     }
     // Refresh grounding once, after every capture/review/shadow write, then fold
     // each home's artifacts into at most one memory commit.
-    const publicCapture = r.status === "written" && !toOverlay;
-    const privateCapture = r.status === "written" && toOverlay;
+    // The home syncCommit wrote, not the flag: a memory policy can home decisions in the
+    // overlay without --private, and a public commit there would land nothing but grounding.
+    const capturedPrivate = r.status === "written" && r.home === "private";
+    const publicCapture = r.status === "written" && !capturedPrivate;
+    const privateCapture = capturedPrivate;
     const publicNeedsFlush = publicCapture || graphRefreshed || publicRepairTouched;
     // The default-branch hold covers the post-commit hook too. Its baked-in --commit is
     // the installed auto-commit default, so only a --commit typed by hand overrides it.
@@ -1099,10 +1102,10 @@ program
           )
         : null;
       if (r.status === "written" && !opts.quiet) {
-        const captureResult = toOverlay ? privateResult : publicResult;
-        const commitTarget = toOverlay ? store.privateDir : hunchPaths(root).hunch;
+        const captureResult = capturedPrivate ? privateResult : publicResult;
+        const commitTarget = capturedPrivate ? store.privateDir : hunchPaths(root).hunch;
         if (captureResult && commitTarget) {
-          console.log(`  ↳ ${captureResult === "pushed" ? "committed + pushed" : "committed"} ${r.decision?.id} (${commitTarget}${toOverlay ? "" : " — rides your next push"})`);
+          console.log(`  ↳ ${captureResult === "pushed" ? "committed + pushed" : "committed"} ${r.decision?.id} (${commitTarget}${capturedPrivate ? "" : " — rides your next push"})`);
         }
       }
     }
@@ -6982,7 +6985,11 @@ program
       // ledger≠records: when the partition this store IS has a change ledger, its records must be
       // exactly what the ledger implies (nuryel.replay/1). No ledger, nothing to check.
       const own = partitionOf(store);
-      const replay = existsSync(ledgerFile(stateHomeFor(store, own).hunchDir, own)) ? verifyReplay(store, own) : null;
+      // An overlay-homed partition on a machine without the overlay (public CI): the ledger is
+      // out of reach, not divergent. Say so; an unreadable policy still refuses in stateHomeFor.
+      const ledgerUnreachable = !store.memoryPolicyProblem && store.memoryPolicy.home === "overlay" && (!store.hasPrivate || !store.privateDir);
+      if (ledgerUnreachable) console.log(`· ledger replay not checked: the memory policy homes ${scopePath(own)} in the overlay, and no overlay is configured on this machine.`);
+      const replay = !ledgerUnreachable && existsSync(ledgerFile(stateHomeFor(store, own).hunchDir, own)) ? verifyReplay(store, own) : null;
       const replayFailing = replay ? replay.divergences.filter((d) => d.kind !== "legacy-drift") : [];
       const replayCount = replay && !replay.ok ? Math.max(1, replayFailing.length) : 0;
       if (!findings.length && collisions.size === 0 && !replayCount) {

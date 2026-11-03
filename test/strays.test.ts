@@ -2,7 +2,7 @@ import { cleanupDir } from "./fixtures.js";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HunchStore } from "../src/store/hunchStore.js";
@@ -54,7 +54,9 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 function tmp(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), prefix));
+  // Canonical form: git reports worktree paths resolved (macOS /private/var,
+  // Windows long names), so expected paths must be built from the same form.
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
   cleanup.push(dir);
   return dir;
 }

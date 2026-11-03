@@ -394,6 +394,17 @@ test("§8 doctor: policy home=overlay with no overlay prints the policy and the 
   } finally { cleanupDir(f.base); }
 });
 
+test("§8 drift under an overlay policy with no overlay (public CI) still checks drift and says the ledger replay was not checked", () => {
+  const f = fixture("drift-noov", null);
+  try {
+    setPolicy(f.root, { home: "overlay" });
+    const r = cli(f, ["drift", "--fail-on", "finding-stale"]);
+    assert.doesNotMatch(r.out, /configure one with `hunch private/, `drift refused instead of checking:\n${r.out}`);
+    assert.match(r.out, /ledger replay not checked/i, `drift did not say the replay was skipped:\n${r.out}`);
+    assert.equal(r.status, 0, `drift must pass on a repo with no drift:\n${r.out}`);
+  } finally { cleanupDir(f.base); }
+});
+
 test("§8 doctor: policy with an overlay prints the policy line and passes; home=repo prints home=repo", () => {
   const f = fixture("doctor-ov", null);
   try {
@@ -722,6 +733,34 @@ function migrateFixture(label: string): { f: Fx; overlay: string; finding: strin
 function overlayFiles(overlay: string): string[] {
   return existsSync(overlay) ? readdirSync(overlay, { recursive: true }).map(String).filter((p) => p.endsWith(".json")) : [];
 }
+
+test("§9 sync under an overlay policy commits the captured decision in the overlay, never a public capture commit", () => {
+  const { f, overlay } = migrateFixture("sync-route");
+  try {
+    const overlayRepo = dirname(overlay);
+    git(overlayRepo, f.env, "init", "-q", "-b", "main");
+    git(overlayRepo, f.env, "config", "user.email", "mpc@example.com");
+    git(overlayRepo, f.env, "config", "user.name", "Mpc");
+    git(overlayRepo, f.env, "config", "commit.gpgsign", "false");
+    mkdirSync(join(f.root, "src"), { recursive: true });
+    writeFileSync(join(f.root, "src", "route.ts"), Array.from({ length: 20 }, (_, i) => `export function route${i}(x: number): number { return x + ${i}; }`).join("\n") + "\n");
+    git(f.root, f.env, "add", "-A");
+    git(f.root, f.env, "commit", "-qm", "feat: add routing helpers\n\nRouting helpers keep each memory record in the one home its policy names.");
+    const codeHead = git(f.root, f.env, "rev-parse", "HEAD");
+
+    const r = cli(f, ["sync", "HEAD", "--commit", "--force"], { HUNCH_PRIVATE_DIR: overlay, HUNCH_SYNTH_PROVIDER: "deterministic" });
+    assert.equal(r.status, 0, r.out);
+    const id = /captured decision (dec_[0-9a-f]+)/.exec(r.out)?.[1];
+    assert.ok(id, `sync captured no decision:\n${r.out}`);
+    assert.ok(existsSync(join(overlay, "decisions", `${id}.json`)), "the decision is homed in the overlay");
+    assert.equal(existsSync(join(f.root, ".hunch", "decisions", `${id}.json`)), false, "no public copy of the decision");
+
+    const codeSubjects = git(f.root, f.env, "log", "--format=%s", `${codeHead}..HEAD`);
+    assert.doesNotMatch(codeSubjects, /hunch: capture/, `a public capture commit landed on the code branch:\n${codeSubjects}`);
+    const overlaySubjects = git(overlayRepo, f.env, "log", "--format=%s");
+    assert.match(overlaySubjects, new RegExp(`hunch: capture ${id}`), `the overlay never got the capture commit:\n${overlaySubjects}\n${r.out}`);
+  } finally { cleanupDir(f.base); }
+});
 
 test("§9 memory-policy migrate moves a public finding into the overlay, deletes the public file, keeps constraints, commits nothing", () => {
   const { f, overlay, finding, constraint } = migrateFixture("mp-migrate");
