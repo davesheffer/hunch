@@ -28,3 +28,13 @@ export function canonicalize(value: unknown): unknown {
 export function stateHash(value: unknown): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(canonicalize(value))).digest("hex")}`;
 }
+
+/** Whether two values are the same once canonicalized; one that cannot be canonicalized
+ *  counts as different, so a caller deduplicating copies keeps both. */
+export function sameCanonical(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
+  } catch {
+    return false;
+  }
+}

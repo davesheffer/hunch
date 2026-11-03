@@ -1,0 +1,24 @@
+{
+  "id": "con_c195e0d533",
+  "type": "correctness",
+  "statement": "Use a TDD approach for the memory home policy work: write the failing test first, run it and see it fail for the right reason, then implement until green",
+  "scope": [
+    "src/store/hunchStore.ts"
+  ],
+  "severity": "warning",
+  "enforcement": "advisory_v1",
+  "match": null,
+  "forbids": null,
+  "rationale": "David asked for TDD mid-build (2026-10-25) after part 1 had started code-first; red-then-green evidence proves each behavior is actually exercised, which matters for a fail-closed, backward-compat routing change.",
+  "source_decision": "dec_66636a2b1b",
+  "violations": [],
+  "status": "active",
+  "valid_from": "2026-10-25T07:53:35.236Z",
+  "valid_to": null,
+  "provenance": {
+    "source": "agent_recorded",
+    "confidence": 0.75,
+    "evidence": [],
+    "last_verified": "2026-10-25T07:53:35.236Z"
+  }
+}

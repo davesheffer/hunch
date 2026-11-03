@@ -67,6 +67,9 @@ const HOLDER = `
 const { DatabaseSync } = require("node:sqlite");
 const { workerData, parentPort } = require("node:worker_threads");
 const db = new DatabaseSync(workerData.path);
+// Like every real writer: COMMIT waits out a reader's momentary SHARED lock
+// (the retrying main thread's schema reads) instead of failing on contact.
+db.exec("PRAGMA busy_timeout = 5000");
 db.exec("BEGIN IMMEDIATE");
 parentPort.postMessage("locked");
 Atomics.wait(workerData.flag, 0, 0, 30000);

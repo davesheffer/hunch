@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { realpathSync, rmSync, rmdirSync, symlinkSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { machineFile } from "../src/core/machine.js";
+import { repoProfileFile } from "../src/core/repoProfile.js";
 import { detectInitiator } from "../src/synthesis/initiator.js";
 import { cleanupDir, isolatedCliEnv, tempDir } from "./helpers.js";
 import { fixtureGitEnv, fixtureGitSystemConfig } from "../tooling/run-tests.mjs";
@@ -73,4 +75,13 @@ test("fixture Git settings survive Hunch's Git environment sanitization", () => 
     rmdirSync(config.dir);
     cleanupDir(root);
   }
+});
+
+test("the test runner points the user config dir at a throwaway directory", () => {
+  // machine.json and repo-profiles.json live there; a real repo profile must never route a
+  // fixture's captures into the developer's actual overlay.
+  const configHome = process.env.XDG_CONFIG_HOME ?? "";
+  assert.match(basename(configHome), /^hunch-test-config-/);
+  assert.ok(machineFile().startsWith(configHome));
+  assert.ok(repoProfileFile().startsWith(configHome));
 });

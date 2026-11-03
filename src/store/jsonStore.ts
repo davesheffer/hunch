@@ -266,6 +266,10 @@ function unsafePath(path: string, reason: string): Error {
   return new Error(`[hunch] refusing unsafe JSON store path ${path}: ${reason}`);
 }
 
+function safeFileId(id: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) && id !== "." && id !== "..";
+}
+
 export class JsonStore {
   private _warnedForward = false;
   /** Memoized validated records per kind. loadAll() is on every read-path method
@@ -280,6 +284,9 @@ export class JsonStore {
   private readonly lexicalRoot: string;
   private readonly canonicalRoot: string;
   private readonly lexicalHunch: string;
+  /** Throws to refuse a record write of a kind (the memory policy's public-store guard).
+   *  Deletes are never guarded: removing a record is the migration direction. */
+  private writeGuard?: (kind: EntityKind) => void;
 
   /** `lockOpts.startedAt` is an INTERNAL TEST SEAM, not API: it replaces the OS
    *  creation-time probe of the `.rmw-lock` "unproven" rule so the suite can
@@ -293,6 +300,10 @@ export class JsonStore {
     if (!hunchRelative || !pathIsWithin(this.lexicalHunch, this.lexicalRoot)) {
       throw unsafePath(paths.hunch, "the Hunch directory is not a child of its declared store root");
     }
+  }
+
+  setWriteGuard(guard: ((kind: EntityKind) => void) | undefined): void {
+    this.writeGuard = guard;
   }
 
   private lstatOrMissing(path: string): FileStat | null {
@@ -367,10 +378,23 @@ export class JsonStore {
     return SINGLE_FILE[kind] ? MAX_JSON_INDEX_BYTES : MAX_JSON_RECORD_BYTES;
   }
 
+  /** Whether `id` can be written or deleted by id for `kind`. A per-record kind needs
+   *  an id that can name a file (`<id>.json`); the loader still keeps a record whose id
+   *  cannot, from a misnamed file, so a caller checks first instead of catching the
+   *  refusal. Single-file kinds hold ids inside one index, so any id is safe there. */
+  isSafeRecordId(kind: EntityKind, id: string): boolean {
+    return this.isSingleFileKind(kind) || safeFileId(id);
+  }
+
+  /** Whether `kind` keeps every record in one index file instead of a file per record. */
+  isSingleFileKind(kind: EntityKind): boolean {
+    return !!SINGLE_FILE[kind];
+  }
+
   private assertSafeRecordId(id: string): void {
     // Entity schemas intentionally accept free-form IDs for backwards
     // compatibility. The storage boundary must still reject path syntax.
-    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || id === "." || id === "..") {
+    if (!safeFileId(id)) {
       throw new Error(`[hunch] refusing unsafe JSON record id: ${JSON.stringify(id)}`);
     }
   }
@@ -754,6 +778,7 @@ export class JsonStore {
 
   /** Write a single record (validated) to its JSON file / into the index array. */
   put<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] {
+    this.writeGuard?.(kind);
     const schema = SCHEMAS[kind];
     const validated = schema.parse(record) as EntityFor[K] & { id: string };
     const single = SINGLE_FILE[kind];
@@ -781,6 +806,7 @@ export class JsonStore {
 
   /** Bulk replace all records of a kind (used by the extractor for symbols/edges). */
   replaceAll<K extends EntityKind>(kind: K, records: EntityFor[K][]): void {
+    this.writeGuard?.(kind);
     const schema = SCHEMAS[kind];
     const validated = records.map((r) => schema.parse(r));
     const single = SINGLE_FILE[kind];
@@ -824,20 +850,27 @@ export class JsonStore {
   }
 
   /** Read a single-file index as a raw array (no validation). Missing/empty → [].
-   *  A non-empty file that fails to parse THROWS — we must never silently treat a
-   *  corrupt index as empty and then rewrite it, which would flatten every existing
-   *  record. (`hunch index` rebuilds from scratch via replaceAll to recover.) */
+   *  A non-empty file that fails to parse, or parses to something other than an
+   *  array, THROWS — we must never silently treat a corrupt index as empty and then
+   *  rewrite it, which would flatten every existing record. (`hunch index` rebuilds
+   *  from scratch via replaceAll to recover.) */
   private readRawArray(kind: EntityKind, directory: SafeDirectory, f: string): unknown[] {
     const text = this.readContainedFile(directory, f, this.maxBytes(kind));
     if (text === null) return [];
     if (!text.trim()) return [];
+    // Only the indexer's kinds can be rebuilt; state records (entities, relationships)
+    // exist nowhere else, so they are restored from history instead.
+    const recover = kind === "symbols" || kind === "edges" || kind === "resources"
+      ? "Fix or remove it, then re-run `hunch index`."
+      : "Fix it, or restore it from git history (or the overlay's remote); removing it loses these records.";
     let v: unknown;
     try {
       v = JSON.parse(text);
     } catch (e) {
-      throw new Error(`refusing to rewrite ${f}: the existing index is not valid JSON (${(e as Error).message}). Fix or remove it, then re-run \`hunch index\`.`);
+      throw new Error(`refusing to rewrite ${f}: the existing index is not valid JSON (${(e as Error).message}). ${recover}`);
     }
-    return Array.isArray(v) ? v : [];
+    if (!Array.isArray(v)) throw new Error(`refusing to rewrite ${f}: the existing index is not a JSON array. ${recover}`);
+    return v;
   }
 
   get<K extends EntityKind>(kind: K, id: string): EntityFor[K] | undefined {
@@ -876,6 +909,60 @@ export class JsonStore {
       if (text !== null && text.trim() !== "") count++;
     }
     return count;
+  }
+
+  /** Every non-tombstone file rawRecordCount counts, unparsed: the absolute path and
+   *  text of each non-empty `.json` file of a per-record kind (sorted by name), or the
+   *  index file of a single-file kind. Read-only and never creates a directory. Lets a
+   *  caller rescuing records (src/store/strays.ts) find the files the validating loader
+   *  skipped instead of silently leaving them behind (con_947c578b2c). A file the
+   *  containment check refuses (hard link, special file, oversized) comes back with
+   *  `error` and empty text, so it never hides its siblings. */
+  rawRecordFiles(kind: EntityKind): Array<{ file: string; text: string; error?: string }> {
+    const directory = this.safeKindDirectory(kind, false);
+    if (!directory) return [];
+    const single = SINGLE_FILE[kind];
+    const out: Array<{ file: string; text: string; error?: string }> = [];
+    for (const name of single ? [single] : this.jsonFileNames(kind)) {
+      const file = join(directory.lexical, name);
+      let text: string | null;
+      try {
+        text = this.readContainedFile(directory, file, this.maxBytes(kind));
+      } catch (error) {
+        out.push({ file, text: "", error: (error as Error).message });
+        continue;
+      }
+      if (text !== null && text.trim() !== "") out.push({ file, text });
+    }
+    return out;
+  }
+
+  /** Whether the store holds ANY copy of this id, valid or not: for a per-record
+   *  kind a file at the canonical name (an invalid, corrupt, oversized or 0-byte
+   *  tombstone file counts), for a single-file kind a raw index entry (a
+   *  schema-invalid or future-schema entry counts). Lets a caller about to WRITE
+   *  that id tell "absent" from "present but skipped by the validating loader", so
+   *  it never overwrites what loadAll could not read. A corrupt index throws. */
+  hasRecordFile(kind: EntityKind, id: string): boolean {
+    if (SINGLE_FILE[kind]) return this.rawIdCount(kind, id) > 0;
+    const file = this.fileFor(kind, id);
+    try {
+      lstatSync(file);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** How many raw entries of a single-file index carry this id, valid or not
+   *  (delete() removes them all, put() replaces them all). Per-record kinds hold at
+   *  most one canonical file, so they answer 0 or 1. A corrupt index throws. */
+  rawIdCount(kind: EntityKind, id: string): number {
+    const single = SINGLE_FILE[kind];
+    if (!single) return this.hasRecordFile(kind, id) ? 1 : 0;
+    const directory = this.safeKindDirectory(kind, false);
+    if (!directory) return 0;
+    return this.readRawArray(kind, directory, join(directory.lexical, single)).filter((r) => (r as { id?: string })?.id === id).length;
   }
 
   /** Remove a record (used by the curate/reject flow). Returns true if removed.

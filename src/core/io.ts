@@ -24,7 +24,7 @@ const renameRetryWaiter = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_
  * for a direct write that an interruption could truncate. Failed writes clean up the
  * temporary file.
  */
-export function writeFileAtomic(file: string, data: string): void {
+export function writeFileAtomic(file: string, data: string | Uint8Array): void {
   const tmp = `${file}.tmp${process.pid}.${counter++}`;
   let mode: number | undefined;
   try {
@@ -95,7 +95,7 @@ export function writeFileAtomicIfAbsent(file: string, data: string): boolean {
 }
 
 /** Write + fsync a fresh temp file (shared by both atomic writers). */
-function writeFileAtomicTmp(tmp: string, data: string, mode?: number): void {
+function writeFileAtomicTmp(tmp: string, data: string | Uint8Array, mode?: number): void {
   // Exclusive creation rejects stale files and links without truncating their
   // contents. If open fails, the path belongs to somebody else: never unlink it.
   const fd = openSync(tmp, "wx", mode ?? 0o666);

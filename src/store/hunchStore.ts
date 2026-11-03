@@ -18,6 +18,8 @@ import { openDb, withTx, type DB } from "./db.js";
 import { RESET_SQL, embedHash } from "./schema.js";
 import { selectEmbedder, type Embedder } from "./embedder.js";
 import { JsonStore } from "./jsonStore.js";
+import { memoryPolicy, memoryPolicyProblem, readConfig, STRUCTURAL_KINDS, type MemoryPolicy } from "../core/config.js";
+import { readRepoProfile } from "../core/repoProfile.js";
 import {
   checkoutCommonDir,
   commonDirCandidates,
@@ -81,7 +83,7 @@ export interface RankedSearchOpts {
   freshnessRoot?: string;
 }
 
-export type OverlayResolutionSource = "environment" | "local-config" | null;
+export type OverlayResolutionSource = "environment" | "local-config" | "machine-profile" | null;
 
 export interface OverlayOverride {
   /** Repo/worktree-local target that would have won without the environment override. */
@@ -145,6 +147,17 @@ export class HunchStore {
   readonly overlaySource: OverlayResolutionSource;
   /** A per-worktree overlay pointer this machine's setup never registered (ignored). */
   private ignoredLocalPointer: string | null = null;
+  /** The checkout's common dir as localConfig() resolved it, reused by the profile
+   *  lookup so a store open pays for one git probe, not two. Undefined when the probe
+   *  was skipped (no pointer possible): the lookup then probes for itself. */
+  private resolvedCommonDir: string | undefined = undefined;
+  /** The committed memory policy (.hunch/config.json `memory`). Changes capture routing
+   *  only; `mode`/`unified` keep describing how the overlay was set up. */
+  readonly memoryPolicy: MemoryPolicy;
+  /** Why config.json exists but yields no readable policy (memoryPolicyProblem), or null.
+   *  While set, every capture outside the index kinds is refused: the intended home is
+   *  unknown, and "no policy" would mean public. */
+  readonly memoryPolicyProblem: string | null;
   /** The routing that ignored pointer asked for, so the refusal can name the exact
    *  setup command that re-registers it. */
   private ignoredLocalPointerSetup: { mode?: "private" | "shared"; autoCommit?: boolean } = {};
@@ -200,12 +213,19 @@ export class HunchStore {
     if (this.ignoredLocalPointer && !configuredDir && !resolvedEnvironmentDir) {
       throw new Error(this.unregisteredPointerMessage(this.ignoredLocalPointer));
     }
-    const priv = resolvedEnvironmentDir || configuredDir;
+    // A fresh clone has neither pointer; this machine's profile for the same origin restores
+    // the overlay it set up before, so the clone does not silently open public.
+    const profile = !configuredDir && !resolvedEnvironmentDir && !this.ignoredLocalPointer
+      ? readRepoProfile(this.paths.root, { commonDir: this.resolvedCommonDir })
+      : null;
+    const priv = resolvedEnvironmentDir || configuredDir || profile?.privateDir;
     this.overlaySource = resolvedEnvironmentDir
       ? "environment"
       : configuredDir
         ? "local-config"
-        : null;
+        : profile
+          ? "machine-profile"
+          : null;
     if (resolvedEnvironmentDir && configuredDir) {
       const canonical = (path: string): string => {
         try { return realpathSync(path); } catch { return resolve(path); }
@@ -246,13 +266,34 @@ export class HunchStore {
     }
     // Auto-commit is ON unless explicitly opted out (`autoCommit: false` in local.json).
     // An absent local.json (plain `hunch init`, or an env-configured overlay) defaults ON.
-    this.autoCommit = local.autoCommit !== false;
+    // The profile fills in what this checkout leaves unset; like the common-dir
+    // registration, a checkout can only force auto-commit OFF, never back on.
+    this.autoCommit = profile ? local.autoCommit !== false && profile.autoCommit : local.autoCommit !== false;
     this.privateAutoCommit = !!(priv && this.autoCommit);
     // Mode: no overlay → "public". With an overlay, an absent `mode` reads as "private"
     // (the pre-mode behavior — split routing), so existing setups are unchanged on upgrade;
     // only an explicit `hunch shared` opts a repo into unified routing.
-    this.mode = priv ? (local.mode ?? "private") : "public";
+    this.mode = priv ? ((local.mode ?? profile?.mode) ?? "private") : "public";
     this.unified = this.mode === "shared" && !!this.privateJson;
+    this.memoryPolicy = memoryPolicy(readConfig(paths));
+    this.memoryPolicyProblem = memoryPolicyProblem(paths);
+    if (this.memoryPolicyProblem) {
+      const refusal = this.unreadablePolicyRefusal.bind(this);
+      this.json.setWriteGuard((kind) => {
+        if (!STRUCTURAL_KINDS.includes(kind)) throw new Error(refusal(kind));
+      });
+    } else if (this.memoryPolicy.home === "overlay") {
+      // Defense in depth: a direct this.json write of an overlay-homed kind (one that
+      // bypasses putCapture) is refused too. The overlay's own store has no guard.
+      this.json.setWriteGuard((kind) => {
+        if (!this.memoryPolicy.publicKinds.has(kind)) {
+          throw new Error(
+            `Refused: the memory policy in .hunch/config.json homes ${kind} in the overlay, so writing ${kind} to the public store was blocked; nothing was written. ` +
+            "Capture through the overlay, or move existing public records first (hunch memory-policy migrate).",
+          );
+        }
+      });
+    }
   }
 
   /** Human-facing warning for the compatibility-preserving env-first resolution.
@@ -289,12 +330,36 @@ export class HunchStore {
       "Otherwise delete .hunch/local.json. (HUNCH_PRIVATE_DIR also selects an overlay explicitly for one process.)";
   }
 
+  private unreadablePolicyRefusal(kind: string | null): string {
+    return `Refused: ${this.memoryPolicyProblem}, so the memory policy cannot be read and ${kind ?? "this capture"} has no known home; nothing was written. ` +
+      "Fix .hunch/config.json (`hunch doctor` names the problem), or capture with private: true to write to the overlay.";
+  }
+
   /** Where a capture belongs: an explicit private:true always goes to the overlay
    *  (putPrivate throws rather than silently landing public when none is configured);
    *  otherwise the overlay in unified ("shared") mode, else the public store. ONE home
-   *  per record — the single-source-of-truth contract. */
-  captureHome(isPrivate = false): "private" | "public" {
+   *  per record — the single-source-of-truth contract. `kind` is what the caller writes
+   *  (a memory policy homes kinds differently); null names a whole-partition home, such
+   *  as a state ledger, which follows the policy's home. */
+  captureHome(isPrivate: boolean, kind: EntityKind | null): "private" | "public" {
     if (isPrivate) return "private";
+    if (this.memoryPolicyProblem) {
+      // Index output keeps the mode's home: shared mode homes it in the overlay.
+      if (kind && STRUCTURAL_KINDS.includes(kind)) return this.unified ? "private" : "public";
+      throw new Error(this.unreadablePolicyRefusal(kind));
+    }
+    if (this.memoryPolicy.home === "overlay") {
+      // An unnamed kind homes in the overlay: fail toward privacy, never toward the
+      // public repository.
+      if (kind && this.memoryPolicy.publicKinds.has(kind)) return "public";
+      if (!this.privateJson) {
+        throw new Error(
+          `Refused: the memory policy in .hunch/config.json routes ${kind ?? "this capture"} to the overlay, but no overlay is configured on this machine, so nothing was written. ` +
+          "Configure one with `hunch private <dir>`, `hunch shared --repo <url>`, or HUNCH_PRIVATE_DIR.",
+        );
+      }
+      return "private";
+    }
     return this.unified ? "private" : "public";
   }
 
@@ -303,7 +368,7 @@ export class HunchStore {
    *  through here so all modes, branches, worktrees, teams, and agents agree on where
    *  memory lives. */
   putCapture<K extends EntityKind>(kind: K, record: EntityFor[K], isPrivate = false): EntityFor[K] {
-    const home = this.captureHome(isPrivate);
+    const home = this.captureHome(isPrivate, kind);
     const id = (record as { id: string }).id;
     const lookup = (json: JsonStore | undefined) => kind === "derived" || kind === "receipts" || kind === "commitments"
       ? json?.getDirect(kind, id) : json?.get(kind, id);
@@ -314,6 +379,9 @@ export class HunchStore {
     // ambiguous state: merged/private-first reads would make later writers and
     // public renderers disagree about which record is real.
     if (!targetHasRecord && otherHasRecord) {
+      if (home === "private" && this.memoryPolicy.home === "overlay" && !isPrivate) {
+        throw new Error(`Refused: ${kind} ${id} lives in the public store but the memory policy homes ${kind} in the overlay; move it first (hunch memory-policy migrate)`);
+      }
       throw new Error(`${kind} record ${id} already exists in the other memory home; refusing to create a public/private id collision`);
     }
     return home === "private" ? this.putPrivate(kind, record) : this.json.put(kind, record);
@@ -329,7 +397,7 @@ export class HunchStore {
    * ordinary capture, so the optimization cannot create a second source of truth.
    */
   replaceCaptures<K extends EntityKind>(kind: K, records: EntityFor[K][], isPrivate = false): void {
-    const home = this.captureHome(isPrivate);
+    const home = this.captureHome(isPrivate, kind);
     const target = home === "private" ? this.privateJson : this.json;
     if (!target) {
       throw new Error("No private store configured — set HUNCH_PRIVATE_DIR to a directory Hunch can write sensitive records into.");
@@ -362,6 +430,11 @@ export class HunchStore {
    *  should use this instead of overlay-first `getRec`. */
   getPrivateRec<K extends EntityKind>(kind: K, id: string): EntityFor[K] | undefined {
     return this.privateJson?.get(kind, id);
+  }
+
+  /** Whether the overlay holds a file for this id, even one its loader skipped. */
+  hasPrivateRecordFile(kind: EntityKind, id: string): boolean {
+    return !!this.privateJson?.hasRecordFile(kind, id);
   }
 
   getStateDirect<K extends "derived" | "receipts" | "commitments">(kind: K, id: string, home: "public" | "private"): EntityFor[K] | undefined {
@@ -451,6 +524,8 @@ export class HunchStore {
       try { lstatSync(join(dir, "hunch", "local.json")); return true; } catch { return false; }
     });
     const common = pointerPossible ? checkoutCommonDir(this.paths.root) : "";
+    // A skipped probe is not "no common dir": the machine-profile lookup must probe itself.
+    this.resolvedCommonDir = pointerPossible ? common : undefined;
     let registered: { privateDir?: string; autoCommit?: boolean; mode?: "private" | "shared" } = {};
     if (common) {
       const commonFile = join(common, "hunch", "local.json");

@@ -10,6 +10,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
+import type { EntityKind } from "../core/types.js";
 import { commitAndPushHunch, hunchDirHasChanges, onDefaultBranch, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
 import { refreshCommittableGrounding } from "./providers.js";
 import { advertisedTeamRemoteContract } from "./team.js";
@@ -104,8 +105,10 @@ export function flushCapture(
   /** Long-lived callers can pin the route snapshot that admitted the write. */
   remoteOverride?: HunchRemoteContract,
   observe?: GitMemoryObserver,
+  /** The kind just written: a memory policy can home kinds differently. */
+  kind?: EntityKind,
 ): "pushed" | "committed" | "held" | null {
-  return flushStore(store, publicHunchDir, isPrivate, message, remoteOverride, observe, true);
+  return flushStore(store, publicHunchDir, isPrivate, message, remoteOverride, observe, true, kind);
 }
 
 /** Auto-commit a state-contract write (`nuryel_write`, `hunch serve`). A state root is a
@@ -129,10 +132,11 @@ function flushStore(
   remoteOverride: HunchRemoteContract | undefined,
   observe: GitMemoryObserver | undefined,
   holdOnDefaultBranch: boolean,
+  kind?: EntityKind,
 ): "pushed" | "committed" | "held" | null {
   // Follow the same routing as HunchStore.captureHome: unified ("shared") mode homes
   // EVERY capture in the overlay, so the flush must go there too — one source of truth.
-  if (store.captureHome(isPrivate) === "private") {
+  if (store.captureHome(isPrivate, kind ?? null) === "private") {
     if (store.privateAutoCommit && store.privateDir) {
       return commitAndPushHunch(store.privateDir, message, {
         push: true,

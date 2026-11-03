@@ -1,0 +1,7 @@
+{
+  "firmness": "advisory",
+  "memory": {
+    "home": "overlay",
+    "public_kinds": ["constraints", "components"]
+  }
+}

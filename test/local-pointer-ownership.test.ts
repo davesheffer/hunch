@@ -70,6 +70,9 @@ function makeFixture(prefix: string): Fixture {
   git(victim, "commit", "-qm", "init");
   const setup = cli(victim, env, ["private", "--repo", remote, "--no-hook"]);
   assert.equal(setup.status, 0, setup.stdout + setup.stderr);
+  // Setup records the repo id in .hunch/config.json and says to commit it; do as told.
+  git(victim, "add", ".hunch/config.json");
+  git(victim, "commit", "-qm", "fixture: repo id");
   const victimStore = join(victim, ".hunch-private", ".hunch");
 
   const hostileSeed = join(base, "hostile-seed");

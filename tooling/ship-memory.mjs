@@ -27,6 +27,8 @@ import { pathToFileURL } from "node:url";
 
 import { classifyChange, GROUNDING_DOCS } from "./merge-class.mjs";
 import { scanRecord } from "../src/core/publication.ts";
+import { memoryPolicy, memoryPolicyProblem, readConfig } from "../src/core/config.ts";
+import { hunchPaths } from "../src/core/paths.ts";
 
 const LOCK_STALE_MS = 30 * 60_000;
 // The holder renews its lock every poll, so a lock this old with a "live" owner is a
@@ -483,6 +485,18 @@ export async function main(argv = process.argv.slice(2)) {
     else throw new Error(`unknown argument: ${a}`);
   }
   const cwd = git(opts.cwd, ["rev-parse", "--show-toplevel"]);
+  // A memory home policy (dec_66636a2b1b) keeps memory out of the public repository, so
+  // there is nothing to ship. Read from the working tree, before any fetch, push or gh call.
+  const policyProblem = memoryPolicyProblem(hunchPaths(cwd));
+  if (policyProblem) {
+    log(`${policyProblem}, so where memory belongs is unknown; not shipping. Fix the file.`);
+    return 1;
+  }
+  if (memoryPolicy(readConfig(hunchPaths(cwd))).home === "overlay") {
+    log("memory policy routes memory to the overlay; the shipper is not needed here");
+    return 0;
+  }
+  process.stderr.write("ship-memory is deprecated: set a memory policy (hunch memory-policy) instead\n");
   const release = opts.dryRun ? () => {} : acquireLock(cwd);
   if (!release) { log("another shipper holds the lock; a --wait holder ships new commits before it exits, otherwise the next commit does"); return 0; }
   try {

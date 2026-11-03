@@ -255,3 +255,30 @@ test("MCP startup and query do not ingest an external record through a symlink",
   assert.ok(warnings.some((message) => /symlinks and special files are not followed/.test(message)));
   assert.equal(readFileSync(target, "utf8"), bytes);
 });
+
+test("a non-array or corrupt index refuses with advice that can recover that kind", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-json-index-advice-"));
+  const store = new JsonStore(hunchPaths(root));
+  try {
+    for (const [kind, text] of [["entities", "{}\n"], ["relationships", "{ not json"], ["symbols", "{}\n"]] as const) {
+      const index = join(root, ".hunch", kind, "index.json");
+      mkdirSync(join(root, ".hunch", kind), { recursive: true });
+      writeFileSync(index, text);
+      let message = "";
+      try {
+        store.delete(kind, "x");
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      assert.match(message, /refusing to rewrite/, `${kind}: the index is refused`);
+      if (kind === "symbols") assert.match(message, /hunch index/, "the indexer rebuilds structural kinds");
+      else {
+        assert.doesNotMatch(message, /hunch index/, `${kind}: the indexer cannot rebuild it`);
+        assert.match(message, /git/, `${kind}: points at git history`);
+      }
+      assert.equal(readFileSync(index, "utf8"), text, `${kind}: the index is untouched`);
+    }
+  } finally {
+    cleanupDir(root);
+  }
+});
