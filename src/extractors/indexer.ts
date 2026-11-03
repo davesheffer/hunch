@@ -389,10 +389,17 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   const pyRoots = [...fileSymbols.keys()].some((f) => f.startsWith("src/")) ? ["", "src"] : [""];
   const goModule = readGoModulePath(root);
   const trackedFiles = new Set(fileSymbols.keys());
-  const resolveImportTargets = (file: string, spec: string): string[] => {
+  // A Go spec resolves the same from every importing file: scan once per package.
+  const goPackages = new Map<string, string[]>();
+  const goFilesOf = (spec: string): string[] => {
+    let files = goPackages.get(spec);
+    if (!files) goPackages.set(spec, files = goPackageFiles(spec, fileSymbols, goModule));
+    return files;
+  };
+  const resolveImportTargets =(file: string, spec: string): string[] => {
     const langId = languageFor(file)?.id;
     if (langId === "python") return [resolvePythonImport(file, spec, fileSymbols, pyRoots)].filter((target): target is string => !!target);
-    if (langId === "go") return [resolveGoImport(spec, fileSymbols, goModule)].filter((target): target is string => !!target);
+    if (langId === "go") return goFilesOf(spec).slice(0, 1);
     if (langId === "php") {
       return resolvePhpImportTargets(
         file,
@@ -476,7 +483,10 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
       const callerName = byId.get(callerId)?.name ?? "?";
       for (const { callee, module } of targets) {
         let files = moduleFiles.get(module);
-        if (!files) moduleFiles.set(module, files = new Set(resolveImportTargets(file, module)));
+        if (!files) {
+          const targets = languageFor(file)?.id === "go" ? goFilesOf(module) : resolveImportTargets(file, module);
+          moduleFiles.set(module, files = new Set(targets));
+        }
         const inModule = (nameIndex.get(callee) ?? []).filter((id) => {
           const sym = byId.get(id);
           return !!sym && files.has(sym.file);
@@ -857,32 +867,23 @@ function readGoModulePath(root: string): string | null {
   }
 }
 
-/** Lexicographically-first tracked .go file whose directory is exactly `dir`
- *  ("" = repo root) — a Go import names a PACKAGE (directory), so any file in it
- *  identifies the right component for a depends_on edge. */
-function firstGoFileInDir(dir: string, fileSymbols: Map<string, string[]>): string | null {
-  let best: string | null = null;
+/** Resolve a Go import path to its package's tracked .go files, sorted. Sibling to
+ *  resolvePythonImport(): an in-module import is the go.mod module path plus the
+ *  package directory, so strip the declared module prefix and look the directory
+ *  up exactly ("" = repo root); with no go.mod, try the path as a repo-relative
+ *  directory. Anything else (stdlib, external modules) resolves to none — no
+ *  suffix guessing, a wrong depends_on edge is worse than a missing one. A Go
+ *  import names a PACKAGE (directory): its first file identifies the component
+ *  for a depends_on edge, and a package-qualified call may land in any of them. */
+function goPackageFiles(spec: string, fileSymbols: Map<string, string[]>, goModule: string | null): string[] {
+  const dir = goModule && spec === goModule ? "" : goModule && spec.startsWith(`${goModule}/`) ? spec.slice(goModule.length + 1) : spec;
+  const out: string[] = [];
   for (const f of fileSymbols.keys()) {
     if (!f.endsWith(".go")) continue;
     const d = toPosix(dirname(f));
-    const matches = dir === "" ? d === "." : d === dir;
-    if (matches && (!best || f < best)) best = f;
+    if (dir === "" ? d === "." : d === dir) out.push(f);
   }
-  return best;
-}
-
-/** Resolve a Go import path to a tracked file. Sibling to resolvePythonImport():
- *  an in-module import is the go.mod module path plus the package directory, so
- *  strip the declared module prefix and look the directory up exactly; with no
- *  go.mod, try the path as a repo-relative directory. Anything else (stdlib,
- *  external modules) resolves to null — no suffix guessing, a wrong depends_on
- *  edge is worse than a missing one. */
-function resolveGoImport(spec: string, fileSymbols: Map<string, string[]>, goModule: string | null): string | null {
-  if (goModule) {
-    if (spec === goModule) return firstGoFileInDir("", fileSymbols);
-    if (spec.startsWith(`${goModule}/`)) return firstGoFileInDir(spec.slice(goModule.length + 1), fileSymbols);
-  }
-  return firstGoFileInDir(spec, fileSymbols);
+  return out.sort(compareCodeUnits);
 }
 
 interface ComponentDraft extends Component {
