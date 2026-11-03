@@ -76,6 +76,43 @@ test("auto CLI saves without rules.json, replays, previews and detects context c
   }
 });
 
+test("auto CLI saves a rule from a pull request's conversation comments", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-auto-discussion-"));
+  const replies = [
+    { action: "locate", file: "src/auth.ts", reason: "The tenant check lives in the auth module." },
+    { action: "accept", reason: "The current implementation requires a tenant.", rule: "Missing tenant must fail validation.",
+      check: "Pass no tenant and assert the function throws.", comment_id: 5, review_quote: "Missing tenant must fail validation.",
+      code_quote: "if (!tenant) throw new Error('missing tenant');" },
+    { supported: true, reusable: true, current: true, checkable: true, no_conflict: true,
+      reason: "The discussion and current implementation support this check." },
+  ];
+  const provider = Object.assign(new DeterministicProvider(), { draftProse: async () => JSON.stringify(replies.shift()) });
+  const saved: Constraint[] = [];
+  const out = join(root, "report.json");
+  const input = join(root, "discussion.json");
+  try {
+    execFileSync("git", ["init", root], { stdio: "ignore" });
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src/auth.ts"), "export function auth(tenant) { if (!tenant) throw new Error('missing tenant'); }");
+    execFileSync("git", ["-C", root, "add", "src/auth.ts"]);
+    writeFileSync(input, JSON.stringify({ review_comments: [], pull_requests: [{ number: 4, files: ["src/auth.ts"], entries: [{
+      id: 5, kind: "comment", body: "Missing tenant must fail validation.", html_url: "https://github.com/acme/app/pull/4#issuecomment-5",
+      created_at: "2026-09-10T00:00:00Z", updated_at: "2026-09-10T00:00:00Z", user: { login: "alice", type: "User" } }] }] }));
+    const command = new Command();
+    registerAutomaticReviewMemory(command, () => ({ root, existing: [...saved] }),
+      records => { records.forEach(r => ConstraintSchema.parse(r)); saved.push(...records); }, async () => provider);
+    await command.parseAsync(["auto", "--repository", "acme/app", "--from", input, "--output", out, "--public"], { from: "user" });
+    const report = JSON.parse(readFileSync(out, "utf8"));
+    assert.equal(report.entries[0].candidate_id, "review_pr_4");
+    assert.equal(report.entries[0].status, "saved");
+    assert.deepEqual(saved[0]!.scope, ["src/auth.ts"]);
+    assert.equal(replies.length, 0);
+  } finally {
+    assert.ok(resolve(root).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/")));
+    cleanupDir(root);
+  }
+});
+
 test("file reader refuses untracked files and escaping directory links", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-auto-path-"));
   const outside = mkdtempSync(join(tmpdir(), "hunch-auto-outside-"));

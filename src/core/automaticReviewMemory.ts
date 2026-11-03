@@ -2,13 +2,17 @@
 import { z } from "zod";
 import { canonicalHash } from "../constitution/canonical.js";
 import { pathMatchesGlob } from "./glob.js";
-import { compileReviewRules, validateReviewPacket } from "./reviewMemory.js";
+import { compileReviewRules, validateReviewPacket, type DiscussionCandidate, type ReviewCandidate } from "./reviewMemory.js";
 import type { Constraint } from "./types.js";
 
 const prose = z.string().trim().min(10).max(2000);
 const proposalSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("accept"), reason: prose, rule: prose, check: prose,
     comment_id: z.number().int().positive(), review_quote: prose, code_quote: prose }).strict(),
+  z.object({ action: z.enum(["skip", "review"]), reason: prose }).strict(),
+]);
+const locateSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("locate"), file: z.string().min(1).max(500), reason: prose }).strict(),
   z.object({ action: z.enum(["skip", "review"]), reason: prose }).strict(),
 ]);
 const verdictSchema = z.object({ supported: z.boolean(), reusable: z.boolean(), current: z.boolean(),
@@ -35,6 +39,9 @@ Resolution or reviewer identity alone proves nothing. Ambiguity, incomplete cont
 or conflict with any existing rule requires review. Do not broaden beyond the supplied file.
 Checks describe observable behavior; they are not commands to execute. Never claim tests were run.`;
 
+type Item = { candidate: ReviewCandidate; discussion?: undefined } | { candidate?: undefined; discussion: DiscussionCandidate };
+const usable = (code: string) => !!code.trim() && !code.includes("\0") && Buffer.byteLength(code) <= 64 * 1024;
+
 /** Bounded sequential analysis with a separate skeptical pass. The caller owns I/O and persistence. */
 export async function automateReviewMemory(options: {
   packet: unknown;
@@ -54,50 +61,90 @@ export async function automateReviewMemory(options: {
   const rules: Constraint[] = [];
   let analyzed = 0;
   // Most recently updated threads first. Full threads are retained, never date-sliced replies.
-  const candidates = [...packet.candidates].sort((a, b) =>
-    Math.max(...b.comments.map(c => Date.parse(c.updated_at))) - Math.max(...a.comments.map(c => Date.parse(c.updated_at)))
-    || a.id.localeCompare(b.id));
-  for (const candidate of candidates) {
-    const entry: AutomaticReviewEntry = { candidate_id: candidate.id, evidence_hash: candidate.evidence_hash,
-      file: candidate.file, status: "review", reason: "Not analyzed." };
+  const updated = (item: Item) => Math.max(...(item.candidate?.comments ?? item.discussion!.entries).map(c => Date.parse(c.updated_at)));
+  const items: Item[] = [...packet.candidates.map(candidate => ({ candidate })),
+    ...(packet.discussions ?? []).map(discussion => ({ discussion }))];
+  items.sort((a, b) => updated(b) - updated(a)
+    || (a.candidate ?? a.discussion!).id.localeCompare((b.candidate ?? b.discussion!).id));
+  for (const item of items) {
+    const { id, evidence_hash } = item.candidate ?? item.discussion!;
+    const entry: AutomaticReviewEntry = { candidate_id: id, evidence_hash,
+      file: item.candidate?.file ?? "", status: "review", reason: "Not analyzed." };
     entries.push(entry);
     const previous = options.existing.filter(r => r.provenance.evidence.includes(packet.repository)
-      && r.provenance.evidence.includes(candidate.id));
+      && r.provenance.evidence.includes(id));
     if (previous.length) {
-      const unchanged = previous.every(r => r.provenance.evidence.includes(candidate.evidence_hash));
+      const unchanged = previous.every(r => r.provenance.evidence.includes(evidence_hash));
       entry.status = unchanged ? "skipped" : "review";
       entry.reason = unchanged ? "Thread already recorded; existing or retired rules are preserved."
         : "Thread changed since capture; review the existing rule explicitly.";
-      if (unchanged && previous.some(r => r.status === "active" && r.provenance.evidence.includes("review-memory:auto/1"))) {
-        try {
-          const codeHash = `code:${canonicalHash(options.readCurrent(candidate.file))}`;
-          if (previous.some(r => r.status === "active" && !r.provenance.evidence.includes(codeHash))) {
-            entry.status = "review"; entry.reason = "Current code changed since automatic capture; review the existing rule.";
-          }
-        } catch { entry.status = "review"; entry.reason = "Previously captured file is no longer available."; }
+      // A discussion's rule lives in the file it was scoped to.
+      if (!entry.file) entry.file = previous[0]!.scope[0] ?? "";
+      if (unchanged) {
+        for (const r of previous.filter(r => r.status === "active" && r.provenance.evidence.includes("review-memory:auto/1"))) {
+          try {
+            const codeHash = `code:${canonicalHash(options.readCurrent(item.candidate?.file ?? r.scope[0] ?? ""))}`;
+            if (!r.provenance.evidence.includes(codeHash)) {
+              entry.status = "review"; entry.reason = "Current code changed since automatic capture; review the existing rule."; break;
+            }
+          } catch { entry.status = "review"; entry.reason = "Previously captured file is no longer available."; break; }
+        }
       }
       continue;
     }
     if (analyzed >= options.limit) { entry.status = "deferred"; entry.reason = "Run limit reached."; continue; }
     try {
-      const code = options.readCurrent(candidate.file);
-      if (!code.trim() || code.includes("\0") || Buffer.byteLength(code) > 64 * 1024) {
-        entry.reason = "Current file is empty, binary, or exceeds 64 KiB; manual review needed."; continue;
+      let code: string;
+      let data: Record<string, unknown>;
+      const cachedFor = (match: (e: AutomaticReviewEntry) => boolean) => options.previous?.find(e => e.candidate_id === id
+        && e.evidence_hash === evidence_hash && !e.retryable && (e.status === "skipped" || e.status === "review") && match(e));
+      const replay = (cached: AutomaticReviewEntry) => {
+        entry.status = cached.status; entry.reason = cached.reason; entry.cached = true;
+        if (cached.file) { entry.file = cached.file; entry.code_hash = cached.code_hash; }
+      };
+      if (item.candidate) {
+        code = options.readCurrent(item.candidate.file);
+        if (!usable(code)) { entry.reason = "Current file is empty, binary, or exceeds 64 KiB; manual review needed."; continue; }
+        entry.code_hash = canonicalHash(code);
+        const cached = cachedFor(e => e.code_hash === entry.code_hash);
+        if (cached) { replay(cached); continue; }
+        analyzed++;
+        options.progress?.(id, analyzed);
+        data = { repository: packet.repository, thread: item.candidate, current_code: code };
+      } else {
+        const discussion = item.discussion!;
+        // A locate-stage disposition depends only on the discussion; a later one also on the chosen file.
+        const cached = cachedFor(e => {
+          if (!e.file) return true;
+          try { return e.code_hash === canonicalHash(options.readCurrent(e.file)); } catch { return false; }
+        });
+        if (cached) { replay(cached); continue; }
+        const current = new Map<string, string>();
+        for (const file of discussion.files) {
+          try { const text = options.readCurrent(file); if (usable(text)) current.set(file, text); } catch { /* not offered */ }
+        }
+        if (!current.size) { entry.reason = "None of the pull request's files is a current bounded text file; manual review needed."; continue; }
+        const discussionData = { repository: packet.repository, discussion: { ...discussion, files: [...current.keys()] } };
+        if (Buffer.byteLength(JSON.stringify(discussionData)) > 120 * 1024) {
+          entry.reason = "Complete evidence exceeds the analysis budget; nothing was truncated."; continue;
+        }
+        analyzed++;
+        options.progress?.(id, analyzed);
+        const located = locateSchema.parse(JSON.parse(await options.generate(`${instructions}\n
+This pull request discussion is not anchored to a file. Choose the ONE supplied current file that a durable
+rule from this discussion would govern. Return {"action":"locate","file":"one of discussion.files","reason":"..."}
+or {"action":"skip"|"review","reason":"..."}. Choose review when uncertain.
+DATA: ${JSON.stringify(discussionData)}`)));
+        entry.reason = located.reason;
+        if (located.action !== "locate") { entry.status = located.action === "skip" ? "skipped" : "review"; continue; }
+        if (!current.has(located.file)) { entry.reason = "Proposed file is not one of the pull request's current files."; continue; }
+        entry.file = located.file;
+        code = current.get(located.file)!;
+        entry.code_hash = canonicalHash(code);
+        data = { repository: packet.repository, thread: discussion, file: located.file, current_code: code };
       }
-      entry.code_hash = canonicalHash(code);
-      const cached = options.previous?.find(e => e.candidate_id === candidate.id && e.evidence_hash === candidate.evidence_hash
-        && e.code_hash === entry.code_hash && !e.retryable && (e.status === "skipped" || e.status === "review"));
-      if (cached) {
-        entry.status = cached.status;
-        entry.reason = cached.reason;
-        entry.cached = true;
-        continue;
-      }
-      analyzed++;
-      options.progress?.(candidate.id, analyzed);
-      const existing = [...options.existing, ...rules].filter(r => r.scope.some(scope => pathMatchesGlob(candidate.file, scope)));
-      const data = { repository: packet.repository, thread: candidate, current_code: code,
-        existing_rules: existing.map(r => ({ id: r.id, statement: r.statement, status: r.status, scope: r.scope })) };
+      const existing = [...options.existing, ...rules].filter(r => r.scope.some(scope => pathMatchesGlob(entry.file, scope)));
+      data.existing_rules = existing.map(r => ({ id: r.id, statement: r.statement, status: r.status, scope: r.scope }));
       if (Buffer.byteLength(JSON.stringify(data)) > 120 * 1024) {
         entry.reason = "Complete evidence exceeds the analysis budget; nothing was truncated."; continue;
       }
@@ -108,8 +155,8 @@ or {"action":"skip"|"review","reason":"..."}. Choose review when uncertain.
 DATA: ${JSON.stringify(data)}`)));
       entry.reason = proposal.reason;
       if (proposal.action !== "accept") { entry.status = proposal.action === "skip" ? "skipped" : "review"; continue; }
-      const comment = candidate.comments.find(c => c.id === proposal.comment_id);
-      if (!comment?.body.includes(proposal.review_quote) || !code.includes(proposal.code_quote)) {
+      const quoted = (item.candidate?.comments ?? item.discussion!.entries).filter(c => c.id === proposal.comment_id);
+      if (!quoted.some(c => c.body.includes(proposal.review_quote)) || !code.includes(proposal.code_quote)) {
         entry.reason = "Proposed supporting quotes do not match the supplied review and current file."; continue;
       }
       const verdict = verdictSchema.parse(JSON.parse(await options.generate(`${instructions}\n
@@ -121,8 +168,8 @@ DATA: ${JSON.stringify({ ...data, proposal })}`)));
       if (![verdict.supported, verdict.reusable, verdict.current, verdict.checkable, verdict.no_conflict].every(Boolean)) {
         entry.reason = `Verification withheld this rule: ${verdict.reason}`; continue;
       }
-      const [record] = compileReviewRules(packet, [{ candidate_id: candidate.id, evidence_hash: candidate.evidence_hash,
-        rule: proposal.rule, check: proposal.check }], options.now);
+      const [record] = compileReviewRules(packet, [{ candidate_id: id, evidence_hash, rule: proposal.rule, check: proposal.check,
+        ...(item.discussion ? { file: entry.file } : {}) }], options.now);
       if ([...options.existing, ...rules].some(r => r.id === record!.id)) {
         entry.status = "skipped"; entry.reason = "Rule already exists; no overwrite or revival."; continue;
       }

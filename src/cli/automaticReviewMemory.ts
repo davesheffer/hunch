@@ -4,7 +4,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { canonicalHash } from "../constitution/canonical.js";
 import { automateReviewMemory } from "../core/automaticReviewMemory.js";
-import { prepareReviewMemory, validateReviewPacket } from "../core/reviewMemory.js";
+import { prepareReviewMemory, pullDiscussionsFromGraphql, validateReviewPacket } from "../core/reviewMemory.js";
 import { writeFileAtomic } from "../core/io.js";
 import type { Constraint } from "../core/types.js";
 import { chooseReviewGenerator } from "./reviewMemoryProvider.js";
@@ -19,6 +19,13 @@ const cacheSchema = z.object({ schema: z.literal("hunch.review-memory-cache/1"),
 });
 
 export interface ReviewMemoryContext { root: string; existing: Constraint[] }
+
+/** Nested connections stop at 100; a pull request over that is reported incomplete, never sliced. */
+const PULL_DISCUSSIONS_QUERY = `query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){
+pullRequests(first:50,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{number
+comments(first:100){totalCount nodes{databaseId body url createdAt updatedAt author{login __typename}}}
+reviews(first:100){totalCount nodes{databaseId body url createdAt updatedAt commit{oid} author{login __typename}}}
+files(first:100){nodes{path}}}}}}`;
 
 /** Only bounded tracked files inside this checkout may enter model context. */
 export function readReviewCode(root: string, file: string): string {
@@ -39,7 +46,7 @@ export function registerAutomaticReviewMemory(command: Command,
   capture: (records: Constraint[], repository: string, privateOnly: boolean) => void,
   chooseProvider: (root: string, configFile?: string, initiator?: string) => Promise<{ name: string; draftProse(prompt: string): Promise<string>; providersUsed?: () => string[] }> = chooseReviewGenerator): void {
   command.command("auto").requiredOption("--repository <owner/repo>", "GitHub repository matching this checkout")
-    .option("--from <file>", "use local comments JSON or a prepared packet instead of fetching GitHub")
+    .option("--from <file>", "use local comments JSON, {review_comments, pull_requests}, or a prepared packet instead of fetching GitHub")
     .option("--limit <count>", "maximum new threads to analyze per run (1..100)", "20")
     .option("--dry-run", "analyze and report without saving rules")
     .option("--retry", "reanalyze cached skipped/review cases; captured rules are still preserved")
@@ -66,12 +73,20 @@ export function registerAutomaticReviewMemory(command: Command,
         input = JSON.parse(readFileSync(opts.from, "utf8"));
       } else {
         // Fetch whole history so an updated reply cannot lose its parent. The analysis itself is bounded.
-        input = JSON.parse(execFileSync("gh", ["api", "--paginate", "--slurp",
+        const reviewComments = JSON.parse(execFileSync("gh", ["api", "--paginate", "--slurp",
           `repos/${opts.repository}/pulls/comments?per_page=100`], {
           cwd: root, encoding: "utf8", timeout: 120000, maxBuffer: 16 * 1024 * 1024, windowsHide: true,
         }));
+        // Conversation comments and review bodies carry no file anchor, so they arrive per pull request.
+        const [owner, name] = opts.repository.split("/");
+        const pages = JSON.parse(execFileSync("gh", ["api", "graphql", "--paginate", "--slurp",
+          "-f", `query=${PULL_DISCUSSIONS_QUERY}`, "-F", `owner=${owner}`, "-F", `name=${name}`], {
+          cwd: root, encoding: "utf8", timeout: 300000, maxBuffer: 64 * 1024 * 1024, windowsHide: true,
+        }));
+        input = { review_comments: reviewComments, ...pullDiscussionsFromGraphql(pages) };
       }
-      const packet = Array.isArray(input) ? prepareReviewMemory(opts.repository, input) : validateReviewPacket(input);
+      const packet = Array.isArray(input) || !(input && typeof input === "object" && "schema" in input)
+        ? prepareReviewMemory(opts.repository, input) : validateReviewPacket(input);
       if (packet.repository.toLowerCase() !== opts.repository.toLowerCase()) throw new Error("packet repository mismatch");
       // Local derived cache lives in Git's worktree administration directory, never the source tree.
       const cacheFile = resolve(root, execFileSync("git", ["-C", root, "rev-parse", "--git-path", "hunch-review-memory.json"],
