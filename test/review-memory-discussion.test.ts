@@ -177,3 +177,37 @@ test("inline-only packets keep their existing shape", () => {
   const packet = prepareReviewMemory("acme/app", []);
   assert.equal("discussions" in packet, false);
 });
+
+test("a pull request with no analyzable human entry is not reported incomplete for its files", () => {
+  const botOnly = node({ number: 9,
+    comments: { totalCount: 1, nodes: [node().comments.nodes[1]] }, reviews: { totalCount: 0, nodes: [] },
+    files: { totalCount: 101, nodes: [{ path: "src/auth.ts" }] } });
+  assert.equal(pullDiscussionsFromGraphql(pages(botOnly)).incomplete_discussions, 0);
+});
+
+test("a pull request whose file list is unavailable is reported incomplete, never silently dropped", () => {
+  const result = pullDiscussionsFromGraphql(pages(node({ files: null }), node({ number: 9, files: null, comments: { totalCount: 0, nodes: [] },
+    reviews: { totalCount: 0, nodes: [] } })));
+  assert.equal(result.incomplete_discussions, 1);
+  assert.equal(result.pull_requests.length, 1);
+});
+
+test("a cached locate-stage disposition is reused only for the same offered files", async () => {
+  const twoFiles = prepareReviewMemory("acme/app", input(node({ files: { totalCount: 2, nodes: [{ path: "src/auth.ts" }, { path: "src/b.ts" }] } })));
+  const call = (readable: string[], responses: unknown[], previous?: Parameters<typeof automateReviewMemory>[0]["previous"]) => {
+    const prompts: string[] = [];
+    const result = automateReviewMemory({ packet: twoFiles, existing: [], previous, provider: "fixture", limit: 20, now,
+      readCurrent: file => { if (!readable.includes(file)) throw new Error("missing"); return code; },
+      generate: async p => { prompts.push(p); assert.ok(responses.length, "unexpected provider call"); return JSON.stringify(responses.shift()); } });
+    return { result, prompts };
+  };
+  const first = await call(["src/auth.ts"], [{ action: "review", reason: "The discussion does not establish a durable rule." }]).result;
+  assert.equal(first.entries[0]!.status, "review");
+  const same = call(["src/auth.ts"], [], first.entries);
+  assert.equal((await same.result).entries[0]!.cached, true);
+  assert.equal(same.prompts.length, 0);
+  const wider = call(["src/auth.ts", "src/b.ts"], [{ action: "review", reason: "The discussion still does not establish a durable rule." }], first.entries);
+  const report = await wider.result;
+  assert.equal(wider.prompts.length, 1);
+  assert.equal(report.entries[0]!.cached, undefined);
+});

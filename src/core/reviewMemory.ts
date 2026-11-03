@@ -75,8 +75,10 @@ export function pullDiscussionsFromGraphql(pages: unknown): { pull_requests: z.i
   const pull_requests: z.infer<typeof pullSchema>[] = [];
   let incomplete = 0;
   for (const pr of nodes) {
+    // A missing or truncated file list only costs a pull request that had something human to analyze.
+    const analyzable = [...pr.comments.nodes, ...pr.reviews.nodes].some(n => n.author?.__typename !== "Bot" && n.body.trim());
     if (pr.comments.totalCount > pr.comments.nodes.length || pr.reviews.totalCount > pr.reviews.nodes.length
-      || (pr.files && pr.files.totalCount > pr.files.nodes.length)
+      || (analyzable && (!pr.files || pr.files.totalCount > pr.files.nodes.length))
       || [...pr.comments.nodes, ...pr.reviews.nodes].some(n => n.databaseId === null)) { incomplete++; continue; }
     const entry = (kind: "comment" | "review", n: z.infer<typeof graphqlPull>["reviews"]["nodes"][number]) => ({
       id: n.databaseId ?? 0, kind, body: n.body, html_url: n.url, created_at: n.createdAt, updated_at: n.updatedAt,

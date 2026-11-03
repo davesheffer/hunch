@@ -94,23 +94,30 @@ export function registerAutomaticReviewMemory(command: Command,
       const provider = await chooseProvider(root, opts.cliConfig ?? process.env.HUNCH_REVIEW_CLI_CONFIG, opts.initiator);
       let input: unknown;
       let discussionsUnavailable = false;
+      let packet;
+      const inline = (value: unknown) => prepareReviewMemory(opts.repository, value);
       if (opts.from) {
         if (statSync(opts.from).size > 16 * 1024 * 1024) throw new Error("review input exceeds 16 MiB");
         input = JSON.parse(readFileSync(opts.from, "utf8"));
+        // --no-discussions means inline threads only, whatever the local file also carries.
+        if (!opts.discussions && input && typeof input === "object" && !Array.isArray(input) && !("schema" in input)) {
+          input = (input as { review_comments?: unknown }).review_comments;
+        }
       } else {
-        const reviewComments = source.reviewComments(opts.repository, root);
-        input = reviewComments;
+        input = source.reviewComments(opts.repository, root);
+      }
+      if (Array.isArray(input) || !(input && typeof input === "object" && "schema" in input)) {
         // Conversation comments and review bodies carry no file anchor, so they arrive per pull request.
-        // Their failure must not cost the inline analysis that works without them.
-        if (opts.discussions) {
-          try { input = { review_comments: reviewComments, ...source.pullDiscussions(opts.repository, root) }; } catch {
+        // Fetching or validating them must not cost the inline analysis that works without them.
+        if (!opts.from && opts.discussions) {
+          try { packet = inline({ review_comments: input, ...source.pullDiscussions(opts.repository, root) }); } catch (error) {
             discussionsUnavailable = true;
-            console.error("[review-memory] Pull request discussions unavailable; analyzing inline review threads only.");
+            const reason = (error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0]!.slice(0, 200);
+            console.error(`[review-memory] Pull request discussions unavailable (${reason}); analyzing inline review threads only.`);
           }
         }
-      }
-      const packet = Array.isArray(input) || !(input && typeof input === "object" && "schema" in input)
-        ? prepareReviewMemory(opts.repository, input) : validateReviewPacket(input);
+        packet ??= inline(input);
+      } else packet = validateReviewPacket(input);
       if (packet.repository.toLowerCase() !== opts.repository.toLowerCase()) throw new Error("packet repository mismatch");
       // Local derived cache lives in Git's worktree administration directory, never the source tree.
       const cacheFile = resolve(root, execFileSync("git", ["-C", root, "rev-parse", "--git-path", "hunch-review-memory.json"],

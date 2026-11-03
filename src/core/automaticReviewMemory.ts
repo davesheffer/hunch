@@ -113,16 +113,17 @@ export async function automateReviewMemory(options: {
         data = { repository: packet.repository, thread: item.candidate, current_code: code };
       } else {
         const discussion = item.discussion!;
-        // A locate-stage disposition depends only on the discussion; a later one also on the chosen file.
-        const cached = cachedFor(e => {
-          if (!e.file) return true;
-          try { return e.code_hash === canonicalHash(options.readCurrent(e.file)); } catch { return false; }
-        });
-        if (cached) { replay(cached); continue; }
         const current = new Map<string, string>();
         for (const file of discussion.files) {
           try { const text = options.readCurrent(file); if (usable(text)) current.set(file, text); } catch { /* not offered */ }
         }
+        // A locate-stage disposition depends on the discussion and the files offered; a later one on the chosen file.
+        const offered = canonicalHash([...current.keys()].sort());
+        const cached = cachedFor(e => {
+          if (!e.file) return e.code_hash === offered;
+          try { return e.code_hash === canonicalHash(options.readCurrent(e.file)); } catch { return false; }
+        });
+        if (cached) { replay(cached); continue; }
         // File-state dispositions are not cached: a restored or shrunk file must get its analysis.
         if (!current.size) {
           entry.reason = "None of the pull request's files is a current bounded text file; manual review needed.";
@@ -130,7 +131,8 @@ export async function automateReviewMemory(options: {
         }
         const discussionData = { repository: packet.repository, discussion: { ...discussion, files: [...current.keys()] } };
         if (Buffer.byteLength(JSON.stringify(discussionData)) > 120 * 1024) {
-          entry.reason = "Complete evidence exceeds the analysis budget; nothing was truncated."; continue;
+          entry.reason = "Complete evidence exceeds the analysis budget; nothing was truncated.";
+          entry.code_hash = offered; continue;
         }
         analyzed++;
         options.progress?.(id, analyzed);
@@ -140,7 +142,9 @@ rule from this discussion would govern. Return {"action":"locate","file":"one of
 or {"action":"skip"|"review","reason":"..."}. Choose review when uncertain.
 DATA: ${JSON.stringify(discussionData)}`)));
         entry.reason = located.reason;
-        if (located.action !== "locate") { entry.status = located.action === "skip" ? "skipped" : "review"; continue; }
+        if (located.action !== "locate") {
+          entry.status = located.action === "skip" ? "skipped" : "review"; entry.code_hash = offered; continue;
+        }
         if (!current.has(located.file)) {
           entry.reason = "Proposed file is not one of the pull request's current files."; entry.retryable = true; continue;
         }

@@ -114,6 +114,28 @@ test("auto CLI saves a rule from a pull request's conversation comments", async 
   }
 });
 
+test("auto CLI --no-discussions also ignores pull_requests in --from input", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-auto-nodisc-"));
+  const input = join(root, "input.json");
+  const out = join(root, "report.json");
+  try {
+    execFileSync("git", ["init", root], { stdio: "ignore" });
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "src/auth.ts"), "export function auth() {}");
+    writeFileSync(input, JSON.stringify({ review_comments: [], pull_requests: [{ number: 4, files: ["src/auth.ts"], entries: [{
+      id: 5, kind: "comment", body: "Missing tenant must fail validation.", html_url: "https://github.com/acme/app/pull/4#issuecomment-5",
+      created_at: "2026-09-10T00:00:00Z", updated_at: "2026-09-10T00:00:00Z", user: { login: "alice", type: "User" } }] }] }));
+    const command = new Command();
+    registerAutomaticReviewMemory(command, () => ({ root, existing: [] }), () => assert.fail("nothing to save"),
+      async () => Object.assign(new DeterministicProvider(), { draftProse: async () => assert.fail("no discussion may be analyzed") }));
+    await command.parseAsync(["auto", "--repository", "acme/app", "--from", input, "--output", out, "--dry-run", "--no-discussions"], { from: "user" });
+    assert.equal(JSON.parse(readFileSync(out, "utf8")).entries.length, 0);
+  } finally {
+    assert.ok(resolve(root).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/")));
+    cleanupDir(root);
+  }
+});
+
 test("auto CLI keeps inline analysis when discussions fail, are skipped, or are incomplete", async () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-auto-fetch-"));
   const out = join(root, "report.json");
@@ -143,7 +165,14 @@ test("auto CLI keeps inline analysis when discussions fail, are skipped, or are 
       .parseAsync(["auto", "--repository", "acme/app", "--output", out, "--dry-run"], { from: "user" });
     assert.equal(report().entries.length, 1);
     assert.equal(report().discussions_unavailable, true);
-    assert.ok(errors.some(e => /discussions unavailable/.test(e)));
+    assert.ok(errors.some(e => /discussions unavailable.*GraphQL: rate limited/.test(e)));
+    // Fetched data that fails normalization degrades the same way instead of killing the inline analysis.
+    await withDiscussions(() => ({ pull_requests: [{ number: 4, files: ["src/auth.ts"], entries: [{ id: 5, kind: "comment", body: "x",
+      html_url: "https://github.com/other/app/pull/4#issuecomment-5", created_at: "2026-09-10T00:00:00Z",
+      updated_at: "2026-09-10T00:00:00Z", user: { login: "alice", type: "User" } }] }], incomplete_discussions: 0 }))
+      .parseAsync(["auto", "--repository", "acme/app", "--output", out, "--dry-run"], { from: "user" });
+    assert.equal(report().entries.length, 1);
+    assert.equal(report().discussions_unavailable, true);
     fetched = 0;
     await withDiscussions(() => assert.fail("must not fetch"))
       .parseAsync(["auto", "--repository", "acme/app", "--output", out, "--dry-run", "--no-discussions"], { from: "user" });
