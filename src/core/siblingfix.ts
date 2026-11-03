@@ -97,13 +97,17 @@ const MAX_CHANGE_LINES = 12;
  *  half of a two-commit fix (trap-310 v5 carried one commit, missed the other). */
 const MAX_FIX_CHANGE_LINES = 32;
 /** Bumped when the cached lesson shape changes. */
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 /** Cached answers kept; past it the least recently written go (pruned on write). */
 const MAX_CACHE_ENTRIES = 256;
 const INVENTORY_FILE = "inventory.json";
 const INVENTORY_VERSION = 1;
 /** Candidate files whose bodies are parsed (best name match first). */
 const MAX_CANDIDATE_FILES = 8;
+/** Same-named files across this many sibling directories, each defining the
+ *  name, make it a per-variant interface (see `candidatesFor`). Two copies
+ *  stay a copy. */
+const MIN_VARIANT_IMPLEMENTERS = 3;
 /** Words too common in code to count as shared shape. */
 const STOP = new Set([
   "const", "let", "var", "return", "function", "if", "else", "for", "while", "new", "this", "true", "false",
@@ -144,6 +148,17 @@ function mentions(body: string, name: string): boolean {
   return new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`).test(body.slice(body.indexOf("\n") + 1));
 }
 
+
+/** `git log -L` follows lines, not names: a function written over another
+ *  one's lines arrives as a change. It adds the definition line while no
+ *  removed line names the function, so it is a creation. */
+export function writtenOver(commit: LineLogCommit, fn: Pick<FnRange, "name" | "body">): boolean {
+  const signature = (fn.body.split("\n", 1)[0] ?? "").trim();
+  const escaped = fn.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`);
+  return signature !== "" && commit.added.some((l) => l.trim() === signature)
+    && !commit.removed.some((l) => named.test(l));
+}
 
 export function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   if (!a.size || !b.size) return 0;
@@ -434,12 +449,32 @@ function candidatesFor(ownNames: readonly string[], target: string, inventory: r
     if (!matchable(s)) continue;
     pool.push({ s, tokens: tokenize(s.name) });
   }
+  // A name every variant directory implements in its same-named file
+  // (backends/{base,mysql,postgresql}/schema.py: quote_value) is an interface,
+  // overridden per variant, not a copy: each variant's fixes are its own.
+  const variantKey = (file: string, name: string): string | null => {
+    const parts = file.split("/");
+    return parts.length < 3 ? null : `${parts.slice(0, -2).join("/")}\0${parts[parts.length - 1]}\0${name}`;
+  };
+  const implementers = new Map<string, Set<string>>();
+  for (const { s } of pool) {
+    const key = variantKey(s.file, s.name);
+    if (!key || s.file === target) continue;
+    const files = implementers.get(key) ?? new Set<string>();
+    files.add(s.file);
+    implementers.set(key, files);
+  }
+  const isOverride = (name: string, file: string): boolean => {
+    const key = variantKey(target, name);
+    return key !== null && key === variantKey(file, name) && (implementers.get(key)?.size ?? 0) + 1 >= MIN_VARIANT_IMPLEMENTERS;
+  };
   for (const name of ownNames) {
     const tokens = tokenize(name);
     if (tokens.size < 2) continue;
     for (const { s, tokens: other } of pool) {
       if (late()) { budget.exhausted = true; return null; }
       if (s.file === target && s.name === name) continue;
+      if (s.name === name && isOverride(name, s.file)) continue;
       let shared = 0;
       for (const t of tokens) if (other.has(t)) shared++;
       const nameSim = jaccard(tokens, other);
@@ -755,7 +790,7 @@ function computeLessons(
     // Divergence: substantive changes to the sibling that never touched the
     // target. Shared commits already carried their change to both copies.
     // The sibling's creation is not a change made to it.
-    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && isSubstantive(c));
+    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c));
     // A reverted fix is no longer in the sibling, and its revert carries the
     // fix's subject: the pair cancels out.
     if (divergent.some((c) => isFixSubject(c.subject))) {

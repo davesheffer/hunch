@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   attributable, changeLines, codeTokens, isFixSubject, isSubstantive, nameTokens, overlap, parseLineLog,
-  renderSiblingLessons, siblingCounters, siblingLessonsFor, warmSiblingCache,
+  renderSiblingLessons, siblingCounters, siblingLessonsFor, warmSiblingCache, writtenOver,
 } from "../src/core/siblingfix.js";
 import { emptyState, lessonReminder, onLessonsDelivered } from "../src/core/pipeline.js";
 import { tsxLoaderUrl } from "./helpers.js";
@@ -144,6 +144,35 @@ test("a fix to one copy surfaces on the other copy, with the change itself", t =
   // The fixed copy itself is not told to copy the broken one: the target's
   // history holds no fix the sibling lacks.
   assert.deepEqual(siblingLessonsFor(root, "src/providers.ts", [], { cache: false }), []);
+});
+
+test("an interface every variant implements is an override, not a copy; two copies stay a copy", t => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-sibling-"));
+  t.after(() => cleanupDir(root));
+  execFileSync("git", ["init", "-q", root]);
+  writeFileSync(join(root, ".gitignore"), ".hunch-cache/\n");
+  const write = (variant: string, body: string) => {
+    mkdirSync(join(root, "backends", variant), { recursive: true });
+    writeFileSync(join(root, "backends", variant, "schema.ts"), `\n${body}`);
+  };
+  for (const v of ["mysql", "postgresql"]) write(v, matcher("isOurHook"));
+  commit(root, "feat: two backends");
+  write("mysql", fixedMatcher("isOurHook"));
+  commit(root, "fix(mysql): a mixed hook entry keeps the user's command");
+  assert.equal(siblingLessonsFor(root, "backends/postgresql/schema.ts", [], { cache: false, budgetMs: 60_000 }).length, 1,
+    "two same-named copies are still a copy");
+  write("base", matcher("isOurHook"));
+  commit(root, "feat: base backend");
+  assert.deepEqual(siblingLessonsFor(root, "backends/postgresql/schema.ts", [], { cache: false, budgetMs: 60_000 }), [],
+    "base/mysql/postgresql each implement it: mysql's fix is mysql's own");
+});
+
+test("a function written over another one's lines is created there, not fixed", () => {
+  const base = { sha: "a".repeat(40), subject: "fix: prune", span: 3, created: false, diff: [] };
+  const fn = { name: "gitEnv", body: "function gitEnv(): NodeJS.ProcessEnv {\n  return {};\n}" };
+  assert.ok(writtenOver({ ...base, added: ["function gitEnv(): NodeJS.ProcessEnv {", "  return {};"], removed: ["export function prunePlanFor(view) {"] }, fn));
+  assert.ok(!writtenOver({ ...base, added: ["  if (depth) return gitEnv();"], removed: ["  return {};"] }, fn), "a fix that calls itself");
+  assert.ok(!writtenOver({ ...base, added: ["function gitEnv(): NodeJS.ProcessEnv {"], removed: ["function gitEnv() {"] }, fn), "a signature change");
 });
 
 test("a fix applied to BOTH copies is shared history, not divergence", t => {
