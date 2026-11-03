@@ -143,6 +143,7 @@ import {
   lessonReminder,
   unverifiedNag,
 } from "../core/pipeline.js";
+import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { draftDuplicateOf, isAcceptedDuplicateAnchor } from "../core/dupdetect.js";
 import { planAutoReview, planMutations, type AutoReviewPlan, type AutoReviewEntry } from "../core/autoreview.js";
 import type { RelevanceVerdict, ExistingDecisionRef } from "../synthesis/provider.js";
@@ -5229,26 +5230,53 @@ program
       // A shell command can edit files without the edit tools ever firing: ground
       // what it wrote now. Every other tool call just moves the baseline.
       let shellGround = "";
+      let recall: FailureRecall = { text: "", bugs: [] };
+      const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
+        const shell = evt.tool_name === "Bash" || evt.tool_name === "PowerShell";
+        let stale = false;
+        let openFailed = false;
+        const openStore = (): HunchStore => {
+          if (store) return store;
+          // One team pull per event: a failed open is not retried by the recall below.
+          if (openFailed) throw new Error("store unavailable");
+          openFailed = true;
+          const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
+          openFailed = false;
+          // Same rule as the pre-edit path: strict never grounds from stale team rules.
+          stale = !!(firmness === "strict" && opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus));
+          return (store = opened.store);
+        };
         // Fail-open on its own: a grounding error must not cost the pipeline
         // bookkeeping below (a missed check would wrongly hold the Stop gate).
         try {
-          if (evt.tool_name === "Bash" || evt.tool_name === "PowerShell") {
+          if (shell) {
             const written = shellWrittenFiles(root, evt.session_id, evt.agent_id);
             if (written.length) {
-              const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
-              store = opened.store;
-              // Same rule as the pre-edit path: strict never grounds from stale team rules.
-              const stale = firmness === "strict" && opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus);
-              if (!stale) shellGround = shellWriteGrounding(root, store, provider, evt, written, processRoot);
+              const opened = openStore();
+              if (!stale) shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
             }
           } else {
             refreshShellBaseline(root, evt.session_id, evt.agent_id);
           }
         } catch { shellGround = ""; }
+        // A failed check that matches a recorded bug says so; anything else stays silent.
+        if (shell && evt.tool_outcome?.status === "failure" && evt.tool_outcome.output) {
+          try {
+            // Per agent, like shellWrittenFiles: a recall a subagent saw is not one the main agent saw.
+            const seen = evt.session_id && pipelineEnabled()
+              ? loadPipelineState(evt.session_id).recalled.filter((k) => k.startsWith(recallScope)).map((k) => k.slice(recallScope.length)) : [];
+            // The store opens only once the output parses as a failing test report.
+            recall = recallFailures(evt.tool_outcome.output, () => {
+              const opened = openStore();
+              return stale ? [] : opened.recs("bugs");
+            }, seen);
+          } catch { recall = { text: "", bugs: [] }; }
+        }
       }
       if (postTool && evt.session_id && pipelineEnabled()) {
         let st = loadPipelineState(evt.session_id);
+        if (recall.bugs.length) st = { ...st, recalled: [...st.recalled, ...recall.bugs.map((id) => `${recallScope}${id}`)] };
         const before = st;
         let activity: Parameters<typeof proofCheckpoint>[2] | null = null;
         let lessonNote = "";
@@ -5280,16 +5308,18 @@ program
           const checkpoint = proofCheckpoint(before, st, activity);
           st = checkpoint.state;
           savePipelineState(evt.session_id, st);
-          const post = [shellGround, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
+          const post = [shellGround, recall.text, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
           if (post) emitContext(provider, postTool, post);
           return;
         }
         savePipelineState(evt.session_id, st);
-        if (shellGround) emitContext(provider, postTool, shellGround);
+        const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
+        if (post) emitContext(provider, postTool, post);
         return;
       }
       if (postTool) {
-        if (shellGround) emitContext(provider, postTool, shellGround);
+        const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
+        if (post) emitContext(provider, postTool, post);
         return;
       }
       if (evt.hook_event_name === "Stop") {

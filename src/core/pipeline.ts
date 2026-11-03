@@ -223,6 +223,8 @@ export interface PipelineState {
   proofReminders: number;
   /** Sibling-fix lessons delivered this session (see core/siblingfix.ts). */
   lessons: PendingLesson[];
+  /** `<agent_id|main>:<bug id>` entries a failed check already recalled this session (see core/failureRecall.ts). */
+  recalled: string[];
 }
 
 /** A delivered lesson the agent has not visibly acted on yet. `hash` is the
@@ -255,6 +257,7 @@ export const emptyState = (): PipelineState => ({
   proofReminderActivity: 0,
   proofReminders: 0,
   lessons: [],
+  recalled: [],
 });
 
 const MAX_OBLIGATIONS = 12;
@@ -1266,6 +1269,7 @@ export function unverifiedNag(state: PipelineState): string {
 }
 
 const MAX_LESSONS = 6;
+const MAX_RECALLED = 50;
 /** Any profile's check shape: the reminder fires when the agent starts proving
  *  its work, whatever the domain. */
 const CHECK_SHAPE = new RegExp([...Object.values(DEFAULT_PROFILES).map((p) => p.verify.source), "node (--test|-e\\b)"].join("|"), "i");
@@ -1357,6 +1361,7 @@ export function loadPipelineState(sessionId: string): PipelineState {
       && typeof l.id === "string" && typeof l.file === "string" && typeof l.symbol === "string" && typeof l.sibling === "string"
       && typeof l.siblingFile === "string" && typeof l.change === "string" && Array.isArray(l.callers)
       && (l.hash === null || typeof l.hash === "string") && typeof l.reminded === "boolean").slice(-MAX_LESSONS);
+    state.recalled = (Array.isArray(raw.recalled) ? raw.recalled : []).filter((id): id is string => typeof id === "string").slice(-MAX_RECALLED);
     const specs = normalizeExecutionObligations(raw.obligations);
     const tracked = new Map((Array.isArray(raw.obligations) ? raw.obligations : []).map((item) => {
       const candidate = item as Partial<TrackedExecutionObligation>;
