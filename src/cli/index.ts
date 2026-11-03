@@ -5193,9 +5193,14 @@ program
       if (postTool) {
         const shell = evt.tool_name === "Bash" || evt.tool_name === "PowerShell";
         let stale = false;
+        let openFailed = false;
         const openStore = (): HunchStore => {
           if (store) return store;
+          // One team pull per event: a failed open is not retried by the recall below.
+          if (openFailed) throw new Error("store unavailable");
+          openFailed = true;
           const opened = openTeamStore(root, { requireFreshTeamMemory: firmness === "strict" });
+          openFailed = false;
           // Same rule as the pre-edit path: strict never grounds from stale team rules.
           stale = !!(firmness === "strict" && opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus));
           return (store = opened.store);
@@ -5216,9 +5221,12 @@ program
         // A failed check that matches a recorded bug says so; anything else stays silent.
         if (shell && evt.tool_outcome?.status === "failure" && evt.tool_outcome.output) {
           try {
-            const opened = openStore();
             const seen = evt.session_id && pipelineEnabled() ? loadPipelineState(evt.session_id).recalled : [];
-            if (!stale) recall = recallFailures(evt.tool_outcome.output, opened.recs("bugs"), seen);
+            // The store opens only once the output parses as a failing test report.
+            recall = recallFailures(evt.tool_outcome.output, () => {
+              const opened = openStore();
+              return stale ? [] : opened.recs("bugs");
+            }, seen);
           } catch { recall = { text: "", bugs: [] }; }
         }
       }

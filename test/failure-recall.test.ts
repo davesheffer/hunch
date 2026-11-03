@@ -41,6 +41,27 @@ test("misses, short names, unrecognized output and already-recalled bugs stay si
   assert.equal(recallFailures(spec(TEST), [bug()], [bugId(TEST)]).text, "");
 });
 
+test("a failed command that is not a failing test report never loads the bug store", () => {
+  const store = () => assert.fail("bug store loaded for a non-test failure");
+  assert.equal(recallFailures("grep: no match\n", store).text, "");
+  assert.equal(recallFailures(`✔ ${TEST} (1ms)\n`, store).text, "");
+  assert.deepEqual(recallFailures(spec(TEST), () => [bug()]).bugs, [bugId(TEST)]);
+});
+
+test("a test name that only occurs inside bug prose, unquoted, is not a hit", () => {
+  const prose = bug({ id: "bug_prose", title: "hunch_query returns an empty array for topics with no decisions" });
+  assert.equal(recallFailures(spec("returns an empty array"), [prose]).text, "");
+  const quoted = bug({ id: "bug_backtick", symptom: "`returns an empty array` fails on Windows" });
+  assert.deepEqual(recallFailures(spec("returns an empty array"), [quoted]).bugs, ["bug_backtick"]);
+});
+
+test("overflow hits are named, not just counted, and all are marked recalled", () => {
+  const many = [0, 1, 2, 3, 4].map((i) => bug({ id: `bug_${i}`, symptom: `"${TEST}" fails (${i})` }));
+  const recall = recallFailures(spec(TEST), many);
+  assert.deepEqual(recall.bugs, ["bug_0", "bug_1", "bug_2", "bug_3", "bug_4"]);
+  assert.match(recall.text, /2 more: bug_3, bug_4/);
+});
+
 // ---- end-to-end: the real `hunch hook` PostToolUseFailure path ----
 const hookCli = resolve("src/cli/index.ts");
 function repo(t: { after: (f: () => void) => void }): string {
