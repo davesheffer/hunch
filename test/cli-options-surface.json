@@ -1008,6 +1008,14 @@
       }
     ]
   },
+  "eval --grounding": {
+    "tests": [
+      {
+        "file": "test/cli-flags-misc.test.ts",
+        "title": "embed --batch embeds with the stub model; query --semantic and eval --semantic switch streams; eval --kind scopes scoring"
+      }
+    ]
+  },
   "eval --guards": {
     "tests": [
       {
