@@ -62,16 +62,29 @@ function commitOf(root: string, rev: string): string | null {
   return SHA.test(v) ? v : null;
 }
 
-interface Paths { prefix: string; memoryDir: string }
+interface Paths { prefix: string; memoryDir: string; shallow: boolean }
 
 /** A first-parent line, newest first, capped at `cap` commits. `-m` gives a merge its
  *  diff against the first parent on every git version. Revisions are shas we
  *  resolved, never user text. */
-function lineOf(root: string, revs: string[], cap: number, paths: Paths): { line: LineCommit[]; truncated: boolean } | null {
+function lineOf(root: string, revs: string[], cap: number, paths: Paths): { line: LineCommit[]; truncated: boolean; boundary: string | null } | null {
   const raw = git(root, ["log", "--first-parent", "-m", "--no-color", "--name-status", `--format=${LINE_FORMAT}`, `--max-count=${cap + 1}`, ...revs, "--"]);
   if (raw === null) return null;
-  const line = parseLine(raw, paths.prefix, paths.memoryDir);
-  return { line: line.slice(0, cap), truncated: line.length > cap };
+  let line = parseLine(raw, paths.prefix, paths.memoryDir);
+  // A shallow clone's boundary commit has no parents and `--name-status` lists its whole
+  // tree, so it would read as a code commit owning every memory file. Cut the line there:
+  // what is below it is simply not available.
+  let boundary: string | null = null;
+  if (paths.shallow) {
+    const at = line.findIndex((c) => c.parents.length === 0);
+    if (at !== -1) { boundary = line[at]!.shortSha; line = line.slice(0, at); }
+  }
+  return { line: line.slice(0, cap), truncated: line.length > cap, boundary };
+}
+
+/** Say so when a read stopped at a shallow clone's boundary. */
+function noteShallow(read: { boundary: string | null }, notes: string[]): void {
+  if (read.boundary) notes.push(`shallow clone: history before ${read.boundary} is not available; memory below it is not attributed`);
 }
 
 const landedAt = (groups: FeatureGroup[], landed: (g: FeatureGroup) => string | null): FeatureGroup[] =>
@@ -86,10 +99,15 @@ function withMergedSides(root: string, line: LineCommit[], paths: Paths, notes: 
     const mine = own.find((g) => g.commit?.sha === c.sha);
     if (mine) out.push(mine);
     if (c.memoryOnly || c.parents.length < 2) continue;
-    const side = lineOf(root, [c.parents[1]!, `^${c.parents[0]!}`], SIDE_LINE_CAP, paths);
-    if (!side) { notes.push(`${c.shortSha}: the merged side could not be read`); continue; }
-    if (side.truncated) notes.push(`${c.shortSha}: only the newest ${SIDE_LINE_CAP} commits of the merged side were searched`);
-    out.push(...landedAt(attributeLine(side.line), () => c.sha));
+    // An octopus merge has several sides; side k excludes the first parent and the sides before it.
+    for (let k = 1; k < c.parents.length; k++) {
+      const side = lineOf(root, [c.parents[k]!, `^${c.parents[0]!}`, ...c.parents.slice(1, k).map((p) => `^${p}`)], SIDE_LINE_CAP, paths);
+      if (!side) { notes.push(`${c.shortSha}: the merged side could not be read`); continue; }
+      if (side.truncated) notes.push(`${c.shortSha}: only the newest ${SIDE_LINE_CAP} commits of the merged side were searched`);
+      noteShallow(side, notes);
+      // Main merged into a side branch is not a feature commit there: no merge owns on a side.
+      out.push(...landedAt(attributeLine(side.line, () => false), () => c.sha));
+    }
   }
   return out;
 }
@@ -124,6 +142,7 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
     const read = lineOf(root, [tip], limit, paths);
     if (!read) throw new Error(`git could not read the history of ${branch}`);
     if (read.truncated) notes.push(`only the newest ${limit} commits of ${branch} were searched (--limit)`);
+    noteShallow(read, notes);
     return result(null, withMergedSides(root, read.line, paths, notes));
   }
 
@@ -156,7 +175,9 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
   const read = lineOf(root, revs, cap, paths);
   if (!read) throw new Error(`git could not read the history of ${branch}`);
   if (read.truncated) notes.push(`only the newest ${cap} commits of ${branch} were searched`);
-  return result(v, landedAt(attributeLine(read.line), landed));
+  noteShallow(read, notes);
+  // No merge owns memory on a feature branch's line (main merged in is not a feature commit).
+  return result(v, landedAt(attributeLine(read.line, () => false), landed));
 }
 
 function forCommit(root: string, query: string, sha: string, limit: number, paths: Paths): MemoryFor {
@@ -169,16 +190,26 @@ function forCommit(root: string, query: string, sha: string, limit: number, path
     notes.push(`${head!.shortSha} is a memory commit, not a feature commit; ask --for the branch it was made on to see where it belongs`);
     return result([]);
   }
+  noteShallow(read, notes);
+  // A merge owns memory only on the default branch's own first-parent line (it landed a
+  // branch there); anywhere else it is transparent, as in attributeLine.
+  const def = resolveDefaultBranch(root);
+  const defSet = new Set(def ? defaultLine(root, def.head) ?? [] : []);
+  const owns = (c: LineCommit): boolean => defSet.has(c.sha);
+  const transparent = (c: LineCommit): boolean => c.parents.length >= 2 && !owns(c);
+  if (transparent(head!)) {
+    notes.push(`${head!.shortSha} merges another line into this one; its memory belongs to the next code commit`);
+    return result([]);
+  }
   // The commit itself, and the memory below it back to the previous code commit.
-  const end = rest.findIndex((c) => !c.memoryOnly);
+  const end = rest.findIndex((c) => !c.memoryOnly && !transparent(c));
   if (end === -1 && read.truncated) notes.push(`no earlier code commit within ${limit} commits (--limit); older memory was not searched`);
   const segment = [head!, ...(end === -1 ? rest : rest.slice(0, end))];
   // A merge on the default branch's first-parent line landed a branch: include what it
   // brought. Any other merge (main merged into a feature branch) brought memory that
   // belongs to the other line's commits, so it is not expanded.
-  const def = resolveDefaultBranch(root);
-  const landsBranch = head!.parents.length >= 2 && !!def && (defaultLine(root, def.head)?.includes(sha) ?? false);
-  return result(landsBranch ? withMergedSides(root, segment, paths, notes) : attributeLine(segment));
+  const landsBranch = head!.parents.length >= 2 && owns(head!);
+  return result(landsBranch ? withMergedSides(root, segment, paths, notes) : attributeLine(segment, owns));
 }
 
 /** Resolve `query` (a local or `origin/` branch name first, as git does, then any
@@ -186,11 +217,21 @@ function forCommit(root: string, query: string, sha: string, limit: number, path
 export function memoryFor(root: string, query: string, opts: { limit?: number } = {}): MemoryFor {
   const limit = opts.limit && opts.limit > 0 ? Math.floor(opts.limit) : 100;
   const prefix = git(root, ["rev-parse", "--show-prefix"], 10_000)?.trim() ?? "";
-  const paths: Paths = { prefix, memoryDir: `${prefix}.hunch/` };
-  if (isSafeBranchName(query)) {
-    for (const ref of [`refs/heads/${query}`, `refs/remotes/origin/${query}`]) {
-      const tip = commitOf(root, ref);
-      if (tip) return forBranch(root, query, query, tip, limit, paths);
+  const shallow = git(root, ["rev-parse", "--is-shallow-repository"], 10_000)?.trim() === "true";
+  const paths: Paths = { prefix, memoryDir: `${prefix}.hunch/`, shallow };
+  // HEAD and @ name the checked-out commit, not its branch; `origin/HEAD` is a pointer.
+  const pointer = query === "HEAD" || query === "@" || query.endsWith("/HEAD");
+  if (!query.startsWith("-") && query !== "HEAD" && query !== "@") {
+    // Let git say what the name is, so `origin/feat/b` is branch `feat/b` and a sha is a commit.
+    const full = (git(root, ["rev-parse", "--symbolic-full-name", "--end-of-options", query], 10_000) ?? "").split(/\s+/).filter((l) => l && l !== "--end-of-options"); // rev-parse echoes the marker
+    const ref = full.length === 1 ? full[0]! : "";
+    const name = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length)
+      : ref.startsWith("refs/remotes/origin/") ? ref.slice("refs/remotes/origin/".length) : "";
+    const tip = name && name !== "HEAD" ? commitOf(root, ref) : null;
+    if (tip) return forBranch(root, query, name, tip, limit, paths);
+    if (!ref && !pointer && isSafeBranchName(query)) {
+      const remote = commitOf(root, `refs/remotes/origin/${query}`);
+      if (remote) return forBranch(root, query, query, remote, limit, paths);
     }
   }
   const sha = query.startsWith("-") ? null : commitOf(root, query);

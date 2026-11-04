@@ -6582,7 +6582,7 @@ program
   .option("--json", "emit the moves as JSON for tooling")
   .option("-n, --limit <n>", "max moves to show", "100")
   .option("--diff <sha>", "print one move's .hunch/ diff (the click-through), instead of the list")
-  .option("--for <commit|branch>", "group the memory by the feature commit it led to, for one commit or branch (with --limit as the commits searched)")
+  .option("--for <commit|branch>", "group the memory by the feature commit it led to, for one commit or branch (--limit caps the commits searched on the default branch or below a commit; feature branches are searched back to where they fork, up to 500 commits)")
   .action((opts: { json?: boolean; limit?: string; diff?: string; for?: string }) => {
     const root = findRoot();
     if (!isGitRepo(root)) return fail("not a git repo — the memory timeline needs git history.");

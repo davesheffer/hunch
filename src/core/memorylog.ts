@@ -183,8 +183,14 @@ export function parseLine(raw: string, prefix: string, memoryDir: string): LineC
  *  diff is what the other side brought in, already attributed on that side, so it is
  *  not counted here. Memory above the last code commit trails with `commit: null`.
  *  Only commits that carry memory are returned, newest first; `landed` is left null
- *  for the caller, who knows how the line reached the default branch. */
-export function attributeLine(line: readonly LineCommit[]): FeatureGroup[] {
+ *  for the caller, who knows how the line reached the default branch.
+ *
+ *  A merge that `ownsMemory` rejects is transparent: it is skipped like a memory-only
+ *  commit, so pending memory passes through to the next code commit above it. A merge
+ *  of main into a feature branch is not a feature commit, and memory captured before
+ *  it was made for the commit that follows. Only a merge on the default branch's own
+ *  line (the commit that landed a branch) owns, hence the default. */
+export function attributeLine(line: readonly LineCommit[], ownsMemory: (c: LineCommit) => boolean = () => true): FeatureGroup[] {
   const groups: FeatureGroup[] = [];
   let pending: MemoryMove[] = [];
   for (let i = line.length - 1; i >= 0; i--) {
@@ -193,6 +199,7 @@ export function attributeLine(line: readonly LineCommit[]): FeatureGroup[] {
       if (c.move) pending.unshift(c.move);
       continue;
     }
+    if (c.parents.length >= 2 && !ownsMemory(c)) continue;
     const own = c.move && c.parents.length < 2 ? [c.move] : [];
     if (own.length || pending.length) {
       groups.unshift({ commit: { sha: c.sha, shortSha: c.shortSha, date: c.date, subject: c.subject }, landed: null, moves: [...own, ...pending] });

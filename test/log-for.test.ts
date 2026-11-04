@@ -15,6 +15,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { commitAndPushHunch } from "../src/extractors/git.js";
 import { attributeLine, type LineCommit, type MemoryMove } from "../src/core/memorylog.js";
 import { memoryFor, type MemoryFor } from "../src/extractors/featurelog.js";
@@ -277,5 +278,113 @@ test("hunch log --for <branch> --json emits the attribution", () => {
     const out = JSON.parse(r.stdout) as MemoryFor;
     assert.equal(out.branch, "feat/b");
     assert.deepEqual(shape(out), [["feat: c1", null, ["dec_a"]]]);
+  } finally { cleanup(); }
+});
+
+// ---- review fixes: clones, shallow history, octopus and transparent merges ------
+
+test("attributeLine: a merge the caller does not own is transparent, so memory passes through it", () => {
+  const l = [
+    line("c2", { code: "feat: c2" }),
+    line("x", { code: "Merge branch 'main' into feat/b", parents: 2 }),
+    line("m1", { memory: "dec_b" }),
+    line("c1", { code: "feat: c1" }),
+  ];
+  assert.deepEqual(attributeLine(l, () => false).map((g) => [g.commit?.sha, g.moves.map((m) => m.sha)]), [["c2", ["m1"]]]);
+  assert.deepEqual(attributeLine(l).map((g) => [g.commit?.sha, g.moves.map((m) => m.sha)]), [["x", ["m1"]]], "owning is the default");
+});
+
+/** A second checkout of `root` (a shallow one at `depth` through a file:// URL, since a plain path ignores --depth). */
+function clone(root: string, depth?: number): { dir: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), "hunch-logfor-clone-"));
+  const src = depth ? pathToFileURL(root).href : root;
+  git(dir, "clone", "-q", ...(depth ? ["--depth", String(depth), "--no-local"] : []), src, ".");
+  git(dir, "config", "user.email", "t@example.com");
+  git(dir, "config", "user.name", "T");
+  return { dir, cleanup: () => cleanupDir(dir) };
+}
+
+test("--for HEAD in a clone is the checked-out commit, and origin/<branch> is that branch", () => {
+  const { root, hunch, cleanup } = repo();
+  let cl: ReturnType<typeof clone> | null = null;
+  try {
+    memory(hunch, "decisions", "dec_0a");
+    code(root, "feat: c1");
+    git(root, "switch", "-q", "-c", "feat/b");
+    memory(hunch, "decisions", "dec_0b");
+    code(root, "feat: c2");
+    git(root, "switch", "-q", "main");
+    cl = clone(root);
+
+    const head = memoryFor(cl.dir, "HEAD");
+    assert.equal(head.kind, "commit", "HEAD is not refs/remotes/origin/HEAD, which would be a branch");
+    assert.deepEqual(shape(head), [["feat: c1", null, ["dec_0a"]]]);
+
+    const remote = memoryFor(cl.dir, "origin/feat/b");
+    assert.equal(remote.kind, "branch");
+    assert.equal(remote.branch, "feat/b");
+    assert.deepEqual(shape(remote), [["feat: c2", null, ["dec_0b"]]]);
+  } finally { cl?.cleanup(); cleanup(); }
+});
+
+test("--for in a shallow clone: memory below the boundary is not attributed to it", () => {
+  const { root, hunch, cleanup } = repo();
+  let cl: ReturnType<typeof clone> | null = null;
+  try {
+    memory(hunch, "decisions", "dec_01d");
+    code(root, "feat: c1");
+    memory(hunch, "decisions", "dec_0a");
+    code(root, "feat: c2");
+    memory(hunch, "decisions", "dec_0b");
+    code(root, "feat: c3");
+    cl = clone(root, 3); // c3, dec_0b and c2 as the boundary
+
+    const r = memoryFor(cl.dir, "main");
+    assert.deepEqual(shape(r), [["feat: c3", null, ["dec_0b"]]], "the boundary commit owns nothing");
+    assert.match(r.notes.join("\n"), /shallow clone/);
+    const c3 = memoryFor(cl.dir, "HEAD");
+    assert.deepEqual(shape(c3), [["feat: c3", null, ["dec_0b"]]]);
+  } finally { cl?.cleanup(); cleanup(); }
+});
+
+test("--for <default branch>: every side of an octopus merge lands at the merge", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    for (const [b, id] of [["feat/x", "dec_0a"], ["feat/y", "dec_0b"]] as const) {
+      git(root, "switch", "-q", "-c", b, "main");
+      memory(hunch, "decisions", id);
+      code(root, `feat: ${b}`);
+    }
+    git(root, "switch", "-q", "main");
+    git(root, "merge", "-q", "--no-ff", "-m", "octopus", "feat/x", "feat/y");
+    const merge = git(root, "rev-parse", "HEAD");
+    assert.equal(git(root, "rev-list", "--parents", "-n1", merge).split(" ").length, 4, "an octopus merge");
+
+    assert.deepEqual(shape(memoryFor(root, "main")), [
+      ["feat: feat/x", merge, ["dec_0a"]],
+      ["feat: feat/y", merge, ["dec_0b"]],
+    ]);
+  } finally { cleanup(); }
+});
+
+test("--for: main merged into a feature branch is transparent, by branch and by commit", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "switch", "-q", "-c", "feat/b");
+    code(root, "feat: c1");
+    memory(hunch, "decisions", "dec_0b");
+    git(root, "switch", "-q", "main");
+    memory(hunch, "decisions", "dec_ffff");
+    code(root, "feat: main work");
+    git(root, "switch", "-q", "feat/b");
+    git(root, "merge", "-q", "--no-ff", "--no-edit", "main");
+    const mergeSha = git(root, "rev-parse", "HEAD");
+    const c2 = code(root, "feat: c2");
+
+    assert.deepEqual(shape(memoryFor(root, "feat/b")), [["feat: c2", null, ["dec_0b"]]]);
+    assert.deepEqual(shape(memoryFor(root, c2)), [["feat: c2", null, ["dec_0b"]]]);
+    const m = memoryFor(root, mergeSha);
+    assert.deepEqual(m.groups, []);
+    assert.match(m.notes.join("\n"), /merges another line into this one/);
   } finally { cleanup(); }
 });
