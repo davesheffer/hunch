@@ -161,8 +161,9 @@ import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWiki
 import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, isInForce, liveForTopic } from "../core/topics.js";
 import { kindOfId, editRecord, linkRecord, removeRecord, restoreRecord, type EditResult, type MemoryKind, type MemoryRecord } from "../core/memoryEdit.js";
+import { NEW_KINDS, isNewKind, newRecord } from "../core/memoryNew.js";
 import { ADR_DIR_CANDIDATES, ADR_FILE_RE, mapAdrCorpus } from "../extractors/adrImport.js";
-import { countersignConstraint, countersignDecision } from "../core/countersign.js";
+import { confirmCommand, countersignConstraint, countersignDecision } from "../core/countersign.js";
 import { applyImportedAdrReview, carryImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, isImportedAdrDecision, pendingImportedAdrReviews } from "../core/importReview.js";
 import { exportMadrCorpus, isRegenerableMadr } from "../integrations/madrExport.js";
 import { buildMadrManifest, writeMadrManifest, refreshMadrCorpus } from "../integrations/madrManifest.js";
@@ -5457,6 +5458,54 @@ program
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
   .action((id: string, opts: { status?: string; json?: boolean }) => {
     runMemoryMove("restore", id, opts, (kind, rec, store, now) => restoreRecord(kind, rec, { status: opts.status, decisions: store.recs("decisions") }, now));
+  });
+
+program
+  .command("new")
+  .description("Add one memory record by hand (decision, constraint or finding); auto-committed as one capture. It lands unconfirmed — sign it with `hunch review --confirm <id>`.")
+  .argument("<kind>", `what to add: ${NEW_KINDS.join(" | ")}`)
+  .option("--title <text>", "title (decision, finding)")
+  .option("--text <text>", "the decision / statement / observation")
+  .option("--context <text>", "why it came up (decisions only)")
+  .option("--rationale <text>", "why it must hold (constraints only)")
+  .option("--rejected <text>", "an alternative the decision rejected (repeatable)", collectOption, [] as string[])
+  .option("--evidence <text>", "what showed it: a command and its output (findings only; repeatable)", collectOption, [] as string[])
+  .option("--feature <topic>", "the decision's topic (one live decision per topic)")
+  .option("--file <path>", "a file or glob it concerns; a constraint without one applies repo-wide (repeatable)", collectOption, [] as string[])
+  .option("--component <cmp_id>", "a component it concerns (decisions only; repeatable)", collectOption, [] as string[])
+  .option("--severity <s>", "constraint: advisory | warning (blocking is granted on confirm); finding: low | medium | high | critical")
+  .option("--status <status>", "decision: accepted (default) | proposed")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((kind: string, opts: { title?: string; text?: string; context?: string; rationale?: string; rejected: string[]; evidence: string[]; feature?: string; file: string[]; component: string[]; severity?: string; status?: string; json?: boolean }) => {
+    if (!isNewKind(kind)) return fail(`"${kind}" can't be added — choose ${NEW_KINDS.join(", ")}`);
+    if (opts.text === undefined) return fail("--text is required");
+    const collection = `${kind}s` as "decisions" | "constraints" | "findings";
+    const { store, root } = storeFor();
+    try {
+      const home = store.captureHome(false, collection);
+      const result = newRecord(kind, {
+        title: opts.title, text: opts.text, context: opts.context, rationale: opts.rationale, rejected: opts.rejected,
+        evidence: opts.evidence, feature: opts.feature, files: opts.file, components: opts.component, severity: opts.severity, status: opts.status,
+      }, {
+        now: new Date().toISOString(), root, knownDeps: kind === "constraint" ? knownRepoDeps(root) : undefined,
+        knownComponents: new Set(store.recs("components").map((c) => c.id)), decisions: store.recs("decisions"), home,
+        existing: (_k, id) => (store.getRec(collection, id) ?? store.json.get(collection, id) ?? store.getPrivateRec(collection, id)) as { title?: string; statement?: string } | undefined,
+      });
+      if (!result.ok) return fail(result.reason);
+      store.json.ensureDirs();
+      const after = store.putCapture(collection, result.record as never) as MemoryRecord;
+      store.reindex();
+      // Same grounding gap as runMemoryMove: a public flush that won't commit the docs must still refresh them.
+      if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+      const flush = pumpMemoryHome(store, root, home, `hunch: capture ${after.id}`);
+      if (opts.json) {
+        console.log(JSON.stringify({ changed: true, id: after.id, kind, home, before: null, after, flush }));
+        return;
+      }
+      console.log(`✓ added ${kind} ${after.id} (unconfirmed). To sign it as yours: ${confirmCommand(after.id, { private: home === "private" })}`);
+    } finally {
+      store.close();
+    }
   });
 
 // ---- firmness (agent-hook enforcement level) ------------------------------

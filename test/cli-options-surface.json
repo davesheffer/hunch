@@ -3857,5 +3857,101 @@
         "title": "worktree --no-share skips the shared overlay pointer that the default registers; --branch creates the named branch"
       }
     ]
+  },
+  "new --title": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --text": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --context": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --rejected": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --feature": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --file": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --component": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --status": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --json": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --rationale": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
+  },
+  "new --severity": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
+  },
+  "new --evidence": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
   }
 }

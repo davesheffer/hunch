@@ -1573,5 +1573,13 @@
         "title": "§9 memory-policy forget drops this machine's profile entry for the origin"
       }
     ]
+  },
+  "new": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
   }
 }
