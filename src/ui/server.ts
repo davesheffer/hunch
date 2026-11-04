@@ -8,7 +8,8 @@
  *     an Authorization header without a CORS preflight this server never answers;
  *   - the page shell is static and holds no data, under the same strict CSP as /operator.
  *
- * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections.
+ * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections, and
+ * /api/history[?id=] (the memory commits in git, from each home).
  * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb,
  * /api/memory/:id/(confirm|unconfirm) runs `hunch review --confirm|--unconfirm`, and POST
  * /api/memory runs `hunch new` (the CLI owns validation, git and the store), one at a time,
@@ -17,13 +18,15 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { basename } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
 import { boundedSpawn } from "../core/boundedSpawn.js";
 import { resolveSynthesisProvider } from "../synthesis/provider.js";
 import { MEMORY_KINDS, countMemory, filterMemory, memoryDetail, memoryItems, type MemoryKind, type MemorySource, type MemoryView } from "./model.js";
 import { uiCss, uiHtml, uiJs } from "./page.js";
+import { memoryHistory, type HistorySource } from "./history.js";
 import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
 
 export interface RepoInfo { root: string; branch: string | null; remote: string | null; webUrl: string | null }
@@ -52,6 +55,8 @@ const WRITE_TIMEOUT_MS = 300_000;
 const MAX_BODY = 64 * 1024;
 /** Rows per list response; search narrows the rest. */
 export const LIST_LIMIT = 200;
+/** Commits per history response. */
+export const HISTORY_LIMIT = 100;
 
 async function run(file: string, args: string[], cwd: string): Promise<{ ok: boolean; out: string }> {
   const r = await boundedSpawn(file, args, { cwd, timeoutMs: PROBE_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
@@ -109,6 +114,7 @@ const isKind = (v: string | null): v is MemoryKind => v !== null && (MEMORY_KIND
 const isView = (v: string | null): v is MemoryView => v === "active" || v === "unconnected" || v === "all";
 
 const WRITE_ROUTE = /^\/api\/memory\/([A-Za-z0-9_-]{1,128})\/([a-z]+)$/;
+const RECORD_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** The request body as parsed JSON; null when it is too big or not JSON. */
 async function readJson(req: IncomingMessage): Promise<{ ok: true; value: unknown } | { ok: false; status: number; error: string }> {
@@ -201,6 +207,19 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     if (url.pathname === "/api/repo") {
       const repo = await probes.repo();
       return send(res, 200, { name: basename(repo.root), branch: repo.branch, webUrl: repo.webUrl });
+    }
+    if (url.pathname === "/api/history") {
+      const id = url.searchParams.get("id") ?? undefined;
+      if (id !== undefined && !RECORD_ID.test(id)) return send(res, 400, { error: "That is not a memory id." });
+      const sources: HistorySource[] = [{ home: "public", hunchDir: hunchPaths(opts.root).hunch, webUrl: (await probes.repo()).webUrl }];
+      if (store.privateDir) {
+        let dir = store.privateDir;
+        try { dir = realpathSync(dir); } catch { /* not there yet: git finds nothing */ }
+        const remote = await run("git", ["remote", "get-url", "origin"], dirname(dir));
+        sources.push({ home: "private", hunchDir: dir, webUrl: remote.ok ? githubWebUrl(remote.out) : null });
+      }
+      const titles = new Map(memoryItems(source()).map((m) => [m.id, m.title]));
+      return send(res, 200, { items: memoryHistory(sources, { limit: HISTORY_LIMIT, id }, titles), private: !!store.privateDir });
     }
     if (url.pathname === "/api/connections") {
       const [repo, github, assistants] = await Promise.all([probes.repo(), probes.github(), probes.assistants()]);

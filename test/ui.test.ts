@@ -21,6 +21,8 @@ import { execFileSync, spawn } from "node:child_process";
 import { join } from "node:path";
 import { Script } from "node:vm";
 import { uiJs } from "../src/ui/page.js";
+import { memoryHistory } from "../src/ui/history.js";
+import { mkdirSync, rmSync } from "node:fs";
 
 const now = "2026-11-04T00:00:00Z";
 const auth = ComponentSchema.parse({ id: "cmp_auth", kind: "module", name: "Auth", paths: ["src/auth/**"], provenance: prov(), created_at: now, updated_at: now });
@@ -393,6 +395,52 @@ test("ui server writes: a CLI that fails to start, refuses, or prints no result 
   }, { file: join(process.cwd(), "no-such-node-binary"), args: [] });
 });
 
+test("memoryHistory: record commits from both homes, newest first, with pushed state, links and titles", () => {
+  const base = tempDir("hunch-ui-history-");
+  const env = isolatedCliEnv({ HOME: base, USERPROFILE: base });
+  const git = (cwd: string, ...args: string[]): string => execFileSync("git", args, { cwd, env, encoding: "utf8" }).trim();
+  const repo = (dir: string): void => { mkdirSync(dir, { recursive: true }); git(dir, "init", "-q"); git(dir, "config", "user.email", "t@example.com"); git(dir, "config", "user.name", "Test"); git(dir, "config", "commit.gpgsign", "false"); };
+  let clock = 0;
+  const commit = (dir: string, file: string, body: string | null, subject: string): void => {
+    const path = join(dir, file);
+    if (body === null) rmSync(path); else { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, body); }
+    git(dir, "add", "-A");
+    const at = `2026-11-0${1 + Math.floor(clock / 10)}T10:${String(clock++ % 10).padStart(2, "0")}:00Z`;
+    execFileSync("git", ["commit", "-qm", subject], { cwd: dir, env: { ...env, GIT_COMMITTER_DATE: at, GIT_AUTHOR_DATE: at } });
+  };
+  try {
+    const code = join(base, "code"), overlay = join(base, "overlay"), remote = join(base, "remote.git");
+    repo(code); repo(overlay);
+    execFileSync("git", ["init", "-q", "--bare", remote], { env });
+    commit(code, ".hunch/decisions/dec_aa01.json", "{}", "hunch: capture dec_aa01");
+    commit(code, ".hunch/tasks/htask_1.json", "{}", "hunch: task htask_1");
+    git(code, "remote", "add", "origin", remote); git(code, "push", "-q", "origin", "HEAD:main");
+    commit(code, ".hunch/constraints/con_bb02.json", "{}", "hunch: capture con_bb02");
+    commit(overlay, "mem/findings/fnd_cc03.json", "{}", "hunch: capture fnd_cc03");
+    commit(code, ".hunch/decisions/dec_aa01.json", "{\"v\":2}", "hunch: edit dec_aa01");
+    commit(code, ".hunch/constraints/con_bb02.json", null, "drop con_bb02");
+
+    const sources = [
+      { home: "public" as const, hunchDir: join(code, ".hunch"), webUrl: "https://github.com/o/demo" },
+      { home: "private" as const, hunchDir: join(overlay, "mem"), webUrl: null },
+    ];
+    const titles = new Map([["dec_aa01", "Use cookies"], ["fnd_cc03", "Slow query"]]);
+    const all = memoryHistory(sources, { limit: 100 }, titles);
+    assert.deepEqual(all.map((h) => h.subject), ["drop con_bb02", "hunch: edit dec_aa01", "hunch: capture fnd_cc03", "hunch: capture con_bb02", "hunch: capture dec_aa01"], "task commits are not memory moves");
+    const [drop, edit, finding, , first] = all;
+    assert.equal(drop!.kind, "prune");
+    assert.deepEqual(drop!.memories, [{ id: "con_bb02", title: null }], "a record gone from the store keeps its id");
+    assert.deepEqual([edit!.kind, edit!.pushed, edit!.url], ["edit", false, null], "not on any remote: no link");
+    assert.deepEqual([finding!.home, finding!.memories], ["private", [{ id: "fnd_cc03", title: "Slow query" }]]);
+    assert.equal(first!.pushed, true);
+    assert.equal(first!.url, `https://github.com/o/demo/commit/${first!.sha}`);
+
+    assert.deepEqual(memoryHistory(sources, { limit: 100, id: "dec_aa01" }, titles).map((h) => h.subject), ["hunch: edit dec_aa01", "hunch: capture dec_aa01"]);
+    assert.equal(memoryHistory(sources, { limit: 2 }, titles).length, 2);
+    assert.deepEqual(memoryHistory([{ home: "public", hunchDir: join(base, "nowhere", ".hunch"), webUrl: null }], { limit: 100 }, titles), [], "no repo: no history");
+  } finally { cleanupDir(base); }
+});
+
 test("ui server writes: edit, link and remove run the CLI, the list reloads, and each Undo puts it back", async () => {
   await withWriteServer(async (post, get, origin) => {
     const detail = async (id: string) => JSON.parse((await get(`/api/memory/${id}`)).body);
@@ -427,6 +475,18 @@ test("ui server writes: edit, link and remove run the CLI, the list reloads, and
     const refused = await post("/api/memory/bug_1/remove", {});
     assert.equal(refused.status, 422);
     assert.match(refused.body.error, /record of what broke/);
+
+    // Every move above is a commit; History names them, newest first.
+    const history = JSON.parse((await get("/api/history")).body);
+    assert.equal(history.private, false);
+    assert.deepEqual(history.items.slice(0, 2).map((h: { memories: { id: string; title: string }[] }) => h.memories), [
+      [{ id: "con_block", title: "Never log tokens" }], [{ id: "con_block", title: "Never log tokens" }],
+    ]);
+    assert.ok(history.items.every((h: { pushed: boolean; url: string | null }) => !h.pushed && h.url === null), "nothing pushed: no GitHub links");
+    const own = JSON.parse((await get("/api/history?id=dec_loose")).body);
+    assert.equal(own.items.length, 5, "the fixture commit, then edit, its undo, link and its undo");
+    assert.ok(own.items.every((h: { memories: { id: string }[] }) => h.memories.every((m) => m.id === "dec_loose")));
+    assert.equal((await get("/api/history?id=dec_*")).status, 400);
   });
 });
 

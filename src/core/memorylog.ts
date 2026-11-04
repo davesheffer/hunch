@@ -36,11 +36,12 @@ export const MEMLOG_HEADER = "@@@";
 /** The `--format` string that pairs with {@link parseMemoryLog}. */
 export const MEMLOG_FORMAT = `${MEMLOG_HEADER}%H\t%h\t%cI\t%s`;
 
-const ID_RE = /\/((?:dec|bug|con|cmp|pol)_[0-9a-f]+)\.json$/;
+const ID_RE = /\/((?:dec|bug|con|cmp|pol|fnd)_[A-Za-z0-9_-]+)\.json$/;
 
 /** Parse `git log <MEMLOG_FORMAT> --name-status -- .hunch/` output into classified
- *  moves, newest first (git's order). */
-export function parseMemoryLog(raw: string): MemoryMove[] {
+ *  moves, newest first (git's order). `dir` is the memory directory's name as the paths
+ *  spell it: `.hunch` in the code repo, whatever the overlay directory is called in its own. */
+export function parseMemoryLog(raw: string, dir = ".hunch"): MemoryMove[] {
   const moves: MemoryMove[] = [];
   let cur: MemoryMove | null = null;
   for (const line of raw.split("\n")) {
@@ -58,7 +59,7 @@ export function parseMemoryLog(raw: string): MemoryMove[] {
     const parts = line.split("\t");
     const status = parts[0]?.[0];
     const path = parts[parts.length - 1];
-    if (!path || !path.startsWith(".hunch/")) continue;
+    if (!path || !path.startsWith(`${dir}/`)) continue;
     cur.files.push(path);
     if (status === "A") cur.added++;
     else if (status === "D") cur.deleted++;

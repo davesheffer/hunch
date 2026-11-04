@@ -4,7 +4,7 @@ export const uiHtml = `<!doctype html>
 <title>Hunch</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/ui.css"><script src="/ui.js" defer></script></head>
 <body>
 <header class="top"><div class="brand"><strong>Hunch</strong><span id="repo-name" class="muted"></span></div>
-<nav aria-label="Sections"><a href="#/memory" data-nav="memory">Memory</a><a href="#/connections" data-nav="connections">Connections</a></nav></header>
+<nav aria-label="Sections"><a href="#/memory" data-nav="memory">Memory</a><a href="#/history" data-nav="history">History</a><a href="#/connections" data-nav="connections">Connections</a></nav></header>
 <p id="error" role="alert" hidden></p>
 <main>
 <section id="memory-page" hidden aria-labelledby="memory-title">
@@ -22,6 +22,11 @@ export const uiHtml = `<!doctype html>
 <div id="list-pane"><p id="list-status" class="muted small" role="status" aria-live="polite"></p><ul id="list" class="list"></ul></div>
 <article id="detail" aria-live="polite"><p class="muted">Pick a memory to see what it says and what it's connected to.</p></article>
 </div>
+</section>
+<section id="history-page" hidden aria-labelledby="history-title">
+<h1 id="history-title">History</h1>
+<p id="history-status" class="muted small" role="status" aria-live="polite"></p>
+<ol id="history" class="history"></ol>
 </section>
 <section id="connections-page" hidden aria-labelledby="connections-title">
 <div class="title-row"><h1 id="connections-title">Connections</h1><button type="button" id="recheck" class="secondary">Check again</button></div>
@@ -86,6 +91,10 @@ a{color:var(--accent)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:16px}
 .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px}
 .plain{list-style:none;margin:0;padding:0;display:grid;gap:10px}.plain li{display:flex;justify-content:space-between;gap:12px}
+.history{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-width:860px}
+#history>li{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.history .head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}.history ul{margin:6px 0 0;padding-left:20px}.history p{margin:6px 0 0}
+#detail .history>li{border-top:1px solid var(--line);padding:8px 0}#detail .history>li:first-child{border-top:0;padding-top:0}
 .ok{color:var(--accent);font-weight:600}.no{color:var(--muted)}
 #error{margin:16px 24px 0;color:var(--error);border-left:3px solid var(--error);padding:10px 14px;background:var(--paper)}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
@@ -106,10 +115,15 @@ export const uiJs = String.raw`
   if (fragment) { key = fragment[1]; try { sessionStorage.setItem(KEY, key); } catch {} history.replaceState(null, '', location.pathname + '#/memory'); }
   else { try { key = sessionStorage.getItem(KEY) || ''; } catch {} }
 
+  // A history entry's headline: the verb a hunch move commits with when it names one, else the
+  // shape of the change in git.
+  const MOVE = { capture: 'Added', adopt: 'Adopted', supersede: 'Replaced', prune: 'Deleted', repair: 'Paths updated', edit: 'Changed' };
+  const VERB = { capture: 'Added', edit: 'Words changed', link: 'Connections changed', remove: 'Removed', retire: 'Removed', restore: 'Restored', confirm: 'Confirmed', unconfirm: 'Confirmation taken back', supersede: 'Replaced' };
+  const headline = (h) => { const v = /^hunch: ([a-z]+) /.exec(h.subject); return (v && VERB[v[1]]) || MOVE[h.kind] || 'Changed'; };
   const DONE = { edit: 'Saved.', link: 'Connections saved.', remove: 'Removed. Agents no longer get this memory.', restore: 'Restored. Agents get this memory again.', confirm: 'Confirmed as yours.', unconfirm: 'Confirmation taken back.' };
 
   // flash: the last change on the open memory, with its Undo, until another memory is opened.
-  const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, flash: null };
+  const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, flash: null };
 
   function showError(text) { $('error').textContent = text; $('error').hidden = !text; }
   async function request(path, init) {
@@ -182,7 +196,49 @@ export const uiJs = String.raw`
     if (/agent/.test(source)) return 'An agent';
     return 'Extracted from code and history';
   }
-  function memoryLink(id) { const a = el('a', id); a.href = '#/memory/' + encodeURIComponent(id); return a; }
+  function memoryLink(id, text) { const a = el('a', text || id); a.href = '#/memory/' + encodeURIComponent(id); return a; }
+
+  // ---- history: one commit that changed memory. withMemories: name what it changed (the
+  // History page); a memory's own history leaves that out.
+  function when(iso) { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
+  function historyEntry(h, withMemories) {
+    const li = el('li');
+    const head = el('div', undefined, 'head');
+    head.append(el('strong', headline(h)), el('span', when(h.date), 'muted small'));
+    if (h.home === 'private') head.append(el('span', 'Private', 'tag off'));
+    li.append(head);
+    if (withMemories && h.memories.length) {
+      const ul = el('ul');
+      for (const m of h.memories.slice(0, 5)) {
+        const item = el('li');
+        if (m.title) item.append(memoryLink(m.id, m.title));
+        else item.append(el('code', m.id), ' · no longer in memory');
+        ul.append(item);
+      }
+      if (h.memories.length > 5) ul.append(el('li', 'and ' + (h.memories.length - 5) + ' more', 'muted'));
+      li.append(ul);
+    }
+    const foot = el('p', undefined, 'muted small');
+    foot.append(h.subject + ' · ');
+    if (h.url) { const a = el('a'); a.href = h.url; a.target = '_blank'; a.rel = 'noreferrer'; a.append(el('code', h.shortSha)); foot.append(a); }
+    else foot.append(el('code', h.shortSha));
+    if (!h.pushed) foot.append(' · not pushed yet');
+    li.append(foot);
+    return li;
+  }
+
+  async function loadHistory() {
+    const gen = ++state.historyGen;
+    $('history-status').textContent = 'Loading…';
+    try {
+      const body = await api('/api/history');
+      if (gen !== state.historyGen) return;
+      showError('');
+      $('history').replaceChildren(...body.items.map((h) => historyEntry(h, true)));
+      $('history-status').textContent = !body.items.length ? 'No memory changes in git yet. Changes appear here once they are committed.'
+        : 'Latest ' + body.items.length + (body.items.length === 1 ? ' change' : ' changes') + ', newest first.';
+    } catch (e) { if (gen === state.historyGen) { $('history-status').textContent = ''; failed(e); } }
+  }
 
   // ---- changes: every one is a CLI move on the server; the page only collects what changed.
   // done: the line to show instead of DONE, for an Undo (which offers no Undo of its own).
@@ -509,11 +565,15 @@ export const uiJs = String.raw`
       row('Commits', linkList(d.commits, commitLink));
       parts.push(dl);
       parts.push(el('h3', 'How agents get it'), el('p', DELIVERY[d.delivery]));
-      if (d.replaces || d.replacedBy) {
-        parts.push(el('h3', 'History'));
-        if (d.replaces) { const p = el('p', 'Replaces '); p.append(memoryLink(d.replaces)); parts.push(p); }
-        if (d.replacedBy) { const p = el('p', 'Replaced by '); p.append(memoryLink(d.replacedBy)); parts.push(p); }
-      }
+      parts.push(el('h3', 'History'));
+      if (d.replaces) { const p = el('p', 'Replaces '); p.append(memoryLink(d.replaces)); parts.push(p); }
+      if (d.replacedBy) { const p = el('p', 'Replaced by '); p.append(memoryLink(d.replacedBy)); parts.push(p); }
+      const changes = el('ol', undefined, 'history'); changes.append(el('li', 'Loading changes…', 'muted small'));
+      parts.push(changes);
+      api('/api/history?id=' + encodeURIComponent(id)).then((r) => {
+        if (state.selected !== id) return;
+        changes.replaceChildren(...(r.items.length ? r.items.map((h) => historyEntry(h, false)) : [el('li', 'No commit has changed this memory yet.', 'muted small')]));
+      }).catch(() => { changes.replaceChildren(el('li', 'Could not load its changes.', 'muted small')); });
       parts.push(el('h3', 'Recorded by'), el('p', recordedBy(d.source) + ' · confidence ' + Math.round(d.confidence * 100) + '%'));
       box.replaceChildren(...parts);
     } catch (e) {
@@ -548,11 +608,11 @@ export const uiJs = String.raw`
   }
 
   function route() {
-    const m = /^#\/(memory|connections)(?:\/(.+))?$/.exec(location.hash);
+    const m = /^#\/(memory|history|connections)(?:\/(.+))?$/.exec(location.hash);
     const page = m ? m[1] : 'memory';
     for (const a of document.querySelectorAll('[data-nav]')) { if (a.dataset.nav === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
-    $('memory-page').hidden = page !== 'memory'; $('connections-page').hidden = page !== 'connections';
-    document.title = (page === 'memory' ? 'Memory' : 'Connections') + ' · Hunch';
+    for (const p of ['memory', 'history', 'connections']) $(p + '-page').hidden = page !== p;
+    document.title = { memory: 'Memory', history: 'History', connections: 'Connections' }[page] + ' · Hunch';
     if (page === 'memory') {
       const id = m && m[2] ? decodeURIComponent(m[2]) : '';
       state.selected = id;
@@ -560,7 +620,8 @@ export const uiJs = String.raw`
       document.querySelector('.split').classList.toggle('reading', !!id);
       for (const a of $('list').querySelectorAll('a')) { if (a.getAttribute('href') === '#/memory/' + encodeURIComponent(id)) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); }
       loadDetail(id);
-    } else loadConnections();
+    } else if (page === 'history') loadHistory();
+    else loadConnections();
   }
 
   function pick(groupId, attr, value) { for (const b of $(groupId).querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset[attr] === value)); }
