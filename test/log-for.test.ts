@@ -458,3 +458,83 @@ test("--for: with no default branch every merge owns its memory, and the output 
     assert.match(byCommit.notes.join("\n"), /no default branch/);
   } finally { cleanup(); }
 });
+
+test("--for: stacked branches landed in turn count each memory once, at the landing that brought it", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "switch", "-q", "-c", "feat/a");
+    memory(hunch, "decisions", "dec_0a1");
+    code(root, "feat: a1");
+    git(root, "switch", "-q", "-c", "feat/b");
+    memory(hunch, "decisions", "dec_0b1");
+    code(root, "feat: b1");
+    git(root, "switch", "-q", "feat/a");
+    memory(hunch, "decisions", "dec_0a2");
+    code(root, "feat: a2");
+    git(root, "switch", "-q", "feat/b");
+    git(root, "merge", "-q", "--no-ff", "-m", "sync a into b", "feat/a");
+    git(root, "switch", "-q", "main");
+    git(root, "merge", "-q", "--no-ff", "-m", "land a", "feat/a");
+    const landA = git(root, "rev-parse", "HEAD");
+    git(root, "merge", "-q", "--no-ff", "-m", "land b", "feat/b");
+    const landB = git(root, "rev-parse", "HEAD");
+
+    assert.deepEqual(shape(memoryFor(root, "main")), [
+      ["feat: b1", landB, ["dec_0b1"]],
+      ["feat: a2", landA, ["dec_0a2"]],
+      ["feat: a1", landA, ["dec_0a1"]],
+    ]);
+    assert.deepEqual(shape(memoryFor(root, "feat/b")), [["feat: b1", landB, ["dec_0b1"]]], "a2 landed with feat/a, not with feat/b");
+    assert.deepEqual(shape(memoryFor(root, landB)), [["feat: b1", landB, ["dec_0b1"]]]);
+  } finally { cleanup(); }
+});
+
+test("--for: an integration branch merged into a feature and back counts its memory once", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "switch", "-q", "-c", "develop");
+    memory(hunch, "decisions", "dec_0d1");
+    code(root, "feat: d1");
+    git(root, "switch", "-q", "-c", "feat/x");
+    memory(hunch, "decisions", "dec_0e1");
+    code(root, "feat: x1");
+    git(root, "switch", "-q", "develop");
+    memory(hunch, "decisions", "dec_0d2");
+    code(root, "feat: d2");
+    git(root, "switch", "-q", "feat/x");
+    git(root, "merge", "-q", "--no-ff", "-m", "sync develop", "develop");
+    code(root, "feat: x2");
+    git(root, "switch", "-q", "develop");
+    git(root, "merge", "-q", "--no-ff", "-m", "merge x", "feat/x");
+    const mergeX = git(root, "rev-parse", "HEAD");
+
+    assert.deepEqual(shape(memoryFor(root, "develop")), [
+      ["feat: x1", mergeX, ["dec_0e1"]],
+      ["feat: d2", null, ["dec_0d2"]],
+      ["feat: d1", null, ["dec_0d1"]],
+    ], "d2 came back through the sync merge but is develop's own");
+  } finally { cleanup(); }
+});
+
+test("--for <branch>: an unlanded branch's nested feature keeps the merge that brought it in", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "switch", "-q", "-c", "feat/a");
+    memory(hunch, "decisions", "dec_0a");
+    code(root, "feat: a1");
+    git(root, "switch", "-q", "-c", "feat/b");
+    memory(hunch, "decisions", "dec_0b");
+    code(root, "feat: b1");
+    git(root, "switch", "-q", "feat/a");
+    git(root, "merge", "-q", "--no-ff", "-m", "merge b into a", "feat/b");
+    const merge = git(root, "rev-parse", "HEAD");
+    memory(hunch, "decisions", "dec_0c");
+    code(root, "feat: a2");
+
+    assert.deepEqual(shape(memoryFor(root, "feat/a")), [
+      ["feat: a2", null, ["dec_0c"]],
+      ["feat: b1", merge, ["dec_0b"]],
+      ["feat: a1", null, ["dec_0a"]],
+    ]);
+  } finally { cleanup(); }
+});

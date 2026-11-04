@@ -90,61 +90,6 @@ function noteShallow(read: { boundary: string | null }, notes: string[]): void {
 const landedAt = (groups: FeatureGroup[], landed: (g: FeatureGroup) => string | null): FeatureGroup[] =>
   groups.map((g) => ({ ...g, landed: landed(g) }));
 
-type Owns = (c: LineCommit) => boolean;
-
-/** Merges nested deeper than this (a branch merged into a branch merged into ...) are not expanded. */
-const MAX_NESTING = 4;
-
-/** Which merges own memory. A merge on the default branch's first-parent line (local or
- *  origin's: a merge not yet pushed is still main's) landed a branch, and so did a merge
- *  that brings in a side NOT on that line (a feature merged into a feature). A merge whose
- *  every side is on it (main merged into a branch) is a sync merge: transparent. With no
- *  default branch to tell them apart, every merge owns, and the notes say so. The line is
- *  read once, on the first merge asked about. */
-function ownership(root: string, notes: string[]): Owns {
-  let line: Set<string> | null | undefined;
-  return (c) => {
-    if (c.parents.length < 2) return false;
-    if (line === undefined) {
-      line = defaultLines(root);
-      if (!line) notes.push("no default branch resolved (or its history could not be read): every merge is read as landing a branch, so memory a merge of main brought in may be attributed to it");
-    }
-    return !line || line.has(c.sha) || c.parents.slice(1).some((p) => !line!.has(p));
-  };
-}
-
-/** The default branch's first-parent line, origin's and the local branch's together. */
-function defaultLines(root: string): Set<string> | null {
-  const def = resolveDefaultBranch(root);
-  if (!def) return null;
-  const local = commitOf(root, `refs/heads/${def.name}`);
-  const fp = firstParentLine(root, [def.head, ...(local && local !== def.head ? [local] : [])]);
-  return fp && new Set(fp);
-}
-
-/** Attribute `line`, then splice in the memory each owning merge on it brought from its
- *  side branch (`X^2` not reachable from `X^1`), landed at that merge; nested owning
- *  merges on a side are expanded the same way and land with it. */
-function withMergedSides(root: string, line: LineCommit[], paths: Paths, notes: string[], owns: Owns, depth = 0): FeatureGroup[] {
-  const own = attributeLine(line, owns);
-  const out: FeatureGroup[] = own.filter((g) => g.commit === null);
-  for (const c of line) {
-    const mine = own.find((g) => g.commit?.sha === c.sha);
-    if (mine) out.push(mine);
-    if (c.memoryOnly || c.parents.length < 2 || !owns(c)) continue;
-    if (depth >= MAX_NESTING) { notes.push(`${c.shortSha}: merges nested more than ${MAX_NESTING} deep were not expanded`); continue; }
-    // An octopus merge has several sides; side k excludes the first parent and the sides before it.
-    for (let k = 1; k < c.parents.length; k++) {
-      const side = lineOf(root, [c.parents[k]!, `^${c.parents[0]!}`, ...c.parents.slice(1, k).map((p) => `^${p}`)], SIDE_LINE_CAP, paths);
-      if (!side) { notes.push(`${c.shortSha}: the merged side could not be read`); continue; }
-      if (side.truncated) notes.push(`${c.shortSha}: only the newest ${SIDE_LINE_CAP} commits of the merged side were searched`);
-      noteShallow(side, notes);
-      out.push(...landedAt(withMergedSides(root, side.line, paths, notes, owns, depth + 1), () => c.sha));
-    }
-  }
-  return out;
-}
-
 /** The first-parent lines of `heads` (shas we resolved), newest first, or null when git cannot list them. */
 function firstParentLine(root: string, heads: string[]): string[] | null {
   const out = git(root, ["rev-list", "--first-parent", ...heads]);
@@ -167,9 +112,81 @@ function landingMerge(root: string, defHead: string, tip: string): string | null
   return isAncestor(root, tip, fp[lo]!) ? fp[lo]! : null;
 }
 
+/** Merges nested deeper than this (a branch merged into a branch merged into ...) are not expanded. */
+const MAX_NESTING = 4;
+
+/** One `--for` read; each merge's sides are read once per exclusion set. */
+interface Ctx { root: string; paths: Paths; notes: string[]; sides: Map<string, LineCommit[][]> }
+
+/** What merge `c` brought in, per side. Side k excludes the first parent, the sides before
+ *  it and `exclude` (what the enclosing lines already hold), so a side that reached the
+ *  line earlier by another path reads empty. */
+function sidesOf(ctx: Ctx, c: LineCommit, exclude: string[]): LineCommit[][] {
+  const key = [c.sha, ...exclude].join(" ");
+  const known = ctx.sides.get(key);
+  if (known) return known;
+  const sides: LineCommit[][] = [];
+  for (let k = 1; k < c.parents.length; k++) {
+    const side = lineOf(ctx.root, [c.parents[k]!, `^${c.parents[0]!}`, ...c.parents.slice(1, k).map((p) => `^${p}`), ...exclude], SIDE_LINE_CAP, ctx.paths);
+    if (!side) { ctx.notes.push(`${c.shortSha}: the merged side could not be read; it is treated as bringing nothing in`); sides.push([]); continue; }
+    if (side.truncated) ctx.notes.push(`${c.shortSha}: only the newest ${SIDE_LINE_CAP} commits of the merged side were searched`);
+    noteShallow(side, ctx.notes);
+    sides.push(side.line);
+  }
+  ctx.sides.set(key, sides);
+  return sides;
+}
+
+/** A merge owns the memory below it when it brought in something the line does not already
+ *  hold: it landed a branch. One that brought nothing new (the default branch merged into a
+ *  feature, a branch already landed by another path) is a sync merge: transparent. */
+const owner = (ctx: Ctx, exclude: string[], depth: number) => (c: LineCommit): boolean =>
+  c.parents.length >= 2 && (depth >= MAX_NESTING || sidesOf(ctx, c, exclude).some((s) => s.length > 0));
+
+/** Attribute `line`, then splice in the memory each owning merge on it brought from its
+ *  sides, landed at that merge; nested owning merges on a side are expanded the same way,
+ *  measured against everything the enclosing lines hold. */
+function withMergedSides(ctx: Ctx, line: LineCommit[], exclude: string[], depth = 0): FeatureGroup[] {
+  const owns = owner(ctx, exclude, depth);
+  const own = attributeLine(line, owns);
+  const out: FeatureGroup[] = own.filter((g) => g.commit === null);
+  for (const c of line) {
+    const mine = own.find((g) => g.commit?.sha === c.sha);
+    if (mine) out.push(mine);
+    if (c.memoryOnly || !owns(c)) continue;
+    if (depth >= MAX_NESTING) { ctx.notes.push(`${c.shortSha}: merges nested more than ${MAX_NESTING} deep were not expanded`); continue; }
+    sidesOf(ctx, c, exclude).forEach((side, i) => {
+      if (!side.length) return;
+      const inner = [`^${c.parents[0]!}`, ...c.parents.slice(1, i + 1).map((p) => `^${p}`), ...exclude];
+      out.push(...landedAt(withMergedSides(ctx, side, inner, depth + 1), () => c.sha));
+    });
+  }
+  return out;
+}
+
+/** What a commit's line is measured against: nothing for a commit on the default branch's
+ *  first-parent line (local or origin's: a merge not yet pushed is still main's), the line
+ *  before its landing merge for a commit that landed, else the default branch itself. */
+function commitBase(root: string, sha: string): { exclude: string[]; unsure: string | null } {
+  const def = resolveDefaultBranch(root);
+  if (!def) return { exclude: [], unsure: "no default branch resolved: a merge is read as landing whatever it brought in, a merge of the main line included" };
+  const local = commitOf(root, `refs/heads/${def.name}`);
+  const heads = [...new Set([def.head, ...(local ? [local] : [])])];
+  const fp = firstParentLine(root, heads);
+  if (fp === null) return { exclude: [], unsure: `the history of ${def.ref} could not be read: a merge is read as landing whatever it brought in` };
+  if (fp.includes(sha)) return { exclude: [], unsure: null };
+  for (const h of heads) {
+    if (isAncestor(root, sha, h) !== true) continue;
+    const merge = landingMerge(root, h, sha);
+    const first = merge ? git(root, ["rev-list", "--parents", "-n1", merge])?.trim().split(/\s+/)[1] : undefined;
+    if (first && SHA.test(first)) return { exclude: [`^${first}`], unsure: null };
+  }
+  return { exclude: heads.map((h) => `^${h}`), unsure: null };
+}
+
 function forBranch(root: string, query: string, branch: string, tip: string, limit: number, paths: Paths): MemoryFor {
   const notes: string[] = [];
-  const owns = ownership(root, notes);
+  const ctx: Ctx = { root, paths, notes, sides: new Map() };
   const result = (merged: MergedVerdict | null, groups: FeatureGroup[]): MemoryFor =>
     ({ query, kind: "branch", sha: tip, branch, merged, groups, notes });
   if (resolveDefaultBranch(root)?.name === branch) {
@@ -177,7 +194,7 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
     if (!read) throw new Error(`git could not read the history of ${branch}`);
     if (read.truncated) notes.push(`only the newest ${limit} commits of ${branch} were searched (--limit)`);
     noteShallow(read, notes);
-    return result(null, withMergedSides(root, read.line, paths, notes, owns));
+    return result(null, withMergedSides(ctx, read.line, []));
   }
 
   const landing = branchLanding(root, branch, tip);
@@ -203,16 +220,17 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
     if (landing.squash) { const squash = landing.squash; landed = () => squash; }
     else if (landing.rebase) { const copies = landing.rebase; landed = (g) => (g.commit ? copies.get(g.commit.sha) ?? null : null); }
   } else {
-    notes.push(`no default branch resolved, so the line runs back ${limit} commits (--limit) and may include history from before ${branch} forked`);
+    notes.push(`no default branch resolved, so the line runs back ${limit} commits (--limit) and may include history from before ${branch} forked, and a merge of the main line into it is read as landing it`);
   }
   const cap = def ? SIDE_LINE_CAP : limit;
   const read = lineOf(root, revs, cap, paths);
   if (!read) throw new Error(`git could not read the history of ${branch}`);
   if (read.truncated) notes.push(`only the newest ${cap} commits of ${branch} were searched`);
   noteShallow(read, notes);
-  // With no default branch the line is its own: a merge on it is where its side landed.
-  const groups = withMergedSides(root, read.line, paths, notes, owns);
-  return result(v, def ? landedAt(groups, landed) : groups);
+  const groups = withMergedSides(ctx, read.line, revs.slice(1));
+  // A landed branch's commits, nested ones too, reached the default branch at its landing;
+  // an unlanded branch's nested sides keep the merge that brought them onto it.
+  return result(v, v.status === "merged" ? landedAt(groups, landed) : groups);
 }
 
 function forCommit(root: string, query: string, sha: string, limit: number, paths: Paths): MemoryFor {
@@ -226,19 +244,22 @@ function forCommit(root: string, query: string, sha: string, limit: number, path
     return result([]);
   }
   noteShallow(read, notes);
-  const owns = ownership(root, notes);
+  const ctx: Ctx = { root, paths, notes, sides: new Map() };
+  const base = commitBase(root, sha);
+  const owns = owner(ctx, base.exclude, 0);
   const transparent = (c: LineCommit): boolean => c.parents.length >= 2 && !owns(c);
   if (transparent(head!)) {
-    notes.push(`${head!.shortSha} merges the default branch into this line (a sync merge); its memory belongs to the next code commit`);
+    notes.push(`${head!.shortSha} brings in nothing new to this line (a sync merge); its memory belongs to the next code commit`);
     return result([]);
   }
   // The commit itself, and the memory below it back to the previous code commit.
   const end = rest.findIndex((c) => !c.memoryOnly && !transparent(c));
   if (end === -1 && read.truncated) notes.push(`no earlier code commit within ${limit} commits (--limit); older memory was not searched`);
   const segment = [head!, ...(end === -1 ? rest : rest.slice(0, end))];
+  if (base.unsure && segment.some((c) => c.parents.length >= 2)) notes.push(base.unsure);
   // An owning merge landed a branch: include what it brought. Transparent merges in the
   // segment brought memory that belongs to the other line's commits, so they are not expanded.
-  return result(withMergedSides(root, segment, paths, notes, owns));
+  return result(withMergedSides(ctx, segment, base.exclude));
 }
 
 /** Resolve `query` (a local or `origin/` branch name first, as git does, then any
