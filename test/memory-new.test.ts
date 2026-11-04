@@ -29,7 +29,7 @@ function component(id: string): Component {
   return { id, kind: "module", name: id, responsibility: "", paths: [], status: "active", owners: [], fragility: 0, provenance: { ...prov }, created_at: NOW, updated_at: NOW } as Component;
 }
 function ctx(over: Partial<NewContext> = {}): NewContext {
-  return { now: NOW, root: "/repo", knownComponents: new Set(["cmp_core"]), decisions: [], home: "public", existing: () => undefined, ...over };
+  return { now: NOW, root: "/repo", knownComponents: new Set(["cmp_core"]), decisions: [], home: "public", existing: () => undefined, unreadable: () => false, ...over };
 }
 function must<T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> {
   assert.equal(r.ok, true, JSON.stringify(r));
@@ -63,7 +63,7 @@ test("newRecord: a decision takes the MCP manual id, lands unsigned, links files
 });
 
 test("newRecord: a constraint is capped at warning, repo-wide without files, scoped with them; rationale is the person's or empty", () => {
-  const wide = must(newRecord("constraint", { text: "Never log tokens", severity: "blocking" }, ctx())).record as Constraint;
+  const wide = must(newRecord("constraint", { text: "Never log tokens" }, ctx())).record as Constraint;
   assert.equal(wide.id, constraintId("Never log tokens"));
   assert.deepEqual(wide.scope, ["**"]);
   assert.equal(wide.severity, "warning");
@@ -73,6 +73,7 @@ test("newRecord: a constraint is capped at warning, repo-wide without files, sco
   assert.deepEqual(scoped.scope, ["src/**", "lib/x.ts"]);
   assert.equal(scoped.severity, "advisory");
   assert.equal(scoped.rationale, "fetch only");
+  assert.deepEqual((must(newRecord("constraint", { text: "Whole repo", files: ["./**", "src/a.ts"] }, ctx())).record as Constraint).scope, ["**", "src/a.ts"], "./** is the whole repo, kept");
   const explicitWide = must(newRecord("constraint", { text: "Everywhere", files: ["**"] }, ctx())).record as Constraint;
   assert.deepEqual(explicitWide.scope, ["**"]);
 });
@@ -91,12 +92,17 @@ test("newRecord: a finding is open, keeps its evidence, takes the finding id of 
 test("newRecord: refuses an existing id, missing text or title, misplaced fields, bad values and bad links", () => {
   const taken = ctx({ existing: (_k, id) => (id === decisionId("manual:Use SQLite") ? { title: "Use SQLite" } : undefined) });
   assert.match(reason(newRecord("decision", { title: "Use SQLite", text: "x" }, taken)), /already exists \("Use SQLite"\).*edit it/);
+  const removed = ctx({ existing: (_k, id) => (id === findingId("Gone") ? { title: "Gone", triage: "stale" } : undefined) });
+  assert.match(reason(newRecord("finding", { title: "Gone", text: "x" }, removed)), new RegExp(`was removed.*hunch restore ${findingId("Gone")}`));
+  const corrupt = ctx({ unreadable: (_k, id) => id === constraintId("x") });
+  assert.match(reason(newRecord("constraint", { text: "x" }, corrupt)), /exists but can't be read/);
   assert.match(reason(newRecord("decision", { title: "T", text: "  " }, ctx())), /--text can't be empty/);
   assert.match(reason(newRecord("finding", { text: "x" }, ctx())), /needs a --title/);
   assert.match(reason(newRecord("constraint", { title: "T", text: "x" }, ctx())), /--title doesn't apply to a new constraint/);
   assert.match(reason(newRecord("finding", { title: "T", text: "x", feature: "f", components: ["cmp_core"] }, ctx())), /--feature, --component don't apply/);
   assert.match(reason(newRecord("decision", { title: "T", text: "x", status: "rejected" }, ctx())), /proposed or accepted/);
-  assert.match(reason(newRecord("constraint", { text: "x", severity: "high" }, ctx())), /advisory, warning or blocking/);
+  assert.match(reason(newRecord("constraint", { text: "x", severity: "high" }, ctx())), /advisory or warning/);
+  assert.match(reason(newRecord("constraint", { text: "x", severity: "blocking" }, ctx())), new RegExp(`can't block edits yet.*hunch review --confirm ${constraintId("x")} --severity blocking`));
   assert.match(reason(newRecord("finding", { title: "T", text: "x", severity: "blocking" }, ctx())), /low, medium, high or critical/);
   assert.match(reason(newRecord("decision", { title: "T", text: "x", files: ["/etc/passwd"] }, ctx())), /relative to the repo root/);
   assert.match(reason(newRecord("decision", { title: "T", text: "x", components: ["cmp_nope"] }, ctx())), /component "cmp_nope" not found/);
@@ -170,7 +176,7 @@ test("cli:new decision writes one unsigned decision with its links, commits one 
 test("cli:new constraint and finding; the human text output names the confirm command", () => {
   const root = fixtureRepo();
   try {
-    const con = spawnSync(process.execPath, hunchCliArgs("new", "constraint", "--text", "Never log tokens", "--rationale", "leaks", "--file", "src/**", "--severity", "blocking"),
+    const con = spawnSync(process.execPath, hunchCliArgs("new", "constraint", "--text", "Never log tokens", "--rationale", "leaks", "--file", "src/**"),
       { cwd: root, encoding: "utf8", env: cliEnv() });
     assert.equal(con.status, 0, `${con.stdout}${con.stderr}`);
     const cid = constraintId("Never log tokens");
@@ -211,5 +217,20 @@ test("cli:new refuses a taken id, a second live decision on a feature, an unknow
     assert.notEqual(again.status, 0);
     assert.match(again.stderr, /already exists \("Dup"\)/);
     assert.equal(read<Finding>(root, "findings", findingId("Dup")).observation, "a");
+  } finally { cleanupDir(root); }
+});
+
+test("cli:new never overwrites a record file the loader can't read", () => {
+  const root = fixtureRepo();
+  try {
+    const file = join(root, ".hunch", "decisions", `${decisionId("manual:Cache reads")}.json`);
+    writeFileSync(file, "{ this is not json");
+    git(root, "add", "-A"); git(root, "commit", "-qm", "corrupt record");
+    const head = git(root, "rev-parse", "HEAD");
+    const run = spawnSync(process.execPath, hunchCliArgs("new", "decision", "--title", "Cache reads", "--text", "x", "--json"), { cwd: root, encoding: "utf8", env: cliEnv() });
+    assert.notEqual(run.status, 0, `${run.stdout}${run.stderr}`);
+    assert.match(run.stderr, /exists but can't be read/);
+    assert.equal(readFileSync(file, "utf8"), "{ this is not json");
+    assert.equal(git(root, "rev-parse", "HEAD"), head);
   } finally { cleanupDir(root); }
 });

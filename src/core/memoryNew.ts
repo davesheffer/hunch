@@ -14,7 +14,7 @@
 import type { Constraint, Decision, Finding } from "./types.js";
 import { constraintId, decisionId, findingId } from "./ids.js";
 import { buildCorrectionConstraint } from "./correction.js";
-import { linkRecord, type EditResult, type LinkChange, type MemoryKind } from "./memoryEdit.js";
+import { fileLink, linkRecord, type EditResult, type LinkChange, type MemoryKind } from "./memoryEdit.js";
 
 export const NEW_KINDS = ["decision", "constraint", "finding"] as const;
 export type NewKind = (typeof NEW_KINDS)[number];
@@ -44,8 +44,14 @@ export interface NewContext {
   decisions: readonly Decision[];
   home: "public" | "private";
   /** The record already holding this id in either home, if any. */
-  existing: (kind: NewKind, id: string) => { title?: string; statement?: string } | undefined;
+  existing: (kind: NewKind, id: string) => { title?: string; statement?: string; status?: string; triage?: string } | undefined;
+  /** Whether either home has a file for this id that the loader skipped (corrupt or
+   *  schema-invalid): `existing` can't see it, and a create would overwrite it. */
+  unreadable: (kind: NewKind, id: string) => boolean;
 }
+
+// The states `hunch remove` leaves a record in; `hunch restore` brings it back.
+const REMOVED = new Set(["rejected", "superseded", "retired", "stale", "resolved"]);
 
 const refuse = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
 
@@ -105,8 +111,11 @@ export function newRecord(kind: NewKind, input: NewInput, ctx: NewContext): Edit
     } as Decision;
   } else if (kind === "constraint") {
     const severity = input.severity ?? "warning";
-    if (severity !== "advisory" && severity !== "warning" && severity !== "blocking") return refuse(`--severity for a constraint must be advisory, warning or blocking, not "${severity}"`);
-    // vouched:false caps it at warning; blocking is granted by `hunch review --confirm <id> --severity blocking`.
+    // Blocking is granted by `hunch review --confirm <id> --severity blocking`, never on create:
+    // refused rather than silently lowered, so the person knows what landed.
+    if (severity === "blocking") return refuse(`a new constraint can't block edits yet — add it as warning, then run hunch review --confirm ${constraintId(text)} --severity blocking`);
+    if (severity !== "advisory" && severity !== "warning") return refuse(`--severity for a new constraint must be advisory or warning, not "${severity}"`);
+    // vouched:false also caps it at warning.
     // The rationale is the person's own or empty: the testimony default says an agent wrote it.
     rec = buildCorrectionConstraint({
       rule: text, severity, rationale: input.rationale?.trim() ?? "", root: ctx.root, knownDeps: ctx.knownDeps,
@@ -137,8 +146,12 @@ export function newRecord(kind: NewKind, input: NewInput, ctx: NewContext): Edit
   const taken = ctx.existing(kind, rec.id);
   if (taken) {
     const name = taken.title ?? taken.statement ?? rec.id;
+    if (REMOVED.has(taken.status ?? "") || REMOVED.has(taken.triage ?? "")) {
+      return refuse(`${rec.id} already exists ("${name}") but was removed — bring it back with hunch restore ${rec.id}`);
+    }
     return refuse(`${rec.id} already exists ("${name}") — edit it instead of adding it again`);
   }
+  if (ctx.unreadable(kind, rec.id)) return refuse(`a file for ${rec.id} exists but can't be read — repair it (hunch doctor) before adding this again`);
 
   const components = lines(input.components);
   const feature = input.feature?.trim();
@@ -146,8 +159,8 @@ export function newRecord(kind: NewKind, input: NewInput, ctx: NewContext): Edit
   if (!files.length && !components.length && !feature) return { ok: true, record: rec, changed: true };
   const change: LinkChange = {
     feature, addFiles: files, addComponents: components,
-    // A constraint scoped to files is no longer repo-wide.
-    removeFiles: kind === "constraint" && !files.includes("**") ? ["**"] : [],
+    // A constraint scoped to files is no longer repo-wide — unless a file (as linked: ./** is **) is the whole repo.
+    removeFiles: kind === "constraint" && !files.some((f) => { const l = fileLink(f, ctx.home); return l.ok && l.link === "**"; }) ? ["**"] : [],
     knownComponents: ctx.knownComponents, decisions: ctx.decisions, home: ctx.home,
   };
   const linked = linkRecord(kind as MemoryKind, rec, change, now);

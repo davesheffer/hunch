@@ -135,7 +135,7 @@ export function topicConflict(rec: Decision, topic: string, decisions: readonly 
 
 /** A file link as stored, or a refusal: repo-relative only, and `private:` only from the
  *  private home (a public record must not depend on unsharable files). */
-function fileLink(raw: string, home: LinkChange["home"]): { ok: true; link: string } | { ok: false; reason: string } {
+export function fileLink(raw: string, home: LinkChange["home"]): { ok: true; link: string } | { ok: false; reason: string } {
   const value = toPosixTarget(raw.trim());
   if (value.startsWith("private:")) {
     if (home !== "private") return refuse(`"${raw}" is a private reference; only a record in the private overlay can link one`);

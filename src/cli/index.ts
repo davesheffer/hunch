@@ -5489,7 +5489,8 @@ program
       }, {
         now: new Date().toISOString(), root, knownDeps: kind === "constraint" ? knownRepoDeps(root) : undefined,
         knownComponents: new Set(store.recs("components").map((c) => c.id)), decisions: store.recs("decisions"), home,
-        existing: (_k, id) => (store.getRec(collection, id) ?? store.json.get(collection, id) ?? store.getPrivateRec(collection, id)) as { title?: string; statement?: string } | undefined,
+        existing: (_k, id) => (store.getRec(collection, id) ?? store.json.get(collection, id) ?? store.getPrivateRec(collection, id)) as { title?: string; statement?: string; status?: string; triage?: string } | undefined,
+        unreadable: (_k, id) => store.json.hasRecordFile(collection, id) || store.hasPrivateRecordFile(collection, id),
       });
       if (!result.ok) return fail(result.reason);
       store.json.ensureDirs();
