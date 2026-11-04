@@ -160,6 +160,7 @@ import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, unconfirmedRoadmapMarker, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, isInForce, liveForTopic } from "../core/topics.js";
+import { kindOfId, editRecord, linkRecord, removeRecord, restoreRecord, type EditResult, type MemoryKind, type MemoryRecord } from "../core/memoryEdit.js";
 import { ADR_DIR_CANDIDATES, ADR_FILE_RE, mapAdrCorpus } from "../extractors/adrImport.js";
 import { countersignConstraint, countersignDecision } from "../core/countersign.js";
 import { applyImportedAdrReview, carryImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, isImportedAdrDecision, pendingImportedAdrReviews } from "../core/importReview.js";
@@ -5350,6 +5351,112 @@ program
       console.log("  ⚠ --reason is not recorded anywhere: the commit was held on the default branch, so no commit message captured it.");
     }
     store.close();
+  });
+
+// ---- edit / link / remove / restore (one memory record, human channel) -----
+/** Shared wiring for the four single-record verbs: resolve the id's kind, run the pure
+ *  transform (src/core/memoryEdit.ts), write into the home the record already lives in,
+ *  reindex, refresh grounding, and auto-commit as ONE move. The subject is fixed
+ *  (`hunch: <verb> <id>`, no user text; `hunch log` files it under "edit"); `--reason`
+ *  rides the body only. `--json` prints exactly one object so a UI can undo by issuing
+ *  the inverse command from `before`/`after`. */
+function runMemoryMove(
+  verb: "edit" | "link" | "remove" | "restore",
+  id: string,
+  opts: { json?: boolean; reason?: string },
+  transform: (kind: MemoryKind, rec: MemoryRecord, store: HunchStore, now: string, home: MemoryHome) => EditResult,
+): void {
+  const target = kindOfId(id);
+  if (!target) return fail(`"${id}" is not a memory id — expected a dec_, con_, bug_ or fnd_ prefix`);
+  const { store, root } = storeFor();
+  try {
+    const existing = store.getRec(target.collection, id) as MemoryRecord | undefined;
+    if (!existing) return fail(`${target.kind} "${id}" not found`);
+    const home: MemoryHome = (target.collection === "decisions" ? decisionMemoryHome(store, id) : store.getPrivateRec(target.collection, id) ? "private" : "public");
+    const result = transform(target.kind, existing, store, new Date().toISOString(), home);
+    if (!result.ok) return fail(result.reason);
+    if (!result.changed) {
+      if (opts.json) console.log(JSON.stringify({ changed: false, id, kind: target.kind, home, before: existing, after: existing, flush: null }));
+      else console.log(`${id} unchanged — nothing to write.`);
+      return;
+    }
+    const after = store.putWhereItLives(target.collection, result.record as never) as MemoryRecord;
+    store.reindex();
+    // Same grounding gap retire-constraint closes: a public flush that won't commit the
+    // tracked grounding docs must still refresh them on disk.
+    if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+    const willCommit = home === "private" ? store.privateAutoCommit : store.autoCommit;
+    const flush = pumpMemoryHome(store, root, home, `hunch: ${verb} ${id}${opts.reason ? `\n\n${opts.reason}` : ""}`);
+    if (opts.json) {
+      console.log(JSON.stringify({ changed: true, id, kind: target.kind, home, before: existing, after, flush }));
+      return;
+    }
+    console.log(`✓ ${id} ${verb === "edit" ? "edited" : verb === "link" ? "relinked" : verb === "remove" ? "removed (retired, not deleted)" : "restored"}.`);
+    if (opts.reason && !willCommit) console.log("  ⚠ --reason is not recorded anywhere: auto-commit is off, so no commit message captured it.");
+    else if (opts.reason && flush === "held") console.log("  ⚠ --reason is not recorded anywhere: the commit was held on the default branch, so no commit message captured it.");
+  } finally {
+    store.close();
+  }
+}
+
+const collectOption = (value: string, previous: string[]): string[] => [...previous, value];
+
+program
+  .command("edit")
+  .description("Edit one memory record's text (decision, constraint, bug or finding) by id; auto-committed as one memory move.")
+  .argument("<id>", "record id (dec_*, con_*, bug_*, fnd_*)")
+  .option("--title <text>", "new title (decision, bug, finding)")
+  .option("--text <text>", "new decision / statement / symptom / observation")
+  .option("--context <text>", "new context (decisions only)")
+  .option("--rationale <text>", "new rationale (constraints only)")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { title?: string; text?: string; context?: string; rationale?: string; json?: boolean }) => {
+    runMemoryMove("edit", id, opts, (kind, rec, _store, now) => editRecord(kind, rec, opts, now));
+  });
+
+program
+  .command("link")
+  .description("Link one memory record to files, components or a feature (topic); removing an absent link is a no-op.")
+  .argument("<id>", "record id (dec_*, con_*, bug_*, fnd_*)")
+  .option("--feature <topic>", "set the decision's topic (one live decision per topic)")
+  .option("--clear-feature", "unset the decision's topic")
+  .option("--add-file <path>", "link a file (repeatable)", collectOption, [] as string[])
+  .option("--remove-file <path>", "unlink a file (repeatable)", collectOption, [] as string[])
+  .option("--add-component <cmp_id>", "link a component (decisions only; repeatable)", collectOption, [] as string[])
+  .option("--remove-component <cmp_id>", "unlink a component (decisions only; repeatable)", collectOption, [] as string[])
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { feature?: string; clearFeature?: boolean; addFile: string[]; removeFile: string[]; addComponent: string[]; removeComponent: string[]; json?: boolean }) => {
+    runMemoryMove("link", id, opts, (kind, rec, store, now, home) => linkRecord(kind, rec, {
+      feature: opts.feature,
+      clearFeature: opts.clearFeature,
+      addFiles: opts.addFile,
+      removeFiles: opts.removeFile,
+      addComponents: opts.addComponent,
+      removeComponents: opts.removeComponent,
+      knownComponents: new Set(store.recs("components").map((c) => c.id)),
+      decisions: store.recs("decisions"),
+      home,
+    }, now));
+  });
+
+program
+  .command("remove")
+  .description("Retire one memory record without deleting it (decision rejected/superseded, constraint retired, finding stale). A bug can't be removed. Undo with `hunch restore`.")
+  .argument("<id>", "record id (dec_*, con_*, fnd_*)")
+  .option("--reason <text>", "why — recorded in the commit body, never the subject")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { reason?: string; json?: boolean }) => {
+    runMemoryMove("remove", id, opts, (kind, rec, _store, now) => removeRecord(kind, rec, now));
+  });
+
+program
+  .command("restore")
+  .description("Undo `hunch remove`: reopen a rejected/superseded decision, a retired constraint or a stale/resolved finding.")
+  .argument("<id>", "record id (dec_*, con_*, fnd_*)")
+  .option("--status <status>", "decision: proposed|accepted (default: the status before remove); finding: open|accepted-risk|scheduled (default open)")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { status?: string; json?: boolean }) => {
+    runMemoryMove("restore", id, opts, (kind, rec, store, now) => restoreRecord(kind, rec, { status: opts.status, decisions: store.recs("decisions") }, now));
   });
 
 // ---- firmness (agent-hook enforcement level) ------------------------------

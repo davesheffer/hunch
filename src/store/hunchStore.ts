@@ -12,7 +12,7 @@
  */
 import { resolve, join, dirname, isAbsolute, relative } from "node:path";
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { toPosixTarget, repoRelativeTarget, isRepoFile, hunchPathsForDir, type HunchPaths } from "../core/paths.js";
+import { toPosixTarget, repoRelativeTarget, isRepoFile, hunchPathsForDir, safeRepoScope, type HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, type Component, type Constraint, type Bug, type Decision, type Symbol, type Edge, type Finding, type RejectedTripwire, type EntityKind, type EntityFor, type TaskRecord } from "../core/types.js";
 import { openDb, withTx, type DB } from "./db.js";
 import { RESET_SQL, embedHash } from "./schema.js";
@@ -1209,7 +1209,7 @@ export class HunchStore {
     for (const decision of decisions) {
       const verifiedAt = Date.parse(decision.provenance.last_verified ?? "");
       if (!Number.isFinite(verifiedAt)) continue;
-      const scopes = [...new Set(decision.related_files.map(safeFreshnessScope).filter(Boolean) as string[])];
+      const scopes = [...new Set(decision.related_files.map(safeRepoScope).filter(Boolean) as string[])];
       if (scopes.length === 0 || scopeCount + scopes.length > DECISION_FRESHNESS_SCOPE_QUERY_CAP) continue;
       scopeCount += scopes.length;
       eligible.set(decision.id, { verifiedAt, scopes });
@@ -2757,14 +2757,6 @@ function allTokensPresent(tokens: readonly string[], doc: { title: string; body:
   if (!tokens.length) return false;
   const words = `${doc.title} ${doc.body}`.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
   return tokens.every((t) => words.some((w) => w.startsWith(t)));
-}
-function safeFreshnessScope(value: string): string | null {
-  const normalized = toPosixTarget(value.trim());
-  if (!normalized || normalized.length > 1_024 || normalized.includes("\0")
-    || isAbsolute(normalized) || /^[a-zA-Z]:/.test(normalized)
-    || normalized === ".." || normalized.startsWith("../") || normalized.includes("/../")
-    || normalized.startsWith("private:")) return null;
-  return normalized.replace(/^\.\//, "");
 }
 function freshnessScopeMatches(path: string, scope: string): boolean {
   try {

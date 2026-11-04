@@ -972,6 +972,46 @@
       }
     ]
   },
+  "edit --context": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
+  "edit --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
+  "edit --rationale": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit --rationale on a constraint; wrong-kind flags and unknown ids are refused with nothing written"
+      }
+    ]
+  },
+  "edit --text": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
+  "edit --title": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
   "embed --batch": {
     "tests": [
       {
@@ -1526,6 +1566,62 @@
       {
         "file": "test/cli-flags-gaps.test.ts",
         "title": "landscape review --ref inspects the named commit, not HEAD, and refuses a ref that is not a commit"
+      }
+    ]
+  },
+  "link --add-component": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --add-file": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --clear-feature": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --feature": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --remove-component": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --remove-file": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
       }
     ]
   },
@@ -2261,6 +2357,22 @@
       }
     ]
   },
+  "remove --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
+      }
+    ]
+  },
+  "remove --reason": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
+      }
+    ]
+  },
   "repair --apply": {
     "tests": [
       {
@@ -2402,6 +2514,22 @@
       {
         "file": "test/cli-flags-misc-2.test.ts",
         "title": "report --revision and --before page lesson history"
+      }
+    ]
+  },
+  "restore --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
+      }
+    ]
+  },
+  "restore --status": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove a proposed decision and a finding, cli:restore --status picks the reopened state"
       }
     ]
   },
