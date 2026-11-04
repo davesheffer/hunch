@@ -161,3 +161,93 @@ test("an overlay commit carries no code trailers (overlays are out of scope)", (
     assert.equal(trailer(overlay.root, "Hunch-Code-Head"), "");
   } finally { overlay.cleanup(); code.cleanup(); }
 });
+
+test("after a rebase the code head is the rewritten commit, not the stale sha an older trailer names", () => {
+  const { root, hunch, cleanup } = repo("hunch-trailers-rebase-");
+  try {
+    git(root, "switch", "-q", "-c", "feat/b");
+    writeFileSync(join(root, "app.ts"), "export const a = 2;\n");
+    git(root, "commit", "-qam", "feat: c2");
+    const c2 = git(root, "rev-parse", "HEAD");
+    writeDec(hunch, "dec_one");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_one", { push: false }), "committed");
+    git(root, "switch", "-q", "main");
+    writeFileSync(join(root, "other.ts"), "export const b = 1;\n");
+    git(root, "add", "other.ts");
+    git(root, "commit", "-qm", "feat: c3");
+    git(root, "switch", "-q", "feat/b");
+    git(root, "rebase", "-q", "main");
+    const rewritten = git(root, "rev-parse", "HEAD~1");
+    assert.notEqual(rewritten, c2);
+
+    writeDec(hunch, "dec_two");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_two", { push: false }), "committed");
+    assert.equal(trailer(root, "Hunch-Code-Head"), rewritten, "the head is read from the branch, never copied from a trailer");
+  } finally { cleanup(); }
+});
+
+test("a nested .hunch/ still recognises its own memory-only commits", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-trailers-nested-"));
+  try {
+    git(root, "init", "-q", "-b", "main", ".");
+    git(root, "config", "user.email", "t@example.com");
+    git(root, "config", "user.name", "T");
+    const project = join(root, "packages", "api");
+    const hunch = join(project, ".hunch");
+    mkdirSync(join(hunch, "decisions"), { recursive: true });
+    writeFileSync(join(root, ".gitignore"), "hunch.sqlite*\n");
+    writeFileSync(join(project, "app.ts"), "export const a = 1;\n");
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "feat: seed");
+    const code = git(root, "rev-parse", "HEAD");
+    writeDec(hunch, "dec_old");
+    writeFileSync(join(project, "AGENTS.md"), "grounding\n");
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "hunch: capture dec_old");
+    writeDec(hunch, "dec_new");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_new", { push: false }), "committed");
+    assert.equal(trailer(root, "Hunch-Code-Head"), code);
+  } finally { cleanupDir(root); }
+});
+
+test("a tracked file named HEAD inside .hunch/ does not hide the code head", () => {
+  const { root, hunch, cleanup } = repo("hunch-trailers-headfile-");
+  try {
+    writeFileSync(join(hunch, "HEAD"), "not a ref\n");
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "feat: add a file named HEAD");
+    const code = git(root, "rev-parse", "HEAD");
+    writeDec(hunch, "dec_one");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_one", { push: false }), "committed");
+    assert.equal(trailer(root, "Hunch-Code-Head"), code);
+  } finally { cleanup(); }
+});
+
+test("a shallow clone whose boundary is a memory commit records no code head", () => {
+  const origin = repo("hunch-trailers-shallow-origin-");
+  const clone = mkdtempSync(join(tmpdir(), "hunch-trailers-shallow-clone-"));
+  try {
+    writeDec(origin.hunch, "dec_old");
+    git(origin.root, "add", "-A");
+    git(origin.root, "commit", "-qm", "hunch: capture dec_old");
+    execFileSync("git", ["clone", "-q", "--depth", "1", `file://${origin.root.replace(/\\/g, "/")}`, clone], { stdio: "ignore" });
+    git(clone, "config", "user.email", "t@example.com");
+    git(clone, "config", "user.name", "T");
+    writeDec(join(clone, ".hunch"), "dec_new");
+    assert.equal(commitAndPushHunch(join(clone, ".hunch"), "hunch: capture dec_new", { push: false }), "committed");
+    assert.equal(trailer(clone, "Hunch-Code-Head"), "", "the boundary's history is unknown, so nothing is guessed");
+    assert.equal(trailer(clone, "Hunch-Code-Branch"), "main");
+  } finally { origin.cleanup(); cleanupDir(clone); }
+});
+
+test("a caller trailer without a space or with a folded line stays a trailer", () => {
+  for (const tail of ["Task:tsk_1", "Task: tsk_1\n  continued"]) {
+    const { root, hunch, cleanup } = repo("hunch-trailers-fold-");
+    try {
+      writeDec(hunch, "dec_one");
+      assert.equal(commitAndPushHunch(hunch, `hunch: capture dec_one\n\n${tail}`, { push: false }), "committed");
+      assert.match(trailer(root, "Task"), /^tsk_1/, tail);
+      assert.equal(trailer(root, "Hunch-Code-Branch"), "main", tail);
+    } finally { cleanup(); }
+  }
+});

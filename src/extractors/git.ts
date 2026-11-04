@@ -657,17 +657,19 @@ const CODE_HEAD_SEARCH_DEPTH = 200;
 /** The `Hunch-Code-Branch` / `Hunch-Code-Head` trailer lines for a PUBLIC memory commit
  *  (memory lane Phase 1): the branch checked out and the code commit the memory was
  *  captured against. Read before the memory commit moves HEAD. Walking first-parent
- *  history, a commit that already carries `Hunch-Code-Head` is a memory commit and its
- *  value is reused, so consecutive captures name the same code. An older memory commit
- *  without trailers is skipped only when its subject is `hunch:` AND it touched nothing
- *  but `.hunch/` and the generated grounding docs; any other commit is the code head. A
- *  detached HEAD records the head only; anything git cannot answer is omitted, never
- *  guessed. Empty string when there is nothing to record. */
+ *  history, a memory commit (one carrying `Hunch-Code-Head`, or an older one whose
+ *  subject is `hunch:`) is skipped when it touched nothing but `.hunch/` and the
+ *  generated grounding docs; any other commit is the code head. An earlier trailer's
+ *  value is never copied: after a rebase it names a commit the branch no longer has. A
+ *  detached HEAD records the head only; anything git cannot answer (including a memory
+ *  commit at a shallow clone's boundary, whose listing is its whole tree) is omitted,
+ *  never guessed. Empty string when there is nothing to record. */
 function codeLinkTrailers(hunchDir: string, env: NodeJS.ProcessEnv): string {
-  const read = (args: string[]): string => {
+  const read = (args: string[], cwd = hunchDir): string => {
     try {
-      return execFileSync("git", ["--no-replace-objects", "-C", hunchDir, ...args], {
+      return execFileSync("git", ["--no-replace-objects", "-C", cwd, ...args], {
         encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: commitGitTimeoutMs(),
+        maxBuffer: 64 * 1024 * 1024,
       }).trim();
     } catch { return ""; }
   };
@@ -677,19 +679,21 @@ function codeLinkTrailers(hunchDir: string, env: NodeJS.ProcessEnv): string {
   const ref = read(["symbolic-ref", "--quiet", "HEAD"]);
   const branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : "";
   if (branch && !/\s/.test(branch)) lines.push(`Hunch-Code-Branch: ${branch}`);
+  // `git log` paths are toplevel-relative, and the project may sit in a subdirectory.
+  const [shallow = "", prefix = ""] = read(["rev-parse", "--is-shallow-repository", "--show-prefix"], dirname(hunchDir)).split("\n");
+  const memoryDir = `${prefix}${basename(resolve(hunchDir))}/`;
+  const isMemoryFile = (file: string): boolean =>
+    !file || file.startsWith(memoryDir) || (file.startsWith(prefix) && HUNCH_MANAGED_FILES.has(file.slice(prefix.length)));
   const history = read(["-c", "log.showSignature=false", "-c", "core.quotePath=false", "log", "--first-parent",
     "--no-color", "--name-only", `--max-count=${CODE_HEAD_SEARCH_DEPTH}`,
-    "--format=%x1e%H%x1f%(trailers:key=Hunch-Code-Head,valueonly,separator=%x20)%x1f%s", "HEAD"]);
+    "--format=%x1e%H%x1f%P%x1f%(trailers:key=Hunch-Code-Head,valueonly,separator=%x20)%x1f%s", "HEAD", "--"]);
   for (const entry of history.split("\x1e").slice(1)) {
     const [header = "", ...files] = entry.split("\n");
-    const [sha = "", linked = "", ...subject] = header.split("\x1f");
+    const [sha = "", parents = "", linked = "", ...subject] = header.split("\x1f");
     if (!isSha(sha)) break;
-    if (linked) {
-      if (isSha(linked)) lines.push(`Hunch-Code-Head: ${linked}`);
-      break;
-    }
-    const memoryOnly = files.every((file) => !file || file.startsWith(".hunch/") || HUNCH_MANAGED_FILES.has(file));
-    if (HUNCH_COMMIT_SUBJECT.test(subject.join("\x1f")) && memoryOnly) continue;
+    const memoryCommit = linked !== "" || HUNCH_COMMIT_SUBJECT.test(subject.join("\x1f"));
+    if (memoryCommit && !parents && shallow === "true") break;
+    if (memoryCommit && files.every(isMemoryFile)) continue;
     lines.push(`Hunch-Code-Head: ${sha}`);
     break;
   }
@@ -704,7 +708,9 @@ function memoryCommitMessageArgs(message: string, trailers: string): string[] {
   const body = message.replace(/\s+$/, "");
   const paragraphs = body.split(/\n\s*\n/);
   const last = paragraphs.length > 1 ? paragraphs[paragraphs.length - 1]!.split("\n") : [];
-  return last.length && last.every((line) => /^[A-Za-z0-9-]+: \S/.test(line))
+  // Git's grammar: "Key: value" or "Key:value", with indented continuation lines.
+  return last.length && /^[A-Za-z0-9-]+:\s*\S/.test(last[0]!)
+    && last.every((line) => /^[A-Za-z0-9-]+:\s*\S/.test(line) || /^\s+\S/.test(line))
     ? ["-m", `${body}\n${trailers}`]
     : ["-m", message, "-m", trailers];
 }
