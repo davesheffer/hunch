@@ -233,7 +233,7 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
   let localHead = def && v.status !== "merged" ? heads.find((h) => h !== def.head && contains(h)) : undefined;
   if (def && localHead && firstParentLine(root, [localHead])?.includes(tip)) {
     // Fast-forwarded: its commits are on local main's own line, with no merge to land them at.
-    notes.push(`${branch} was fast-forwarded into local ${def.name} (not pushed to ${def.ref} yet), so no merge commit lands it`);
+    notes.push(`${branch} is on local ${def.name}'s own line with no merge commit to land it: it was fast-forwarded into ${def.name}, or created from it with nothing of its own (not pushed to ${def.ref} yet)`);
     localHead = undefined;
   }
   if (def && ((v.status === "merged" && v.method === "ancestry") || localHead)) {

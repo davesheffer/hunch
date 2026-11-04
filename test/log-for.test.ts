@@ -635,7 +635,7 @@ test("--for <branch>: a branch fast-forwarded into unpushed local main keeps its
 
     const r = memoryFor(cl.dir, "feat/x");
     assert.deepEqual(shape(r), [["feat: x1", null, ["dec_4a"]]], "--for x1 and --for main agree");
-    assert.ok(r.notes.some((n) => /fast-forwarded/.test(n)), r.notes.join("\n"));
+    assert.ok(r.notes.some((n) => /fast-forwarded/.test(n) && /created from it/.test(n)), "git cannot tell a fast-forward from a branch made off main\n" + r.notes.join("\n"));
     assert.ok(!r.notes.some((n) => /not found/.test(n)), r.notes.join("\n"));
   } finally { cl?.cleanup(); cleanup(); }
 });
