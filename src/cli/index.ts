@@ -31,6 +31,7 @@ import { registerTaskReportCommands } from "./taskReport.js";
 import { registerStateCommands } from "./state.js";
 import { DEFAULT_CONFIG as SERVE_DEFAULT_CONFIG_FILE, registerServeCommands } from "./serve.js";
 import { readServeConfig } from "../serve/config.js";
+import { registerUiCommands } from "./ui.js";
 import { registerUpdateCommand } from "./update.js";
 import { registerVerifyCommand } from "./verify.js";
 import { registerReviewMemoryCommands } from "./reviewMemory.js";
@@ -230,6 +231,7 @@ registerIntegrationCommands(program, () => {
 });
 registerTaskReportCommands(program, () => { const { store, root } = storeFor(); return { store, root }; });
 registerServeCommands(program);
+registerUiCommands(program);
 registerStateCommands(program);
 registerUpdateCommand(program);
 registerVerifyCommand(program);

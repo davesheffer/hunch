@@ -3388,6 +3388,22 @@
       }
     ]
   },
+  "ui --no-open": {
+    "tests": [
+      {
+        "file": "test/ui.test.ts",
+        "title": "cli:ui: hunch ui --port --no-open prints a keyed loopback link and serves the API with that key only"
+      }
+    ]
+  },
+  "ui --port": {
+    "tests": [
+      {
+        "file": "test/ui.test.ts",
+        "title": "cli:ui: hunch ui --port --no-open prints a keyed loopback link and serves the API with that key only"
+      }
+    ]
+  },
   "uninstall --dry-run": {
     "tests": [
       {
