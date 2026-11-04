@@ -538,3 +538,85 @@ test("--for <branch>: an unlanded branch's nested feature keeps the merge that b
     ]);
   } finally { cleanup(); }
 });
+
+// ---- critic round 4: local main in branch reads, criss-cross, the commit line --
+
+test("--for <branch>: a sync merge of unpushed local main does not pull main's memory in", () => {
+  const { root, hunch, cleanup } = repo();
+  let cl: ReturnType<typeof clone> | null = null;
+  try {
+    cl = clone(root);
+    const h = join(cl.dir, ".hunch");
+    git(cl.dir, "switch", "-q", "-c", "feat/x");
+    memory(h, "decisions", "dec_1a");
+    code(cl.dir, "feat: x1");
+    git(cl.dir, "switch", "-q", "main");
+    memory(h, "decisions", "dec_1e");
+    code(cl.dir, "feat: main work unpushed");
+    git(cl.dir, "switch", "-q", "feat/x");
+    git(cl.dir, "merge", "-q", "--no-ff", "-m", "sync main", "main");
+    memory(h, "decisions", "dec_1b");
+    code(cl.dir, "feat: x2");
+
+    assert.deepEqual(shape(memoryFor(cl.dir, "feat/x")), [
+      ["feat: x2", null, ["dec_1b"]],
+      ["feat: x1", null, ["dec_1a"]],
+    ], "the branch read and the commit read agree that the sync merge brought nothing new");
+  } finally { cl?.cleanup(); cleanup(); }
+});
+
+test("--for <branch>: a branch merged into local main but not pushed lands at the local merge", () => {
+  const { root, cleanup } = repo();
+  let cl: ReturnType<typeof clone> | null = null;
+  try {
+    cl = clone(root);
+    const h = join(cl.dir, ".hunch");
+    git(cl.dir, "switch", "-q", "-c", "feat/x");
+    memory(h, "decisions", "dec_1c");
+    code(cl.dir, "feat: x1");
+    git(cl.dir, "switch", "-q", "main");
+    git(cl.dir, "merge", "-q", "--no-ff", "-m", "merge x", "feat/x");
+    const merge = git(cl.dir, "rev-parse", "HEAD");
+
+    const r = memoryFor(cl.dir, "feat/x");
+    assert.deepEqual(shape(r), [["feat: x1", merge, ["dec_1c"]]]);
+    assert.ok(r.notes.some((n) => /not pushed/.test(n)), r.notes.join("\n"));
+  } finally { cl?.cleanup(); cleanup(); }
+});
+
+test("--for <branch>: a branch whose commits landed through another branch says so", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "switch", "-q", "-c", "feat/a");
+    memory(hunch, "decisions", "dec_2a");
+    code(root, "feat: a1");
+    git(root, "switch", "-q", "main");
+    git(root, "switch", "-q", "-c", "feat/b");
+    memory(hunch, "decisions", "dec_2b");
+    code(root, "feat: b1");
+    git(root, "switch", "-q", "feat/a");
+    git(root, "merge", "-q", "--no-ff", "-m", "merge b into a", "feat/b");
+    git(root, "switch", "-q", "feat/b");
+    git(root, "merge", "-q", "--no-ff", "-m", "merge a into b", "feat/a");
+    git(root, "switch", "-q", "main");
+    git(root, "merge", "-q", "--no-ff", "-m", "land a", "feat/a");
+    git(root, "merge", "-q", "--no-ff", "-m", "land b", "feat/b");
+
+    const r = memoryFor(root, "feat/b");
+    assert.deepEqual(shape(r), []);
+    assert.ok(r.notes.some((n) => /another/.test(n)), r.notes.join("\n"));
+  } finally { cleanup(); }
+});
+
+test("--for <commit>: main's memory from before the fork is not the branch's first commit's", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    code(root, "feat: c0");
+    memory(hunch, "decisions", "dec_3a");
+    git(root, "switch", "-q", "-c", "feat/x");
+    const x1 = code(root, "feat: x1");
+
+    assert.deepEqual(shape(memoryFor(root, x1)), [], "--for feat/x agrees: dec_3a trails on main");
+    assert.deepEqual(shape(memoryFor(root, "feat/x")), []);
+  } finally { cleanup(); }
+});

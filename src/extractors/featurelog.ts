@@ -112,6 +112,23 @@ function landingMerge(root: string, defHead: string, tip: string): string | null
   return isAncestor(root, tip, fp[lo]!) ? fp[lo]! : null;
 }
 
+/** The merge that brought `tip` onto `head`'s first-parent line, and that merge's first
+ *  parent (the line before it). null when `tip` arrived some other way (a fast-forward)
+ *  or git fails on the way. */
+function landingOn(root: string, head: string, tip: string): { merge: string; first: string } | null {
+  const merge = landingMerge(root, head, tip);
+  const parents = merge ? (git(root, ["rev-list", "--parents", "-n1", merge])?.trim().split(/\s+/).slice(1) ?? []) : [];
+  if (!merge || parents.length < 2 || !SHA.test(parents[0]!) || isAncestor(root, tip, parents[0]!) !== false) return null;
+  return { merge, first: parents[0]! };
+}
+
+/** The default branch's heads: origin's and the local branch (a merge not yet pushed is
+ *  still main's). Branch and commit reads measure against the same heads. */
+function defaultHeads(root: string, def: { name: string; head: string }): string[] {
+  const local = commitOf(root, `refs/heads/${def.name}`);
+  return [...new Set([def.head, ...(local ? [local] : [])])];
+}
+
 /** Merges nested deeper than this (a branch merged into a branch merged into ...) are not expanded. */
 const MAX_NESTING = 4;
 
@@ -170,17 +187,20 @@ function withMergedSides(ctx: Ctx, line: LineCommit[], exclude: string[], depth 
 function commitBase(root: string, sha: string): { exclude: string[]; unsure: string | null } {
   const def = resolveDefaultBranch(root);
   if (!def) return { exclude: [], unsure: "no default branch resolved: a merge is read as landing whatever it brought in, a merge of the main line included" };
-  const local = commitOf(root, `refs/heads/${def.name}`);
-  const heads = [...new Set([def.head, ...(local ? [local] : [])])];
+  const heads = defaultHeads(root, def);
   const fp = firstParentLine(root, heads);
   if (fp === null) return { exclude: [], unsure: `the history of ${def.ref} could not be read: a merge is read as landing whatever it brought in` };
   if (fp.includes(sha)) return { exclude: [], unsure: null };
+  let contained = false;
   for (const h of heads) {
     if (isAncestor(root, sha, h) !== true) continue;
-    const merge = landingMerge(root, h, sha);
-    const first = merge ? git(root, ["rev-list", "--parents", "-n1", merge])?.trim().split(/\s+/)[1] : undefined;
-    if (first && SHA.test(first)) return { exclude: [`^${first}`], unsure: null };
+    contained = true;
+    const l = landingOn(root, h, sha);
+    if (l) return { exclude: [`^${l.first}`], unsure: null };
   }
+  // In the default branch but its landing merge was not found: excluding the heads would
+  // hide the commit itself, so read it unmeasured and say so.
+  if (contained) return { exclude: [], unsure: `the merge that brought it into ${def.ref} was not found: a merge is read as landing whatever it brought in` };
   return { exclude: heads.map((h) => `^${h}`), unsure: null };
 }
 
@@ -206,17 +226,22 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
   }
   let revs = [tip];
   let landed: (g: FeatureGroup) => string | null = () => null;
-  if (v.status === "merged" && v.method === "ancestry" && def) {
-    const merge = landingMerge(root, def.head, tip);
-    const parents = merge ? (git(root, ["rev-list", "--parents", "-n1", merge])?.trim().split(/\s+/).slice(1) ?? []) : [];
-    if (!merge || parents.length < 2 || isAncestor(root, tip, parents[0]!) !== false) {
-      notes.push(`${branch} is in ${def.ref}, but the merge commit that brought it in was not found; nothing is attributed`);
+  let isLanded = v.status === "merged";
+  const heads = def ? defaultHeads(root, def) : [];
+  // The verdict reads origin's head; a branch merged into local main only is landed too.
+  const localHead = def && v.status !== "merged" ? heads.find((h) => h !== def.head && isAncestor(root, tip, h) === true) : undefined;
+  if (def && ((v.status === "merged" && v.method === "ancestry") || localHead)) {
+    const l = landingOn(root, localHead ?? def.head, tip);
+    if (!l) {
+      notes.push(`${branch} is in ${localHead ? `local ${def.name}` : def.ref}, but the merge commit that brought it in was not found; nothing is attributed`);
       return result(v, []);
     }
-    revs = [tip, `^${parents[0]!}`];
-    landed = () => merge;
+    if (localHead) notes.push(`${branch} landed on local ${def.name} at ${l.merge.slice(0, 7)}, not pushed to ${def.ref} yet`);
+    revs = [tip, `^${l.first}`];
+    landed = () => l.merge;
+    isLanded = true;
   } else if (def) {
-    revs = [tip, `^${def.head}`];
+    revs = [tip, ...heads.map((h) => `^${h}`)];
     if (landing.squash) { const squash = landing.squash; landed = () => squash; }
     else if (landing.rebase) { const copies = landing.rebase; landed = (g) => (g.commit ? copies.get(g.commit.sha) ?? null : null); }
   } else {
@@ -228,14 +253,23 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
   if (read.truncated) notes.push(`only the newest ${cap} commits of ${branch} were searched`);
   noteShallow(read, notes);
   const groups = withMergedSides(ctx, read.line, revs.slice(1));
+  // Only sync merges left on the line: the branch's own commits reached the default branch
+  // earlier, inside another branch (criss-cross merges).
+  const owns = owner(ctx, revs.slice(1), 0);
+  if (isLanded && def && read.line.length && read.line.every((c) => !c.memoryOnly && c.parents.length >= 2 && !owns(c))) {
+    notes.push(`${branch}'s commits reached ${def.ref} earlier, through another branch's landing; ask --for ${def.name} to see where their memory landed`);
+  }
   // A landed branch's commits, nested ones too, reached the default branch at its landing;
   // an unlanded branch's nested sides keep the merge that brought them onto it.
-  return result(v, v.status === "merged" ? landedAt(groups, landed) : groups);
+  return result(v, isLanded ? landedAt(groups, landed) : groups);
 }
 
 function forCommit(root: string, query: string, sha: string, limit: number, paths: Paths): MemoryFor {
   const notes: string[] = [];
-  const read = lineOf(root, [sha], limit, paths);
+  const base = commitBase(root, sha);
+  // The line stops where the base begins, as the branch read does: memory the default
+  // branch made before the fork is not the first branch commit's.
+  const read = lineOf(root, [sha, ...base.exclude], limit, paths);
   if (!read?.line.length) throw new Error(`git could not read the history of ${query}`);
   const [head, ...rest] = read.line;
   const result = (groups: FeatureGroup[]): MemoryFor => ({ query, kind: "commit", sha, branch: null, merged: null, groups, notes });
@@ -245,7 +279,6 @@ function forCommit(root: string, query: string, sha: string, limit: number, path
   }
   noteShallow(read, notes);
   const ctx: Ctx = { root, paths, notes, sides: new Map() };
-  const base = commitBase(root, sha);
   const owns = owner(ctx, base.exclude, 0);
   const transparent = (c: LineCommit): boolean => c.parents.length >= 2 && !owns(c);
   if (transparent(head!)) {
