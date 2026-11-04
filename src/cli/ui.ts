@@ -25,7 +25,12 @@ export function registerUiCommands(program: Command): void {
       const port = opts.port === undefined ? 0 : Number(opts.port);
       if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`invalid port ${opts.port}`);
       const token = randomBytes(24).toString("base64url");
-      const server = createUiServer({ root: findRoot(), token, version: HUNCH_VERSION });
+      // execArgv carries the tsx loader in dev, so a write runs this same CLI the same way.
+      // Debugger, watch and profiler flags would hang each write or drop files in the repo.
+      const entry = process.argv[1];
+      const execArgv = process.execArgv.filter((a) => !/^--(?:inspect|watch|[a-z]+-prof)/.test(a));
+      const cli = entry ? { file: process.execPath, args: [...execArgv, entry] } : undefined;
+      const server = createUiServer({ root: findRoot(), token, version: HUNCH_VERSION, cli });
       server.listen(port, "127.0.0.1", () => {
         const address = server.address();
         const bound = typeof address === "object" && address ? address.port : port;

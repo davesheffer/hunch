@@ -48,10 +48,20 @@ main{max-width:1280px;margin:0 auto;padding:24px}
 h1{font-size:28px;line-height:1.2;margin:0 0 16px}h2{font-size:20px;line-height:1.3;margin:0 0 8px}h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:20px 0 6px}
 .muted{color:var(--muted)}.small{font-size:13px}
 label{display:block;font-size:13px;font-weight:650;margin-bottom:4px}
-input,button{font:inherit;border-radius:7px;min-height:44px}
-input{width:100%;padding:8px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--line)}
+input,button,textarea,select{font:inherit;border-radius:7px;min-height:44px}
+input,textarea,select{width:100%;padding:8px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--line)}
+textarea{resize:vertical}
 button{cursor:pointer;padding:8px 14px;background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);font-weight:600}
+button:disabled{opacity:.6;cursor:default}
 button.secondary,.segmented button{background:var(--paper);color:var(--ink);border-color:var(--line)}
+button.danger{background:var(--paper);color:var(--error);border-color:var(--error)}
+.actions,.form-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.editor{display:grid;gap:10px;margin:12px 0;padding:16px;border:1px solid var(--line);border-radius:10px}
+fieldset{border:0;padding:0;margin:0;display:grid;gap:8px;min-width:0}legend{font-size:13px;font-weight:650;padding:0;margin-bottom:4px}
+.rows{list-style:none;margin:0;padding:0;display:grid;gap:6px}.rows li{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}
+.add{display:flex;gap:8px}.add input,.add select{flex:1;min-width:0}
+.problem{color:var(--error);margin:0}
+.flash{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:var(--chip);border-radius:8px;padding:8px 14px;margin:12px 0}.flash p{margin:0}
 .segmented{display:flex;flex-wrap:wrap;gap:6px}.segmented button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .controls{display:grid;gap:12px;margin-bottom:16px}.search{max-width:520px}
 .split{display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:20px;align-items:start}
@@ -62,7 +72,7 @@ button.secondary,.segmented button{background:var(--paper);color:var(--ink);bord
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .tag{font-size:12px;padding:2px 8px;border-radius:20px;background:var(--chip);color:var(--ink);overflow-wrap:anywhere}
 .tag.warn{background:var(--warn-bg);color:var(--warn)}.tag.off{background:transparent;border:1px solid var(--line);color:var(--muted)}
-#detail{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 24px;min-width:0;position:sticky;top:76px}
+#detail{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 24px;min-width:0;position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto}
 #detail p,#detail li{overflow-wrap:anywhere;white-space:pre-wrap}
 .meta{color:var(--muted);font-size:13px;margin:0 0 12px}
 .callout{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 14px;margin:12px 0}
@@ -77,7 +87,7 @@ a{color:var(--accent)}
 .ok{color:var(--accent);font-weight:600}.no{color:var(--muted)}
 #error{margin:16px 24px 0;color:var(--error);border-left:3px solid var(--error);padding:10px 14px;background:var(--paper)}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-@media(max-width:800px){.top{padding:10px 16px}main{padding:16px}.split{grid-template-columns:1fr}#detail{position:static;padding:16px}
+@media(max-width:800px){.top{padding:10px 16px}main{padding:16px}.split{grid-template-columns:1fr}#detail{position:static;padding:16px;max-height:none;overflow:visible}
 .split.reading #list-pane{display:none}.split:not(.reading) #detail{display:none}.split.reading .back{display:inline-block}}
 `;
 
@@ -94,16 +104,21 @@ export const uiJs = String.raw`
   if (fragment) { key = fragment[1]; try { sessionStorage.setItem(KEY, key); } catch {} history.replaceState(null, '', location.pathname + '#/memory'); }
   else { try { key = sessionStorage.getItem(KEY) || ''; } catch {} }
 
-  const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0 };
+  const DONE = { edit: 'Saved.', link: 'Connections saved.', remove: 'Removed. Agents no longer get this memory.', restore: 'Restored. Agents get this memory again.' };
+
+  // flash: the last change on the open memory, with its Undo, until another memory is opened.
+  const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, flash: null };
 
   function showError(text) { $('error').textContent = text; $('error').hidden = !text; }
-  async function api(path) {
+  async function request(path, init) {
     if (!key) throw Object.assign(new Error('no key'), { status: 401 });
-    const res = await fetch(path, { headers: { authorization: 'Bearer ' + key } });
+    const res = await fetch(path, Object.assign({}, init, { headers: Object.assign({ authorization: 'Bearer ' + key }, init && init.headers) }));
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(body.error || ('Request failed (' + res.status + ')')), { status: res.status });
     return body;
   }
+  const api = (path) => request(path);
+  const post = (path, body) => request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   function failed(e) {
     showError(e.status === 401 ? 'This page needs a fresh link. Run hunch ui again and open the link it prints.' : 'Could not load: ' + e.message);
   }
@@ -167,6 +182,183 @@ export const uiJs = String.raw`
   }
   function memoryLink(id) { const a = el('a', id); a.href = '#/memory/' + encodeURIComponent(id); return a; }
 
+  // ---- changes: every one is a CLI move on the server; the page only collects what changed.
+  // done: the line to show instead of DONE, for an Undo (which offers no Undo of its own).
+  async function change(id, action, body, done) {
+    const r = await post('/api/memory/' + encodeURIComponent(id) + '/' + action, body);
+    state.flash = { id, text: !r.changed ? 'Nothing changed.' : done || DONE[action], undo: done ? null : r.undo || null };
+    loadList();
+    await loadDetail(id);
+  }
+  function button(text, cls, type) { const b = el('button', text, cls); b.type = type || 'button'; return b; }
+  function problemLine() { const p = el('p', '', 'problem'); p.setAttribute('role', 'alert'); p.hidden = true; return p; }
+  function say(p, text) { p.textContent = text; p.hidden = !text; }
+  // Runs one change from a form: buttons off while it runs, the CLI's refusal shown in place.
+  async function run(box, problem, fn) {
+    const buttons = [...box.querySelectorAll('button')];
+    for (const b of buttons) b.disabled = true;
+    say(problem, '');
+    try { await fn(); }
+    catch (e) { if (e.status === 401) failed(e); else say(problem, e.message); }
+    finally { for (const b of buttons) b.disabled = false; }
+  }
+  function formButtons(label, cls, close) {
+    const row = el('div', undefined, 'form-actions');
+    const cancel = button('Cancel', 'secondary'); cancel.addEventListener('click', close);
+    row.append(button(label, cls, 'submit'), cancel);
+    return row;
+  }
+  function labelled(text, input, id) { const l = el('label', text); l.htmlFor = id; input.id = id; return [l, input]; }
+
+  function flashLine(d) {
+    const f = state.flash;
+    const box = el('div', undefined, 'flash'); box.setAttribute('role', 'status');
+    box.append(el('p', f.text));
+    if (f.undo) {
+      const undo = button('Undo', 'secondary');
+      const problem = problemLine();
+      undo.addEventListener('click', () => run(box, problem, () => change(d.id, f.undo.action, f.undo.body, 'Undone.')));
+      box.append(undo);
+      if (f.undo.note) box.append(el('p', f.undo.note, 'muted small'));
+      box.append(problem);
+    }
+    return box;
+  }
+
+  function textForm(d, close) {
+    const form = el('form', undefined, 'editor');
+    const inputs = d.actions.fields.map((f) => {
+      const input = el(f.long ? 'textarea' : 'input'); input.value = f.value; if (f.long) input.rows = 4;
+      form.append(...labelled(f.label, input, 'edit-' + f.name));
+      return [f, input];
+    });
+    if (d.actions.signed) form.append(el('p', 'You confirmed this memory. Saving new words removes that confirmation.', 'muted small'));
+    const problem = problemLine();
+    form.append(problem, formButtons('Save changes', '', close));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const body = {};
+      for (const [f, input] of inputs) if (input.value !== f.value) body[f.name] = input.value;
+      if (!Object.keys(body).length) return say(problem, 'Nothing changed.');
+      run(form, problem, () => change(d.id, 'edit', body));
+    });
+    return form;
+  }
+
+  // A list a person edits locally (files, components) before saving once.
+  function editableRows(values, render, onRemove) {
+    const ul = el('ul', undefined, 'rows');
+    if (!values.length) ul.append(el('li', 'None', 'muted'));
+    for (const v of values) {
+      const li = el('li'); li.append(render(v));
+      const remove = button('Remove', 'secondary'); remove.setAttribute('aria-label', 'Remove ' + (typeof v === 'string' ? v : v.name));
+      remove.addEventListener('click', () => onRemove(v));
+      li.append(remove); ul.append(li);
+    }
+    return ul;
+  }
+
+  function linksForm(d, close) {
+    const form = el('form', undefined, 'editor');
+    const problem = problemLine();
+    let feature = null;
+    if (d.actions.takesFeature) {
+      feature = el('input'); feature.value = d.feature || ''; feature.autocomplete = 'off'; feature.spellcheck = false;
+      form.append(...labelled('Feature', feature, 'link-feature'), el('p', 'Leave empty for no feature.', 'muted small'));
+    }
+
+    const files = d.files.slice();
+    const fileBox = el('fieldset'); fileBox.append(el('legend', 'Files and folders'));
+    const fileRows = el('div');
+    const drawFiles = () => fileRows.replaceChildren(editableRows(files, (f) => el('code', f), (f) => { files.splice(files.indexOf(f), 1); drawFiles(); }));
+    const newFile = el('input'); newFile.placeholder = 'src/auth/** or src/auth/session.ts'; newFile.autocomplete = 'off'; newFile.spellcheck = false;
+    newFile.setAttribute('aria-label', 'Add a file or folder');
+    const addFile = () => { const v = newFile.value.trim(); if (v && !files.includes(v)) files.push(v); newFile.value = ''; drawFiles(); newFile.focus(); };
+    const addFileBtn = button('Add file', 'secondary'); addFileBtn.addEventListener('click', addFile);
+    newFile.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addFile(); } });
+    const fileAdd = el('div', undefined, 'add'); fileAdd.append(newFile, addFileBtn);
+    drawFiles(); fileBox.append(fileRows, fileAdd); form.append(fileBox);
+
+    const recorded = d.components.filter((c) => c.source === 'recorded');
+    const comps = recorded.slice();
+    if (d.actions.takesComponents) {
+      const compBox = el('fieldset'); compBox.append(el('legend', 'Components'));
+      const compRows = el('div');
+      const drawComps = () => compRows.replaceChildren(editableRows(comps, (c) => el('span', c.name), (c) => { comps.splice(comps.indexOf(c), 1); drawComps(); }));
+      drawComps(); compBox.append(compRows);
+      const byPath = d.components.filter((c) => c.source === 'by-path');
+      if (byPath.length) compBox.append(el('p', 'Matched by path: ' + byPath.map((c) => c.name).join(', ') + '. Change the files to change these.', 'muted small'));
+      const pickComp = el('select'); pickComp.setAttribute('aria-label', 'Add a component');
+      pickComp.append(el('option', 'Loading components…')); pickComp.disabled = true;
+      const addComp = button('Add component', 'secondary'); addComp.disabled = true;
+      let known = [];
+      const fillPick = () => {
+        const free = known.filter((k) => !comps.some((c) => c.id === k.id));
+        pickComp.replaceChildren(...(free.length ? free.map((k) => { const o = el('option', k.name); o.value = k.id; return o; }) : [el('option', 'No other components')]));
+        pickComp.disabled = addComp.disabled = !free.length;
+      };
+      api('/api/components').then((r) => { known = r.items; fillPick(); }).catch(() => { pickComp.replaceChildren(el('option', 'Could not load components')); });
+      addComp.addEventListener('click', () => {
+        const k = known.find((x) => x.id === pickComp.value);
+        if (k) { comps.push({ id: k.id, name: k.name }); drawComps(); fillPick(); }
+      });
+      const compAdd = el('div', undefined, 'add'); compAdd.append(pickComp, addComp);
+      compBox.append(compAdd); form.append(compBox);
+    }
+
+    form.append(problem, formButtons('Save connections', '', close));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const body = {};
+      if (feature) {
+        const v = feature.value.trim();
+        if (v !== (d.feature || '')) { if (v) body.feature = v; else body.clearFeature = true; }
+      }
+      const addFiles = files.filter((f) => !d.files.includes(f)), removeFiles = d.files.filter((f) => !files.includes(f));
+      if (addFiles.length) body.addFiles = addFiles;
+      if (removeFiles.length) body.removeFiles = removeFiles;
+      const ids = comps.map((c) => c.id), before = recorded.map((c) => c.id);
+      const addComponents = ids.filter((c) => !before.includes(c)), removeComponents = before.filter((c) => !ids.includes(c));
+      if (addComponents.length) body.addComponents = addComponents;
+      if (removeComponents.length) body.removeComponents = removeComponents;
+      if (!Object.keys(body).length) return say(problem, 'Nothing changed.');
+      run(form, problem, () => change(d.id, 'link', body));
+    });
+    return form;
+  }
+
+  function removeForm(d, close) {
+    const form = el('form', undefined, 'editor');
+    form.append(el('p', 'Agents stop getting this memory. It stays in history, and you can restore it.'));
+    const reason = el('input'); reason.autocomplete = 'off';
+    form.append(...labelled('Reason (optional)', reason, 'remove-reason'));
+    const problem = problemLine();
+    form.append(problem, formButtons('Remove memory', 'danger', close));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const why = reason.value.trim();
+      run(form, problem, () => change(d.id, 'remove', why ? { reason: why } : {}));
+    });
+    return form;
+  }
+
+  // The action row, and the one form it opens below it.
+  function actionBar(d) {
+    const a = d.actions;
+    const bar = el('div', undefined, 'actions');
+    const panel = el('div');
+    const problem = problemLine();
+    const close = () => { panel.replaceChildren(); bar.hidden = false; };
+    const open = (form) => { panel.replaceChildren(form); bar.hidden = true; const first = form.querySelector('input,textarea,select'); if (first) first.focus(); };
+    if (!a.textLocked) { const b = button('Edit text', 'secondary'); b.addEventListener('click', () => open(textForm(d, close))); bar.append(b); }
+    const links = button('Edit connections', 'secondary'); links.addEventListener('click', () => open(linksForm(d, close))); bar.append(links);
+    if (a.removable) { const b = button('Remove memory', 'danger'); b.addEventListener('click', () => open(removeForm(d, close))); bar.append(b); }
+    if (a.restorable) { const b = button('Restore memory'); b.addEventListener('click', () => run(bar, problem, () => change(d.id, 'restore', {}))); bar.append(b); }
+    if (a.textLocked) bar.append(el('p', a.textLocked, 'muted small'));
+    bar.append(problem);
+    return [bar, panel];
+  }
+
   async function loadDetail(id) {
     const box = $('detail');
     if (!id) { box.replaceChildren(el('p', "Pick a memory to see what it says and what it's connected to.", 'muted')); return; }
@@ -179,6 +371,8 @@ export const uiJs = String.raw`
       const parts = [back, el('h2', d.title), el('p', KIND[d.kind] + ' · ' + d.status + ' · ' + d.id, 'meta')];
       if (!d.active) parts.push(el('p', 'Inactive: agents no longer get this memory.', 'callout'));
       if (d.unconnected) parts.push(el('p', 'Not connected: no feature, component or file routes this memory to an agent.', 'callout'));
+      if (state.flash && state.flash.id === id) parts.push(flashLine(d));
+      parts.push(...actionBar(d));
       for (const s of d.sections) {
         if (s.items ? !s.items.length : !s.text) continue;
         parts.push(el('h3', s.label));
@@ -241,6 +435,7 @@ export const uiJs = String.raw`
     if (page === 'memory') {
       const id = m && m[2] ? decodeURIComponent(m[2]) : '';
       state.selected = id;
+      if (state.flash && state.flash.id !== id) state.flash = null;
       document.querySelector('.split').classList.toggle('reading', !!id);
       for (const a of $('list').querySelectorAll('a')) { if (a.getAttribute('href') === '#/memory/' + encodeURIComponent(id)) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); }
       loadDetail(id);

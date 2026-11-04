@@ -6,6 +6,7 @@
  * and every write still goes through CLI verbs (human-ui-strategy).
  */
 import type { Bug, Component, Constraint, Decision, Finding } from "../core/types.js";
+import { isImportedAdrDecision } from "../core/importReview.js";
 
 export type MemoryKind = "decision" | "rule" | "bug" | "finding";
 export const MEMORY_KINDS: readonly MemoryKind[] = ["decision", "rule", "bug", "finding"];
@@ -40,12 +41,29 @@ export interface MemoryItem {
 
 export interface DetailSection { label: string; text?: string; items?: string[] }
 
+/** One text a person can change, as stored, named by the field the write route takes. */
+export interface EditField { name: "title" | "text" | "context" | "rationale"; label: string; value: string; long: boolean }
+
+/** What the page offers on this memory. The CLI still decides; this only hides moves it would refuse. */
+export interface MemoryActions {
+  fields: EditField[];
+  /** Why the words can't be changed here; null when they can. */
+  textLocked: string | null;
+  /** Confirmed by a person: changing its words removes that confirmation. */
+  signed: boolean;
+  takesFeature: boolean;
+  takesComponents: boolean;
+  removable: boolean;
+  restorable: boolean;
+}
+
 export interface MemoryDetail extends MemoryItem {
   sections: DetailSection[];
   replaces: string | null;
   replacedBy: string | null;
   source: string;
   confidence: number;
+  actions: MemoryActions;
 }
 
 export interface MemorySource {
@@ -158,6 +176,13 @@ export function countMemory(items: readonly MemoryItem[], query: MemoryQuery): M
   };
 }
 
+const field = (name: EditField["name"], label: string, value: string | null | undefined, long = true): EditField => ({ name, label, value: value ?? "", long });
+const humanSigned = (source: string): boolean => source.split("+").includes("human_confirmed");
+
+function actions(over: Partial<MemoryActions> & Pick<MemoryActions, "fields" | "removable" | "restorable">): MemoryActions {
+  return { textLocked: null, signed: false, takesFeature: false, takesComponents: false, ...over };
+}
+
 export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null {
   const base = memoryItems(src).find((m) => m.id === id);
   if (!base) return null;
@@ -172,6 +197,13 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
         { label: "Rejected", items: decision.alternatives_rejected },
         { label: "Consequences", items: decision.consequences },
       ],
+      actions: actions({
+        fields: [field("title", "Title", decision.title, false), field("text", "Decision", decision.decision), field("context", "Why", decision.context)],
+        textLocked: isImportedAdrDecision(decision) ? "Imported from an ADR file. Change the ADR, then run hunch import adrs." : null,
+        signed: humanSigned(decision.provenance.source), takesFeature: true, takesComponents: true,
+        removable: (decision.status === "accepted" || decision.status === "proposed") && !decision.valid_to,
+        restorable: (decision.status === "rejected" || decision.status === "superseded") && !decision.superseded_by,
+      }),
     };
   }
   const constraint = src.constraints.find((c) => c.id === id);
@@ -184,6 +216,12 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
         { label: "Why", text: constraint.rationale },
         { label: "From decision", text: constraint.source_decision ?? "" },
       ],
+      actions: actions({
+        fields: [field("text", "Rule", constraint.statement), field("rationale", "Why", constraint.rationale)],
+        signed: humanSigned(constraint.provenance.source),
+        removable: constraint.status !== "retired" && !constraint.valid_to,
+        restorable: constraint.status === "retired",
+      }),
     };
   }
   const bug = src.bugs.find((b) => b.id === id);
@@ -196,6 +234,7 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
         { label: "Root cause", text: bug.root_cause },
         { label: "Severity", text: bug.severity },
       ],
+      actions: actions({ fields: [field("title", "Title", bug.title, false), field("text", "Symptom", bug.symptom)], removable: false, restorable: false }),
     };
   }
   const finding = src.findings.find((f) => f.id === id)!;
@@ -207,5 +246,10 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
       { label: "Evidence", items: finding.evidence },
       { label: "Severity", text: finding.severity },
     ],
+    actions: actions({
+      fields: [field("title", "Title", finding.title, false), field("text", "Observation", finding.observation)],
+      removable: finding.triage !== "stale" && finding.triage !== "resolved",
+      restorable: finding.triage === "stale" || finding.triage === "resolved",
+    }),
   };
 }
