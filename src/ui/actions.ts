@@ -72,13 +72,52 @@ export function actionArgs(action: UiAction, id: string, body: unknown): Args {
   return { ok: true, args };
 }
 
-/** What the CLI prints with --json (runMemoryMove). */
+/** The page's kinds for new memory, mapped to `hunch new <kind>`. */
+const NEW_KIND: Record<string, string> = { decision: "decision", rule: "constraint", finding: "finding" };
+const NEW_STRINGS: Record<string, string> = {
+  title: "--title", text: "--text", context: "--context", rationale: "--rationale",
+  feature: "--feature", severity: "--severity", status: "--status",
+};
+const NEW_LISTS: Record<string, string> = { rejected: "--rejected", evidence: "--evidence", files: "--file", components: "--component" };
+
+/** The CLI argv for one new memory (`hunch new <kind> … --json`), or why the request is
+ *  malformed. Which fields fit which kind is the CLI's call; this only allowlists names. */
+export function newArgs(body: unknown): Args {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Send a JSON object." };
+  const b = body as Body;
+  const kind = typeof b.kind === "string" && Object.hasOwn(NEW_KIND, b.kind) ? NEW_KIND[b.kind] : undefined;
+  if (!kind) return { ok: false, error: "Choose a decision, rule or finding." };
+  const unknown = Object.keys(b).filter((k) => k !== "kind" && !Object.hasOwn(NEW_STRINGS, k) && !Object.hasOwn(NEW_LISTS, k));
+  if (unknown.length) return { ok: false, error: `Unknown field for new memory: ${unknown.join(", ")}.` };
+  if (typeof b.text !== "string") return { ok: false, error: "text is required." };
+
+  const args: string[] = ["new", kind];
+  for (const [k, flag] of Object.entries(NEW_STRINGS)) {
+    const v = b[k];
+    if (v === undefined) continue;
+    if (typeof v !== "string" || v.length > MAX_TEXT || v.includes("\0")) return { ok: false, error: `${k} must be text under ${MAX_TEXT} characters.` };
+    args.push(`${flag}=${v}`);
+  }
+  for (const [k, flag] of Object.entries(NEW_LISTS)) {
+    const v = b[k];
+    if (v === undefined) continue;
+    if (!Array.isArray(v) || v.length > MAX_LIST || !v.every((x) => typeof x === "string" && x.length <= MAX_TEXT && !x.includes("\0"))) {
+      return { ok: false, error: `${k} must be a list of up to ${MAX_LIST} entries.` };
+    }
+    for (const x of v as string[]) args.push(`${flag}=${x}`);
+  }
+  args.push("--json");
+  if (args.reduce((n, a) => n + a.length + 1, 0) > MAX_ARGV) return { ok: false, error: `That memory is too large to save at once (over ${MAX_ARGV} characters). Shorten it.` };
+  return { ok: true, args };
+}
+
+/** What the CLI prints with --json (runMemoryMove; `hunch new`, whose before is null). */
 export interface MoveResult {
   changed: boolean;
   id: string;
   kind: RecordKind;
   home: "public" | "private";
-  before: Record<string, unknown>;
+  before: Record<string, unknown> | null;
   after: Record<string, unknown>;
   flush: string | null;
 }
@@ -100,10 +139,13 @@ const signed = (rec: Record<string, unknown>): boolean => {
   return typeof source === "string" && source.split("+").includes("human_confirmed");
 };
 
-/** The move that puts `before` back, or null when nothing changed. */
-export function undoFor(action: UiAction, result: MoveResult): Undo | null {
+/** The move that puts `before` back, or null when nothing changed. A new record has no
+ *  before: its Undo retires it (`hunch remove`), since nothing is ever deleted. */
+export function undoFor(action: UiAction | "new", result: MoveResult): Undo | null {
   if (!result.changed || !kindOfId(result.id)) return null;
-  const { kind, before, after } = result;
+  if (action === "new") return { action: "remove", body: {} };
+  const { kind, after } = result;
+  const before = result.before ?? {};
   if (action === "edit") {
     const body: Body = {};
     const fields: Array<[string, string]> = [["title", "title"], ["text", TEXT_FIELD[kind]], ["context", "context"], ["rationale", "rationale"]];

@@ -10,7 +10,7 @@ import type { AddressInfo } from "node:net";
 import { BugSchema, ComponentSchema, DecisionSchema, FindingSchema } from "../src/core/types.js";
 import { countMemory, filterMemory, memoryDetail, memoryItems, type MemorySource } from "../src/ui/model.js";
 import { createUiServer, githubWebUrl, type UiProbes } from "../src/ui/server.js";
-import { actionArgs, cliError, undoFor, type MoveResult } from "../src/ui/actions.js";
+import { actionArgs, cliError, newArgs, undoFor, type MoveResult } from "../src/ui/actions.js";
 import { JsonStore } from "../src/store/jsonStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { writeFileSync } from "node:fs";
@@ -179,9 +179,10 @@ test("ui server: memory list, detail, repo and connections", async () => {
 test("ui server: refuses a short key and non-GET methods", async () => {
   assert.throws(() => createUiServer({ root: ".", token: "short", version: "t", probes: fakeProbes }), /at least 16/);
   await withServer(async (get) => {
-    const res = await get("/api/memory", undefined, "POST");
+    const res = await get("/api/components", undefined, "POST");
     assert.equal(res.status, 405);
     assert.equal(res.headers.allow, "GET, POST");
+    assert.equal((await get("/api/memory", undefined, "PUT")).status, 405);
     assert.equal((await get("/api/memory/dec_live/edit", undefined, "PUT")).status, 405);
     assert.equal((await get("/api/memory/dec_live/edit", undefined, "OPTIONS")).status, 405, "no CORS preflight is ever answered");
   });
@@ -252,6 +253,46 @@ test("cliError: the CLI's error: lines, else its last lines", () => {
   assert.equal(cliError("noise\nerror: a bug can't be removed\n", ""), "a bug can't be removed");
   assert.equal(cliError("", "one\ntwo"), "one two");
   assert.equal(cliError("", ""), "The change was refused.");
+});
+
+test("newArgs: page kinds map to hunch new, fields are allowlisted into --flag=value argv", () => {
+  assert.deepEqual(newArgs({ kind: "rule", text: "-x never", rationale: "--json", files: ["src/a.ts"], severity: "warning" }),
+    { ok: true, args: ["new", "constraint", "--text=-x never", "--rationale=--json", "--severity=warning", "--file=src/a.ts", "--json"] });
+  assert.deepEqual(newArgs({ kind: "decision", title: "T", text: "D", feature: "f", rejected: ["a", "b"], status: "proposed" }),
+    { ok: true, args: ["new", "decision", "--title=T", "--text=D", "--feature=f", "--status=proposed", "--rejected=a", "--rejected=b", "--json"] });
+  assert.deepEqual(newArgs({ kind: "finding", title: "T", text: "saw", evidence: ["log"] }),
+    { ok: true, args: ["new", "finding", "--title=T", "--text=saw", "--evidence=log", "--json"] });
+  const refused: Array<[unknown, RegExp]> = [
+    [null, /JSON object/],
+    [["x"], /JSON object/],
+    [{ text: "x" }, /decision, rule or finding/],
+    [{ kind: "constraint", text: "x" }, /decision, rule or finding/],
+    [{ kind: "__proto__", text: "x" }, /decision, rule or finding/],
+    [{ kind: "constructor", text: "x" }, /decision, rule or finding/],
+    [{ kind: "toString", text: "x" }, /decision, rule or finding/],
+    [{ kind: "rule" }, /text is required/],
+    [{ kind: "rule", text: 5 }, /text is required/],
+    [{ kind: "rule", text: "x", json: true }, /Unknown field for new memory: json/],
+    [{ kind: "rule", text: "x", supersedes: "dec_1" }, /Unknown field/],
+    [{ kind: "rule", text: "x", private: true }, /Unknown field/],
+    [{ kind: "rule", text: "a\0b" }, /must be text/],
+    [{ kind: "rule", text: "x".repeat(20_001) }, /must be text/],
+    [{ kind: "rule", text: "x", files: "a.ts" }, /must be a list/],
+    [{ kind: "rule", text: "x", files: [1] }, /must be a list/],
+    [{ kind: "rule", text: "x", files: Array(201).fill("a") }, /must be a list/],
+    [{ kind: "rule", text: "x".repeat(16_000), rationale: "y".repeat(16_000) }, /too large to save at once/],
+  ];
+  for (const [body, pattern] of refused) {
+    const r = newArgs(body);
+    assert.equal(r.ok, false, JSON.stringify(body).slice(0, 80));
+    assert.match((r as { error: string }).error, pattern);
+  }
+});
+
+test("undoFor new: a new record's Undo retires it; an unchanged result has none", () => {
+  const created: MoveResult = { changed: true, id: "con_1", kind: "constraint", home: "public", before: null, after: { status: "active" }, flush: "committed" };
+  assert.deepEqual(undoFor("new", created), { action: "remove", body: {} });
+  assert.equal(undoFor("new", { ...created, changed: false }), null);
 });
 
 type Post = (path: string, body: unknown, headers?: Record<string, string>) => Promise<{ status: number; body: any }>;
@@ -360,6 +401,45 @@ test("ui server writes: edit, link and remove run the CLI, the list reloads, and
     const refused = await post("/api/memory/bug_1/remove", {});
     assert.equal(refused.status, 422);
     assert.match(refused.body.error, /record of what broke/);
+  });
+});
+
+test("ui server new memory: guarded like every write; the CLI adds it unconfirmed, refuses duplicates and a second live decision, and Undo retires it", async () => {
+  await withWriteServer(async (post, get, origin) => {
+    const rule = { kind: "rule", text: "Never charge twice", rationale: "Refunds are manual", files: ["src/billing/**"], severity: "warning" };
+    const total = async (): Promise<number> => JSON.parse((await get("/api/memory?view=all")).body).counts.all;
+    const baseline = await total();
+    assert.equal((await post("/api/memory", rule, { authorization: "" })).status, 401);
+    assert.equal((await post("/api/memory", rule, { origin: "https://evil.example" })).status, 403);
+    assert.equal((await post("/api/memory", rule, { "content-type": "text/plain" })).status, 415);
+    assert.equal((await post("/api/memory", { ...rule, kind: "constraint" })).status, 400);
+    assert.equal((await post("/api/memory/", rule)).status, 405, "only the exact path creates");
+    assert.equal(await total(), baseline, "no refused request added a record");
+
+    const created = await post("/api/memory", rule, { origin });
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    assert.equal(created.body.changed, true);
+    assert.equal(created.body.flush, "committed");
+    assert.deepEqual(created.body.undo, { action: "remove", body: {} });
+    const id: string = created.body.id;
+    assert.match(id, /^con_/);
+    const detail = JSON.parse((await get(`/api/memory/${id}`)).body);
+    assert.equal(detail.active, true);
+    assert.equal(detail.actions.signed, false, "a page write never mints a person's confirmation");
+    assert.equal(detail.source, "agent_recorded");
+    assert.equal(await total(), baseline + 1, "the list reloads with it");
+
+    const again = await post("/api/memory", rule);
+    assert.equal(again.status, 422);
+    assert.match(again.body.error, /already exists/);
+
+    const second = await post("/api/memory", { kind: "decision", title: "Sessions in JWTs", text: "JWT", feature: "auth-session" });
+    assert.equal(second.status, 422, JSON.stringify(second.body));
+    assert.equal(JSON.parse((await get("/api/memory/dec_live")).body).active, true, "the live decision for the feature is untouched");
+
+    const undo = await post(`/api/memory/${id}/${created.body.undo.action}`, created.body.undo.body);
+    assert.equal(undo.status, 200, JSON.stringify(undo.body));
+    assert.equal(JSON.parse((await get(`/api/memory/${id}`)).body).active, false);
   });
 });
 

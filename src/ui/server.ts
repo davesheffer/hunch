@@ -9,8 +9,9 @@
  *   - the page shell is static and holds no data, under the same strict CSP as /operator.
  *
  * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections.
- * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb (the CLI owns
- * validation, git and the store), one at a time, and answers with the move plus its Undo.
+ * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb, and POST
+ * /api/memory runs `hunch new` (the CLI owns validation, git and the store), one at a time,
+ * and answers with the move plus its Undo.
  * A write also needs a JSON body and, when the browser sends an Origin, this server's own.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -22,7 +23,7 @@ import { boundedSpawn } from "../core/boundedSpawn.js";
 import { resolveSynthesisProvider } from "../synthesis/provider.js";
 import { MEMORY_KINDS, countMemory, filterMemory, memoryDetail, memoryItems, type MemoryKind, type MemorySource, type MemoryView } from "./model.js";
 import { uiCss, uiHtml, uiJs } from "./page.js";
-import { actionArgs, cliError, isUiAction, undoFor, type MoveResult } from "./actions.js";
+import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
 
 export interface RepoInfo { root: string; branch: string | null; remote: string | null; webUrl: string | null }
 export interface GithubInfo { installed: boolean; authenticated: boolean; user: string | null; repo: string | null }
@@ -133,8 +134,10 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
   // One CLI write at a time: each one commits, and two commits must not race.
   let writing: Promise<unknown> = Promise.resolve();
 
-  const write = async (req: IncomingMessage, res: ServerResponse, id: string, action: string): Promise<void> => {
-    if (!isUiAction(action)) return send(res, 404, { error: "Not found." });
+  // id null: POST /api/memory, a new record (`hunch new`).
+  const write = async (req: IncomingMessage, res: ServerResponse, id: string | null, action: string): Promise<void> => {
+    if (id !== null && !isUiAction(action)) return send(res, 404, { error: "Not found." });
+    const move = id === null ? "new" : (action as UiAction);
     // A browser always sends Origin on a cross-site POST; it must be this page's own.
     const origin = req.headers.origin;
     if (origin !== undefined && origin !== `http://${req.headers.host}`) return send(res, 403, { error: "Changes are only accepted from this page." });
@@ -142,7 +145,7 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     if (!opts.cli) return send(res, 503, { error: "Editing needs hunch ui started from the command line." });
     const body = await readJson(req);
     if (!body.ok) return send(res, body.status, { error: body.error });
-    const parsed = actionArgs(action, id, body.value);
+    const parsed = id === null ? newArgs(body.value) : actionArgs(move as UiAction, id, body.value);
     if (!parsed.ok) return send(res, 400, { error: parsed.error });
     const cli = opts.cli;
     const job = writing.then(() => boundedSpawn(cli.file, [...cli.args, ...parsed.args], {
@@ -158,17 +161,18 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     let result: MoveResult;
     try { result = JSON.parse(last) as MoveResult; } catch { return send(res, 500, { error: "The change ran but its result could not be read." }); }
     if (result.changed) { store.close(); store = new HunchStore(hunchPaths(opts.root)); }
-    return send(res, 200, { changed: result.changed, id: result.id, home: result.home, flush: result.flush, undo: undoFor(action, result) });
+    return send(res, 200, { changed: result.changed, id: result.id, home: result.home, flush: result.flush, undo: undoFor(move, result) });
   };
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     if (!LOOPBACK_HOST.test(req.headers.host ?? "")) return send(res, 421, { error: "This server only answers on 127.0.0.1." });
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const writeRoute = req.method === "POST" ? WRITE_ROUTE.exec(url.pathname) : null;
-    if (req.method !== "GET" && !writeRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
-    if (writeRoute) {
+    const createRoute = req.method === "POST" && url.pathname === "/api/memory";
+    if (req.method !== "GET" && !writeRoute && !createRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
+    if (writeRoute || createRoute) {
       if (!tokenMatches(req.headers.authorization, opts.token)) return send(res, 401, { error: "Access key missing or expired." });
-      return write(req, res, writeRoute[1]!, writeRoute[2]!);
+      return writeRoute ? write(req, res, writeRoute[1]!, writeRoute[2]!) : write(req, res, null, "new");
     }
     const asset = ASSETS.get(url.pathname);
     if (asset) {

@@ -8,7 +8,7 @@ export const uiHtml = `<!doctype html>
 <p id="error" role="alert" hidden></p>
 <main>
 <section id="memory-page" hidden aria-labelledby="memory-title">
-<h1 id="memory-title">Memory</h1>
+<div class="title-row"><h1 id="memory-title">Memory</h1><button type="button" id="new-memory">New memory</button></div>
 <div class="controls">
 <div class="search"><label for="q">Search memory</label><input id="q" type="search" autocomplete="off" spellcheck="false"></div>
 <div role="group" aria-label="Type" class="segmented" id="kinds">
@@ -57,6 +57,8 @@ button.secondary,.segmented button{background:var(--paper);color:var(--ink);bord
 button.danger{background:var(--paper);color:var(--error);border-color:var(--error)}
 .actions,.form-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
 .editor{display:grid;gap:10px;margin:12px 0;padding:16px;border:1px solid var(--line);border-radius:10px}
+#detail>.editor.new{margin:0;padding:0;border:0}
+#memory-page>.title-row{margin-bottom:16px}
 fieldset{border:0;padding:0;margin:0;display:grid;gap:8px;min-width:0}legend{font-size:13px;font-weight:650;padding:0;margin-bottom:4px}
 .rows{list-style:none;margin:0;padding:0;display:grid;gap:6px}.rows li{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}
 .add{display:flex;gap:8px}.add input,.add select{flex:1;min-width:0}
@@ -342,6 +344,100 @@ export const uiJs = String.raw`
     return form;
   }
 
+  // ---- new memory: one form, its fields follow the type. Only the chosen type's fields are
+  // sent, since the CLI refuses a field that doesn't fit.
+  const NEW_FIELDS = {
+    decision: { title: 'Title', text: 'What was decided', context: 'Why', rejected: 'Rejected alternatives', feature: 'Feature', files: 'Files and folders', status: 'Status' },
+    rule: { text: 'The rule', rationale: 'Why it must hold', files: 'Files and folders', severity: 'How agents get it' },
+    finding: { title: 'Title', text: 'What you saw', evidence: 'Evidence', files: 'Files and folders', severity: 'Severity' },
+  };
+  const REQUIRED = { title: true, text: true };
+  const LISTS = { rejected: true, files: true };
+  const SEVERITY = {
+    rule: [['warning', 'Warn before edits'], ['advisory', 'Given to agents as context']],
+    finding: [['medium', 'Medium'], ['low', 'Low'], ['high', 'High'], ['critical', 'Critical']],
+  };
+  const HINT = {
+    rejected: 'One per line.',
+    feature: 'Optional. A feature has one current decision.',
+    evidence: 'A log line, command output or link.',
+  };
+  function select(options) { const s = el('select'); for (const [v, t] of options) { const o = el('option', t); o.value = v; s.append(o); } return s; }
+  const lines = (v) => v.split('\n').map((x) => x.trim()).filter(Boolean);
+
+  function newForm() {
+    const form = el('form', undefined, 'editor new');
+    form.noValidate = true;
+    form.append(el('h2', 'New memory'));
+    let kind = 'decision';
+    const types = el('div', undefined, 'segmented'); types.setAttribute('role', 'group'); types.setAttribute('aria-label', 'Type of memory');
+    for (const [k, t] of [['decision', 'Decision'], ['rule', 'Rule'], ['finding', 'Finding']]) {
+      const b = button(t, ''); b.dataset.kind = k; b.setAttribute('aria-pressed', String(k === kind)); types.append(b);
+    }
+    form.append(types);
+
+    // Every field once, so typed words survive a change of type; only the type's own are shown.
+    const inputs = {
+      title: el('input'), text: el('textarea'), context: el('textarea'), rationale: el('textarea'), rejected: el('textarea'),
+      feature: el('input'), evidence: el('textarea'), files: el('textarea'),
+      status: select([['accepted', 'Accepted: agents follow it'], ['proposed', 'Draft: not agreed yet']]),
+      severity: el('select'),
+    };
+    const rows = {};
+    for (const [name, input] of Object.entries(inputs)) {
+      if (input.tagName === 'TEXTAREA') input.rows = name === 'text' ? 4 : 3;
+      if (input.tagName === 'INPUT') input.autocomplete = 'off';
+      if (name === 'files' || name === 'feature') input.spellcheck = false;
+      const row = el('div');
+      const [label] = labelled('', input, 'new-' + name);
+      const hint = el('p', '', 'muted small'); hint.id = 'new-' + name + '-hint'; input.setAttribute('aria-describedby', hint.id);
+      row.append(label, input, hint);
+      rows[name] = { row, label, hint };
+      form.append(row);
+    }
+    inputs.files.placeholder = 'src/auth/**';
+
+    const draw = () => {
+      for (const b of types.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.kind === kind));
+      const fields = NEW_FIELDS[kind];
+      for (const [name, r] of Object.entries(rows)) {
+        r.row.hidden = !fields[name];
+        inputs[name].required = !!(fields[name] && REQUIRED[name]);
+        if (!fields[name]) continue;
+        r.label.textContent = fields[name] + (REQUIRED[name] ? ' (required)' : '');
+        let hint = HINT[name] || '';
+        if (name === 'files') hint = kind === 'rule' ? 'One per line. Leave empty for the whole repository.' : 'One per line. Optional.';
+        if (name === 'severity' && kind === 'rule') hint = 'To block edits that break it, confirm it as yours after adding it.';
+        say(r.hint, hint);
+      }
+      if (SEVERITY[kind]) inputs.severity.replaceChildren(...select(SEVERITY[kind]).children);
+    };
+    types.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || b.dataset.kind === kind) return; kind = b.dataset.kind; draw(); });
+    draw();
+
+    const problem = problemLine();
+    form.append(problem, formButtons('Add memory', '', () => { location.hash = '#/memory'; }));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const body = { kind };
+      for (const name of Object.keys(NEW_FIELDS[kind])) {
+        const v = inputs[name].value;
+        if (LISTS[name]) { const l = lines(v); if (l.length) body[name] = l; }
+        else if (name === 'evidence') { if (v.trim()) body.evidence = [v.trim()]; }
+        else if (v.trim()) body[name] = v.trim();
+      }
+      const missing = Object.keys(REQUIRED).find((n) => NEW_FIELDS[kind][n] && !body[n]);
+      if (missing) { inputs[missing].focus(); return say(problem, NEW_FIELDS[kind][missing] + ' is required.'); }
+      run(form, problem, async () => {
+        const r = await post('/api/memory', body);
+        state.flash = { id: r.id, text: 'Added. It stays unconfirmed until you confirm it as yours: hunch review --confirm ' + r.id, undo: r.undo || null };
+        loadList();
+        location.hash = '#/memory/' + encodeURIComponent(r.id);
+      });
+    });
+    return form;
+  }
+
   // The action row, and the one form it opens below it.
   function actionBar(d) {
     const a = d.actions;
@@ -362,6 +458,8 @@ export const uiJs = String.raw`
   async function loadDetail(id) {
     const box = $('detail');
     if (!id) { box.replaceChildren(el('p', "Pick a memory to see what it says and what it's connected to.", 'muted')); return; }
+    // Record ids are prefixed (dec_, con_, …), so 'new' is never one.
+    if (id === 'new') { const form = newForm(); box.replaceChildren(form); form.querySelector('textarea,input').focus(); return; }
     box.replaceChildren(el('p', 'Loading…', 'muted'));
     try {
       const d = await api('/api/memory/' + encodeURIComponent(id));
@@ -447,10 +545,11 @@ export const uiJs = String.raw`
   $('views').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; state.view = b.dataset.view; pick('views', 'view', state.view); loadList(); });
   let timer; $('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { state.q = $('q').value.trim(); loadList(); }, 200); });
   $('recheck').addEventListener('click', loadConnections);
+  $('new-memory').addEventListener('click', () => { location.hash = '#/memory/new'; });
   window.addEventListener('hashchange', route);
 
   if (!key) { showError('This page needs a fresh link. Run hunch ui again and open the link it prints.'); return; }
-  api('/api/repo').then((r) => { state.webUrl = r.webUrl; $('repo-name').textContent = r.name + (r.branch ? ' · ' + r.branch : ''); if (state.selected) loadDetail(state.selected); }).catch(() => {});
+  api('/api/repo').then((r) => { state.webUrl = r.webUrl; $('repo-name').textContent = r.name + (r.branch ? ' · ' + r.branch : ''); if (state.selected && state.selected !== 'new') loadDetail(state.selected); }).catch(() => {});
   loadList();
   route();
 })();
