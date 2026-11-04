@@ -35,7 +35,7 @@ A source-control-style view of everything Hunch does:
   one led to on the checked-out branch, says whether and how the branch landed on the default
   branch (merge, squash, or rebase), and shows the CLI's notes where git can't say. Needs Hunch
   CLI with `hunch log --for`; the branch comes from VS Code's Git extension (detached HEAD
-  groups below the checked-out commit).
+  groups below the checked-out commit), and the view regroups on a branch switch or a new commit.
 - **Title actions** — 🛡 Strictness (advisory ↔ strict gate), Sync now, Adopt drafts, and
   **Approve-to-push**: memory auto-commits locally; publishing it to your remote is deliberately
   your click.

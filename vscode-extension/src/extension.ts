@@ -290,10 +290,11 @@ export function activate(context: vscode.ExtensionContext): void {
   // The "Hunch Memory" activity-bar view: a source-control-style timeline of every
   // memory move (capture/adopt/supersede/prune), each reviewable + revertable —
   // or, grouped, the moves under the feature commit each one led to.
-  // The tree reads the branch only while loading, after activation, so it can be
-  // built before the Git watcher, whose first callback may fire synchronously.
-  const memoryTree = new MemoryTreeProvider(() => root, undefined, (folder) => branches.branchOf(folder));
-  const branches = new GitBranches(() => { if (memoryTree.isGrouped) memoryTree.refresh(); });
+  // The Git watcher's first callback can fire inside its own constructor, so the
+  // tree reaches it through a late binding: until it exists, there is no branch.
+  let branches: GitBranches | undefined;
+  const memoryTree = new MemoryTreeProvider(() => root, undefined, (folder) => branches?.branchOf(folder));
+  branches = new GitBranches(() => { if (memoryTree.isGrouped) memoryTree.refresh(); });
   context.subscriptions.push(branches);
   context.subscriptions.push(vscode.window.createTreeView("hunch.memory", { treeDataProvider: memoryTree }));
   const setMemoryGrouped = (on: boolean): void => {

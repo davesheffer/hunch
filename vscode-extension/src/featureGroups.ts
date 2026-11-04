@@ -44,16 +44,42 @@ export function featureQuery(branch: string | undefined): string {
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const isString = (v: unknown): v is string => typeof v === "string";
+const isStringOrNull = (v: unknown): boolean => v === null || isString(v);
+const isStrings = (v: unknown): boolean => Array.isArray(v) && v.every(isString);
+
+/** A move carries every field a move row reads; a version-skewed CLI's payload is
+ *  dropped rather than thrown on while the tree renders. `kind` stays open so a
+ *  newer CLI's move kind still shows. */
+export function isMemoryMove(v: unknown): v is MemoryMove {
+  return isObject(v) && isString(v.sha) && isString(v.shortSha) && isString(v.date) && isString(v.subject)
+    && isString(v.kind) && isStrings(v.decisionIds) && isStrings(v.otherIds);
+}
+
+function isFeatureGroup(v: unknown): boolean {
+  if (!isObject(v) || !isStringOrNull(v.landed) || !Array.isArray(v.moves) || !v.moves.every(isMemoryMove)) return false;
+  const c = v.commit;
+  return c === null || (isObject(c) && isString(c.sha) && isString(c.shortSha) && isString(c.date) && isString(c.subject));
+}
 
 /** Parse `hunch log --for --json`; null for anything that is not that shape, so an
  *  old CLI or a stray payload never renders as half a tree. */
 export function parseMemoryFor(stdout: string): MemoryFor | null {
   let v: unknown;
   try { v = JSON.parse(stdout); } catch { return null; }
-  if (!isObject(v) || (v.kind !== "branch" && v.kind !== "commit") || typeof v.sha !== "string") return null;
-  if (!Array.isArray(v.notes) || !v.notes.every((n) => typeof n === "string")) return null;
-  if (!Array.isArray(v.groups) || !v.groups.every((g) => isObject(g) && Array.isArray(g.moves) && (g.commit === null || isObject(g.commit)))) return null;
+  if (!isObject(v) || (v.kind !== "branch" && v.kind !== "commit") || !isString(v.sha) || !isString(v.query) || !isStringOrNull(v.branch)) return null;
+  if (v.merged !== null && !(isObject(v.merged) && isString(v.merged.status))) return null;
+  if (!isStrings(v.notes) || !Array.isArray(v.groups) || !v.groups.every(isFeatureGroup)) return null;
   return v as unknown as MemoryFor;
+}
+
+/** Why grouping failed, as a warning row: the CLI's first stderr line, and a hint
+ *  only where one is known (an older CLI without `--for`). An unknown ref or a
+ *  folder outside git already says so in the message. */
+export function featureFailure(log: { ok: boolean; stderr: string }): { message: string; hint: string } {
+  if (log.ok) return { message: "unexpected output", hint: "the Hunch CLI and extension versions may differ" };
+  const message = log.stderr.trim().split(/\r?\n/)[0] || "the CLI failed";
+  return { message, hint: /unknown option '--for'/.test(message) ? "update the Hunch CLI" : "" };
 }
 
 /** The top row: what was asked for and how it reached the default branch. */

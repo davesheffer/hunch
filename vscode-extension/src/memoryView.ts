@@ -13,7 +13,7 @@
 import * as vscode from "vscode";
 import * as os from "node:os";
 import { runHunch, runHunchWithProgress, type CliResult } from "./cli.js";
-import { featureQuery, groupText, headerText, parseMemoryFor, type FeatureGroup, type MemoryFor } from "./featureGroups.js";
+import { featureFailure, featureQuery, groupText, headerText, isMemoryMove, parseMemoryFor, type FeatureGroup, type MemoryFor } from "./featureGroups.js";
 import { RootLoadFence } from "./rootBinding.js";
 
 /** One memory move — mirrors src/core/memorylog.MemoryMove (JSON consumer). */
@@ -61,12 +61,14 @@ export class MoveNode extends vscode.TreeItem {
   constructor(public readonly move: MemoryMove, public readonly root: string) {
     super(move.subject.replace(/^hunch:\s*/, ""), vscode.TreeItemCollapsibleState.None);
     const ids = [...move.decisionIds, ...move.otherIds];
-    this.description = `${move.date.slice(0, 10)} · ${KIND_LABEL[move.kind]}${ids.length ? " · " + ids.slice(0, 2).join(",") : ""}`;
-    this.iconPath = new vscode.ThemeIcon(KIND_ICON[move.kind]);
+    // A kind a newer CLI added shows under its own name.
+    const kind = KIND_LABEL[move.kind] ?? move.kind;
+    this.description = `${move.date.slice(0, 10)} · ${kind}${ids.length ? " · " + ids.slice(0, 2).join(",") : ""}`;
+    this.iconPath = new vscode.ThemeIcon(KIND_ICON[move.kind] ?? "circle-outline");
     this.contextValue = "hunchMove";
     this.tooltip = new vscode.MarkdownString(
       [
-        `**${KIND_LABEL[move.kind]}** · \`${move.shortSha}\` · ${move.date.slice(0, 10)}`,
+        `**${kind}** · \`${move.shortSha}\` · ${move.date.slice(0, 10)}`,
         ``,
         move.subject,
         ``,
@@ -191,7 +193,7 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
   readonly onDidChangeTreeData = this._changed.event;
   private moves: MemoryMove[] = [];
   private feature: MemoryFor | null = null;
-  private featureError: string | null = null;
+  private featureError: { message: string; hint: string } | null = null;
   private escalations: EscalationEntry[] = [];
   private policies: PolicyEntry[] = [];
   private loaded = false;
@@ -251,11 +253,11 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
     if (!this.loadFence.isCurrent(ticket, this.currentRoot())) return false;
     this.moves = []; this.feature = null; this.featureError = null;
     if (query === undefined) {
-      try { const v: unknown = log.ok ? JSON.parse(log.stdout) : []; this.moves = Array.isArray(v) ? v as MemoryMove[] : []; } catch { this.moves = []; }
+      try { const v: unknown = log.ok ? JSON.parse(log.stdout) : []; this.moves = Array.isArray(v) ? v.filter(isMemoryMove) : []; } catch { this.moves = []; }
     } else {
       this.feature = log.ok ? parseMemoryFor(log.stdout) : null;
       // Say why instead of an empty view: an older CLI without --for, an unknown ref.
-      if (!this.feature) this.featureError = (log.ok ? "unexpected output" : log.stderr.trim().split(/\r?\n/)[0]) || "the CLI failed";
+      if (!this.feature) this.featureError = featureFailure(log);
     }
     this.loadedQuery = query;
     // `hunch escalations --json` exits non-zero when actionable entries exist,
@@ -287,7 +289,7 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
       }
       if (this.policies.length) roots.push(new GroupNode(`🏛 Constitution (${this.policies.length})`, "law", "policies", root));
       if (this.loadedQuery === undefined) return [...roots, ...this.moves.map((m) => new MoveNode(m, root))];
-      if (!this.feature) return [...roots, new InfoNode(`Could not group by feature commit: ${this.featureError}`, "update the Hunch CLI", "warning")];
+      if (!this.feature) return [...roots, new InfoNode(`Could not group by feature commit: ${this.featureError?.message}`, this.featureError?.hint ?? "", "warning")];
       const r = this.feature;
       const head = headerText(r);
       roots.push(new InfoNode(head.label, head.description, r.kind === "branch" ? "git-branch" : "git-commit"));
