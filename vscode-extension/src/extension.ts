@@ -34,6 +34,10 @@ import { HunchMcp } from "./mcpClient.js";
 import { ContributionTreeProvider, openTaskEvidence, type TaskNode } from "./contributionView.js";
 import { MemoryTreeProvider, openMove, revertMove, syncNow, adoptDrafts, approveAndPush, setFirmness, openPolicyCard, openEscalation, activatePolicy, demotePolicy, withdrawPolicy, retirePolicy, type MoveNode, type PolicyNode, type EscalationNode } from "./memoryView.js";
 import { workspaceRootForFile } from "./workspace.js";
+import { GitBranches } from "./gitBranch.js";
+
+/** Workspace-state and context key: the memory view is grouped by feature commit. */
+const MEMORY_GROUPED_KEY = "hunch.memory.grouped";
 
 function workspaceRoot(): string | undefined {
   const folders = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [];
@@ -284,9 +288,20 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push({ dispose: () => { for (const mcp of mcps.values()) mcp.dispose(); } });
 
   // The "Hunch Memory" activity-bar view: a source-control-style timeline of every
-  // memory move (capture/adopt/supersede/prune), each reviewable + revertable.
-  const memoryTree = new MemoryTreeProvider(() => root);
+  // memory move (capture/adopt/supersede/prune), each reviewable + revertable —
+  // or, grouped, the moves under the feature commit each one led to.
+  // The tree reads the branch only while loading, after activation, so it can be
+  // built before the Git watcher, whose first callback may fire synchronously.
+  const memoryTree = new MemoryTreeProvider(() => root, undefined, (folder) => branches.branchOf(folder));
+  const branches = new GitBranches(() => { if (memoryTree.isGrouped) memoryTree.refresh(); });
+  context.subscriptions.push(branches);
   context.subscriptions.push(vscode.window.createTreeView("hunch.memory", { treeDataProvider: memoryTree }));
+  const setMemoryGrouped = (on: boolean): void => {
+    memoryTree.setGrouped(on);
+    void context.workspaceState.update(MEMORY_GROUPED_KEY, on);
+    void vscode.commands.executeCommand("setContext", MEMORY_GROUPED_KEY, on);
+  };
+  setMemoryGrouped(context.workspaceState.get<boolean>(MEMORY_GROUPED_KEY, false));
   // The "Contribution" view: per-task evidence of what Hunch delivered, saved,
   // guarded and checked — the host-neutral home for the Stop-hook card.
   const contributionTree = new ContributionTreeProvider(() => root);
@@ -371,6 +386,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     // --- Hunch Memory view (source-control-style timeline) -----------------
     vscode.commands.registerCommand("hunch.memory.refresh", () => memoryTree.refresh()),
+    vscode.commands.registerCommand("hunch.memory.groupByFeature", () => setMemoryGrouped(true)),
+    vscode.commands.registerCommand("hunch.memory.showTimeline", () => setMemoryGrouped(false)),
     // --- Contribution view ---------------------------------------------------
     vscode.commands.registerCommand("hunch.contribution.refresh", () => contributionTree.refresh()),
     vscode.commands.registerCommand("hunch.contribution.open", (node?: TaskNode) => { if (node?.root) void openTaskEvidence(node.root, node); }),
