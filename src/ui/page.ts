@@ -106,7 +106,7 @@ export const uiJs = String.raw`
   if (fragment) { key = fragment[1]; try { sessionStorage.setItem(KEY, key); } catch {} history.replaceState(null, '', location.pathname + '#/memory'); }
   else { try { key = sessionStorage.getItem(KEY) || ''; } catch {} }
 
-  const DONE = { edit: 'Saved.', link: 'Connections saved.', remove: 'Removed. Agents no longer get this memory.', restore: 'Restored. Agents get this memory again.' };
+  const DONE = { edit: 'Saved.', link: 'Connections saved.', remove: 'Removed. Agents no longer get this memory.', restore: 'Restored. Agents get this memory again.', confirm: 'Confirmed as yours.', unconfirm: 'Confirmation taken back.' };
 
   // flash: the last change on the open memory, with its Undo, until another memory is opened.
   const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, flash: null };
@@ -344,6 +344,22 @@ export const uiJs = String.raw`
     return form;
   }
 
+  // A rule's confirmation also sets how agents get it; only a confirmed rule can block edits.
+  function confirmForm(d, close) {
+    const form = el('form', undefined, 'editor');
+    form.append(el('p', 'Confirming makes this rule yours: agents treat it as your word, not their own note.'));
+    const severity = select(CONFIRM_SEVERITY);
+    severity.value = d.actions.severity;
+    form.append(...labelled('How agents get it', severity, 'confirm-severity'));
+    const problem = problemLine();
+    form.append(problem, formButtons('Confirm as mine', '', close));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      run(form, problem, () => change(d.id, 'confirm', severity.value !== d.actions.severity ? { severity: severity.value } : {}));
+    });
+    return form;
+  }
+
   // ---- new memory: one form, its fields follow the type. Only the chosen type's fields are
   // sent, since the CLI refuses a field that doesn't fit.
   const NEW_FIELDS = {
@@ -357,6 +373,7 @@ export const uiJs = String.raw`
     rule: [['warning', 'Warn before edits'], ['advisory', 'Given to agents as context']],
     finding: [['medium', 'Medium'], ['low', 'Low'], ['high', 'High'], ['critical', 'Critical']],
   };
+  const CONFIRM_SEVERITY = [['blocking', 'Block edits that break it'], ...SEVERITY.rule];
   const HINT = {
     rejected: 'One per line.',
     feature: 'Optional. A feature has one current decision.',
@@ -410,7 +427,8 @@ export const uiJs = String.raw`
         if (name === 'severity' && kind === 'rule') hint = 'To block edits that break it, confirm it as yours after adding it.';
         say(r.hint, hint);
       }
-      if (SEVERITY[kind]) inputs.severity.replaceChildren(...select(SEVERITY[kind]).children);
+      // Moving options out of a select selects the next one, so the default is set, not inherited.
+      if (SEVERITY[kind]) { inputs.severity.replaceChildren(...select(SEVERITY[kind]).children); inputs.severity.value = SEVERITY[kind][0][0]; }
     };
     types.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || b.dataset.kind === kind) return; kind = b.dataset.kind; draw(); });
     draw();
@@ -430,7 +448,7 @@ export const uiJs = String.raw`
       if (missing) { inputs[missing].focus(); return say(problem, NEW_FIELDS[kind][missing] + ' is required.'); }
       run(form, problem, async () => {
         const r = await post('/api/memory', body);
-        state.flash = { id: r.id, text: 'Added. It stays unconfirmed until you confirm it as yours: hunch review --confirm ' + r.id, undo: r.undo || null };
+        state.flash = { id: r.id, text: 'Added. It stays unconfirmed until you confirm it as yours.', undo: r.undo || null };
         loadList();
         location.hash = '#/memory/' + encodeURIComponent(r.id);
       });
@@ -446,6 +464,11 @@ export const uiJs = String.raw`
     const problem = problemLine();
     const close = () => { panel.replaceChildren(); bar.hidden = false; };
     const open = (form) => { panel.replaceChildren(form); bar.hidden = true; const first = form.querySelector('input,textarea,select'); if (first) first.focus(); };
+    if (a.confirmable) {
+      const b = button('Confirm as mine');
+      b.addEventListener('click', () => d.kind === 'rule' ? open(confirmForm(d, close)) : run(bar, problem, () => change(d.id, 'confirm', {})));
+      bar.append(b);
+    }
     if (!a.textLocked) { const b = button('Edit text', 'secondary'); b.addEventListener('click', () => open(textForm(d, close))); bar.append(b); }
     const links = button('Edit connections', 'secondary'); links.addEventListener('click', () => open(linksForm(d, close))); bar.append(links);
     if (a.removable) { const b = button('Remove memory', 'danger'); b.addEventListener('click', () => open(removeForm(d, close))); bar.append(b); }

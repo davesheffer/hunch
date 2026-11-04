@@ -79,11 +79,12 @@ export function editRecord(kind: MemoryKind, rec: MemoryRecord, change: EditChan
 }
 
 /** Testimony confidence — the tier an un-vouched correction lands at (correction.ts). */
-const TESTIMONY_CONFIDENCE = 0.75;
+export const TESTIMONY_CONFIDENCE = 0.75;
 
 /** Drop the human signature from edited text; a record without one is returned as is.
- *  A rationale the edit itself set is the human's own words and is kept. */
-function unsign<R extends MemoryRecord>(rec: R, rationaleEdited: boolean): R {
+ *  A rationale the edit itself set is the human's own words and is kept. Also the
+ *  transform behind `hunch review --unconfirm` (nothing edited, so `rationaleEdited` false). */
+export function unsign<R extends MemoryRecord>(rec: R, rationaleEdited: boolean): R {
   if (!rec.provenance.source.split("+").includes("human_confirmed")) return rec;
   const out: R = {
     ...rec,

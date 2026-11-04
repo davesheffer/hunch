@@ -2601,6 +2601,14 @@
       }
     ]
   },
+  "review --json": {
+    "tests": [
+      {
+        "file": "test/capture-authority.test.ts",
+        "title": "hunch review --unconfirm takes a countersign back, and --json reports confirm and unconfirm as one move each"
+      }
+    ]
+  },
   "review --min-grounded": {
     "tests": [
       {
@@ -2646,6 +2654,14 @@
       {
         "file": "test/capture-authority.test.ts",
         "title": "hunch review --confirm: a human countersigns a correction (granting severity) and a decision (keeping status)"
+      }
+    ]
+  },
+  "review --unconfirm": {
+    "tests": [
+      {
+        "file": "test/capture-authority.test.ts",
+        "title": "hunch review --unconfirm takes a countersign back, and --json reports confirm and unconfirm as one move each"
       }
     ]
   },

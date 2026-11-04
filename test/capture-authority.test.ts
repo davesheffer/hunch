@@ -201,3 +201,62 @@ test("hunch review --confirm: a human countersigns a correction (granting severi
     assert.notEqual(bad.status, 0, "--severity applies only to a constraint");
   } finally { s.cleanup(); }
 });
+
+test("hunch review --unconfirm takes a countersign back, and --json reports confirm and unconfirm as one move each", async () => {
+  const s = await setup();
+  const run = (...args: string[]) => spawnSync(process.execPath, [tsx, cli, ...args], {
+    cwd: s.root, encoding: "utf8", env: { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" },
+  });
+  const move = (r: ReturnType<typeof run>) => {
+    assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+    return JSON.parse(r.stdout.trim().split(/\r?\n/).pop()!) as { changed: boolean; id: string; kind: string; home: string; before: Constraint & Decision; after: Constraint & Decision; flush: string | null };
+  };
+  try {
+    await s.call("hunch_record_correction", { rule: "never call the metered API from here", scope_hint_file: "src/pay.ts", severity: "warning", capture_token: await s.token() });
+    await s.call("hunch_record_decision", {
+      decision: { title: "move to a queue", topic: "jobs.queue", decision: "adopt a queue", status: "accepted" },
+      capture_token: await s.token(),
+    });
+    const [c0] = readAll<Constraint>(s.root, "constraints");
+    const [d0] = readAll<Decision>(s.root, "decisions");
+
+    const never = run("review", "--unconfirm", c0!.id);
+    assert.notEqual(never.status, 0, "an unsigned record has no signature to take back");
+    assert.match(never.stderr, /not confirmed/);
+
+    const signed = move(run("review", "--confirm", c0!.id, "--severity", "blocking", "--json"));
+    assert.deepEqual([signed.changed, signed.id, signed.kind, signed.home], [true, c0!.id, "constraint", "public"]);
+    assert.equal(signed.before.severity, "warning");
+    assert.equal(signed.after.severity, "blocking");
+    assert.equal(signed.after.provenance.source, "human_confirmed");
+
+    const grantBlock = run("review", "--unconfirm", c0!.id, "--severity", "blocking");
+    assert.notEqual(grantBlock.status, 0, "unconfirm never grants blocking");
+    assert.equal(readAll<Constraint>(s.root, "constraints")[0]!.provenance.source, "human_confirmed", "a refused unconfirm writes nothing");
+
+    const back = move(run("review", "--unconfirm", c0!.id, "--severity", "warning", "--json"));
+    const [c2] = readAll<Constraint>(s.root, "constraints");
+    assert.equal(back.after.severity, "warning");
+    assert.equal(c2!.provenance.source, "agent_recorded");
+    assert.equal(c2!.severity, "warning");
+    assert.equal(isStrictBlocker(c2!, false), false);
+    assert.equal(c2!.statement, c0!.statement, "content is untouched");
+    assert.equal(c2!.rationale, c0!.rationale, "the vouched rationale goes back to testimony");
+
+    // Without --severity, unconfirm still never leaves a rule blocking: the edit hook denies on severity alone.
+    move(run("review", "--confirm", c0!.id, "--severity", "blocking", "--json"));
+    const lowered = move(run("review", "--unconfirm", c0!.id, "--json"));
+    assert.deepEqual([lowered.after.severity, lowered.after.provenance.source], ["warning", "agent_recorded"]);
+
+    move(run("review", "--confirm", d0!.id, "--json"));
+    const dBack = move(run("review", "--unconfirm", d0!.id, "--json"));
+    assert.equal(dBack.kind, "decision");
+    const [d2] = readAll<Decision>(s.root, "decisions");
+    assert.equal(d2!.provenance.source, "agent_recorded");
+    assert.equal(d2!.provenance.confidence, 0.75);
+    assert.equal(d2!.status, "accepted", "unconfirming is not retiring: status is unchanged");
+
+    const stray = run("review", "--accept", d0!.id, "--json");
+    assert.notEqual(stray.status, 0, "--json belongs to confirm and unconfirm only");
+  } finally { s.cleanup(); }
+});

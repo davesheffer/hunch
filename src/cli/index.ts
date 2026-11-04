@@ -160,7 +160,7 @@ import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, unconfirmedRoadmapMarker, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, isInForce, liveForTopic } from "../core/topics.js";
-import { kindOfId, editRecord, linkRecord, removeRecord, restoreRecord, type EditResult, type MemoryKind, type MemoryRecord } from "../core/memoryEdit.js";
+import { kindOfId, editRecord, linkRecord, removeRecord, restoreRecord, unsign, type EditResult, type MemoryKind, type MemoryRecord } from "../core/memoryEdit.js";
 import { NEW_KINDS, isNewKind, newRecord } from "../core/memoryNew.js";
 import { ADR_DIR_CANDIDATES, ADR_FILE_RE, mapAdrCorpus } from "../extractors/adrImport.js";
 import { confirmCommand, countersignConstraint, countersignDecision } from "../core/countersign.js";
@@ -6295,7 +6295,9 @@ program
   .option("--accept <id>", "promote a decision to accepted/human-confirmed (confirms its tripwires)")
   .option("--reject <id>", "reject a draft decision with a durable lifecycle tombstone")
   .option("--confirm <id>", "countersign an agent-recorded decision (dec_…) or correction (con_…) as human-confirmed WITHOUT changing its status or content — the human act a capture token alone cannot stand in for")
-  .option("--severity <s>", "with --confirm on a correction: the severity you grant (advisory | warning | blocking); default keeps its current severity")
+  .option("--unconfirm <id>", "take your countersign back: the decision (dec_…) or correction (con_…) is agent testimony again; status and content are untouched")
+  .option("--severity <s>", "with --confirm on a correction: the severity you grant (advisory | warning | blocking); with --unconfirm: the severity it goes back to (advisory | warning); default keeps its current severity, except blocking becomes warning")
+  .option("--json", "with --confirm or --unconfirm: print { changed, id, kind, home, before, after, flush } as one JSON object")
   .option("--approve-import <id>", "approve one exact imported ADR as human-confirmed authority")
   .option("--decline-import <id>", "record that one exact imported ADR was reviewed and must stay advisory")
   .option("--expected-source-hash <hash>", "exact sha256 source hash printed with the imported-ADR question")
@@ -6305,13 +6307,14 @@ program
   .option("--reject-duplicates", "batch-reject drafts that near-duplicate an accepted record (deterministic term+file similarity — hygiene, not judgment)")
   .option("--min-grounded <n>", "grounded-ness threshold for the ready group / --accept-verified", String(READY_MIN_GROUNDED))
   .option("--private", "include local private/shared-overlay drafts; terminal output may contain private memory")
-  .action((opts: { accept?: string; reject?: string; confirm?: string; severity?: string; approveImport?: string; declineImport?: string; expectedSourceHash?: string; expectedReviewHash?: string; reviewedBy?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string; private?: boolean }) => {
+  .action((opts: { accept?: string; reject?: string; confirm?: string; unconfirm?: string; severity?: string; json?: boolean; approveImport?: string; declineImport?: string; expectedSourceHash?: string; expectedReviewHash?: string; reviewedBy?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string; private?: boolean }) => {
     const { store, root } = storeFor();
     const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
-    const actionCount = [opts.accept, opts.reject, opts.confirm, opts.approveImport, opts.declineImport, opts.acceptVerified, opts.rejectDuplicates].filter(Boolean).length;
+    const actionCount = [opts.accept, opts.reject, opts.confirm, opts.unconfirm, opts.approveImport, opts.declineImport, opts.acceptVerified, opts.rejectDuplicates].filter(Boolean).length;
     if (actionCount > 1) { store.close(); return fail("choose exactly one review action at a time"); }
-    if (opts.severity && !opts.confirm) { store.close(); return fail("--severity applies only with --confirm on a correction"); }
+    if (opts.severity && !opts.confirm && !opts.unconfirm) { store.close(); return fail("--severity applies only with --confirm or --unconfirm on a correction"); }
+    if (opts.json && !opts.confirm && !opts.unconfirm) { store.close(); return fail("--json applies only with --confirm or --unconfirm"); }
     const decisions = () => opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
     let publicGroundingChanged = false;
     const touchedHomes = new Set<MemoryHome>();
@@ -6345,40 +6348,62 @@ program
         store.close();
         return fail(error instanceof Error ? error.message : String(error));
       }
-    } else if (opts.confirm) {
+    } else if (opts.confirm || opts.unconfirm) {
       // Human countersign of agent testimony. A capture token proves only that the
       // interview tool was called (inside the agent's channel), so agent-written records
       // land as agent_recorded; this is the out-of-channel human act that signs them.
       // Content and status are untouched: confirming a proposed decision is not shipping it.
-      const id = opts.confirm;
-      const SEV = ["advisory", "warning", "blocking"] as const;
-      if (opts.severity && !(SEV as readonly string[]).includes(opts.severity)) { store.close(); return fail(`--severity must be one of: ${SEV.join(", ")}`); }
+      // --unconfirm takes the signature back (the UI's Undo). It only lowers authority —
+      // never grants blocking — and `hunch edit` already drops a signature, so it opens
+      // no new channel. Each is one move with its own commit, so `--json` can report it.
+      const signing = !!opts.confirm;
+      const id = (opts.confirm ?? opts.unconfirm)!;
+      const SEV: readonly Constraint["severity"][] = signing ? ["advisory", "warning", "blocking"] : ["advisory", "warning"];
+      if (opts.severity && !(SEV as readonly string[]).includes(opts.severity)) {
+        store.close();
+        return fail(signing ? `--severity must be one of: ${SEV.join(", ")}` : `--unconfirm takes --severity ${SEV.join(" or ")}: an unconfirmed rule cannot block edits`);
+      }
+      const severity = opts.severity as Constraint["severity"] | undefined;
       const now = new Date().toISOString();
       const d = opts.private ? store.getRec("decisions", id) : store.json.get("decisions", id);
       const c = d ? undefined : opts.private ? store.getRec("constraints", id) : store.json.get("constraints", id);
       if (!d && !c) { store.close(); return fail(`no decision or constraint ${id} found${opts.private ? "" : " in the public home (add --private for overlay records)"}`); }
+      if (!signing && !isHumanConfirmed((d ?? c)!.provenance.source)) { store.close(); return fail(`${id} is not confirmed; there is no signature to take back`); }
       let home: MemoryHome;
+      let after: Decision | Constraint;
       if (d) {
-        if (opts.severity) { store.close(); return fail("--severity applies only when confirming a correction (con_…), not a decision"); }
+        if (severity) { store.close(); return fail(`--severity applies only when ${signing ? "confirming" : "unconfirming"} a correction (con_…), not a decision`); }
         if (isImportedAdrDecision(d)) { store.close(); return fail(`imported ADR ${d.id} requires the hash-bound --approve-import flow shown by hunch review`); }
         home = opts.private ? decisionMemoryHome(store, d.id) : "public";
-        putDecisionInHome(store, countersignDecision(d, now), home);
-        console.log(`✓ confirmed decision ${id} as human_confirmed (status ${d.status} unchanged)`);
+        after = signing ? countersignDecision(d, now) : unsign(d, false);
+        putDecisionInHome(store, after, home);
+        if (!opts.json) {
+          console.log(signing
+            ? `✓ confirmed decision ${id} as human_confirmed (status ${d.status} unchanged)`
+            : `✓ unconfirmed decision ${id}: agent testimony again (status ${d.status} unchanged)`);
+          const armed = d.rejected_tripwires.filter((tw) => isHumanConfirmed(tw.provenance.source)).length;
+          if (!signing && armed) console.log(`  ⚠ its ${armed} confirmed tripwire(s) still veto: unconfirming the decision doesn't disarm them.`);
+        }
       } else {
         home = opts.private && store.getPrivateRec("constraints", id) ? "private" : "public";
-        const next = countersignConstraint(c!, now, opts.severity as (typeof SEV)[number] | undefined);
+        // The edit hook denies on severity alone, so an unconfirmed rule never stays blocking.
+        const next = signing ? countersignConstraint(c!, now, severity)
+          : { ...unsign(c!, false), severity: severity ?? (c!.severity === "blocking" ? "warning" : c!.severity) };
+        after = next;
         if (home === "private") store.putPrivate("constraints", next);
         else store.json.put("constraints", next);
         const repoWide = next.scope.length === 1 && next.scope[0] === "**";
-        console.log(`✓ confirmed ${next.severity} constraint ${id} as human_confirmed (scope: ${next.scope.join(", ")})`);
-        if (next.severity === "blocking" && repoWide) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
+        if (!opts.json && signing) {
+          console.log(`✓ confirmed ${next.severity} constraint ${id} as human_confirmed (scope: ${next.scope.join(", ")})`);
+          if (next.severity === "blocking" && repoWide) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
+        } else if (!opts.json) {
+          console.log(`✓ unconfirmed ${next.severity} constraint ${id}: agent testimony again (scope: ${next.scope.join(", ")})`);
+        }
       }
-      touchedHomes.add(home);
       store.reindex();
-      if (home === "public") {
-        publicGroundingChanged = true;
-        if (!publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
-      }
+      if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+      const flush = pumpMemoryHome(store, root, home, `hunch: ${signing ? "confirm" : "unconfirm"} ${id}`);
+      if (opts.json) console.log(JSON.stringify({ changed: true, id, kind: d ? "decision" : "constraint", home, before: (d ?? c)!, after, flush }));
     } else if (opts.accept) {
       const d = opts.private ? store.getRec("decisions", opts.accept) : store.json.get("decisions", opts.accept);
       if (!d) { store.close(); return fail(`decision ${opts.accept} not found`); }

@@ -51,6 +51,10 @@ export interface MemoryActions {
   textLocked: string | null;
   /** Confirmed by a person: changing its words removes that confirmation. */
   signed: boolean;
+  /** A live, unconfirmed decision or rule a person can confirm as theirs (`hunch review --confirm`). */
+  confirmable: boolean;
+  /** A rule's severity, for the confirm choice; null for every other kind. */
+  severity: Constraint["severity"] | null;
   takesFeature: boolean;
   takesComponents: boolean;
   removable: boolean;
@@ -180,7 +184,7 @@ const field = (name: EditField["name"], label: string, value: string | null | un
 const humanSigned = (source: string): boolean => source.split("+").includes("human_confirmed");
 
 function actions(over: Partial<MemoryActions> & Pick<MemoryActions, "fields" | "removable" | "restorable">): MemoryActions {
-  return { textLocked: null, signed: false, takesFeature: false, takesComponents: false, ...over };
+  return { textLocked: null, signed: false, confirmable: false, severity: null, takesFeature: false, takesComponents: false, ...over };
 }
 
 export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null {
@@ -201,6 +205,9 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
         fields: [field("title", "Title", decision.title, false), field("text", "Decision", decision.decision), field("context", "Why", decision.context)],
         textLocked: isImportedAdrDecision(decision) ? "Imported from an ADR file. Change the ADR, then run hunch import adrs." : null,
         signed: humanSigned(decision.provenance.source), takesFeature: true, takesComponents: true,
+        // An imported ADR is signed through its own hash-bound question, never here.
+        confirmable: !humanSigned(decision.provenance.source) && !isImportedAdrDecision(decision)
+          && (decision.status === "accepted" || decision.status === "proposed") && !decision.valid_to,
         removable: (decision.status === "accepted" || decision.status === "proposed") && !decision.valid_to,
         restorable: (decision.status === "rejected" || decision.status === "superseded") && !decision.superseded_by,
       }),
@@ -219,6 +226,8 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
       actions: actions({
         fields: [field("text", "Rule", constraint.statement), field("rationale", "Why", constraint.rationale)],
         signed: humanSigned(constraint.provenance.source),
+        confirmable: !humanSigned(constraint.provenance.source) && constraint.status !== "retired" && !constraint.valid_to,
+        severity: constraint.severity,
         removable: constraint.status !== "retired" && !constraint.valid_to,
         restorable: constraint.status === "retired",
       }),

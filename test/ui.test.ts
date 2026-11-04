@@ -94,12 +94,19 @@ test("memory detail: actions offer only the moves the CLI takes for that record"
   assert.deepEqual(actions("bug_1").fields.map((f) => f.name), ["title", "text"]);
   assert.deepEqual([actions("bug_1").removable, actions("bug_1").restorable], [false, false], "a bug can't be removed");
   assert.deepEqual([actions("fnd_1").removable, actions("fnd_1").restorable], [false, true]);
+  // Confirm as mine: live and not yet signed, decisions and rules only.
+  assert.deepEqual([live.confirmable, actions("dec_loose").confirmable, actions("dec_old").confirmable], [false, true, false]);
+  assert.deepEqual([rule.signed, rule.confirmable, rule.severity, live.severity], [true, false, "blocking", null]);
+  const draftRule = memoryDetail({ ...source(), constraints: [mkConstraint({ id: "con_draft", provenance: { source: "agent_recorded", confidence: 0.75, evidence: [] } })] }, "con_draft")!.actions;
+  assert.deepEqual([draftRule.confirmable, draftRule.severity], [true, "warning"]);
+  assert.deepEqual([actions("con_gone").confirmable, actions("bug_1").confirmable, actions("fnd_1").confirmable], [false, false, false]);
 
   const src = source();
   const imported = DecisionSchema.parse({ id: "dec_adr", title: "Use Postgres", status: "accepted", provenance: { source: "imported:madr", confidence: 0.8, evidence: [] }, date: "2026-01-01" });
   const adr = memoryDetail({ ...src, decisions: [...src.decisions, imported] }, "dec_adr")!.actions;
   assert.match(adr.textLocked ?? "", /ADR/, "imported ADR words are changed in the ADR file");
   assert.equal(adr.removable, true);
+  assert.equal(adr.confirmable, false, "an imported ADR is signed through its own hash-bound question");
 });
 
 test("page script parses", () => {
@@ -202,7 +209,14 @@ test("actionArgs: allowlists each action's fields into --flag=value argv", () =>
   assert.deepEqual(actionArgs("link", "dec_1", { clearFeature: true, addComponents: ["cmp_a"] }), { ok: true, args: ["link", "dec_1", "--add-component=cmp_a", "--clear-feature", "--json"] });
   assert.deepEqual(actionArgs("remove", "fnd_1", { reason: "dup" }), { ok: true, args: ["remove", "fnd_1", "--reason=dup", "--json"] });
   assert.deepEqual(actionArgs("restore", "dec_1", {}), { ok: true, args: ["restore", "dec_1", "--json"] });
+  // Signing is `hunch review`; with an overlay it must look there too.
+  assert.deepEqual(actionArgs("confirm", "con_1", { severity: "blocking" }), { ok: true, args: ["review", "--confirm=con_1", "--severity=blocking", "--json"] });
+  assert.deepEqual(actionArgs("unconfirm", "dec_1", {}, { private: true }), { ok: true, args: ["review", "--unconfirm=dec_1", "--private", "--json"] });
+  assert.deepEqual(actionArgs("edit", "dec_1", { title: "t" }, { private: true }), { ok: true, args: ["edit", "dec_1", "--title=t", "--json"] }, "memory moves find the overlay themselves");
   const refused: Array<[Parameters<typeof actionArgs>, RegExp]> = [
+    [["confirm", "dec_1", { reason: "x" }], /Unknown field for confirm: reason/],
+    [["confirm", "dec_1", { private: true }], /Unknown field/],
+    [["confirm", "--accept-verified", {}], /not a memory id/],
     [["edit", "dec_1", { title: "x", json: true }], /Unknown field for edit: json/],
     [["edit", "dec_1", { reason: "x" }], /Unknown field/],
     [["edit", "dec_1", { title: 5 }], /must be text/],
@@ -231,7 +245,19 @@ test("undoFor: each move's inverse, built from before/after", () => {
   assert.deepEqual(undoFor("edit", move("decision", { title: "A", decision: "x", context: "c" }, { title: "B", decision: "y", context: "c" })), { action: "edit", body: { title: "A", text: "x" } });
   assert.deepEqual(undoFor("edit", move("constraint", { statement: "s", rationale: "r" }, { statement: "t", rationale: "r" }, "con_1")), { action: "edit", body: { text: "s" } });
   const signed = undoFor("edit", move("decision", { title: "A", provenance: { source: "human_confirmed" } }, { title: "B", provenance: { source: "agent_recorded" } }));
-  assert.match(signed!.note!, /not your confirmation.*hunch review --confirm dec_1/);
+  assert.match(signed!.note!, /not your confirmation.*Confirm as mine/);
+  const testimony = { source: "agent_recorded", confidence: 0.75 };
+  assert.deepEqual(undoFor("confirm", move("decision", { provenance: testimony }, { provenance: { source: "human_confirmed", confidence: 0.95 } })), { action: "unconfirm", body: {} });
+  assert.deepEqual(undoFor("confirm", move("constraint", { severity: "warning", provenance: testimony }, { severity: "blocking" }, "con_1")), { action: "unconfirm", body: { severity: "warning" } });
+  assert.deepEqual(undoFor("unconfirm", move("constraint", { severity: "blocking" }, { severity: "warning" }, "con_1")), { action: "confirm", body: { severity: "blocking" } });
+  assert.deepEqual(undoFor("unconfirm", move("decision", {}, {})), { action: "confirm", body: {} });
+  // --unconfirm never grants blocking or raises trust, so those can't come back; Undo says so.
+  const lowered = undoFor("confirm", move("constraint", { severity: "blocking", provenance: testimony }, { severity: "warning" }, "con_1"))!;
+  assert.deepEqual([lowered.action, lowered.body], ["unconfirm", {}]);
+  assert.match(lowered.note!, /sets it to warn/);
+  const kept = undoFor("confirm", move("constraint", { severity: "blocking", provenance: testimony }, { severity: "blocking" }, "con_1"))!;
+  assert.deepEqual([kept.body, /sets it to warn/.test(kept.note!)], [{}, true], "unconfirm lowers a blocking rule, so Undo says so even when confirm kept it");
+  assert.match(undoFor("confirm", move("constraint", { severity: "blocking", provenance: { source: "extracted", confidence: 0.9 } }, { severity: "blocking" }, "con_1"))!.note!, /75%, not 90%/);
   assert.deepEqual(undoFor("link", move("decision",
     { related_files: ["a", "b"], related_components: ["cmp_x"], topic: null },
     { related_files: ["a", "c"], related_components: [], topic: "auth" })),
@@ -425,7 +451,7 @@ test("ui server new memory: guarded like every write; the CLI adds it unconfirme
     assert.match(id, /^con_/);
     const detail = JSON.parse((await get(`/api/memory/${id}`)).body);
     assert.equal(detail.active, true);
-    assert.equal(detail.actions.signed, false, "a page write never mints a person's confirmation");
+    assert.equal(detail.actions.signed, false, "adding never mints a person's confirmation; only Confirm as mine does");
     assert.equal(detail.source, "agent_recorded");
     assert.equal(await total(), baseline + 1, "the list reloads with it");
 
@@ -440,6 +466,39 @@ test("ui server new memory: guarded like every write; the CLI adds it unconfirme
     const undo = await post(`/api/memory/${id}/${created.body.undo.action}`, created.body.undo.body);
     assert.equal(undo.status, 200, JSON.stringify(undo.body));
     assert.equal(JSON.parse((await get(`/api/memory/${id}`)).body).active, false);
+  });
+});
+
+test("ui server confirm: Confirm as mine signs a decision or a rule (with the severity chosen) through hunch review, and Undo takes it back", async () => {
+  await withWriteServer(async (post, get, origin) => {
+    const detail = async (id: string) => JSON.parse((await get(`/api/memory/${id}`)).body);
+    const never = await post("/api/memory/dec_loose/unconfirm", {}, { origin });
+    assert.equal(never.status, 422);
+    assert.match(never.body.error, /not confirmed/);
+
+    const signed = await post("/api/memory/dec_loose/confirm", {}, { origin });
+    assert.equal(signed.status, 200, JSON.stringify(signed.body));
+    assert.equal(signed.body.flush, "committed");
+    const d = await detail("dec_loose");
+    assert.deepEqual([d.actions.signed, d.actions.confirmable, d.source], [true, false, "extracted+human_confirmed"]);
+    assert.equal(signed.body.undo.action, "unconfirm");
+    assert.match(signed.body.undo.note, /75%, not 90%/, "an extracted record can't get its old trust back");
+    const undo = await post(`/api/memory/dec_loose/${signed.body.undo.action}`, signed.body.undo.body);
+    assert.equal(undo.status, 200, JSON.stringify(undo.body));
+    assert.deepEqual([(await detail("dec_loose")).actions.signed, (await detail("dec_loose")).actions.confirmable], [false, true]);
+
+    const created = await post("/api/memory", { kind: "rule", text: "Never charge twice", rationale: "Refunds are manual", files: ["src/billing/**"], severity: "warning" });
+    const id: string = created.body.id;
+    assert.equal((await post(`/api/memory/${id}/confirm`, { severity: "forever" })).status, 422);
+    const block = await post(`/api/memory/${id}/confirm`, { severity: "blocking" }, { origin });
+    assert.equal(block.status, 200, JSON.stringify(block.body));
+    assert.deepEqual(block.body.undo, { action: "unconfirm", body: { severity: "warning" } });
+    const blocking = await detail(id);
+    assert.deepEqual([blocking.actions.signed, blocking.actions.severity, blocking.delivery], [true, "blocking", "block"]);
+    const back = await post(`/api/memory/${id}/${block.body.undo.action}`, block.body.undo.body);
+    assert.equal(back.status, 200, JSON.stringify(back.body));
+    const warned = await detail(id);
+    assert.deepEqual([warned.actions.signed, warned.actions.severity, warned.source], [false, "warning", "agent_recorded"]);
   });
 });
 

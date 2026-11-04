@@ -9,7 +9,8 @@
  *   - the page shell is static and holds no data, under the same strict CSP as /operator.
  *
  * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections.
- * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb, and POST
+ * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb,
+ * /api/memory/:id/(confirm|unconfirm) runs `hunch review --confirm|--unconfirm`, and POST
  * /api/memory runs `hunch new` (the CLI owns validation, git and the store), one at a time,
  * and answers with the move plus its Undo.
  * A write also needs a JSON body and, when the browser sends an Origin, this server's own.
@@ -145,7 +146,7 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     if (!opts.cli) return send(res, 503, { error: "Editing needs hunch ui started from the command line." });
     const body = await readJson(req);
     if (!body.ok) return send(res, body.status, { error: body.error });
-    const parsed = id === null ? newArgs(body.value) : actionArgs(move as UiAction, id, body.value);
+    const parsed = id === null ? newArgs(body.value) : actionArgs(move as UiAction, id, body.value, { private: store.hasPrivate });
     if (!parsed.ok) return send(res, 400, { error: parsed.error });
     const cli = opts.cli;
     const job = writing.then(() => boundedSpawn(cli.file, [...cli.args, ...parsed.args], {

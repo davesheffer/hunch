@@ -1,14 +1,15 @@
 /**
  * `hunch ui` writes: a page request becomes one CLI memory move (`hunch edit | link |
- * remove | restore <id> --json`), and every result carries the inverse move as its Undo.
+ * remove | restore <id> --json`, or `hunch review --confirm | --unconfirm <id> --json`),
+ * and every result carries the inverse move as its Undo.
  *
  * Pure: the request body is allowlisted field by field into argv (`--flag=value`, so a
  * value starting with "-" is never read as an option; no shell), and the undo is built
  * from the CLI's own before/after records. The CLI owns validation, git and the store.
  */
-import { kindOfId, type MemoryKind as RecordKind } from "../core/memoryEdit.js";
+import { TESTIMONY_CONFIDENCE, kindOfId, type MemoryKind as RecordKind } from "../core/memoryEdit.js";
 
-export const UI_ACTIONS = ["edit", "link", "remove", "restore"] as const;
+export const UI_ACTIONS = ["edit", "link", "remove", "restore", "confirm", "unconfirm"] as const;
 export type UiAction = (typeof UI_ACTIONS)[number];
 
 export const isUiAction = (v: string): v is UiAction => (UI_ACTIONS as readonly string[]).includes(v);
@@ -27,20 +28,27 @@ const STRING_FIELDS: Record<UiAction, readonly string[]> = {
   link: ["feature"],
   remove: ["reason"],
   restore: ["status"],
+  confirm: ["severity"],
+  unconfirm: ["severity"],
 };
 const LIST_FIELDS: Record<UiAction, readonly (readonly [string, string])[]> = {
   edit: [],
   link: [["addFiles", "--add-file"], ["removeFiles", "--remove-file"], ["addComponents", "--add-component"], ["removeComponents", "--remove-component"]],
   remove: [],
   restore: [],
+  confirm: [],
+  unconfirm: [],
 };
 const FLAG: Record<string, string> = {
   title: "--title", text: "--text", context: "--context", rationale: "--rationale",
-  feature: "--feature", reason: "--reason", status: "--status",
+  feature: "--feature", reason: "--reason", status: "--status", severity: "--severity",
 };
+/** Signing is a `hunch review` act, not a memory move of its own. */
+const isReview = (action: UiAction): boolean => action === "confirm" || action === "unconfirm";
 
-/** The CLI argv (after the entry script) for one UI action, or why the request is malformed. */
-export function actionArgs(action: UiAction, id: string, body: unknown): Args {
+/** The CLI argv (after the entry script) for one UI action, or why the request is malformed.
+ *  `private`: the store has an overlay, so `hunch review` must look there too (`--private`). */
+export function actionArgs(action: UiAction, id: string, body: unknown, ctx: { private?: boolean } = {}): Args {
   if (!ID.test(id)) return { ok: false, error: `"${id}" is not a memory id.` };
   if (body === null || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Send a JSON object." };
   const b = body as Body;
@@ -48,7 +56,7 @@ export function actionArgs(action: UiAction, id: string, body: unknown): Args {
   const unknown = Object.keys(b).filter((k) => !known.has(k));
   if (unknown.length) return { ok: false, error: `Unknown field for ${action}: ${unknown.join(", ")}.` };
 
-  const args: string[] = [action, id];
+  const args: string[] = isReview(action) ? ["review", `--${action}=${id}`] : [action, id];
   for (const k of STRING_FIELDS[action]) {
     const v = b[k];
     if (v === undefined) continue;
@@ -67,6 +75,7 @@ export function actionArgs(action: UiAction, id: string, body: unknown): Args {
     if (b.clearFeature !== true) return { ok: false, error: "clearFeature must be true when given." };
     args.push("--clear-feature");
   }
+  if (isReview(action) && ctx.private) args.push("--private");
   args.push("--json");
   if (args.reduce((n, a) => n + a.length + 1, 0) > MAX_ARGV) return { ok: false, error: `That change is too large to save at once (over ${MAX_ARGV} characters). Save it in parts.` };
   return { ok: true, args };
@@ -146,6 +155,22 @@ export function undoFor(action: UiAction | "new", result: MoveResult): Undo | nu
   if (action === "new") return { action: "remove", body: {} };
   const { kind, after } = result;
   const before = result.before ?? {};
+  if (action === "confirm" || action === "unconfirm") {
+    const body: Body = {};
+    const notes: string[] = [];
+    if (kind === "constraint" && typeof before.severity === "string") {
+      // --unconfirm never leaves a rule blocking, so it can't put that back.
+      if (action === "confirm" && before.severity === "blocking") notes.push("Undo sets it to warn before edits: only a confirmed rule can block edits.");
+      else if (before.severity !== after.severity) body.severity = before.severity;
+    }
+    // --unconfirm caps trust at testimony and never raises it, so higher trust can't come back.
+    const was = (before.provenance as { confidence?: unknown } | undefined)?.confidence;
+    if (action === "confirm" && typeof was === "number" && was > TESTIMONY_CONFIDENCE) {
+      notes.push(`Undo leaves it as unconfirmed agent testimony, trusted less than before: ${Math.round(TESTIMONY_CONFIDENCE * 100)}%, not ${Math.round(was * 100)}%.`);
+    }
+    const undo: Undo = { action: action === "confirm" ? "unconfirm" : "confirm", body };
+    return notes.length ? { ...undo, note: notes.join(" ") } : undo;
+  }
   if (action === "edit") {
     const body: Body = {};
     const fields: Array<[string, string]> = [["title", "title"], ["text", TEXT_FIELD[kind]], ["context", "context"], ["rationale", "rationale"]];
@@ -155,7 +180,7 @@ export function undoFor(action: UiAction | "new", result: MoveResult): Undo | nu
     }
     if (!Object.keys(body).length) return null;
     return signed(before) && !signed(after)
-      ? { action, body, note: `Undo restores the words, not your confirmation. To confirm it again, run hunch review --confirm ${result.id}.` }
+      ? { action, body, note: "Undo restores the words, not your confirmation. To confirm it again, use Confirm as mine." }
       : { action, body };
   }
   if (action === "link") {
