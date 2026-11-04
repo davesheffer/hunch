@@ -620,3 +620,40 @@ test("--for <commit>: main's memory from before the fork is not the branch's fir
     assert.deepEqual(shape(memoryFor(root, "feat/x")), []);
   } finally { cleanup(); }
 });
+
+test("--for <branch>: a branch fast-forwarded into unpushed local main keeps its memory", () => {
+  const { root, cleanup } = repo();
+  let cl: ReturnType<typeof clone> | null = null;
+  try {
+    cl = clone(root);
+    const h = join(cl.dir, ".hunch");
+    git(cl.dir, "switch", "-q", "-c", "feat/x");
+    memory(h, "decisions", "dec_4a");
+    code(cl.dir, "feat: x1");
+    git(cl.dir, "switch", "-q", "main");
+    git(cl.dir, "merge", "-q", "--ff-only", "feat/x");
+
+    const r = memoryFor(cl.dir, "feat/x");
+    assert.deepEqual(shape(r), [["feat: x1", null, ["dec_4a"]]], "--for x1 and --for main agree");
+    assert.ok(r.notes.some((n) => /fast-forwarded/.test(n)), r.notes.join("\n"));
+    assert.ok(!r.notes.some((n) => /not found/.test(n)), r.notes.join("\n"));
+  } finally { cl?.cleanup(); cleanup(); }
+});
+
+test("--for <branch>: a landed branch that only synced main does not blame another branch", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "switch", "-q", "-c", "feat/x");
+    git(root, "switch", "-q", "main");
+    memory(hunch, "decisions", "dec_4b");
+    code(root, "feat: m2");
+    git(root, "switch", "-q", "feat/x");
+    git(root, "merge", "-q", "--no-ff", "-m", "sync main", "main");
+    git(root, "switch", "-q", "main");
+    git(root, "merge", "-q", "--no-ff", "-m", "land x", "feat/x");
+
+    const r = memoryFor(root, "feat/x");
+    assert.deepEqual(shape(r), []);
+    assert.ok(r.notes.some((n) => /synced/.test(n)), r.notes.join("\n"));
+  } finally { cleanup(); }
+});

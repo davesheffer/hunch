@@ -228,8 +228,14 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
   let landed: (g: FeatureGroup) => string | null = () => null;
   let isLanded = v.status === "merged";
   const heads = def ? defaultHeads(root, def) : [];
+  const contains = (h: string): boolean => isAncestor(root, tip, h) === true;
   // The verdict reads origin's head; a branch merged into local main only is landed too.
-  const localHead = def && v.status !== "merged" ? heads.find((h) => h !== def.head && isAncestor(root, tip, h) === true) : undefined;
+  let localHead = def && v.status !== "merged" ? heads.find((h) => h !== def.head && contains(h)) : undefined;
+  if (def && localHead && firstParentLine(root, [localHead])?.includes(tip)) {
+    // Fast-forwarded: its commits are on local main's own line, with no merge to land them at.
+    notes.push(`${branch} was fast-forwarded into local ${def.name} (not pushed to ${def.ref} yet), so no merge commit lands it`);
+    localHead = undefined;
+  }
   if (def && ((v.status === "merged" && v.method === "ancestry") || localHead)) {
     const l = landingOn(root, localHead ?? def.head, tip);
     if (!l) {
@@ -241,7 +247,8 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
     landed = () => l.merge;
     isLanded = true;
   } else if (def) {
-    revs = [tip, ...heads.map((h) => `^${h}`)];
+    // A head that already holds the tip (a local fast-forward) would hide the whole branch.
+    revs = [tip, ...heads.filter((h) => !contains(h)).map((h) => `^${h}`)];
     if (landing.squash) { const squash = landing.squash; landed = () => squash; }
     else if (landing.rebase) { const copies = landing.rebase; landed = (g) => (g.commit ? copies.get(g.commit.sha) ?? null : null); }
   } else {
@@ -253,11 +260,12 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
   if (read.truncated) notes.push(`only the newest ${cap} commits of ${branch} were searched`);
   noteShallow(read, notes);
   const groups = withMergedSides(ctx, read.line, revs.slice(1));
-  // Only sync merges left on the line: the branch's own commits reached the default branch
-  // earlier, inside another branch (criss-cross merges).
+  // Only sync merges left on the line: the branch only synced the default branch, or its own
+  // commits reached it earlier inside another branch (criss-cross merges). Git cannot tell
+  // the two apart from here, so the note names both.
   const owns = owner(ctx, revs.slice(1), 0);
   if (isLanded && def && read.line.length && read.line.every((c) => !c.memoryOnly && c.parents.length >= 2 && !owns(c))) {
-    notes.push(`${branch}'s commits reached ${def.ref} earlier, through another branch's landing; ask --for ${def.name} to see where their memory landed`);
+    notes.push(`nothing on ${branch}'s line is its own: it only synced ${def.name}, or its commits reached ${def.ref} earlier through another branch's landing; ask --for ${def.name} to see where that memory landed`);
   }
   // A landed branch's commits, nested ones too, reached the default branch at its landing;
   // an unlanded branch's nested sides keep the merge that brought them onto it.
