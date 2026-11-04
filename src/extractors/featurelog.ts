@@ -90,31 +90,64 @@ function noteShallow(read: { boundary: string | null }, notes: string[]): void {
 const landedAt = (groups: FeatureGroup[], landed: (g: FeatureGroup) => string | null): FeatureGroup[] =>
   groups.map((g) => ({ ...g, landed: landed(g) }));
 
-/** Attribute `line`, then splice in the memory each merge commit on it brought from
- *  its side branch (`X^2` not reachable from `X^1`), landed at that merge. */
-function withMergedSides(root: string, line: LineCommit[], paths: Paths, notes: string[]): FeatureGroup[] {
-  const own = attributeLine(line);
+type Owns = (c: LineCommit) => boolean;
+
+/** Merges nested deeper than this (a branch merged into a branch merged into ...) are not expanded. */
+const MAX_NESTING = 4;
+
+/** Which merges own memory. A merge on the default branch's first-parent line (local or
+ *  origin's: a merge not yet pushed is still main's) landed a branch, and so did a merge
+ *  that brings in a side NOT on that line (a feature merged into a feature). A merge whose
+ *  every side is on it (main merged into a branch) is a sync merge: transparent. With no
+ *  default branch to tell them apart, every merge owns, and the notes say so. The line is
+ *  read once, on the first merge asked about. */
+function ownership(root: string, notes: string[]): Owns {
+  let line: Set<string> | null | undefined;
+  return (c) => {
+    if (c.parents.length < 2) return false;
+    if (line === undefined) {
+      line = defaultLines(root);
+      if (!line) notes.push("no default branch resolved (or its history could not be read): every merge is read as landing a branch, so memory a merge of main brought in may be attributed to it");
+    }
+    return !line || line.has(c.sha) || c.parents.slice(1).some((p) => !line!.has(p));
+  };
+}
+
+/** The default branch's first-parent line, origin's and the local branch's together. */
+function defaultLines(root: string): Set<string> | null {
+  const def = resolveDefaultBranch(root);
+  if (!def) return null;
+  const local = commitOf(root, `refs/heads/${def.name}`);
+  const fp = firstParentLine(root, [def.head, ...(local && local !== def.head ? [local] : [])]);
+  return fp && new Set(fp);
+}
+
+/** Attribute `line`, then splice in the memory each owning merge on it brought from its
+ *  side branch (`X^2` not reachable from `X^1`), landed at that merge; nested owning
+ *  merges on a side are expanded the same way and land with it. */
+function withMergedSides(root: string, line: LineCommit[], paths: Paths, notes: string[], owns: Owns, depth = 0): FeatureGroup[] {
+  const own = attributeLine(line, owns);
   const out: FeatureGroup[] = own.filter((g) => g.commit === null);
   for (const c of line) {
     const mine = own.find((g) => g.commit?.sha === c.sha);
     if (mine) out.push(mine);
-    if (c.memoryOnly || c.parents.length < 2) continue;
+    if (c.memoryOnly || c.parents.length < 2 || !owns(c)) continue;
+    if (depth >= MAX_NESTING) { notes.push(`${c.shortSha}: merges nested more than ${MAX_NESTING} deep were not expanded`); continue; }
     // An octopus merge has several sides; side k excludes the first parent and the sides before it.
     for (let k = 1; k < c.parents.length; k++) {
       const side = lineOf(root, [c.parents[k]!, `^${c.parents[0]!}`, ...c.parents.slice(1, k).map((p) => `^${p}`)], SIDE_LINE_CAP, paths);
       if (!side) { notes.push(`${c.shortSha}: the merged side could not be read`); continue; }
       if (side.truncated) notes.push(`${c.shortSha}: only the newest ${SIDE_LINE_CAP} commits of the merged side were searched`);
       noteShallow(side, notes);
-      // Main merged into a side branch is not a feature commit there: no merge owns on a side.
-      out.push(...landedAt(attributeLine(side.line, () => false), () => c.sha));
+      out.push(...landedAt(withMergedSides(root, side.line, paths, notes, owns, depth + 1), () => c.sha));
     }
   }
   return out;
 }
 
-/** The default branch's first-parent line, newest first, or null when git cannot list it. */
-function defaultLine(root: string, head: string): string[] | null {
-  const out = git(root, ["rev-list", "--first-parent", head]);
+/** The first-parent lines of `heads` (shas we resolved), newest first, or null when git cannot list them. */
+function firstParentLine(root: string, heads: string[]): string[] | null {
+  const out = git(root, ["rev-list", "--first-parent", ...heads]);
   return out === null ? null : out.split("\n").map((l) => l.trim()).filter((l) => SHA.test(l));
 }
 
@@ -122,7 +155,7 @@ function defaultLine(root: string, head: string): string[] | null {
  *  Containment is monotone along the line, so a binary search keeps it to ~log2(n)
  *  git calls. null when git fails on the way. */
 function landingMerge(root: string, defHead: string, tip: string): string | null {
-  const fp = defaultLine(root, defHead);
+  const fp = firstParentLine(root, [defHead]);
   if (!fp?.length) return null;
   let lo = 0, hi = fp.length - 1; // fp[lo] contains tip (the verdict said so)
   while (lo < hi) {
@@ -136,6 +169,7 @@ function landingMerge(root: string, defHead: string, tip: string): string | null
 
 function forBranch(root: string, query: string, branch: string, tip: string, limit: number, paths: Paths): MemoryFor {
   const notes: string[] = [];
+  const owns = ownership(root, notes);
   const result = (merged: MergedVerdict | null, groups: FeatureGroup[]): MemoryFor =>
     ({ query, kind: "branch", sha: tip, branch, merged, groups, notes });
   if (resolveDefaultBranch(root)?.name === branch) {
@@ -143,7 +177,7 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
     if (!read) throw new Error(`git could not read the history of ${branch}`);
     if (read.truncated) notes.push(`only the newest ${limit} commits of ${branch} were searched (--limit)`);
     noteShallow(read, notes);
-    return result(null, withMergedSides(root, read.line, paths, notes));
+    return result(null, withMergedSides(root, read.line, paths, notes, owns));
   }
 
   const landing = branchLanding(root, branch, tip);
@@ -176,8 +210,9 @@ function forBranch(root: string, query: string, branch: string, tip: string, lim
   if (!read) throw new Error(`git could not read the history of ${branch}`);
   if (read.truncated) notes.push(`only the newest ${cap} commits of ${branch} were searched`);
   noteShallow(read, notes);
-  // No merge owns memory on a feature branch's line (main merged in is not a feature commit).
-  return result(v, landedAt(attributeLine(read.line, () => false), landed));
+  // With no default branch the line is its own: a merge on it is where its side landed.
+  const groups = withMergedSides(root, read.line, paths, notes, owns);
+  return result(v, def ? landedAt(groups, landed) : groups);
 }
 
 function forCommit(root: string, query: string, sha: string, limit: number, paths: Paths): MemoryFor {
@@ -191,25 +226,19 @@ function forCommit(root: string, query: string, sha: string, limit: number, path
     return result([]);
   }
   noteShallow(read, notes);
-  // A merge owns memory only on the default branch's own first-parent line (it landed a
-  // branch there); anywhere else it is transparent, as in attributeLine.
-  const def = resolveDefaultBranch(root);
-  const defSet = new Set(def ? defaultLine(root, def.head) ?? [] : []);
-  const owns = (c: LineCommit): boolean => defSet.has(c.sha);
+  const owns = ownership(root, notes);
   const transparent = (c: LineCommit): boolean => c.parents.length >= 2 && !owns(c);
   if (transparent(head!)) {
-    notes.push(`${head!.shortSha} merges another line into this one; its memory belongs to the next code commit`);
+    notes.push(`${head!.shortSha} merges the default branch into this line (a sync merge); its memory belongs to the next code commit`);
     return result([]);
   }
   // The commit itself, and the memory below it back to the previous code commit.
   const end = rest.findIndex((c) => !c.memoryOnly && !transparent(c));
   if (end === -1 && read.truncated) notes.push(`no earlier code commit within ${limit} commits (--limit); older memory was not searched`);
   const segment = [head!, ...(end === -1 ? rest : rest.slice(0, end))];
-  // A merge on the default branch's first-parent line landed a branch: include what it
-  // brought. Any other merge (main merged into a feature branch) brought memory that
-  // belongs to the other line's commits, so it is not expanded.
-  const landsBranch = head!.parents.length >= 2 && owns(head!);
-  return result(landsBranch ? withMergedSides(root, segment, paths, notes) : attributeLine(segment, owns));
+  // An owning merge landed a branch: include what it brought. Transparent merges in the
+  // segment brought memory that belongs to the other line's commits, so they are not expanded.
+  return result(withMergedSides(root, segment, paths, notes, owns));
 }
 
 /** Resolve `query` (a local or `origin/` branch name first, as git does, then any

@@ -385,6 +385,76 @@ test("--for: main merged into a feature branch is transparent, by branch and by 
     assert.deepEqual(shape(memoryFor(root, c2)), [["feat: c2", null, ["dec_0b"]]]);
     const m = memoryFor(root, mergeSha);
     assert.deepEqual(m.groups, []);
-    assert.match(m.notes.join("\n"), /merges another line into this one/);
+    assert.match(m.notes.join("\n"), /sync merge/);
+  } finally { cleanup(); }
+});
+
+test("--for: a merge made on local main and not yet pushed owns its memory, by branch and by HEAD", () => {
+  const { root, cleanup } = repo();
+  let cl: ReturnType<typeof clone> | null = null;
+  try {
+    cl = clone(root);
+    const hunch = join(cl.dir, ".hunch");
+    git(cl.dir, "switch", "-q", "-c", "feat/b");
+    memory(hunch, "decisions", "dec_0b");
+    code(cl.dir, "feat: b1");
+    git(cl.dir, "switch", "-q", "main");
+    memory(hunch, "decisions", "dec_0c");
+    git(cl.dir, "merge", "-q", "--no-ff", "-m", "merge b", "feat/b");
+    const merge = git(cl.dir, "rev-parse", "HEAD");
+
+    const want: Array<[string, string | null, string[]]> = [["merge b", null, ["dec_0c"]], ["feat: b1", merge, ["dec_0b"]]];
+    assert.deepEqual(shape(memoryFor(cl.dir, "main")), want);
+    assert.deepEqual(shape(memoryFor(cl.dir, "HEAD")), want, "origin/main does not have the merge yet; local main does");
+  } finally { cl?.cleanup(); cleanup(); }
+});
+
+test("--for: a feature merged into a feature lands with it, its memory not lost", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "switch", "-q", "-c", "feat/a");
+    memory(hunch, "decisions", "dec_0a");
+    code(root, "feat: a1");
+    git(root, "switch", "-q", "-c", "feat/b");
+    memory(hunch, "decisions", "dec_0b");
+    code(root, "feat: b1");
+    git(root, "switch", "-q", "feat/a");
+    git(root, "merge", "-q", "--no-ff", "-m", "merge b into a", "feat/b");
+    memory(hunch, "decisions", "dec_0c");
+    code(root, "feat: a2");
+    git(root, "switch", "-q", "main");
+    git(root, "merge", "-q", "--no-ff", "-m", "land a", "feat/a");
+    const land = git(root, "rev-parse", "HEAD");
+
+    const want: Array<[string, string | null, string[]]> = [
+      ["feat: a2", land, ["dec_0c"]],
+      ["feat: b1", land, ["dec_0b"]],
+      ["feat: a1", land, ["dec_0a"]],
+    ];
+    assert.deepEqual(shape(memoryFor(root, "main")), want);
+    assert.deepEqual(shape(memoryFor(root, "feat/a")), want);
+  } finally { cleanup(); }
+});
+
+test("--for: with no default branch every merge owns its memory, and the output says so", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    git(root, "branch", "-q", "-m", "trunk");
+    git(root, "switch", "-q", "-c", "feat/b");
+    memory(hunch, "decisions", "dec_0b");
+    code(root, "feat: b1");
+    git(root, "switch", "-q", "trunk");
+    memory(hunch, "decisions", "dec_0a");
+    git(root, "merge", "-q", "--no-ff", "-m", "merge b", "feat/b");
+    const merge = git(root, "rev-parse", "HEAD");
+    code(root, "feat: t2");
+
+    const want: Array<[string, string | null, string[]]> = [["merge b", null, ["dec_0a"]], ["feat: b1", merge, ["dec_0b"]]];
+    const byBranch = memoryFor(root, "trunk");
+    assert.deepEqual(shape(byBranch), want, "dec_0a was captured before the merge, not before t2");
+    assert.match(byBranch.notes.join("\n"), /no default branch/);
+    const byCommit = memoryFor(root, merge);
+    assert.deepEqual(shape(byCommit), want);
+    assert.match(byCommit.notes.join("\n"), /no default branch/);
   } finally { cleanup(); }
 });
