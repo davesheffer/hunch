@@ -67,6 +67,9 @@ type RmwOwner = { pid: number; host: string; nonce?: string; start?: string; at?
  *  still throws after the last attempt. */
 const RMW_OWNER_READ_ATTEMPTS = 3;
 
+/** 25ms waits a store may spend on records caught mid-publish (nlink=2). */
+const LINK_SETTLE_WAITS = 10;
+
 function readRmwOwner(lock: string): RmwOwner | undefined {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -281,6 +284,7 @@ export class JsonStore {
    *  explicitly (exact, independent of mtime granularity). */
   private cache = new Map<EntityKind, { mtimeMs: number; data: readonly unknown[] }>();
 
+  private linkWaitsLeft = LINK_SETTLE_WAITS;
   private readonly lexicalRoot: string;
   private readonly canonicalRoot: string;
   private readonly lexicalHunch: string;
@@ -418,12 +422,17 @@ export class JsonStore {
     if (!stat) return null;
     // create() publishes by hard link, so a fresh record sits at nlink=2 until its
     // writer unlinks the temp. Wait that out instead of skipping a healthy record
-    // as corrupt; a link that lasts is still refused below.
-    for (let tries = 0; stat.isFile() && stat.nlink !== 1 && tries < 10; tries++) {
+    // as corrupt. One budget per store, refilled when a wait pays off: a link that
+    // lasts spends it once and is then refused at once, so many of them stay fast.
+    let waited = false;
+    while (stat.isFile() && stat.nlink !== 1 && this.linkWaitsLeft > 0) {
+      this.linkWaitsLeft--;
+      waited = true;
       Atomics.wait(RMW_LOCK_WAITER, 0, 0, 25);
       stat = this.lstatOrMissing(lexical);
       if (!stat) return null;
     }
+    if (waited && stat.nlink === 1) this.linkWaitsLeft = LINK_SETTLE_WAITS;
     if (stat.isSymbolicLink() || !stat.isFile()) {
       throw unsafePath(lexical, "expected an ordinary file (symlinks and special files are not followed)");
     }

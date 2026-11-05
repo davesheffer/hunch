@@ -502,7 +502,7 @@ function pumpMemoryHome(store: HunchStore, root: string, home: MemoryHome, messa
   return flush;
 }
 
-const NOT_COMMITTED = "saved, but not committed: git was busy, or other staged work or a stray file blocked the auto-commit. Check git status, then commit it yourself. A later memory change tries again.";
+const notCommitted = (home: MemoryHome): string => `saved, but not committed: git was busy, or other staged work or a stray file blocked the auto-commit. Check git status${home === "private" ? " in the memory overlay repo" : ""}, then commit it yourself. A later memory change tries again.`;
 
 /** A flush's null also means auto-commit is off or there was nothing to commit: only changes left behind mean it failed. */
 function commitFailed(store: HunchStore, root: string, home: MemoryHome, flush: ReturnType<typeof flushMemoryHome>): boolean {
@@ -5403,7 +5403,7 @@ function runMemoryMove(
       return;
     }
     console.log(`✓ ${id} ${verb === "edit" ? "edited" : verb === "link" ? "relinked" : verb === "remove" ? "removed (retired, not deleted)" : "restored"}.`);
-    if (uncommitted) console.log(`  ⚠ ${NOT_COMMITTED}`);
+    if (uncommitted) console.log(`  ⚠ ${notCommitted(home)}`);
     if (opts.reason && !willCommit) console.log("  ⚠ --reason is not recorded anywhere: auto-commit is off, so no commit message captured it.");
     else if (opts.reason && flush === "held") console.log("  ⚠ --reason is not recorded anywhere: the commit was held on the default branch, so no commit message captured it.");
   } finally {
@@ -5517,7 +5517,7 @@ program
         return;
       }
       console.log(`✓ added ${kind} ${after.id} (unconfirmed). To sign it as yours: ${confirmCommand(after.id, { private: home === "private" })}`);
-      if (uncommitted) console.log(`  ⚠ ${NOT_COMMITTED}`);
+      if (uncommitted) console.log(`  ⚠ ${notCommitted(home)}`);
     } finally {
       store.close();
     }

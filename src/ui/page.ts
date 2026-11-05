@@ -272,12 +272,12 @@ export const uiJs = String.raw`
     } catch (e) { if (gen === state.historyGen) { $('history-status').textContent = ''; failed(e); } }
   }
 
-  const NOT_COMMITTED = ' Saved, but not committed: git was busy, or other staged work or a stray file blocked it. Check git status.';
+  const notCommitted = (r) => ' Saved, but not committed: git was busy, or other staged work or a stray file blocked it. Check git status' + (r.home === 'private' ? ' in the memory overlay repo.' : '.');
   // ---- changes: every one is a CLI move on the server; the page only collects what changed.
   // done: the line to show instead of DONE, for an Undo (which offers no Undo of its own).
   async function change(id, action, body, done) {
     const r = await post('/api/memory/' + encodeURIComponent(id) + '/' + action, body);
-    state.flash = { id, text: (!r.changed ? 'Nothing changed.' : done || DONE[action]) + (r.uncommitted ? NOT_COMMITTED : ''), undo: done ? null : r.undo || null };
+    state.flash = { id, text: (!r.changed ? 'Nothing changed.' : done || DONE[action]) + (r.uncommitted ? notCommitted(r) : ''), undo: done ? null : r.undo || null };
     loadList();
     await loadDetail(id);
   }
@@ -538,7 +538,7 @@ export const uiJs = String.raw`
       if (missing) { inputs[missing].focus(); return say(problem, NEW_FIELDS[kind][missing] + ' is required.'); }
       run(form, problem, async () => {
         const r = await post('/api/memory', body);
-        state.flash = { id: r.id, text: 'Added. It stays unconfirmed until you confirm it as yours.' + (r.uncommitted ? NOT_COMMITTED : ''), undo: r.undo || null };
+        state.flash = { id: r.id, text: 'Added. It stays unconfirmed until you confirm it as yours.' + (r.uncommitted ? notCommitted(r) : ''), undo: r.undo || null };
         loadList();
         location.hash = '#/memory/' + encodeURIComponent(r.id);
       });

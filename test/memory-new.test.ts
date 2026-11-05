@@ -252,6 +252,23 @@ test("JsonStore: a record caught mid-publish at nlink=2 reads once it settles; a
   } finally { cleanupDir(root); }
 });
 
+test("JsonStore: a store full of lasting hard links spends one wait, not one per record", () => {
+  const root = fixtureRepo();
+  try {
+    const writer = new JsonStore(hunchPaths(root));
+    for (let i = 0; i < 40; i++) {
+      const id = decisionId(`manual:Linked ${i}`);
+      writer.create("decisions", decision(id));
+      const file = join(root, ".hunch", "decisions", `${id}.json`);
+      linkSync(file, `${file}.tmp1.${i}`);
+    }
+    const started = Date.now();
+    assert.equal(new JsonStore(hunchPaths(root)).get("decisions", decisionId("manual:Linked 0")), undefined);
+    // One wait per record would be 10s; one shared budget is about 250ms.
+    assert.ok(Date.now() - started < 5000, `took ${Date.now() - started}ms`);
+  } finally { cleanupDir(root); }
+});
+
 test("cli:new racing itself on one id: one run succeeds, the rest refuse, and the file holds the winner's text", async () => {
   const root = fixtureRepo();
   try {
