@@ -16,7 +16,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { commitAndPushHunch } from "../src/extractors/git.js";
+import { commitAndPushHunch, revertMemoryMove } from "../src/extractors/git.js";
 import { parseMemoryLog } from "../src/core/memorylog.js";
 import { gitMemoryLog } from "../src/extractors/git.js";
 
@@ -37,8 +37,10 @@ function repo(prefix: string, seed = "feat: seed"): { root: string; hunch: strin
   return { root, hunch, cleanup: () => cleanupDir(root) };
 }
 
-const writeDec = (hunch: string, id: string): void =>
+const writeDec = (hunch: string, id: string): void => {
+  mkdirSync(join(hunch, "decisions"), { recursive: true }); // a revert drops a directory left empty
   writeFileSync(join(hunch, "decisions", `${id}.json`), JSON.stringify({ id }) + "\n");
+};
 
 const trailer = (root: string, key: string): string =>
   git(root, "log", "-1", `--format=%(trailers:key=${key},valueonly,separator=%x20)`);
@@ -101,6 +103,41 @@ test("a memory commit from before the trailers is skipped when it touched only m
     writeDec(hunch, "dec_new");
     assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_new", { push: false }), "committed");
     assert.equal(trailer(root, "Hunch-Code-Head"), code);
+  } finally { cleanup(); }
+});
+
+test("a reverted memory move is not the code head, and neither is reverting that revert", () => {
+  const { root, hunch, cleanup } = repo("hunch-trailers-revert-");
+  try {
+    const code = git(root, "rev-parse", "HEAD");
+    writeDec(hunch, "dec_one");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_one", { push: false }), "committed");
+    const captured = git(root, "rev-parse", "HEAD");
+    assert.equal(revertMemoryMove(captured, root), true);
+    assert.equal(git(root, "log", "-1", "--format=%s"), 'Revert "hunch: capture dec_one"');
+    writeDec(hunch, "dec_two");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_two", { push: false }), "committed");
+    assert.equal(trailer(root, "Hunch-Code-Head"), code, "the revert touched only memory");
+
+    // Git titles a revert of a revert either Reapply "..." or Revert "Revert "..."", by version.
+    for (const subject of ['Reapply "hunch: capture dec_one"', 'Revert "Revert "hunch: capture dec_one""']) {
+      writeDec(hunch, "dec_one");
+      git(root, "add", "-A");
+      git(root, "commit", "-qm", subject);
+      git(root, "rm", "-q", join(".hunch", "decisions", "dec_one.json"));
+      git(root, "commit", "-qm", 'Revert "hunch: capture dec_one"');
+    }
+    writeDec(hunch, "dec_three");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_three", { push: false }), "committed");
+    assert.equal(trailer(root, "Hunch-Code-Head"), code);
+
+    // A revert that touches code is a code commit, whatever it is titled.
+    writeFileSync(join(root, "app.ts"), "export const a = 4;\n");
+    git(root, "commit", "-qam", 'Revert "hunch: capture dec_two"');
+    const revertWithCode = git(root, "rev-parse", "HEAD");
+    writeDec(hunch, "dec_four");
+    assert.equal(commitAndPushHunch(hunch, "hunch: capture dec_four", { push: false }), "committed");
+    assert.equal(trailer(root, "Hunch-Code-Head"), revertWithCode);
   } finally { cleanup(); }
 });
 

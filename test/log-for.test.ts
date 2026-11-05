@@ -16,7 +16,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { commitAndPushHunch } from "../src/extractors/git.js";
+import { commitAndPushHunch, revertMemoryMove } from "../src/extractors/git.js";
 import { attributeLine, type LineCommit, type MemoryMove } from "../src/core/memorylog.js";
 import { memoryFor, type MemoryFor } from "../src/extractors/featurelog.js";
 
@@ -254,6 +254,24 @@ test("--for <commit>: the memory captured before that commit, back to the previo
     const mem = memoryFor(root, "HEAD");
     assert.deepEqual(mem.groups, [], "a memory commit is not a feature commit");
     assert.match(mem.notes.join("\n"), /memory commit/);
+  } finally { cleanup(); }
+});
+
+test("--for <commit>: a reverted memory move stays memory, it does not become a feature commit", () => {
+  const { root, hunch, cleanup } = repo();
+  try {
+    const c1 = code(root, "feat: c1");
+    memory(hunch, "decisions", "dec_a");
+    memory(hunch, "decisions", "dec_b");
+    assert.equal(revertMemoryMove(git(root, "rev-parse", "HEAD"), root), true);
+    const reverted = git(root, "rev-parse", "HEAD");
+    const c2 = code(root, "feat: c2");
+
+    assert.deepEqual(shape(memoryFor(root, c2)), [["feat: c2", null, ["dec_a", "dec_b", "dec_b"]]], "the revert groups with the memory it undoes");
+    const mem = memoryFor(root, reverted);
+    assert.deepEqual(mem.groups, [], "a reverted memory move is not a feature commit");
+    assert.match(mem.notes.join("\n"), /memory commit/);
+    assert.deepEqual(shape(memoryFor(root, c1)), []);
   } finally { cleanup(); }
 });
 
