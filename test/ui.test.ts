@@ -7,8 +7,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { request } from "node:http";
 import type { AddressInfo } from "node:net";
-import { BugSchema, ComponentSchema, DecisionSchema, FindingSchema } from "../src/core/types.js";
-import { countMemory, filterMemory, memoryDetail, memoryItems, type MemorySource } from "../src/ui/model.js";
+import { BugSchema, ComponentSchema, DecisionSchema, EdgeSchema, FindingSchema } from "../src/core/types.js";
+import { componentDetail, componentMap, countMemory, filterMemory, memoryDetail, memoryItems, needsAttention, type MemorySource } from "../src/ui/model.js";
 import { createUiServer, githubWebUrl, type UiProbes } from "../src/ui/server.js";
 import { actionArgs, cliError, newArgs, undoFor, type MoveResult } from "../src/ui/actions.js";
 import { JsonStore } from "../src/store/jsonStore.js";
@@ -76,6 +76,61 @@ test("memory filters: kind, view and search, with per-view counts", () => {
   assert.deepEqual(countMemory(items, { kind: "decision" }), { active: 2, unconnected: 1, all: 3 });
 });
 
+const dependsOn = (id: string, from: string, to: string, type = "depends_on") => EdgeSchema.parse({ id, from, to, type, provenance: prov() });
+
+test("needs attention: open findings by severity, unconnected, unconfirmed with blocking first", () => {
+  const finding = (id: string, severity: string, triage: string, observed_at: string) => FindingSchema.parse({ id, title: id, observation: "seen", severity, triage, observed_at, affected_files: ["src/auth/session.ts"], provenance: prov() });
+  const s = source();
+  const src: MemorySource = {
+    ...s,
+    findings: [...s.findings, finding("fnd_low", "low", "open", "2026-10-02T00:00:00Z"), finding("fnd_high", "high", "open", "2026-10-01T00:00:00Z"), finding("fnd_risk", "high", "accepted-risk", "2026-10-03T00:00:00Z")],
+    constraints: [...s.constraints,
+      mkConstraint({ id: "con_warn", statement: "Warn me", scope: ["src/**"], severity: "warning", provenance: prov() }),
+      mkConstraint({ id: "con_would_block", statement: "Would block", scope: ["src/**"], severity: "blocking", provenance: prov() }),
+    ],
+    decisions: [...s.decisions, DecisionSchema.parse({ id: "dec_adr", title: "From an ADR", status: "accepted", related_files: ["docs/adr/1.md"], provenance: { source: "imported:madr", confidence: 0.9, evidence: ["docs/adr/1.md"] }, date: "2026-09-02" })],
+  };
+  const { total, groups } = needsAttention(src, memoryItems(src));
+  const ids = Object.fromEntries(groups.map((g) => [g.key, g.items.map((m) => m.id)]));
+  assert.deepEqual(ids["open-findings"], ["fnd_high", "fnd_low"], "worst first; triaged and resolved findings don't wait");
+  assert.deepEqual(ids["not-connected"], ["dec_loose"]);
+  assert.deepEqual(ids["not-confirmed"]!.slice(0, 2), ["con_would_block", "con_warn"], "the rule that would block comes first");
+  assert.ok(ids["not-confirmed"]!.includes("dec_loose"));
+  assert.ok(!ids["not-confirmed"]!.includes("dec_live"), "a person already confirmed it");
+  assert.ok(!ids["not-confirmed"]!.includes("con_block"), "a person already confirmed it");
+  assert.ok(!ids["not-confirmed"]!.includes("con_gone"), "retired");
+  assert.ok(!ids["not-confirmed"]!.includes("dec_adr"), "an imported ADR is signed through its own question");
+  for (const id of ids["not-confirmed"]!) assert.equal(memoryDetail(src, id)!.actions.confirmable, true, `${id} is offered Confirm`);
+  assert.equal(total, new Set(Object.values(ids).flat()).size, "dec_loose is in two groups and counts once");
+  const quiet: MemorySource = { components: [], decisions: [], constraints: [], bugs: [], findings: [] };
+  assert.deepEqual(needsAttention(quiet, []), { total: 0, groups: [] });
+});
+
+test("map: components with memory counts, uses and used by; only live components and depends_on edges", () => {
+  const s = source();
+  const gone = ComponentSchema.parse({ id: "cmp_gone", kind: "module", name: "Gone", status: "deprecated", paths: ["src/gone/**"], provenance: prov(), created_at: now, updated_at: now });
+  const empty = ComponentSchema.parse({ id: "cmp_empty", kind: "module", name: "Empty", paths: ["src/empty/**"], provenance: prov(), created_at: now, updated_at: now });
+  const src: MemorySource = { ...s, components: [...s.components, gone, empty] };
+  const edges = [
+    dependsOn("e1", "cmp_bill", "cmp_auth"), dependsOn("e2", "cmp_bill", "cmp_auth"), dependsOn("e3", "cmp_auth", "cmp_auth"),
+    dependsOn("e4", "cmp_bill", "cmp_gone"), dependsOn("e5", "sym_a", "sym_b", "calls"), dependsOn("e6", "cmp_auth", "cmp_empty", "calls"),
+  ];
+  const map = componentMap(src, edges);
+  assert.deepEqual(map.components.map((c) => c.name), ["Auth", "Billing", "Empty"], "most memory first; deprecated left out");
+  const auth = map.components[0]!;
+  assert.deepEqual(auth.counts, { decision: 1, rule: 1, bug: 0, finding: 0 }, "retired and superseded memory is not counted");
+  assert.deepEqual(auth.usedBy, [{ id: "cmp_bill", name: "Billing" }], "duplicates collapse; self-edges, calls and dead components don't count");
+  assert.deepEqual(auth.uses, []);
+  assert.equal(map.components[2]!.total, 0);
+  assert.equal(map.outside, 1, "dec_loose touches no component");
+  assert.ok(!("memory" in auth), "the list stays small");
+  const billing = componentDetail(src, edges, "cmp_bill")!;
+  assert.deepEqual(billing.memory.map((m) => m.id).sort(), ["bug_1", "dec_live"], "recorded and by-path both count");
+  assert.deepEqual(billing.uses, [{ id: "cmp_auth", name: "Auth" }]);
+  assert.equal(componentDetail(src, edges, "cmp_gone"), null);
+  assert.equal(componentDetail(src, edges, "cmp_none"), null);
+});
+
 test("memory detail: sections, history links, provenance; unknown id is null", () => {
   const d = memoryDetail(source(), "dec_live")!;
   assert.equal(d.replaces, "dec_old");
@@ -139,6 +194,7 @@ async function withServer(fn: (get: Get) => Promise<void>): Promise<void> {
   for (const c of s.components) store.json.put("components", c);
   for (const d of s.decisions) store.json.put("decisions", d);
   for (const c of s.constraints) store.json.put("constraints", c);
+  store.json.put("edges", dependsOn("edge_bill_auth", "cmp_bill", "cmp_auth"));
   const token = "k".repeat(32);
   const server = createUiServer({ root, token, version: "test", probes: fakeProbes });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
@@ -185,6 +241,23 @@ test("ui server: memory list, detail, repo and connections", async () => {
     const conn = JSON.parse((await get("/api/connections")).body);
     assert.equal(conn.github.user, "octo");
     assert.equal(conn.assistants[0].available, true);
+  });
+});
+
+test("ui server: needs attention and map need the key, and answer from the store", async () => {
+  await withServer(async (get) => {
+    for (const path of ["/api/attention", "/api/map", "/api/map/cmp_auth"]) assert.equal((await get(path, {})).status, 401, path);
+    const attention = JSON.parse((await get("/api/attention")).body);
+    assert.deepEqual(attention.groups.map((g: { key: string }) => g.key), ["not-connected", "not-confirmed"]);
+    assert.equal(attention.groups[0].total, 1);
+    assert.equal(attention.groups[0].items[0].id, "dec_loose");
+    assert.equal(JSON.parse((await get("/api/memory")).body).attention, attention.total, "the page's nav count");
+    const map = JSON.parse((await get("/api/map")).body);
+    assert.deepEqual(map.components.map((c: { name: string }) => c.name), ["Auth", "Billing"]);
+    assert.deepEqual(map.components[0].usedBy, [{ id: "cmp_bill", name: "Billing" }]);
+    const auth = JSON.parse((await get("/api/map/cmp_auth")).body);
+    assert.deepEqual(auth.memory.map((m: { id: string }) => m.id).sort(), ["con_block", "dec_live"]);
+    assert.equal((await get("/api/map/cmp_missing")).status, 404);
   });
 });
 

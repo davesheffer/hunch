@@ -4,7 +4,7 @@ export const uiHtml = `<!doctype html>
 <title>Hunch</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/ui.css"><script src="/ui.js" defer></script></head>
 <body>
 <header class="top"><div class="brand"><strong>Hunch</strong><span id="repo-name" class="muted"></span></div>
-<nav aria-label="Sections"><a href="#/memory" data-nav="memory">Memory</a><a href="#/ask" data-nav="ask">Ask</a><a href="#/history" data-nav="history">History</a><a href="#/connections" data-nav="connections">Connections</a></nav></header>
+<nav aria-label="Sections"><a href="#/memory" data-nav="memory">Memory</a><a href="#/attention" data-nav="attention">Needs attention <span id="attention-count"></span></a><a href="#/map" data-nav="map">Map</a><a href="#/ask" data-nav="ask">Ask</a><a href="#/history" data-nav="history">History</a><a href="#/connections" data-nav="connections">Connections</a></nav></header>
 <p id="error" role="alert" hidden></p>
 <main>
 <section id="memory-page" hidden aria-labelledby="memory-title">
@@ -18,9 +18,21 @@ export const uiHtml = `<!doctype html>
 <button type="button" data-view="active" aria-pressed="true">Active <span data-count="active"></span></button><button type="button" data-view="unconnected" aria-pressed="false">Not connected <span data-count="unconnected"></span></button><button type="button" data-view="all" aria-pressed="false">All <span data-count="all"></span></button>
 </div>
 </div>
-<div class="split">
-<div id="list-pane"><p id="list-status" class="muted small" role="status" aria-live="polite"></p><ul id="list" class="list"></ul></div>
-<article id="detail" aria-live="polite"><p class="muted">Pick a memory to see what it says and what it's connected to.</p></article>
+<div class="split" id="memory-split">
+<div id="list-pane" class="pane"><p id="list-status" class="muted small" role="status" aria-live="polite"></p><ul id="list" class="list"></ul></div>
+<article id="detail" class="panel" aria-live="polite"><p class="muted">Pick a memory to see what it says and what it's connected to.</p></article>
+</div>
+</section>
+<section id="attention-page" hidden aria-labelledby="attention-title">
+<h1 id="attention-title">Needs attention</h1>
+<p id="attention-status" class="muted small" role="status" aria-live="polite"></p>
+<div id="attention" class="attention"></div>
+</section>
+<section id="map-page" hidden aria-labelledby="map-title">
+<h1 id="map-title">Map</h1>
+<div class="split" id="map-split">
+<div class="pane"><p id="map-status" class="muted small" role="status" aria-live="polite"></p><ul id="map" class="list"></ul></div>
+<article id="map-detail" class="panel" aria-live="polite"></article>
 </div>
 </section>
 <section id="ask-page" hidden aria-labelledby="ask-title">
@@ -52,7 +64,7 @@ export const uiCss = String.raw`
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,sans-serif}
 .top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--paper);position:sticky;top:0;z-index:1}
 .brand{display:flex;gap:10px;align-items:baseline;min-width:0}.brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-nav{display:flex;gap:4px}nav a{color:var(--ink);text-decoration:none;padding:8px 14px;border-radius:7px;font-weight:600}
+nav{display:flex;flex-wrap:wrap;gap:4px}nav a{color:var(--ink);text-decoration:none;padding:8px 14px;border-radius:7px;font-weight:600}
 nav a[aria-current="page"]{background:var(--accent);color:var(--accent-ink)}
 main{max-width:1280px;margin:0 auto;padding:24px}
 h1{font-size:28px;line-height:1.2;margin:0 0 16px}h2{font-size:20px;line-height:1.3;margin:0 0 8px}h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:20px 0 6px}
@@ -84,8 +96,9 @@ fieldset{border:0;padding:0;margin:0;display:grid;gap:8px;min-width:0}legend{fon
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .tag{font-size:12px;padding:2px 8px;border-radius:20px;background:var(--chip);color:var(--ink);overflow-wrap:anywhere}
 .tag.warn{background:var(--warn-bg);color:var(--warn)}.tag.off{background:transparent;border:1px solid var(--line);color:var(--muted)}
-#detail{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 24px;min-width:0;position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto}
-#detail p,#detail li{overflow-wrap:anywhere;white-space:pre-wrap}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px 24px;min-width:0;position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto}
+.panel p,.panel li{overflow-wrap:anywhere;white-space:pre-wrap}
+.attention{display:grid;gap:24px;max-width:860px}.attention h2{margin:0}.attention p{margin:0 0 8px}.attention button{margin-top:8px}
 .meta{color:var(--muted);font-size:13px;margin:0 0 12px}
 .callout{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 14px;margin:12px 0}
 dl.links{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}dl.links dt{color:var(--muted);font-size:14px}dl.links dd{margin:0;min-width:0;overflow-wrap:anywhere}
@@ -106,8 +119,8 @@ a{color:var(--accent)}
 .ok{color:var(--accent);font-weight:600}.no{color:var(--muted)}
 #error{margin:16px 24px 0;color:var(--error);border-left:3px solid var(--error);padding:10px 14px;background:var(--paper)}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-@media(max-width:800px){.top{padding:10px 16px;flex-wrap:wrap}main{padding:16px}.split{grid-template-columns:1fr}#detail{position:static;padding:16px;max-height:none;overflow:visible}
-.split.reading #list-pane{display:none}.split:not(.reading) #detail{display:none}.split.reading .back{display:inline-block}}
+@media(max-width:800px){.top{padding:10px 16px;flex-wrap:wrap;position:static}main{padding:16px}.split{grid-template-columns:1fr}.panel{position:static;padding:16px;max-height:none;overflow:visible}
+.split.reading .pane{display:none}.split:not(.reading) .panel{display:none}.split.reading .back{display:inline-block}}
 `;
 
 export const uiJs = String.raw`
@@ -133,7 +146,8 @@ export const uiJs = String.raw`
   // flash: the last change on the open memory, with its Undo, until another memory is opened.
   // ask: the question in progress and its answer, kept while the person looks around.
   // draft: what the next New memory form starts with.
-  const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, flash: null, draft: null,
+  // shownAll: the long lists opened past their first rows.
+  const state = { page: '', kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, attentionGen: 0, mapGen: 0, component: '', shownAll: new Set(), flash: null, draft: null,
     askRoute: '', ask: { about: null, question: '', assistant: '', answer: null, waiting: false, problem: '', gen: 0 } };
 
   function showError(text) { $('error').textContent = text; $('error').hidden = !text; }
@@ -160,6 +174,15 @@ export const uiJs = String.raw`
     return box;
   }
 
+  function memoryRow(m) {
+    const a = el('a'); a.href = '#/memory/' + encodeURIComponent(m.id);
+    a.append(el('div', m.title, 'title'));
+    if (m.summary) a.append(el('div', m.summary, 'summary'));
+    a.append(tags(m));
+    const li = el('li'); li.append(a);
+    return li;
+  }
+
   async function loadList() {
     const gen = ++state.listGen;
     const params = new URLSearchParams({ view: state.view });
@@ -171,14 +194,12 @@ export const uiJs = String.raw`
       if (gen !== state.listGen) return;
       showError('');
       for (const n of document.querySelectorAll('[data-count]')) n.textContent = '(' + body.counts[n.dataset.count] + ')';
+      $('attention-count').textContent = body.attention ? '(' + body.attention + ')' : '';
       const list = $('list'); list.replaceChildren();
       for (const m of body.items) {
-        const a = el('a'); a.href = '#/memory/' + encodeURIComponent(m.id);
-        if (m.id === state.selected) a.setAttribute('aria-current', 'true');
-        a.append(el('div', m.title, 'title'));
-        if (m.summary) a.append(el('div', m.summary, 'summary'));
-        a.append(tags(m));
-        const li = el('li'); li.append(a); list.append(li);
+        const row = memoryRow(m);
+        if (m.id === state.selected) row.firstChild.setAttribute('aria-current', 'true');
+        list.append(row);
       }
       $('list-status').textContent = !body.items.length ? emptyText(body.counts)
         : body.total > body.items.length ? 'Showing ' + body.items.length + ' of ' + body.total + '. Search to narrow.' : body.total + ' shown';
@@ -573,7 +594,7 @@ export const uiJs = String.raw`
       const dl = el('dl', undefined, 'links');
       const row = (label, value) => { dl.append(el('dt', label)); const dd = el('dd'); dd.append(value); dl.append(dd); };
       row('Feature', d.feature ? el('span', d.feature, 'tag') : el('span', 'None', 'muted'));
-      row('Components', linkList(d.components, (c) => el('span', c.source === 'by-path' ? c.name + ' · matched by path' : c.name, c.source === 'by-path' ? 'tag off' : 'tag')));
+      row('Components', linkList(d.components, (c) => { const a = el('a', c.source === 'by-path' ? c.name + ' · matched by path' : c.name, c.source === 'by-path' ? 'tag off' : 'tag'); a.href = '#/map/' + encodeURIComponent(c.id); return a; }));
       row('Files', linkList(d.files, (f) => el('code', f)));
       row('Commits', linkList(d.commits, commitLink));
       parts.push(dl);
@@ -592,6 +613,114 @@ export const uiJs = String.raw`
     } catch (e) {
       if (state.selected !== id) return;
       box.replaceChildren(el('p', e.status === 404 ? 'That memory is gone. It may have been removed or renamed.' : 'Could not load this memory.', 'muted'));
+      if (e.status !== 404) failed(e);
+    }
+  }
+
+  // ---- needs attention: what waits on a person, each row opening the memory to act on it.
+  const ATTENTION = {
+    'open-findings': ['Open findings', 'Problems someone saw that nobody has settled.'],
+    'not-connected': ['Not connected', 'No feature, component or file routes these to an agent.'],
+    'not-confirmed': ['Not confirmed', 'Agents treat these as notes, not your word, until you confirm them.'],
+  };
+  const FIRST_ROWS = 10;
+  // A long list starts with its first rows; key keeps it open when the person comes back.
+  function rowList(ul, items, render, key) {
+    const draw = () => ul.replaceChildren(...items.slice(0, state.shownAll.has(key) ? items.length : FIRST_ROWS).map(render));
+    draw();
+    if (items.length <= FIRST_ROWS || state.shownAll.has(key)) return [ul];
+    const more = button('Show all ' + items.length, 'secondary');
+    more.addEventListener('click', () => { state.shownAll.add(key); draw(); more.remove(); });
+    return [ul, more];
+  }
+  function attentionGroup(g) {
+    const box = el('section');
+    const title = el('h2', ATTENTION[g.key][0] + ' (' + g.total + ')'); title.id = 'attention-' + g.key;
+    box.setAttribute('aria-labelledby', title.id);
+    box.append(title, el('p', ATTENTION[g.key][1], 'muted small'));
+    box.append(...rowList(el('ul', undefined, 'list'), g.items, memoryRow, g.key));
+    if (g.total > g.items.length) box.append(el('p', 'Showing the first ' + g.items.length + ' of ' + g.total + '.', 'muted small'));
+    return box;
+  }
+  async function loadAttention() {
+    const gen = ++state.attentionGen;
+    $('attention-status').textContent = 'Loading…';
+    try {
+      const body = await api('/api/attention');
+      if (gen !== state.attentionGen) return;
+      showError('');
+      $('attention-count').textContent = body.total ? '(' + body.total + ')' : '';
+      $('attention').replaceChildren(...body.groups.map(attentionGroup));
+      $('attention-status').textContent = body.total ? '' : 'Nothing needs you. Every memory is confirmed and connected, and no finding is open.';
+    } catch (e) { if (gen === state.attentionGen) { $('attention-status').textContent = ''; failed(e); } }
+  }
+
+  // ---- map: the components, what memory is on each, and what each one uses.
+  const MAP_KINDS = [['rule', 'Rules', 'rule', 'rules'], ['decision', 'Decisions', 'decision', 'decisions'], ['bug', 'Bugs', 'bug', 'bugs'], ['finding', 'Findings', 'finding', 'findings']];
+  const memoryLabel = (n) => n + (n === 1 ? ' memory' : ' memories');
+  function mapRow(c) {
+    const a = el('a'); a.href = '#/map/' + encodeURIComponent(c.id);
+    if (c.id === state.component) a.setAttribute('aria-current', 'true');
+    a.append(el('div', c.name, 'title'));
+    if (c.responsibility) a.append(el('div', c.responsibility, 'summary'));
+    const box = el('div', undefined, 'tags');
+    for (const [kind, , one, many] of MAP_KINDS) if (c.counts[kind]) box.append(el('span', c.counts[kind] + ' ' + (c.counts[kind] === 1 ? one : many), 'tag'));
+    if (!c.total) box.append(el('span', 'No memory', 'tag warn'));
+    a.append(box);
+    const li = el('li'); li.append(a);
+    return li;
+  }
+  async function loadMap() {
+    const gen = ++state.mapGen;
+    $('map-status').textContent = 'Loading…';
+    try {
+      const body = await api('/api/map');
+      if (gen !== state.mapGen) return;
+      showError('');
+      $('map').replaceChildren(...body.components.map(mapRow));
+      const count = body.components.length;
+      $('map-status').textContent = !count ? 'No components yet. Run hunch index to find them.'
+        : count + (count === 1 ? ' component' : ' components') + (body.outside ? '. ' + memoryLabel(body.outside) + ' on no component.' : '.');
+    } catch (e) { if (gen === state.mapGen) { $('map-status').textContent = ''; failed(e); } }
+  }
+  function componentLinks(values) {
+    if (!values.length) return el('p', 'None', 'muted');
+    const box = el('div', undefined, 'tags');
+    for (const c of values) { const a = el('a', c.name, 'tag'); a.href = '#/map/' + encodeURIComponent(c.id); box.append(a); }
+    return box;
+  }
+  function memoryOnComponent(m, id) {
+    const a = memoryLink(m.id, m.title);
+    const li = el('li'); li.append(a);
+    if (m.components.some((c) => c.id === id && c.source === 'by-path')) li.append(el('span', ' · matched by path', 'muted small'));
+    return li;
+  }
+  async function loadComponent(id) {
+    const box = $('map-detail');
+    if (!id) { box.replaceChildren(el('p', 'Pick a component to see what it owns and what memory is on it.', 'muted')); return; }
+    box.replaceChildren(el('p', 'Loading…', 'muted'));
+    try {
+      const c = await api('/api/map/' + encodeURIComponent(id));
+      if (state.component !== id) return;
+      showError('');
+      const back = el('a', '← Map', 'back'); back.href = '#/map';
+      const add = button('Add memory here');
+      add.addEventListener('click', () => { state.draft = { files: c.paths.join('\n') }; location.hash = '#/memory/new'; });
+      const bar = el('div', undefined, 'actions'); bar.append(add);
+      const parts = [back, el('h2', c.name)];
+      if (c.responsibility) parts.push(el('p', c.responsibility));
+      parts.push(bar, el('h3', 'Owns'), linkList(c.paths, (p) => el('code', p)));
+      parts.push(el('h3', 'Uses'), componentLinks(c.uses), el('h3', 'Used by'), componentLinks(c.usedBy));
+      for (const [kind, label] of MAP_KINDS) {
+        const here = c.memory.filter((m) => m.kind === kind);
+        if (!here.length) continue;
+        parts.push(el('h3', label + ' (' + here.length + ')'), ...rowList(el('ul'), here, (m) => memoryOnComponent(m, id), id + ':' + kind));
+      }
+      if (!c.total) parts.push(el('h3', 'Memory'), el('p', 'None yet.', 'muted'));
+      box.replaceChildren(...parts);
+    } catch (e) {
+      if (state.component !== id) return;
+      box.replaceChildren(el('p', e.status === 404 ? 'That component is gone. It may have been removed or renamed.' : 'Could not load this component.', 'muted'));
       if (e.status !== 404) failed(e);
     }
   }
@@ -759,16 +888,27 @@ export const uiJs = String.raw`
   }
 
   function route() {
-    const m = /^#\/(memory|ask|history|connections)(?:\/(.+))?$/.exec(location.hash);
+    const m = /^#\/(memory|attention|map|ask|history|connections)(?:\/(.+))?$/.exec(location.hash);
     const page = m ? m[1] : 'memory';
+    const entering = page !== state.page;
+    state.page = page;
     for (const a of document.querySelectorAll('[data-nav]')) { if (a.dataset.nav === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
-    for (const p of ['memory', 'ask', 'history', 'connections']) $(p + '-page').hidden = page !== p;
-    document.title = { memory: 'Memory', ask: 'Ask', history: 'History', connections: 'Connections' }[page] + ' · Hunch';
-    if (page === 'memory') {
+    for (const p of ['memory', 'attention', 'map', 'ask', 'history', 'connections']) $(p + '-page').hidden = page !== p;
+    document.title = { memory: 'Memory', attention: 'Needs attention', map: 'Map', ask: 'Ask', history: 'History', connections: 'Connections' }[page] + ' · Hunch';
+    if (page === 'map') {
+      const id = m && m[2] ? decodeURIComponent(m[2]) : '';
+      state.component = id;
+      $('map-split').classList.toggle('reading', !!id);
+      // The list only changes when memory does, which happens on other pages.
+      if (entering) loadMap();
+      else for (const a of $('map').querySelectorAll('a')) { if (a.getAttribute('href') === '#/map/' + encodeURIComponent(id)) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); }
+      loadComponent(id);
+    } else if (page === 'attention') loadAttention();
+    else if (page === 'memory') {
       const id = m && m[2] ? decodeURIComponent(m[2]) : '';
       state.selected = id;
       if (state.flash && state.flash.id !== id) state.flash = null;
-      document.querySelector('.split').classList.toggle('reading', !!id);
+      $('memory-split').classList.toggle('reading', !!id);
       for (const a of $('list').querySelectorAll('a')) { if (a.getAttribute('href') === '#/memory/' + encodeURIComponent(id)) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); }
       loadDetail(id);
     } else if (page === 'ask') loadAsk(m && m[2] ? decodeURIComponent(m[2]) : '');

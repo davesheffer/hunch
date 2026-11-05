@@ -8,8 +8,9 @@
  *     an Authorization header without a CORS preflight this server never answers;
  *   - the page shell is static and holds no data, under the same strict CSP as /operator.
  *
- * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections, and
- * /api/history[?id=] (the memory commits in git, from each home).
+ * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections,
+ * /api/attention, /api/map, /api/map/:id, and /api/history[?id=] (the memory commits in git,
+ * from each home).
  * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb,
  * /api/memory/:id/(confirm|unconfirm) runs `hunch review --confirm|--unconfirm`, and POST
  * /api/memory runs `hunch new` (the CLI owns validation, git and the store), one at a time,
@@ -26,7 +27,7 @@ import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
 import { boundedSpawn } from "../core/boundedSpawn.js";
 import { resolveSynthesisProvider } from "../synthesis/provider.js";
-import { MEMORY_KINDS, countMemory, filterMemory, memoryDetail, memoryItems, type MemoryKind, type MemorySource, type MemoryView } from "./model.js";
+import { MEMORY_KINDS, componentDetail, componentMap, countMemory, filterMemory, memoryDetail, memoryItems, needsAttention, type MemoryKind, type MemorySource, type MemoryView } from "./model.js";
 import { uiCss, uiHtml, uiJs } from "./page.js";
 import { memoryHistory, type HistorySource } from "./history.js";
 import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
@@ -229,9 +230,21 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     if (url.pathname === "/api/memory") {
       const kind = url.searchParams.get("kind"), view = url.searchParams.get("view");
       const query = { kind: isKind(kind) ? kind : undefined, q: url.searchParams.get("q") ?? undefined };
-      const items = memoryItems(source());
+      const src = source();
+      const items = memoryItems(src);
       const matched = filterMemory(items, { ...query, view: isView(view) ? view : "active" });
-      return send(res, 200, { version: opts.version, counts: countMemory(items, query), total: matched.length, items: matched.slice(0, LIST_LIMIT) });
+      return send(res, 200, { version: opts.version, counts: countMemory(items, query), attention: needsAttention(src, items).total, total: matched.length, items: matched.slice(0, LIST_LIMIT) });
+    }
+    if (url.pathname === "/api/attention") {
+      const src = source();
+      const { total, groups } = needsAttention(src, memoryItems(src));
+      return send(res, 200, { total, groups: groups.map((g) => ({ key: g.key, total: g.items.length, items: g.items.slice(0, LIST_LIMIT) })) });
+    }
+    if (url.pathname === "/api/map") return send(res, 200, componentMap(source(), store.recs("edges")));
+    const component = /^\/api\/map\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
+    if (component) {
+      const found = componentDetail(source(), store.recs("edges"), component[1]!);
+      return found ? send(res, 200, found) : send(res, 404, { error: `No component with id ${component[1]}.` });
     }
     const detail = /^\/api\/memory\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
     if (detail) {

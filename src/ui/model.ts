@@ -5,7 +5,7 @@
  * or matched by path. Pure functions over records; the UI computes nothing authoritative
  * and every write still goes through CLI verbs (human-ui-strategy).
  */
-import type { Bug, Component, Constraint, Decision, Finding } from "../core/types.js";
+import type { Bug, Component, Constraint, Decision, Edge, Finding } from "../core/types.js";
 import { isImportedAdrDecision } from "../core/importReview.js";
 
 export type MemoryKind = "decision" | "rule" | "bug" | "finding";
@@ -187,6 +187,88 @@ function actions(over: Partial<MemoryActions> & Pick<MemoryActions, "fields" | "
   return { textLocked: null, signed: false, confirmable: false, severity: null, takesFeature: false, takesComponents: false, ...over };
 }
 
+// An imported ADR is signed through its own hash-bound question, never here.
+const decisionConfirmable = (d: Decision): boolean => !humanSigned(d.provenance.source) && !isImportedAdrDecision(d)
+  && (d.status === "accepted" || d.status === "proposed") && !d.valid_to;
+const ruleConfirmable = (c: Constraint): boolean => !humanSigned(c.provenance.source) && c.status !== "retired" && !c.valid_to;
+
+export type AttentionKey = "open-findings" | "not-connected" | "not-confirmed";
+
+export interface AttentionGroup { key: AttentionKey; items: MemoryItem[] }
+
+/** What waits on a person. Empty groups are left out; total counts each memory once. */
+export interface Attention { total: number; groups: AttentionGroup[] }
+
+const FINDING_ORDER: Record<Finding["severity"], number> = { critical: 0, high: 1, medium: 2, low: 3 };
+const DELIVERY_ORDER: Record<Delivery, number> = { block: 0, warn: 1, inform: 2 };
+
+export function needsAttention(src: MemorySource, items: readonly MemoryItem[]): Attention {
+  const severity = new Map(src.findings.map((f) => [f.id, FINDING_ORDER[f.severity]]));
+  const unsigned = new Set([...src.decisions.filter(decisionConfirmable), ...src.constraints.filter(ruleConfirmable)].map((r) => r.id));
+  // Triaged findings (accepted risk, scheduled) are settled by a person, so only open ones wait.
+  const groups: AttentionGroup[] = [
+    { key: "open-findings", items: items.filter((m) => m.kind === "finding" && m.status === "open").sort((a, b) => severity.get(a.id)! - severity.get(b.id)!) },
+    { key: "not-connected", items: items.filter((m) => m.unconnected) },
+    { key: "not-confirmed", items: items.filter((m) => unsigned.has(m.id)).sort((a, b) => DELIVERY_ORDER[a.delivery] - DELIVERY_ORDER[b.delivery]) },
+  ];
+  const waiting = groups.filter((g) => g.items.length > 0);
+  return { total: new Set(waiting.flatMap((g) => g.items.map((m) => m.id))).size, groups: waiting };
+}
+
+export interface ComponentRef { id: string; name: string }
+
+export interface MapEntry {
+  id: string;
+  name: string;
+  responsibility: string;
+  paths: string[];
+  /** Active memory on this component, per kind. */
+  counts: Record<MemoryKind, number>;
+  total: number;
+  uses: ComponentRef[];
+  usedBy: ComponentRef[];
+}
+
+export interface ComponentDetail extends MapEntry { memory: MemoryItem[] }
+
+export interface ComponentMap {
+  components: MapEntry[];
+  /** Active memory on no component: whole-repository rules, or files no component owns. */
+  outside: number;
+}
+
+function mapDetails(src: MemorySource, edges: readonly Edge[]): { details: ComponentDetail[]; outside: number } {
+  const live = src.components.filter((c) => c.status === "active");
+  const names = new Map(live.map((c) => [c.id, c.name]));
+  const uses = new Map(live.map((c) => [c.id, new Set<string>()]));
+  const usedBy = new Map(live.map((c) => [c.id, new Set<string>()]));
+  for (const e of edges) {
+    if (e.type !== "depends_on" || e.from === e.to || !names.has(e.from) || !names.has(e.to)) continue;
+    uses.get(e.from)!.add(e.to);
+    usedBy.get(e.to)!.add(e.from);
+  }
+  const refs = (ids: ReadonlySet<string>): ComponentRef[] => [...ids].map((id) => ({ id, name: names.get(id)! })).sort((a, b) => a.name.localeCompare(b.name));
+  const active = memoryItems(src).filter((m) => m.active);
+  const details = live.map((c): ComponentDetail => {
+    const memory = active.filter((m) => m.components.some((l) => l.id === c.id));
+    const counts: Record<MemoryKind, number> = { decision: 0, rule: 0, bug: 0, finding: 0 };
+    for (const m of memory) counts[m.kind]++;
+    return { id: c.id, name: c.name, responsibility: c.responsibility, paths: c.paths, counts, total: memory.length, uses: refs(uses.get(c.id)!), usedBy: refs(usedBy.get(c.id)!), memory };
+  });
+  return { details, outside: active.filter((m) => !m.components.some((l) => names.has(l.id))).length };
+}
+
+/** Active components, most memory first, each with what it uses and what uses it. */
+export function componentMap(src: MemorySource, edges: readonly Edge[]): ComponentMap {
+  const { details, outside } = mapDetails(src, edges);
+  const components = details.map(({ memory: _memory, ...entry }): MapEntry => entry);
+  return { components: components.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)), outside };
+}
+
+export function componentDetail(src: MemorySource, edges: readonly Edge[], id: string): ComponentDetail | null {
+  return mapDetails(src, edges).details.find((c) => c.id === id) ?? null;
+}
+
 export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null {
   const base = memoryItems(src).find((m) => m.id === id);
   if (!base) return null;
@@ -205,9 +287,7 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
         fields: [field("title", "Title", decision.title, false), field("text", "Decision", decision.decision), field("context", "Why", decision.context)],
         textLocked: isImportedAdrDecision(decision) ? "Imported from an ADR file. Change the ADR, then run hunch import adrs." : null,
         signed: humanSigned(decision.provenance.source), takesFeature: true, takesComponents: true,
-        // An imported ADR is signed through its own hash-bound question, never here.
-        confirmable: !humanSigned(decision.provenance.source) && !isImportedAdrDecision(decision)
-          && (decision.status === "accepted" || decision.status === "proposed") && !decision.valid_to,
+        confirmable: decisionConfirmable(decision),
         removable: (decision.status === "accepted" || decision.status === "proposed") && !decision.valid_to,
         restorable: (decision.status === "rejected" || decision.status === "superseded") && !decision.superseded_by,
       }),
@@ -226,7 +306,7 @@ export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null
       actions: actions({
         fields: [field("text", "Rule", constraint.statement), field("rationale", "Why", constraint.rationale)],
         signed: humanSigned(constraint.provenance.source),
-        confirmable: !humanSigned(constraint.provenance.source) && constraint.status !== "retired" && !constraint.valid_to,
+        confirmable: ruleConfirmable(constraint),
         severity: constraint.severity,
         removable: constraint.status !== "retired" && !constraint.valid_to,
         restorable: constraint.status === "retired",
