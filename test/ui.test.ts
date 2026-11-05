@@ -9,6 +9,7 @@ import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { BugSchema, ComponentSchema, DecisionSchema, EdgeSchema, FindingSchema } from "../src/core/types.js";
 import { componentDetail, componentMap, countMemory, filterMemory, memoryDetail, memoryItems, needsAttention, type MemorySource } from "../src/ui/model.js";
+import { createPulse } from "../src/ui/pulse.js";
 import { createUiServer, githubWebUrl, type UiProbes } from "../src/ui/server.js";
 import { actionArgs, cliError, newArgs, undoFor, type MoveResult } from "../src/ui/actions.js";
 import { JsonStore } from "../src/store/jsonStore.js";
@@ -20,7 +21,7 @@ import { hunchCliArgs } from "./cli-invocation.js";
 import { execFileSync, spawn } from "node:child_process";
 import { join } from "node:path";
 import { Script } from "node:vm";
-import { uiJs } from "../src/ui/page.js";
+import { uiHtml, uiJs } from "../src/ui/page.js";
 import { memoryHistory } from "../src/ui/history.js";
 import { mkdirSync, rmSync } from "node:fs";
 import { askContext, askPrompt, askRequest, askableAssistants, defaultAskRunner, parseAnswer, type AskRunner } from "../src/ui/ask.js";
@@ -110,7 +111,8 @@ test("map: components with memory counts, uses and used by; only live components
   const s = source();
   const gone = ComponentSchema.parse({ id: "cmp_gone", kind: "module", name: "Gone", status: "deprecated", paths: ["src/gone/**"], provenance: prov(), created_at: now, updated_at: now });
   const empty = ComponentSchema.parse({ id: "cmp_empty", kind: "module", name: "Empty", paths: ["src/empty/**"], provenance: prov(), created_at: now, updated_at: now });
-  const src: MemorySource = { ...s, components: [...s.components, gone, empty] };
+  const open = FindingSchema.parse({ id: "fnd_open", title: "Open one", observation: "seen", severity: "high", triage: "open", observed_at: now, affected_files: ["src/auth/x.ts"], provenance: prov() });
+  const src: MemorySource = { ...s, components: [...s.components, gone, empty], findings: [...s.findings, open] };
   const edges = [
     dependsOn("e1", "cmp_bill", "cmp_auth"), dependsOn("e2", "cmp_bill", "cmp_auth"), dependsOn("e3", "cmp_auth", "cmp_auth"),
     dependsOn("e4", "cmp_bill", "cmp_gone"), dependsOn("e5", "sym_a", "sym_b", "calls"), dependsOn("e6", "cmp_auth", "cmp_empty", "calls"),
@@ -118,11 +120,12 @@ test("map: components with memory counts, uses and used by; only live components
   const map = componentMap(src, edges);
   assert.deepEqual(map.components.map((c) => c.name), ["Auth", "Billing", "Empty"], "most memory first; deprecated left out");
   const auth = map.components[0]!;
-  assert.deepEqual(auth.counts, { decision: 1, rule: 1, bug: 0, finding: 0 }, "retired and superseded memory is not counted");
+  assert.deepEqual(auth.counts, { decision: 1, rule: 1, bug: 0, finding: 1 }, "retired and superseded memory is not counted");
   assert.deepEqual(auth.usedBy, [{ id: "cmp_bill", name: "Billing" }], "duplicates collapse; self-edges, calls and dead components don't count");
   assert.deepEqual(auth.uses, []);
   assert.equal(map.components[2]!.total, 0);
   assert.equal(map.outside, 1, "dec_loose touches no component");
+  assert.deepEqual(map.components.map((c) => [c.name, c.needsYou]), [["Auth", 1], ["Billing", 0], ["Empty", 0]], "only the open finding waits on a person: dec_live and con_block are confirmed, dec_loose is on no component");
   assert.ok(!("memory" in auth), "the list stays small");
   const billing = componentDetail(src, edges, "cmp_bill")!;
   assert.deepEqual(billing.memory.map((m) => m.id).sort(), ["bug_1", "dec_live"], "recorded and by-path both count");
@@ -169,8 +172,65 @@ test("memory detail: actions offer only the moves the CLI takes for that record"
   assert.equal(adr.confirmable, false, "an imported ADR is signed through its own hash-bound question");
 });
 
-test("page script parses", () => {
+test("page script parses; the shell uses one vocabulary and redirects the old map route", () => {
   assert.doesNotThrow(() => new Script(uiJs));
+  for (const word of ["Brain", "Memory", "Needs you", "Ask", "History", "Setup"]) assert.ok(uiHtml.includes(word), word);
+  for (const old of ["Needs attention", "Connections", "Not connected", "Edit connections", "Save connections", "Connections saved."]) assert.ok(!uiHtml.includes(old) && !uiJs.includes(old), `${old} is renamed`);
+  assert.match(uiJs, /location\.replace\('#\/brain'/, "#/map and #/map/:id go to the Brain");
+  assert.match(uiJs, /Edit links/);
+  assert.match(uiJs, /Links saved\./);
+});
+
+test("pulse: the first read is the baseline; then added, changed and removed memory, with a rising seq", () => {
+  const pulse = createPulse();
+  const s = source();
+  const items = memoryItems(s);
+  const first = pulse.read(items, 0, 3);
+  assert.deepEqual([first.seq, first.changes, first.attention], [0, [], 3], "baseline reports nothing");
+  assert.deepEqual(pulse.read(items, 0, 3).changes, [], "no change, no news");
+  const added = memoryItems({ ...s, decisions: [...s.decisions, DecisionSchema.parse({ id: "dec_new", title: "Queue emails", status: "accepted", related_files: ["src/billing/q.ts"], provenance: prov(), date: "2026-11-01" })] });
+  const a = pulse.read(added, 0, 4);
+  assert.deepEqual(a.changes.map((c) => [c.seq, c.id, c.change, c.components]), [[1, "dec_new", "added", ["cmp_bill"]]]);
+  const edited = added.map((m) => (m.id === "dec_loose" ? { ...m, title: "Prefer tiny PRs" } : m));
+  const c = pulse.read(edited, 1, 4);
+  assert.deepEqual(c.changes.map((x) => [x.seq, x.id, x.change, x.title]), [[2, "dec_loose", "changed", "Prefer tiny PRs"]], "since skips what the page already saw");
+  const gone = pulse.read(edited.filter((m) => m.id !== "bug_1"), 2, 4);
+  assert.deepEqual(gone.changes.map((x) => [x.seq, x.id, x.change, x.components]), [[3, "bug_1", "removed", ["cmp_bill"]]], "a removed memory keeps the components it was on");
+  assert.equal(pulse.read(edited.filter((m) => m.id !== "bug_1"), 3, 4).changes.length, 0);
+});
+
+test("ui server: /api/pulse needs the key, sets a baseline, then reports added, changed and removed memory", async () => {
+  const { store, root, cleanup } = tempStore();
+  const s = source();
+  for (const c of s.components) store.json.put("components", c);
+  for (const d of s.decisions) store.json.put("decisions", d);
+  const token = "k".repeat(32);
+  const server = createUiServer({ root, token, version: "test", probes: fakeProbes });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+  const port = (server.address() as AddressInfo).port;
+  const get = (path: string, headers: Record<string, string> = { authorization: `Bearer ${token}` }) => new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const req = request({ host: "127.0.0.1", port, path, headers }, (res) => { let body = ""; res.setEncoding("utf8"); res.on("data", (c) => { body += c; }); res.on("end", () => resolve({ status: res.statusCode!, body })); });
+    req.on("error", reject); req.end();
+  });
+  const settle = () => new Promise((r) => setTimeout(r, 40));
+  try {
+    assert.equal((await get("/api/pulse?since=0", {})).status, 401);
+    const base = JSON.parse((await get("/api/pulse?since=0")).body);
+    assert.deepEqual([base.seq, base.changes], [0, []]);
+    assert.equal(typeof base.attention, "number");
+    await settle();
+    store.json.put("decisions", DecisionSchema.parse({ id: "dec_new", title: "Queue emails", status: "accepted", related_files: ["src/billing/q.ts"], provenance: prov(), date: "2026-11-01" }));
+    const added = JSON.parse((await get("/api/pulse?since=0")).body);
+    assert.deepEqual(added.changes.map((c: { id: string; change: string; components: string[] }) => [c.id, c.change, c.components]), [["dec_new", "added", ["cmp_bill"]]]);
+    await settle();
+    store.json.put("decisions", DecisionSchema.parse({ id: "dec_new", title: "Queue all emails", status: "accepted", related_files: ["src/billing/q.ts"], provenance: prov(), date: "2026-11-01" }));
+    const changed = JSON.parse((await get(`/api/pulse?since=${added.seq}`)).body);
+    assert.deepEqual(changed.changes.map((c: { id: string; change: string }) => [c.id, c.change]), [["dec_new", "changed"]]);
+    await settle();
+    store.json.delete("decisions", "dec_new");
+    const removed = JSON.parse((await get(`/api/pulse?since=${changed.seq}`)).body);
+    assert.deepEqual(removed.changes.map((c: { id: string; change: string }) => [c.id, c.change]), [["dec_new", "removed"]]);
+  } finally { await new Promise<void>((r) => server.close(() => r())); server.closeStore(); cleanup(); }
 });
 
 test("githubWebUrl: ssh and https remotes map to the web URL; other hosts do not", () => {
@@ -255,6 +315,7 @@ test("ui server: needs attention and map need the key, and answer from the store
     const map = JSON.parse((await get("/api/map")).body);
     assert.deepEqual(map.components.map((c: { name: string }) => c.name), ["Auth", "Billing"]);
     assert.deepEqual(map.components[0].usedBy, [{ id: "cmp_bill", name: "Billing" }]);
+    assert.deepEqual(map.components.map((c: { name: string; needsYou: number }) => [c.name, c.needsYou]), [["Auth", 0], ["Billing", 0]], "needsYou counts only memory that waits on a person");
     const auth = JSON.parse((await get("/api/map/cmp_auth")).body);
     assert.deepEqual(auth.memory.map((m: { id: string }) => m.id).sort(), ["con_block", "dec_live"]);
     assert.equal((await get("/api/map/cmp_missing")).status, 404);
@@ -505,14 +566,16 @@ test("memoryHistory: record commits from both homes, newest first, with pushed s
     assert.deepEqual(all.map((h) => h.subject), ["drop con_bb02", "hunch: edit dec_aa01", "hunch: capture fnd_cc03", "hunch: capture con_bb02", "hunch: capture dec_aa01"], "task commits are not memory moves");
     const [drop, edit, finding, , first] = all;
     assert.equal(drop!.kind, "prune");
-    assert.deepEqual(drop!.memories, [{ id: "con_bb02", title: null }], "a record gone from the store keeps its id");
+    assert.deepEqual(drop!.memories, [{ id: "con_bb02", title: null, components: [] }], "a record gone from the store keeps its id");
     assert.deepEqual([edit!.kind, edit!.pushed, edit!.url], ["edit", false, null], "not on any remote: no link");
-    assert.deepEqual([finding!.home, finding!.memories], ["private", [{ id: "fnd_cc03", title: "Slow query" }]]);
+    assert.deepEqual([finding!.home, finding!.memories], ["private", [{ id: "fnd_cc03", title: "Slow query", components: [] }]]);
     assert.equal(first!.pushed, true);
     assert.equal(first!.url, `https://github.com/o/demo/commit/${first!.sha}`);
 
     assert.deepEqual(memoryHistory(sources, { limit: 100, id: "dec_aa01" }, titles).map((h) => h.subject), ["hunch: edit dec_aa01", "hunch: capture dec_aa01"]);
     assert.equal(memoryHistory(sources, { limit: 2 }, titles).length, 2);
+    const placed = memoryHistory(sources, { limit: 100 }, titles, new Map([["dec_aa01", ["cmp_auth"]]]));
+    assert.deepEqual(placed.find((h) => h.subject === "hunch: edit dec_aa01")!.memories, [{ id: "dec_aa01", title: "Use cookies", components: ["cmp_auth"] }], "each memory names its components for the Brain replay");
     assert.deepEqual(memoryHistory([{ home: "public", hunchDir: join(base, "nowhere", ".hunch"), webUrl: null }], { limit: 100 }, titles), [], "no repo: no history");
   } finally { cleanupDir(base); }
 });
@@ -556,7 +619,7 @@ test("ui server writes: edit, link and remove run the CLI, the list reloads, and
     const history = JSON.parse((await get("/api/history")).body);
     assert.equal(history.private, false);
     assert.deepEqual(history.items.slice(0, 2).map((h: { memories: { id: string; title: string }[] }) => h.memories), [
-      [{ id: "con_block", title: "Never log tokens" }], [{ id: "con_block", title: "Never log tokens" }],
+      [{ id: "con_block", title: "Never log tokens", components: ["cmp_auth"] }], [{ id: "con_block", title: "Never log tokens", components: ["cmp_auth"] }],
     ]);
     assert.ok(history.items.every((h: { pushed: boolean; url: string | null }) => !h.pushed && h.url === null), "nothing pushed: no GitHub links");
     const own = JSON.parse((await get("/api/history?id=dec_loose")).body);

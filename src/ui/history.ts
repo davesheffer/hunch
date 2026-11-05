@@ -33,7 +33,7 @@ export interface HistoryEntry {
   /** The commit on GitHub; null until it is pushed, or when the repo is not on GitHub. */
   url: string | null;
   /** The memories it changed; title null when the record is gone from the store. */
-  memories: { id: string; title: string | null }[];
+  memories: { id: string; title: string | null; components: string[] }[];
 }
 
 /** The overlay may be a symlink to its own repo; git must run where the commits are. */
@@ -43,7 +43,7 @@ function physical(dir: string): string {
 
 /** Newest first across homes, at most `limit`. With `id`, only that record's own commits.
  *  `id` must already be a plain record id: it is placed into a git pathspec. */
-export function memoryHistory(sources: readonly HistorySource[], opts: { limit: number; id?: string }, titles: ReadonlyMap<string, string>): HistoryEntry[] {
+export function memoryHistory(sources: readonly HistorySource[], opts: { limit: number; id?: string }, titles: ReadonlyMap<string, string>, components: ReadonlyMap<string, readonly string[]> = new Map()): HistoryEntry[] {
   const out: HistoryEntry[] = [];
   for (const src of sources) {
     const dir = physical(src.hunchDir);
@@ -57,7 +57,7 @@ export function memoryHistory(sources: readonly HistorySource[], opts: { limit: 
       out.push({
         sha: m.sha, shortSha: m.shortSha, date: m.date, subject: m.subject, kind: m.kind, home: src.home, pushed,
         url: pushed && src.webUrl ? `${src.webUrl}/commit/${m.sha}` : null,
-        memories: [...new Set([...m.decisionIds, ...m.otherIds])].map((id) => ({ id, title: titles.get(id) ?? null })),
+        memories: [...new Set([...m.decisionIds, ...m.otherIds])].map((id) => ({ id, title: titles.get(id) ?? null, components: [...(components.get(id) ?? [])] })),
       });
     }
   }

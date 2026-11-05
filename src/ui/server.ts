@@ -9,7 +9,7 @@
  *   - the page shell is static and holds no data, under the same strict CSP as /operator.
  *
  * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections,
- * /api/attention, /api/map, /api/map/:id, and /api/history[?id=] (the memory commits in git,
+ * /api/attention, /api/map, /api/map/:id, /api/pulse?since= (what changed since the page last asked), and /api/history[?id=] (the memory commits in git,
  * from each home).
  * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb,
  * /api/memory/:id/(confirm|unconfirm) runs `hunch review --confirm|--unconfirm`, and POST
@@ -29,6 +29,7 @@ import { boundedSpawn } from "../core/boundedSpawn.js";
 import { resolveSynthesisProvider } from "../synthesis/provider.js";
 import { MEMORY_KINDS, componentDetail, componentMap, countMemory, filterMemory, memoryDetail, memoryItems, needsAttention, type MemoryKind, type MemorySource, type MemoryView } from "./model.js";
 import { uiCss, uiHtml, uiJs } from "./page.js";
+import { createPulse } from "./pulse.js";
 import { memoryHistory, type HistorySource } from "./history.js";
 import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
 import { askContext, askPrompt, askRequest, defaultAskRunner, parseAnswer, type AskRunner } from "./ask.js";
@@ -144,6 +145,7 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     decisions: store.recs("decisions"), constraints: store.recs("constraints"), bugs: store.recs("bugs"),
     findings: store.recs("findings"), components: store.recs("components"),
   });
+  const pulse = createPulse();
   // One CLI write at a time: each one commits, and two commits must not race.
   let writing: Promise<unknown> = Promise.resolve();
   const asker = opts.asker ?? defaultAskRunner(opts.root);
@@ -240,6 +242,12 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
       const { total, groups } = needsAttention(src, memoryItems(src));
       return send(res, 200, { total, groups: groups.map((g) => ({ key: g.key, total: g.items.length, items: g.items.slice(0, LIST_LIMIT) })) });
     }
+    if (url.pathname === "/api/pulse") {
+      const since = Number(url.searchParams.get("since"));
+      const src = source();
+      const items = memoryItems(src);
+      return send(res, 200, pulse.read(items, Number.isInteger(since) && since > 0 ? since : 0, needsAttention(src, items).total));
+    }
     if (url.pathname === "/api/map") return send(res, 200, componentMap(source(), store.recs("edges")));
     const component = /^\/api\/map\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
     if (component) {
@@ -268,8 +276,10 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
         const remote = await run("git", ["remote", "get-url", "origin"], dirname(dir));
         sources.push({ home: "private", hunchDir: dir, webUrl: remote.ok ? githubWebUrl(remote.out) : null });
       }
-      const titles = new Map(memoryItems(source()).map((m) => [m.id, m.title]));
-      return send(res, 200, { items: memoryHistory(sources, { limit: HISTORY_LIMIT, id }, titles), private: !!store.privateDir });
+      const all = memoryItems(source());
+      const titles = new Map(all.map((m) => [m.id, m.title]));
+      const where = new Map(all.map((m) => [m.id, m.components.map((c) => c.id)]));
+      return send(res, 200, { items: memoryHistory(sources, { limit: HISTORY_LIMIT, id }, titles, where), private: !!store.privateDir });
     }
     if (url.pathname === "/api/ask") return send(res, 200, await asker.assistants());
     if (url.pathname === "/api/connections") {

@@ -225,6 +225,8 @@ export interface MapEntry {
   /** Active memory on this component, per kind. */
   counts: Record<MemoryKind, number>;
   total: number;
+  /** Active memory here that waits on a person: an open finding, not linked, or not confirmed. */
+  needsYou: number;
   uses: ComponentRef[];
   usedBy: ComponentRef[];
 }
@@ -248,12 +250,14 @@ function mapDetails(src: MemorySource, edges: readonly Edge[]): { details: Compo
     usedBy.get(e.to)!.add(e.from);
   }
   const refs = (ids: ReadonlySet<string>): ComponentRef[] => [...ids].map((id) => ({ id, name: names.get(id)! })).sort((a, b) => a.name.localeCompare(b.name));
-  const active = memoryItems(src).filter((m) => m.active);
+  const all = memoryItems(src);
+  const active = all.filter((m) => m.active);
+  const waiting = new Set(needsAttention(src, all).groups.flatMap((g) => g.items.map((m) => m.id)));
   const details = live.map((c): ComponentDetail => {
     const memory = active.filter((m) => m.components.some((l) => l.id === c.id));
     const counts: Record<MemoryKind, number> = { decision: 0, rule: 0, bug: 0, finding: 0 };
     for (const m of memory) counts[m.kind]++;
-    return { id: c.id, name: c.name, responsibility: c.responsibility, paths: c.paths, counts, total: memory.length, uses: refs(uses.get(c.id)!), usedBy: refs(usedBy.get(c.id)!), memory };
+    return { id: c.id, name: c.name, responsibility: c.responsibility, paths: c.paths, counts, total: memory.length, needsYou: memory.filter((m) => waiting.has(m.id)).length, uses: refs(uses.get(c.id)!), usedBy: refs(usedBy.get(c.id)!), memory };
   });
   return { details, outside: active.filter((m) => !m.components.some((l) => names.has(l.id))).length };
 }
