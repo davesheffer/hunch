@@ -8,7 +8,8 @@
  * wins, and a UI started from inside an agent session stays on that agent's account.
  *
  * Memory is repository text a stranger's pull request can write, so an assistant runs with its
- * tools off or isn't offered: Cursor Agent has no such mode (Hunch launches it with --trust).
+ * tools off or isn't offered. Cursor Agent has no such mode (Hunch launches it with --trust), and
+ * Codex's read-only sandbox still leaves it the shell tool, MCP servers and web search.
  */
 import { extractJsonObjects, resolveSynthesisProvider, type ProviderSelectionOptions, type ProviderStatus } from "../synthesis/provider.js";
 import { detectInitiator, withInitiator } from "../synthesis/initiator.js";
@@ -24,12 +25,12 @@ const MAX_OPTIONS = 6;
 const MAX_ANSWER_FIELD = 1500;
 const MAX_ANSWER_TEXT = 8000;
 
-export interface Assistant { name: string; label: string; subscription: string }
+export interface Assistant { name: string; label: string }
 /** Why nobody can be asked: local-only analysis is on, `hunch provider` names someone who can't
  *  be asked, or this UI's origin can't pick an account. */
 export type AskBlock = "local-only" | "other-provider" | "unknown-origin";
 /** The CLIs that can run with no tools (ProseOptions.noTools). */
-const ASKABLE = new Set(["claude-cli", "codex-cli"]);
+const ASKABLE = new Set(["claude-cli"]);
 export interface AskRunner {
   assistants(): Promise<{ assistants: Assistant[]; blocked: AskBlock | null }>;
   /** The assistant's raw reply. Throws when it can't answer. */
@@ -43,7 +44,7 @@ export function askableAssistants(statuses: readonly ProviderStatus[], env: Node
   if (!origin.provider && (origin.source !== "unknown" || env.HUNCH_INITIATOR === "unknown")) return null;
   return statuses
     .filter((s) => s.available && s.subscription !== null && ASKABLE.has(s.name) && (!origin.provider || s.name === origin.provider))
-    .map((s) => ({ name: s.name, label: s.label, subscription: s.subscription! }));
+    .map((s) => ({ name: s.name, label: s.label }));
 }
 
 export function defaultAskRunner(root: string, opts: Pick<ProviderSelectionOptions, "env" | "providers"> = {}): AskRunner {

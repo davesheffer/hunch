@@ -129,6 +129,7 @@ export interface MoveResult {
   before: Record<string, unknown> | null;
   after: Record<string, unknown>;
   flush: string | null;
+  uncommitted?: boolean;
 }
 
 export interface Undo {

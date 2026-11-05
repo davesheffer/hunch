@@ -204,7 +204,7 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     let result: MoveResult;
     try { result = JSON.parse(last) as MoveResult; } catch { return send(res, 500, { error: "The change ran but its result could not be read." }); }
     if (result.changed) { store.close(); store = new HunchStore(hunchPaths(opts.root)); }
-    return send(res, 200, { changed: result.changed, id: result.id, home: result.home, flush: result.flush, undo: undoFor(move, result) });
+    return send(res, 200, { changed: result.changed, id: result.id, home: result.home, flush: result.flush, uncommitted: result.uncommitted === true, undo: undoFor(move, result) });
   };
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {

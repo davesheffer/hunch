@@ -368,6 +368,22 @@ export class HunchStore {
    *  through here so all modes, branches, worktrees, teams, and agents agree on where
    *  memory lives. */
   putCapture<K extends EntityKind>(kind: K, record: EntityFor[K], isPrivate = false): EntityFor[K] {
+    const home = this.admitCapture(kind, record, isPrivate);
+    return home === "private" ? this.putPrivate(kind, record) : this.json.put(kind, record);
+  }
+
+  /** putCapture for a record that must not exist yet: null when its file appeared first. */
+  createCapture<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] | null {
+    const home = this.admitCapture(kind, record, false);
+    const target = home === "private" ? this.privateJson : this.json;
+    if (!target) {
+      throw new Error("No private store configured — set HUNCH_PRIVATE_DIR to a directory Hunch can write sensitive records into.");
+    }
+    target.ensureDirs();
+    return target.create(kind, record);
+  }
+
+  private admitCapture<K extends EntityKind>(kind: K, record: EntityFor[K], isPrivate: boolean): "public" | "private" {
     const home = this.captureHome(isPrivate, kind);
     const id = (record as { id: string }).id;
     const lookup = (json: JsonStore | undefined) => kind === "derived" || kind === "receipts" || kind === "commitments"
@@ -384,7 +400,7 @@ export class HunchStore {
       }
       throw new Error(`${kind} record ${id} already exists in the other memory home; refusing to create a public/private id collision`);
     }
-    return home === "private" ? this.putPrivate(kind, record) : this.json.put(kind, record);
+    return home;
   }
 
   /** Replace one capture kind in its routed home as a single bulk operation.

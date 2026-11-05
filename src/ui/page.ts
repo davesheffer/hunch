@@ -272,11 +272,12 @@ export const uiJs = String.raw`
     } catch (e) { if (gen === state.historyGen) { $('history-status').textContent = ''; failed(e); } }
   }
 
+  const NOT_COMMITTED = ' Saved, but the commit failed (git refused or was busy). The next change commits it.';
   // ---- changes: every one is a CLI move on the server; the page only collects what changed.
   // done: the line to show instead of DONE, for an Undo (which offers no Undo of its own).
   async function change(id, action, body, done) {
     const r = await post('/api/memory/' + encodeURIComponent(id) + '/' + action, body);
-    state.flash = { id, text: !r.changed ? 'Nothing changed.' : done || DONE[action], undo: done ? null : r.undo || null };
+    state.flash = { id, text: (!r.changed ? 'Nothing changed.' : done || DONE[action]) + (r.uncommitted ? NOT_COMMITTED : ''), undo: done ? null : r.undo || null };
     loadList();
     await loadDetail(id);
   }
@@ -537,7 +538,7 @@ export const uiJs = String.raw`
       if (missing) { inputs[missing].focus(); return say(problem, NEW_FIELDS[kind][missing] + ' is required.'); }
       run(form, problem, async () => {
         const r = await post('/api/memory', body);
-        state.flash = { id: r.id, text: 'Added. It stays unconfirmed until you confirm it as yours.', undo: r.undo || null };
+        state.flash = { id: r.id, text: 'Added. It stays unconfirmed until you confirm it as yours.' + (r.uncommitted ? NOT_COMMITTED : ''), undo: r.undo || null };
         loadList();
         location.hash = '#/memory/' + encodeURIComponent(r.id);
       });
@@ -729,7 +730,7 @@ export const uiJs = String.raw`
   // recording it opens the New memory form, filled in, for them to change and add.
   const NOBODY = {
     'local-only': 'Asking is off: this repository uses local-only analysis. Change it with hunch provider.',
-    'other-provider': 'Asking needs Claude Code or Codex, and this repository is set to use something else. Change it with hunch provider.',
+    'other-provider': 'Asking needs Claude Code, and this repository is set to use something else. Change it with hunch provider.',
     'unknown-origin': 'This page was started by a background process, so it can\'t choose an account. Run hunch ui from your terminal.',
   };
   function resetAsk() { const a = state.ask; a.about = null; a.question = ''; a.answer = null; a.waiting = false; a.problem = ''; a.gen++; $('ask-status').textContent = ''; }
@@ -781,7 +782,7 @@ export const uiJs = String.raw`
       parts.push(row);
     }
     if (!who.assistants.length) {
-      parts.push(el('p', NOBODY[who.blocked] || 'No assistant CLI found. Install Claude Code or Codex, sign in, then start hunch ui again.', 'callout'));
+      parts.push(el('p', NOBODY[who.blocked] || 'Claude Code not found. Install it, sign in, then start hunch ui again.', 'callout'));
       $('ask-status').textContent = '';
       return box.replaceChildren(...parts);
     }
@@ -794,7 +795,7 @@ export const uiJs = String.raw`
     form.append(...labelled('Your question', question, 'ask-question'));
     const send = button('', '', 'submit');
     const note = el('p', '', 'muted small');
-    const label = () => { const c = chosen(); send.textContent = 'Ask ' + c.label; note.textContent = 'Sends your question and related memory to ' + c.label + ', on your ' + c.subscription + '. Nothing is saved.'; };
+    const label = () => { const c = chosen(); send.textContent = 'Ask ' + c.label; note.textContent = 'Sends your question and related memory to ' + c.label + ', on the account it is signed in to. Nothing is saved.'; };
     if (who.assistants.length > 1) {
       const pick = select(who.assistants.map((x) => [x.name, x.label])); pick.value = a.assistant;
       pick.addEventListener('change', () => { a.assistant = pick.value; label(); });

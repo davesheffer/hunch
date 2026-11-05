@@ -70,7 +70,7 @@ import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
 import { parseDocRules, planDocRules, docRulePlanIsDirty, withoutMarkedRules, recordedDocRuleKey, recordedDocRuleSource, recordedDocRuleHash, docRuleHash, type DocRule, type DocRuleIssue } from "../extractors/docRules.js";
-import { trackedFiles } from "../extractors/git.js";
+import { hunchDirHasChanges, trackedFiles } from "../extractors/git.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
 import { proposalPrompt, validateProposals, readProposalQueue, writeProposalQueue, enqueueProposals, acceptProposal, type DocRuleProposal } from "../core/docRuleProposals.js";
 import { renderText, renderMarkdown, renderSarif, renderImpact, reportFailsStrict, type CheckReport, type SarifExtras } from "../core/checkreport.js";
@@ -500,6 +500,15 @@ function pumpMemoryHome(store: HunchStore, root: string, home: MemoryHome, messa
   const flush = flushMemoryHome(store, hunchPaths(root).hunch, home, message);
   if (flush === "held") noteHeld();
   return flush;
+}
+
+const NOT_COMMITTED = "saved, but the commit failed (git refused or was busy). The next memory change commits it, or commit it yourself.";
+
+/** A flush's null also means auto-commit is off or there was nothing to commit: only changes left behind mean it failed. */
+function commitFailed(store: HunchStore, root: string, home: MemoryHome, flush: ReturnType<typeof flushMemoryHome>): boolean {
+  if (flush !== null) return false;
+  if (home === "private") return store.privateAutoCommit && !!store.privateDir && hunchDirHasChanges(store.privateDir);
+  return store.autoCommit && hunchDirHasChanges(hunchPaths(root).hunch);
 }
 
 function pumpPolicyHome(store: HunchStore, root: string, service: ConstitutionService, policyId: string, message: string): void {
@@ -5388,11 +5397,13 @@ function runMemoryMove(
     if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
     const willCommit = home === "private" ? store.privateAutoCommit : store.autoCommit;
     const flush = pumpMemoryHome(store, root, home, `hunch: ${verb} ${id}${opts.reason ? `\n\n${opts.reason}` : ""}`);
+    const uncommitted = commitFailed(store, root, home, flush);
     if (opts.json) {
-      console.log(JSON.stringify({ changed: true, id, kind: target.kind, home, before: existing, after, flush }));
+      console.log(JSON.stringify({ changed: true, id, kind: target.kind, home, before: existing, after, flush, uncommitted }));
       return;
     }
     console.log(`✓ ${id} ${verb === "edit" ? "edited" : verb === "link" ? "relinked" : verb === "remove" ? "removed (retired, not deleted)" : "restored"}.`);
+    if (uncommitted) console.log(`  ⚠ ${NOT_COMMITTED}`);
     if (opts.reason && !willCommit) console.log("  ⚠ --reason is not recorded anywhere: auto-commit is off, so no commit message captured it.");
     else if (opts.reason && flush === "held") console.log("  ⚠ --reason is not recorded anywhere: the commit was held on the default branch, so no commit message captured it.");
   } finally {
@@ -5494,16 +5505,19 @@ program
       });
       if (!result.ok) return fail(result.reason);
       store.json.ensureDirs();
-      const after = store.putCapture(collection, result.record as never) as MemoryRecord;
+      const after = store.createCapture(collection, result.record as never) as MemoryRecord | null;
+      if (!after) return fail(`${result.record.id} was just added by another run — edit it instead of adding it again`);
       store.reindex();
       // Same grounding gap as runMemoryMove: a public flush that won't commit the docs must still refresh them.
       if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
       const flush = pumpMemoryHome(store, root, home, `hunch: capture ${after.id}`);
+      const uncommitted = commitFailed(store, root, home, flush);
       if (opts.json) {
-        console.log(JSON.stringify({ changed: true, id: after.id, kind, home, before: null, after, flush }));
+        console.log(JSON.stringify({ changed: true, id: after.id, kind, home, before: null, after, flush, uncommitted }));
         return;
       }
       console.log(`✓ added ${kind} ${after.id} (unconfirmed). To sign it as yours: ${confirmCommand(after.id, { private: home === "private" })}`);
+      if (uncommitted) console.log(`  ⚠ ${NOT_COMMITTED}`);
     } finally {
       store.close();
     }

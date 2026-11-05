@@ -24,7 +24,7 @@ import { uiJs } from "../src/ui/page.js";
 import { memoryHistory } from "../src/ui/history.js";
 import { mkdirSync, rmSync } from "node:fs";
 import { askContext, askPrompt, askRequest, askableAssistants, defaultAskRunner, parseAnswer, type AskRunner } from "../src/ui/ask.js";
-import { DeterministicProvider, OpenAICompatProvider, claudePrintArgs, codexExecArgs, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
+import { DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudePrintArgs, codexExecArgs, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
 import { currentInitiator, withInitiator } from "../src/synthesis/initiator.js";
 
 const now = "2026-11-04T00:00:00Z";
@@ -698,11 +698,12 @@ test("askRequest: question, assistant and a memory id are checked before anythin
 
 test("askableAssistants: only ready subscription CLIs; a person picks, an agent session stays on its own account, an unknown origin asks nobody", () => {
   const status = (name: ProviderStatus["name"], subscription: string | null, available = true): ProviderStatus => ({ name, label: name, subscription, available });
-  const statuses = [status("claude-cli", "Claude subscription"), status("codex-cli", "ChatGPT subscription", false), status("cursor-agent", "Cursor subscription"), status("kimi-cli", null), status("openai-compat", null), status("deterministic", null)];
+  const statuses = [status("claude-cli", "Claude subscription"), status("codex-cli", "ChatGPT subscription"), status("cursor-agent", "Cursor subscription"), status("kimi-cli", null), status("openai-compat", null), status("deterministic", null)];
   const names = (env: NodeJS.ProcessEnv) => askableAssistants(statuses, env)?.map((a) => a.name) ?? null;
-  assert.deepEqual(names({}), ["claude-cli"], "not metered or local HTTP providers, not a CLI that can't run without tools, not one that isn't ready");
+  assert.deepEqual(names({}), ["claude-cli"], "not metered or local HTTP providers, not a CLI that can't run without tools");
+  assert.deepEqual(askableAssistants([status("claude-cli", "Claude subscription", false)], {}), [], "not one that isn't ready");
   assert.deepEqual(names({ CLAUDECODE: "1" }), ["claude-cli"]);
-  assert.deepEqual(names({ HUNCH_INITIATOR: "codex" }), [], "bound to an assistant that isn't ready");
+  assert.deepEqual(names({ HUNCH_INITIATOR: "codex" }), [], "bound to an assistant that can't run without tools");
   assert.deepEqual(names({ HUNCH_INITIATOR: "cursor" }), [], "bound to an assistant that can't run without tools");
   assert.equal(names({ CLAUDECODE: "1", CODEX_THREAD_ID: "t" }), null);
   assert.equal(names({ HUNCH_INITIATOR: "unknown" }), null);
@@ -721,18 +722,20 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
     const person = defaultAskRunner(root, { providers, env: {} });
     const list = await person.assistants();
     assert.equal(list.blocked, null);
-    assert.deepEqual(list.assistants.map((a) => a.name), ["claude-cli", "codex-cli"], "several ready is fine: the person picks");
-    assert.equal(await person.ask("codex-cli", "p"), "reply");
-    assert.deepEqual(seen, ["codex-cli:codex-cli:true:p"], "the pick is the operation's origin, and it runs with no tools");
+    assert.deepEqual(list.assistants.map((a) => a.name), ["claude-cli"], "Codex and Cursor stay off: neither can run with no tools");
+    assert.equal(await person.ask("claude-cli", "p"), "reply");
+    assert.deepEqual(seen, ["claude-cli:claude-cli:true:p"], "the pick is the operation's origin, and it runs with no tools");
+    await assert.rejects(person.ask("codex-cli", "p"), /not available/);
     await assert.rejects(person.ask("cursor-agent", "p"), /not available/);
     await assert.rejects(person.ask("deterministic", "p"), /not available/);
-    await assert.rejects(defaultAskRunner(root, { providers, env: { CLAUDECODE: "1" } }).ask("codex-cli", "p"), /not available/, "the spend itself holds an agent session to its own account");
+    await assert.rejects(defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "codex" } }).ask("claude-cli", "p"), /not available/, "the spend itself holds an agent session to its own account");
     await assert.rejects(defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "unknown" } }).ask("claude-cli", "p"), /not available/);
     assert.equal(seen.length, 1, "none of those reached a model");
 
-    const named = defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "codex-cli" } });
-    assert.deepEqual((await named.assistants()).assistants.map((a) => a.name), ["codex-cli"], "a named provider is the person's spending choice");
-    await assert.rejects(named.ask("claude-cli", "p"), /not available/);
+    const named = defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "claude-cli" } });
+    assert.deepEqual((await named.assistants()).assistants.map((a) => a.name), ["claude-cli"], "a named provider is the person's spending choice");
+    await assert.rejects(named.ask("codex-cli", "p"), /not available/);
+    assert.deepEqual(await defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "codex-cli" } }).assistants(), { assistants: [], blocked: "other-provider" });
     assert.deepEqual(await defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "cursor-agent" } }).assistants(), { assistants: [], blocked: "other-provider" });
 
     seen.length = 0;
@@ -750,12 +753,17 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
   } finally { cleanupDir(root); }
 });
 
-test("noTools: Claude and Codex take it as flags, off otherwise; a provider that can't hold it refuses before running", async () => {
+test("claudeChildEnv strips every switch that would route headless Claude to metered billing, and nothing else", () => {
+  const metered = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_USE_GATEWAY", "CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL", "ANTHROPIC_FOUNDRY_RESOURCE", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_BEDROCK_MANTLE_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL", "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION"];
+  const env = Object.fromEntries(metered.map((k) => [k, "1"]));
+  assert.deepEqual(claudeChildEnv({ ...env, CLAUDE_CODE_OAUTH_TOKEN: "t", PATH: "p", CLAUDE_CODE_USE_POWERSHELL_TOOL: "1" }), { CLAUDE_CODE_OAUTH_TOKEN: "t", PATH: "p", CLAUDE_CODE_USE_POWERSHELL_TOOL: "1" });
+});
+
+test("noTools: Claude takes it as flags, off otherwise; a provider that can't hold it refuses before running", async () => {
   assert.deepEqual(claudePrintArgs("haiku"), ["-p", "--output-format", "json", "--model", "haiku", "--max-turns", "1"], "synthesis is unchanged");
-  assert.deepEqual(claudePrintArgs("haiku", { noTools: true }).slice(-2), ["--tools=", "--strict-mcp-config"]);
+  assert.deepEqual(claudePrintArgs("haiku", { noTools: true }).slice(-3), ["--restricted", "--tools=", "--strict-mcp-config"]);
   assert.ok(claudePrintArgs("haiku", { noTools: true }).every((a) => a !== "" && !/\s/.test(a)), "every token survives the cmd.exe line");
   assert.deepEqual(codexExecArgs("m"), ["exec", "--json", "--skip-git-repo-check", "-m", "m", "-"], "synthesis is unchanged");
-  assert.deepEqual(codexExecArgs(undefined, { noTools: true }), ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only", "-"]);
   class Plain extends OpenAICompatProvider {
     ran = false;
     protected override async run(): Promise<string> { this.ran = true; return "x"; }
@@ -768,7 +776,7 @@ test("noTools: Claude and Codex take it as flags, off otherwise; a provider that
 });
 
 test("ui server ask: guarded like a write, one question at a time, answers from memory, and writes nothing", async () => {
-  const claude = { name: "claude-cli", label: "Claude Code", subscription: "Claude subscription" };
+  const claude = { name: "claude-cli", label: "Claude Code" };
   const prompts: string[] = [];
   let reply: (prompt: string) => Promise<string> = async () => '{"options":[{"title":"Keep cookies","for":"f","against":"a"}],"recommended":"Keep cookies","why":"w","unknowns":[]}';
   const asker: AskRunner = { assistants: async () => ({ assistants: [claude], blocked: null }), ask: async (_name, prompt) => { prompts.push(prompt); return reply(prompt); } };

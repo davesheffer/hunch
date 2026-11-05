@@ -23,7 +23,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, SCHEMAS, type EntityKind, type EntityFor } from "../core/types.js";
 import { BASELINE_VERSION, hasPendingMigration, migrateRaw, SCHEMA_VERSION } from "../core/migrate.js";
-import { writeFileAtomic } from "../core/io.js";
+import { writeFileAtomic, writeFileAtomicIfAbsent } from "../core/io.js";
 import { readStoreArtifact } from "../core/storeArtifact.js";
 import { createdAfterLock, heldLockNonces, judgeSameHostOwner, processStartedAt, selfStartToken, startTokenOf } from "../core/procstart.js";
 
@@ -467,7 +467,8 @@ export class JsonStore {
     }
   }
 
-  private writeContainedFile(directory: SafeDirectory, file: string, data: string, maxBytes: number): void {
+  /** Returns false only for createOnly, when the file already exists and was left alone. */
+  private writeContainedFile(directory: SafeDirectory, file: string, data: string, maxBytes: number, createOnly = false): boolean {
     const lexical = this.assertFileBelongsTo(directory, file);
     const bytes = Buffer.byteLength(data);
     if (bytes > maxBytes) {
@@ -476,12 +477,14 @@ export class JsonStore {
     // Refuse an existing symlink/hardlink/special file rather than relying on
     // rename semantics that differ across platforms.
     this.validateExistingFile(directory, lexical, maxBytes);
-    writeFileAtomic(lexical, data);
+    if (!createOnly) writeFileAtomic(lexical, data);
+    else if (!writeFileAtomicIfAbsent(lexical, data)) return false;
     this.validateExistingFile(directory, lexical, maxBytes);
     // Detect a kind-dir replacement around the atomic rename before reporting
     // success. (Node has no portable openat/renameat API; this closes the static
     // committed-symlink attack and detects the common concurrent replacement.)
     this.safeDirectory(directory.lexical, false);
+    return true;
   }
 
   private removeContainedFile(directory: SafeDirectory, file: string, maxBytes: number): boolean {
@@ -800,6 +803,19 @@ export class JsonStore {
     } else {
       this.writeContainedFile(directory, this.fileFor(kind, validated.id), encode(validated), this.maxBytes(kind));
     }
+    this.invalidate(kind);
+    return validated;
+  }
+
+  /** Write a new per-record file, or return null when a file for that id already exists.
+   *  Unlike put, a run that loses a race can't replace what the winner wrote. */
+  create<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] | null {
+    if (SINGLE_FILE[kind]) throw new Error(`[hunch] create is for per-record kinds, not ${kind}`);
+    this.writeGuard?.(kind);
+    const validated = SCHEMAS[kind].parse(record) as EntityFor[K] & { id: string };
+    this.assertSafeRecordId(validated.id);
+    const directory = this.safeKindDirectory(kind, true)!;
+    if (!this.writeContainedFile(directory, this.fileFor(kind, validated.id), encode(validated), this.maxBytes(kind), true)) return null;
     this.invalidate(kind);
     return validated;
   }

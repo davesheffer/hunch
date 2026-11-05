@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
@@ -218,6 +218,59 @@ test("cli:new refuses a taken id, a second live decision on a feature, an unknow
     assert.match(again.stderr, /already exists \("Dup"\)/);
     assert.equal(read<Finding>(root, "findings", findingId("Dup")).observation, "a");
   } finally { cleanupDir(root); }
+});
+
+test("JsonStore.create: a second writer of the same id gets null and the first record survives", () => {
+  const root = fixtureRepo();
+  try {
+    const first = new JsonStore(hunchPaths(root));
+    const second = new JsonStore(hunchPaths(root));
+    const id = decisionId("manual:Race");
+    assert.equal(second.get("decisions", id), undefined, "the loser has already looked and found nothing");
+    assert.equal(first.create("decisions", decision(id, { decision: "first" }))?.decision, "first");
+    assert.equal(second.create("decisions", decision(id, { decision: "second" })), null);
+    assert.equal(read<Decision>(root, "decisions", id).decision, "first");
+    assert.throws(() => first.create("symbols", {} as never), /per-record kinds/);
+  } finally { cleanupDir(root); }
+});
+
+test("cli:new racing itself on one id: one run succeeds, the rest refuse, and the file holds the winner's text", async () => {
+  const root = fixtureRepo();
+  try {
+    const run = (text: string) => new Promise<{ code: number | null; text: string; out: string }>((resolve) => {
+      const child = spawn(process.execPath, hunchCliArgs("new", "finding", "--title", "Racy", "--text", text, "--json"), { cwd: root, env: cliEnv(), stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      child.stdout.on("data", (d) => { out += d; });
+      child.stderr.on("data", (d) => { out += d; });
+      child.on("close", (code) => resolve({ code, text, out }));
+    });
+    const runs = await Promise.all(["a", "b", "c", "d"].map(run));
+    const won = runs.filter((r) => r.code === 0);
+    assert.equal(won.length, 1, runs.map((r) => `${r.code}: ${r.out}`).join("\n"));
+    for (const lost of runs.filter((r) => r.code !== 0)) assert.match(lost.out, /already exists|just added by another run|can't be read/);
+    assert.equal(read<Finding>(root, "findings", findingId("Racy")).observation, won[0]!.text);
+  } finally { cleanupDir(root); }
+});
+
+test("cli:new says so when the commit fails: the record stays, uncommitted", () => {
+  const root = fixtureRepo();
+  const lock = join(root, ".git", "index.lock");
+  try {
+    const clean = spawnSync(process.execPath, hunchCliArgs("new", "finding", "--title", "Committed", "--text", "a", "--json"), { cwd: root, encoding: "utf8", env: cliEnv() });
+    assert.equal(clean.status, 0, `${clean.stdout}${clean.stderr}`);
+    assert.equal(parseJson(clean.stdout).uncommitted, false);
+    git(root, "add", "-A"); git(root, "commit", "-qm", "settle", "--allow-empty");
+    writeFileSync(lock, "");
+    const json = spawnSync(process.execPath, hunchCliArgs("new", "finding", "--title", "Locked", "--text", "b", "--json"), { cwd: root, encoding: "utf8", env: cliEnv() });
+    assert.equal(json.status, 0, `${json.stdout}${json.stderr}`);
+    const body = parseJson(json.stdout);
+    assert.equal(body.flush, null);
+    assert.equal(body.uncommitted, true);
+    assert.equal(read<Finding>(root, "findings", findingId("Locked")).observation, "b");
+    const text = spawnSync(process.execPath, hunchCliArgs("new", "finding", "--title", "Locked too", "--text", "c"), { cwd: root, encoding: "utf8", env: cliEnv() });
+    assert.equal(text.status, 0, `${text.stdout}${text.stderr}`);
+    assert.match(text.stdout, /the commit failed/);
+  } finally { rmSync(lock, { force: true }); cleanupDir(root); }
 });
 
 test("cli:new never overwrites a record file the loader can't read", () => {
