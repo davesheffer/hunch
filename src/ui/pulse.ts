@@ -9,7 +9,7 @@ export interface PulseChange { seq: number; id: string; title: string; kind: Mem
 export interface Pulse { seq: number; attention: number; changes: PulseChange[] }
 
 const RING = 100;
-const signature = (m: MemoryItem): string => JSON.stringify([m.title, m.summary, m.status, m.active, m.feature, m.components.map((c) => c.id), m.files]);
+const signature = (m: MemoryItem): string => JSON.stringify([m.title, m.summary, m.status, m.active, m.signed, m.delivery, m.feature, m.components.map((c) => c.id), m.files]);
 
 export function createPulse(): { read(items: readonly MemoryItem[], since: number, attention: number): Pulse } {
   let known: Map<string, { sig: string; title: string; kind: MemoryKind; components: string[] }> | null = null;

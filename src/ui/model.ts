@@ -33,6 +33,8 @@ export interface MemoryItem {
   files: string[];
   commits: string[];
   delivery: Delivery;
+  /** A decision or rule a person confirmed as theirs. */
+  signed: boolean;
   /** ISO date used for ordering; empty when the record carries none. */
   date: string;
   /** Active, but tied to no feature, component or file: nothing routes it to an agent. */
@@ -107,13 +109,14 @@ function item(base: Omit<MemoryItem, "unconnected">): MemoryItem {
 }
 
 const present = (values: readonly (string | null | undefined)[]): string[] => values.filter((v): v is string => typeof v === "string" && v.length > 0);
+const humanSigned = (source: string): boolean => source.split("+").includes("human_confirmed");
 
 function fromDecision(d: Decision, components: readonly Component[]): MemoryItem {
   return item({
     id: d.id, kind: "decision", title: d.title, summary: d.decision, status: d.status,
     active: (d.status === "accepted" || d.status === "proposed") && !d.valid_to,
     feature: d.topic, components: componentLinks(d.related_components, d.related_files, components),
-    files: d.related_files, commits: present([d.commit]), delivery: "inform", date: d.valid_from ?? d.date,
+    files: d.related_files, commits: present([d.commit]), delivery: "inform", signed: humanSigned(d.provenance.source), date: d.valid_from ?? d.date,
   });
 }
 
@@ -123,7 +126,7 @@ function fromConstraint(c: Constraint, components: readonly Component[]): Memory
     active: c.status === "active" && !c.valid_to, feature: null,
     components: componentLinks([], c.scope, components), files: c.scope, commits: [],
     delivery: c.severity === "blocking" ? "block" : c.severity === "warning" ? "warn" : "inform",
-    date: c.valid_from ?? "",
+    signed: humanSigned(c.provenance.source), date: c.valid_from ?? "",
   });
 }
 
@@ -132,7 +135,7 @@ function fromBug(b: Bug, components: readonly Component[]): MemoryItem {
     id: b.id, kind: "bug", title: b.title, summary: b.root_cause || b.symptom, status: b.status,
     active: true, feature: null, components: componentLinks([], b.affected_files, components),
     files: b.affected_files, commits: present([b.lineage.introduced_commit, b.lineage.fixed_commit]),
-    delivery: "inform", date: "",
+    delivery: "inform", signed: false, date: "",
   });
 }
 
@@ -141,7 +144,7 @@ function fromFinding(f: Finding, components: readonly Component[]): MemoryItem {
     id: f.id, kind: "finding", title: f.title, summary: f.observation, status: f.triage,
     active: f.triage !== "resolved" && f.triage !== "stale", feature: null,
     components: componentLinks([], f.affected_files, components), files: f.affected_files,
-    commits: present([f.resolved_commit]), delivery: "inform", date: f.observed_at,
+    commits: present([f.resolved_commit]), delivery: "inform", signed: false, date: f.observed_at,
   });
 }
 
@@ -181,7 +184,6 @@ export function countMemory(items: readonly MemoryItem[], query: MemoryQuery): M
 }
 
 const field = (name: EditField["name"], label: string, value: string | null | undefined, long = true): EditField => ({ name, label, value: value ?? "", long });
-const humanSigned = (source: string): boolean => source.split("+").includes("human_confirmed");
 
 function actions(over: Partial<MemoryActions> & Pick<MemoryActions, "fields" | "removable" | "restorable">): MemoryActions {
   return { textLocked: null, signed: false, confirmable: false, severity: null, takesFeature: false, takesComponents: false, ...over };

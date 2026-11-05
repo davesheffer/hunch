@@ -199,6 +199,27 @@ test("pulse: the first read is the baseline; then added, changed and removed mem
   assert.equal(pulse.read(edited.filter((m) => m.id !== "bug_1"), 3, 4).changes.length, 0);
 });
 
+test("pulse: confirming a memory or changing a rule's severity is a change", () => {
+  const pulse = createPulse();
+  const s = source();
+  pulse.read(memoryItems(s), 0, 0);
+  const signed = memoryItems({ ...s, decisions: s.decisions.map((d) => (d.id === "dec_loose" ? { ...d, provenance: { ...d.provenance, source: "llm_draft+human_confirmed" as const } } : d)) });
+  assert.equal(signed.find((m) => m.id === "dec_loose")!.signed, true);
+  assert.deepEqual(pulse.read(signed, 0, 0).changes.map((c) => [c.id, c.change]), [["dec_loose", "changed"]]);
+  const rule = signed.find((m) => m.kind === "rule")!;
+  const louder = signed.map((m) => (m.id === rule.id ? { ...m, delivery: m.delivery === "block" ? "warn" as const : "block" as const } : m));
+  assert.deepEqual(pulse.read(louder, 1, 0).changes.map((c) => [c.id, c.change]), [[rule.id, "changed"]]);
+});
+
+test("ui page: the first poll only places the page in the ring, and a backfill lands as one feed line", () => {
+  assert.match(uiJs, /!P\.started \|\| r\.seq < P\.seq\) \{ P\.started = true; P\.seq = r\.seq; return; \}/);
+  assert.match(uiJs, /document\.hidden && P\.started/, "a tab opened hidden still gets its baseline");
+  assert.match(uiJs, /B\.fq\.length > 5/);
+  assert.match(uiJs, /B\.hist = null/, "Replay reads git again after a change");
+  assert.match(uiJs, /want\.id === d\.id/, "a queued form opens only on the memory it was queued for");
+  assert.match(uiJs, /go\.disabled = B\.busy/, "Next up offers no second write during a request");
+});
+
 test("ui server: /api/pulse needs the key, sets a baseline, then reports added, changed and removed memory", async () => {
   const { store, root, cleanup } = tempStore();
   const s = source();

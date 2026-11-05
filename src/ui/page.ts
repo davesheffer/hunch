@@ -712,7 +712,8 @@ export const uiJs = String.raw`
     if (a.removable) { const b = button('Remove memory', 'danger end'); b.addEventListener('click', () => open(removeForm(d, close))); bar.append(b); }
     if (a.textLocked) bar.append(el('p', a.textLocked, 'muted small'));
     bar.append(problem);
-    if (state.openForm) { const w = state.openForm; state.openForm = ''; if (w === 'links') links.click(); else if (confirm) confirm.click(); }
+    const want = state.openForm; state.openForm = null;
+    if (want && want.id === d.id) { if (want.form === 'links') links.click(); else if (confirm) confirm.click(); }
     return [bar, panel, leads];
   }
 
@@ -813,7 +814,7 @@ export const uiJs = String.raw`
 
   // ---- brain: the components, what memory is on each, what each one uses, and what waits.
   // B holds what the canvas, the strip and the panel share.
-  const B = { map: null, att: null, ready: false, plain: false, skipped: new Set(), done: null, q: '', results: null, feedEv: null, fq: [], fqBusy: false, replay: null, hist: null, stats: null, lost: false };
+  const B = { map: null, att: null, ready: false, plain: false, skipped: new Set(), done: null, busy: false, q: '', results: null, feedEv: null, fq: [], fqBusy: false, replay: null, hist: null, stats: null, lost: false };
   const MAP_KINDS = [['rule', 'Rules'], ['decision', 'Decisions'], ['bug', 'Bugs'], ['finding', 'Findings']];
   const memoryLabel = (n) => n + (n === 1 ? ' memory' : ' memories');
   const compName = (id) => { const c = B.map && B.map.components.find((x) => x.id === id); return c ? c.name : id; };
@@ -999,9 +1000,10 @@ export const uiJs = String.raw`
       const why = el('span', WHY[cur.k] + (names ? ' ' + names + '.' : ''), 'nu-why'); why.title = why.textContent; row.append(why);
       const act = el('div', undefined, 'nu-act');
       const go = button(cur.k === 'open-findings' ? 'Open finding' : cur.k === 'not-connected' ? 'Add links' : m.kind === 'rule' ? 'Review rule' : 'Confirm as mine');
+      go.disabled = B.busy;
       go.addEventListener('click', async () => {
         if (cur.k === 'not-confirmed' && m.kind !== 'rule') return confirmInPlace(m, go);
-        state.openForm = cur.k === 'not-connected' ? 'links' : cur.k === 'not-confirmed' ? 'confirm' : '';
+        state.openForm = cur.k === 'open-findings' ? null : { id: m.id, form: cur.k === 'not-connected' ? 'links' : 'confirm' };
         location.hash = '#/memory/' + enc(m.id);
       });
       const skip = button('Skip', 'secondary'); skip.addEventListener('click', () => { B.skipped.add(m.id); renderNext(); });
@@ -1012,21 +1014,27 @@ export const uiJs = String.raw`
     if (B.done) {
       const d = el('div', undefined, 'nu-done'); d.setAttribute('role', 'status');
       const undo = button('Undo', 'secondary');
+      undo.disabled = B.busy;
       undo.addEventListener('click', async () => {
         undo.disabled = true;
-        try { await post('/api/memory/' + enc(B.done.id) + '/' + B.done.undo.action, B.done.undo.body); B.done = null; await loadBrain(true); } catch (e) { undo.disabled = false; d.firstChild.textContent = e.message; }
+        try { await nextWrite(B.done.id, B.done.undo.action, B.done.undo.body); B.done = null; await loadBrain(true); } catch (e) { B.done.text = e.message; renderNext(); }
       });
       d.append(el('span', B.done.text), undo); parts.push(d);
     }
     box.replaceChildren(...parts);
   }
+  // One write at a time: a pulse can redraw Next up mid-request and offer fresh buttons.
+  async function nextWrite(id, action, body) {
+    B.busy = true;
+    try { return await post('/api/memory/' + enc(id) + '/' + action, body); } finally { B.busy = false; }
+  }
   async function confirmInPlace(m, go) {
     go.disabled = true;
     try {
-      const r = await post('/api/memory/' + enc(m.id) + '/confirm', {});
+      const r = await nextWrite(m.id, 'confirm', {});
       B.done = r.undo ? { id: m.id, undo: r.undo, text: 'Confirmed "' + m.title + '" as yours.' } : null;
       await loadBrain(true); loadList();
-    } catch (e) { go.disabled = false; if (e.status === 401) failed(e); else { B.done = null; showError(e.message); } }
+    } catch (e) { if (e.status === 401) failed(e); else { B.done = null; showError(e.message); renderNext(); } }
   }
 
   // ---- live: the feed line, polling, and Replay.
@@ -1046,7 +1054,7 @@ export const uiJs = String.raw`
   const P = { seq: 0, started: false };
   const VERBS = { added: 'Added', changed: 'Changed', removed: 'Removed' };
   function playChange(c) {
-    B.feedEv = { verb: VERBS[c.change], id: c.change === 'removed' ? '' : c.id, title: c.title, names: c.components.map(compName).join(', '), at: Date.now() };
+    B.feedEv = { verb: c.verb || VERBS[c.change], id: c.change === 'removed' ? '' : c.id, title: c.title, more: c.more, names: c.components.slice(0, 3).map(compName).join(', '), at: Date.now() };
     drawFeed();
     if (state.page === 'brain' && !B.plain) for (const id of c.components) Brain.fire(id);
   }
@@ -1058,7 +1066,13 @@ export const uiJs = String.raw`
   }
   function onChanges(changes) {
     const ids = new Set(changes.map((c) => c.id));
+    B.hist = null;
     B.fq.push(...changes);
+    // A backfill lands as one line, not a minute of lines.
+    if (B.fq.length > 5) {
+      const last = B.fq[B.fq.length - 1], kinds = new Set(B.fq.map((c) => c.change));
+      B.fq = [{ ...last, verb: kinds.size === 1 ? VERBS[last.change] : 'Changed', more: B.fq.length - 1, components: [...new Set(B.fq.flatMap((c) => c.components))] }];
+    }
     drainFeed();
     if (B.map) loadBrain(true);
     if (state.page === 'memory') loadList();
@@ -1067,12 +1081,13 @@ export const uiJs = String.raw`
     if (ids.has(state.selected) && !box.querySelector('form') && state.selected !== 'new') loadDetail(state.selected);
   }
   async function poll() {
-    if (document.hidden || !key) return;
+    if (!key || (document.hidden && P.started)) return;
     try {
       const r = await api('/api/pulse?since=' + P.seq);
       if (B.lost) { B.lost = false; drawFeed(); }
       setCount(r.attention);
-      if (r.seq < P.seq) { P.seq = r.seq; return; }
+      // The first answer only places this page in the ring: what it holds predates the page.
+      if (!P.started || r.seq < P.seq) { P.started = true; P.seq = r.seq; return; }
       P.seq = r.seq;
       if (r.changes.length) onChanges(r.changes);
     } catch (e) {
