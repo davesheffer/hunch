@@ -4,7 +4,7 @@ export const uiHtml = `<!doctype html>
 <title>Hunch</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/ui.css"><script src="/ui.js" defer></script></head>
 <body>
 <header class="top"><div class="brand"><strong>Hunch</strong><span id="repo-name" class="muted"></span></div>
-<nav aria-label="Sections"><a href="#/memory" data-nav="memory">Memory</a><a href="#/history" data-nav="history">History</a><a href="#/connections" data-nav="connections">Connections</a></nav></header>
+<nav aria-label="Sections"><a href="#/memory" data-nav="memory">Memory</a><a href="#/ask" data-nav="ask">Ask</a><a href="#/history" data-nav="history">History</a><a href="#/connections" data-nav="connections">Connections</a></nav></header>
 <p id="error" role="alert" hidden></p>
 <main>
 <section id="memory-page" hidden aria-labelledby="memory-title">
@@ -22,6 +22,11 @@ export const uiHtml = `<!doctype html>
 <div id="list-pane"><p id="list-status" class="muted small" role="status" aria-live="polite"></p><ul id="list" class="list"></ul></div>
 <article id="detail" aria-live="polite"><p class="muted">Pick a memory to see what it says and what it's connected to.</p></article>
 </div>
+</section>
+<section id="ask-page" hidden aria-labelledby="ask-title">
+<h1 id="ask-title">Ask an assistant</h1>
+<p id="ask-status" class="muted small" role="status" aria-live="polite"></p>
+<div id="ask" class="ask"></div>
 </section>
 <section id="history-page" hidden aria-labelledby="history-title">
 <h1 id="history-title">History</h1>
@@ -95,10 +100,13 @@ a{color:var(--accent)}
 #history>li{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
 .history .head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}.history ul{margin:6px 0 0;padding-left:20px}.history p{margin:6px 0 0}
 #detail .history>li{border-top:1px solid var(--line);padding:8px 0}#detail .history>li:first-child{border-top:0;padding-top:0}
+.ask{display:grid;gap:16px;max-width:860px}.ask .editor{margin:0}.ask p{margin:0 0 8px;overflow-wrap:anywhere;white-space:pre-wrap}
+.ask .card{scroll-margin-top:76px}.ask .card h3:first-child{margin-top:0}.options{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.options>li{border-top:1px solid var(--line);padding-top:12px}.options>li:first-child{border-top:0;padding-top:0}
 .ok{color:var(--accent);font-weight:600}.no{color:var(--muted)}
 #error{margin:16px 24px 0;color:var(--error);border-left:3px solid var(--error);padding:10px 14px;background:var(--paper)}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-@media(max-width:800px){.top{padding:10px 16px}main{padding:16px}.split{grid-template-columns:1fr}#detail{position:static;padding:16px;max-height:none;overflow:visible}
+@media(max-width:800px){.top{padding:10px 16px;flex-wrap:wrap}main{padding:16px}.split{grid-template-columns:1fr}#detail{position:static;padding:16px;max-height:none;overflow:visible}
 .split.reading #list-pane{display:none}.split:not(.reading) #detail{display:none}.split.reading .back{display:inline-block}}
 `;
 
@@ -123,7 +131,10 @@ export const uiJs = String.raw`
   const DONE = { edit: 'Saved.', link: 'Connections saved.', remove: 'Removed. Agents no longer get this memory.', restore: 'Restored. Agents get this memory again.', confirm: 'Confirmed as yours.', unconfirm: 'Confirmation taken back.' };
 
   // flash: the last change on the open memory, with its Undo, until another memory is opened.
-  const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, flash: null };
+  // ask: the question in progress and its answer, kept while the person looks around.
+  // draft: what the next New memory form starts with.
+  const state = { kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, flash: null, draft: null,
+    askRoute: '', ask: { about: null, question: '', assistant: '', answer: null, waiting: false, problem: '', gen: 0 } };
 
   function showError(text) { $('error').textContent = text; $('error').hidden = !text; }
   async function request(path, init) {
@@ -469,6 +480,7 @@ export const uiJs = String.raw`
       form.append(row);
     }
     inputs.files.placeholder = 'src/auth/**';
+    if (state.draft) { for (const [name, v] of Object.entries(state.draft)) inputs[name].value = v; state.draft = null; }
 
     const draw = () => {
       for (const b of types.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.kind === kind));
@@ -529,6 +541,7 @@ export const uiJs = String.raw`
     const links = button('Edit connections', 'secondary'); links.addEventListener('click', () => open(linksForm(d, close))); bar.append(links);
     if (a.removable) { const b = button('Remove memory', 'danger'); b.addEventListener('click', () => open(removeForm(d, close))); bar.append(b); }
     if (a.restorable) { const b = button('Restore memory'); b.addEventListener('click', () => run(bar, problem, () => change(d.id, 'restore', {}))); bar.append(b); }
+    const asking = button('Ask about this', 'secondary'); asking.addEventListener('click', () => { location.hash = '#/ask/' + encodeURIComponent(d.id); }); bar.append(asking);
     if (a.textLocked) bar.append(el('p', a.textLocked, 'muted small'));
     bar.append(problem);
     return [bar, panel];
@@ -583,6 +596,144 @@ export const uiJs = String.raw`
     }
   }
 
+  // ---- ask: one question to an assistant the person picks. The answer is a suggestion:
+  // recording it opens the New memory form, filled in, for them to change and add.
+  const NOBODY = {
+    'local-only': 'Asking is off: this repository uses local-only analysis. Change it with hunch provider.',
+    'other-provider': 'Asking needs Claude Code or Codex, and this repository is set to use something else. Change it with hunch provider.',
+    'unknown-origin': 'This page was started by a background process, so it can\'t choose an account. Run hunch ui from your terminal.',
+  };
+  function resetAsk() { const a = state.ask; a.about = null; a.question = ''; a.answer = null; a.waiting = false; a.problem = ''; a.gen++; $('ask-status').textContent = ''; }
+
+  function recordOption(a, r, option) {
+    const recommended = r.recommended !== null && r.options[r.recommended] === option;
+    state.draft = {
+      title: option.title, text: option.title, context: recommended ? r.why || option.for : option.for,
+      rejected: r.options.filter((o) => o !== option).map((o) => o.title).join('\n'),
+      feature: (a.about && a.about.feature) || '',
+    };
+    location.hash = '#/memory/new';
+  }
+  function answerView(a) {
+    const r = a.answer;
+    const box = el('section', undefined, 'card');
+    box.append(el('p', 'Suggestion from ' + r.assistant.label + '. Nothing is saved until you record it.', 'muted small'));
+    if (r.text) {
+      box.append(el('h3', 'Answer'), el('p', r.text));
+      const b = button('Record as a decision', 'secondary');
+      b.addEventListener('click', () => { state.draft = { text: r.text, feature: (a.about && a.about.feature) || '' }; location.hash = '#/memory/new'; });
+      box.append(b);
+    } else {
+      if (r.recommended !== null) box.append(el('h3', 'Recommended'), el('h2', r.options[r.recommended].title));
+      if (r.why) box.append(el('p', r.why));
+      box.append(el('h3', 'Options'));
+      const ul = el('ul', undefined, 'options');
+      for (const o of r.options) {
+        const li = el('li'); li.append(el('h2', o.title));
+        if (o.for) li.append(el('p', 'For: ' + o.for));
+        if (o.against) li.append(el('p', 'Against: ' + o.against));
+        const b = button('Record this decision', 'secondary'); b.addEventListener('click', () => recordOption(a, r, o));
+        li.append(b); ul.append(li);
+      }
+      box.append(ul);
+      if (r.unknowns.length) { box.append(el('h3', 'Still unknown')); const u = el('ul'); for (const x of r.unknowns) u.append(el('li', x)); box.append(u); }
+    }
+    box.append(el('h3', 'Based on'));
+    if (r.used.length) { const u = el('ul'); for (const m of r.used) { const li = el('li'); li.append(memoryLink(m.id, m.title)); u.append(li); } box.append(u); }
+    else box.append(el('p', 'No memory matched. The answer rests on your question alone.', 'muted'));
+    return box;
+  }
+  function drawAsk(who) {
+    const a = state.ask, box = $('ask');
+    const parts = [];
+    if (a.about) {
+      const row = el('p', 'About: ');
+      row.append(memoryLink(a.about.id, a.about.title));
+      parts.push(row);
+    }
+    if (!who.assistants.length) {
+      parts.push(el('p', NOBODY[who.blocked] || 'No assistant CLI found. Install Claude Code or Codex, sign in, then start hunch ui again.', 'callout'));
+      $('ask-status').textContent = '';
+      return box.replaceChildren(...parts);
+    }
+    if (!who.assistants.some((x) => x.name === a.assistant)) a.assistant = who.assistants[0].name;
+    const chosen = () => who.assistants.find((x) => x.name === a.assistant);
+
+    const form = el('form', undefined, 'editor'); form.noValidate = true;
+    const question = el('textarea'); question.rows = 4; question.value = a.question; question.maxLength = 2000;
+    question.addEventListener('input', () => { a.question = question.value; });
+    form.append(...labelled('Your question', question, 'ask-question'));
+    const send = button('', '', 'submit');
+    const note = el('p', '', 'muted small');
+    const label = () => { const c = chosen(); send.textContent = 'Ask ' + c.label; note.textContent = 'Sends your question and related memory to ' + c.label + ', on your ' + c.subscription + '. Nothing is saved.'; };
+    if (who.assistants.length > 1) {
+      const pick = select(who.assistants.map((x) => [x.name, x.label])); pick.value = a.assistant;
+      pick.addEventListener('change', () => { a.assistant = pick.value; label(); });
+      form.append(...labelled('Who to ask', pick, 'ask-who'));
+    }
+    label();
+    const problem = problemLine(); say(problem, a.problem);
+    const row = el('div', undefined, 'form-actions'); row.append(send);
+    if (a.about || a.answer || a.question) {
+      const clear = button('Start over', 'secondary');
+      clear.addEventListener('click', () => { resetAsk(); if (location.hash === '#/ask') drawAsk(who); else location.hash = '#/ask'; });
+      row.append(clear);
+    }
+    form.append(note, problem, row);
+    if (a.waiting) for (const b of form.querySelectorAll('button')) b.disabled = true;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = question.value.trim();
+      if (!text) { question.focus(); return say(problem, 'Write your question first.'); }
+      const gen = a.gen, name = chosen();
+      a.waiting = true; a.answer = null; a.problem = '';
+      drawAsk(who);
+      $('ask-status').textContent = 'Waiting for ' + name.label + '. This can take a couple of minutes.';
+      let status = '';
+      try {
+        const body = { question: text, assistant: name.name };
+        if (a.about) body.about = a.about.id;
+        const r = await post('/api/ask', body);
+        if (gen !== a.gen) return;
+        a.answer = r; status = 'Answer from ' + r.assistant.label + ' below.';
+      } catch (err) {
+        if (gen !== a.gen) return;
+        if (err.status === 401) failed(err); else a.problem = err.message;
+      }
+      a.waiting = false;
+      $('ask-status').textContent = status;
+      drawAsk(who);
+      const card = $('ask').querySelector('section.card');
+      if (card) card.scrollIntoView({ block: 'start' });
+    });
+    parts.push(form);
+    if (a.answer) parts.push(answerView(a));
+    box.replaceChildren(...parts);
+  }
+  async function loadAsk(id) {
+    const a = state.ask;
+    state.askRoute = id;
+    showError('');
+    if (id && (!a.about || a.about.id !== id)) {
+      resetAsk();
+      $('ask').replaceChildren(el('p', 'Loading…', 'muted'));
+      try {
+        const d = await api('/api/memory/' + encodeURIComponent(id));
+        if (state.askRoute !== id) return;
+        a.about = { id: d.id, title: d.title, feature: d.kind === 'decision' ? d.feature : null };
+      } catch (e) {
+        if (state.askRoute !== id) return;
+        if (e.status === 404) $('ask').replaceChildren(el('p', 'That memory is gone. It may have been removed or renamed.', 'muted'));
+        else failed(e);
+        return;
+      }
+    }
+    try {
+      const who = await api('/api/ask');
+      if (state.askRoute === id) drawAsk(who);
+    } catch (e) { if (state.askRoute === id) failed(e); }
+  }
+
   async function loadConnections() {
     $('connections-status').textContent = 'Checking…';
     $('recheck').disabled = true;
@@ -608,11 +759,11 @@ export const uiJs = String.raw`
   }
 
   function route() {
-    const m = /^#\/(memory|history|connections)(?:\/(.+))?$/.exec(location.hash);
+    const m = /^#\/(memory|ask|history|connections)(?:\/(.+))?$/.exec(location.hash);
     const page = m ? m[1] : 'memory';
     for (const a of document.querySelectorAll('[data-nav]')) { if (a.dataset.nav === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
-    for (const p of ['memory', 'history', 'connections']) $(p + '-page').hidden = page !== p;
-    document.title = { memory: 'Memory', history: 'History', connections: 'Connections' }[page] + ' · Hunch';
+    for (const p of ['memory', 'ask', 'history', 'connections']) $(p + '-page').hidden = page !== p;
+    document.title = { memory: 'Memory', ask: 'Ask', history: 'History', connections: 'Connections' }[page] + ' · Hunch';
     if (page === 'memory') {
       const id = m && m[2] ? decodeURIComponent(m[2]) : '';
       state.selected = id;
@@ -620,7 +771,8 @@ export const uiJs = String.raw`
       document.querySelector('.split').classList.toggle('reading', !!id);
       for (const a of $('list').querySelectorAll('a')) { if (a.getAttribute('href') === '#/memory/' + encodeURIComponent(id)) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); }
       loadDetail(id);
-    } else if (page === 'history') loadHistory();
+    } else if (page === 'ask') loadAsk(m && m[2] ? decodeURIComponent(m[2]) : '');
+    else if (page === 'history') loadHistory();
     else loadConnections();
   }
 

@@ -85,7 +85,7 @@ function globBase(pattern: string): string {
   return literal.replace(/\/+$/, "").replace(/^\.\//, "");
 }
 
-function overlaps(a: string, b: string): boolean {
+export function overlaps(a: string, b: string): boolean {
   const x = globBase(a), y = globBase(b);
   if (x === "" || y === "" || x === "." || y === ".") return false;
   return x === y || x.startsWith(`${y}/`) || y.startsWith(`${x}/`);

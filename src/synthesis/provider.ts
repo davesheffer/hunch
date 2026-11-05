@@ -180,6 +180,11 @@ export interface FailureInput {
   suspects: string[];
 }
 
+export interface ProseOptions {
+  /** The prompt carries text the person didn't write: run with no tools, or refuse to run. */
+  noTools?: boolean;
+}
+
 export interface SynthProvider {
   readonly name: string;
   available(): Promise<boolean>;
@@ -192,7 +197,7 @@ export interface SynthProvider {
   /** Optional free-form grounded prose (the wiki's Overview section). LLM-backed
    *  providers implement it through their normal guarded transport, so callers
    *  must feature-detect and degrade to a deterministic template when absent. */
-  draftProse?(prompt: string): Promise<string>;
+  draftProse?(prompt: string, opts?: ProseOptions): Promise<string>;
   /** Optional harness judgment of an auto-drafted decision's relevance, for
    *  `hunch auto-review`. Only LLM-backed providers implement it, so callers
    *  feature-detect. */
@@ -343,7 +348,9 @@ type PromptOutput = "json" | "text";
 abstract class PromptSynthProvider implements SynthProvider {
   abstract readonly name: string;
   abstract available(): Promise<boolean>;
-  protected abstract run(prompt: string, output?: PromptOutput): Promise<string>;
+  protected abstract run(prompt: string, output?: PromptOutput, opts?: ProseOptions): Promise<string>;
+  /** Whether `run` honors `noTools`. Off unless a provider has a real way to hold it. */
+  protected readonly honorsNoTools: boolean = false;
 
   /** Run a CLI with the prompt on stdin, stripping API-key env vars so the tool
    *  falls through to its SUBSCRIPTION credentials. Shared by codex/cursor. */
@@ -388,9 +395,10 @@ abstract class PromptSynthProvider implements SynthProvider {
   /** Grounded prose for the wiki. Uses text mode rather than the structured JSON
    *  mode required by the record mappers. Throws on empty output so the caller
    *  falls back to its deterministic template page. */
-  async draftProse(prompt: string): Promise<string> {
+  async draftProse(prompt: string, opts?: ProseOptions): Promise<string> {
     assertInitiatorProvider(this.name);
-    const text = (await this.run(prompt, "text")).trim();
+    if (opts?.noTools && !this.honorsNoTools) throw new Error(`${this.name} cannot run without tools`);
+    const text = (await this.run(prompt, "text", opts)).trim();
     if (!text) throw new Error(`${this.name}: empty prose output`);
     return text;
   }
@@ -438,8 +446,15 @@ export function safeModel(v: string | undefined, fallback: string | undefined): 
  * directory. Codex normally refuses to start outside a trusted Git repository;
  * the explicit skip flag preserves that neutral-cwd isolation without loading a
  * target repo's agent rules or MCP configuration. */
-export function codexExecArgs(model?: string): string[] {
-  return ["exec", "--json", "--skip-git-repo-check", ...(model ? ["-m", model] : []), "-"];
+export function codexExecArgs(model?: string, opts?: ProseOptions): string[] {
+  // Explicit, since a user's Codex config can widen the default sandbox.
+  return ["exec", "--json", "--skip-git-repo-check", ...(opts?.noTools ? ["--sandbox", "read-only"] : []), ...(model ? ["-m", model] : []), "-"];
+}
+
+/** Headless Claude Code. `--tools=` is the empty tool list in one token, so it survives the
+ *  cmd.exe line on Windows; MCP servers are separate from the built-in set. */
+export function claudePrintArgs(model: string, opts?: ProseOptions): string[] {
+  return ["-p", "--output-format", "json", "--model", model, "--max-turns", "1", ...(opts?.noTools ? ["--tools=", "--strict-mcp-config"] : [])];
 }
 
 // The timeout drives an abort delay and max_tokens caps output length; neither is
@@ -469,6 +484,7 @@ class ClaudeCliProvider extends PromptSynthProvider {
   // Default to the `haiku` alias (cheap/fast, and survives model retirements)
   // rather than a pinned dated id; override with HUNCH_SYNTH_MODEL if needed.
   private model = safeModel(process.env.HUNCH_SYNTH_MODEL, "haiku");
+  protected override readonly honorsNoTools = true;
 
   async available(): Promise<boolean> {
     try {
@@ -479,7 +495,7 @@ class ClaudeCliProvider extends PromptSynthProvider {
     }
   }
 
-  protected async run(prompt: string): Promise<string> {
+  protected async run(prompt: string, _output?: PromptOutput, opts?: ProseOptions): Promise<string> {
     // Force SUBSCRIPTION auth: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN outrank
     // subscription OAuth in Claude Code's precedence and are *always* used in
     // headless `-p` mode when present. Strip them so the CLI falls through to
@@ -508,7 +524,7 @@ class ClaudeCliProvider extends PromptSynthProvider {
     // user's home config, not cwd, so this doesn't affect subscription billing.
     // Prompt goes via STDIN (-p reads piped stdin), never argv — keeps untrusted
     // diff content out of any shell the spawn helper uses on Windows.
-    const args = ["-p", "--output-format", "json", "--model", this.model, "--max-turns", "1"];
+    const args = claudePrintArgs(this.model, opts);
     const { stdout } = await pexecIn("claude", args, {
       input: prompt,
       env: childEnv,
@@ -541,6 +557,7 @@ class ClaudeCliProvider extends PromptSynthProvider {
 class CodexCliProvider extends PromptSynthProvider {
   readonly name = "codex-cli";
   private model = safeModel(process.env.HUNCH_CODEX_MODEL, undefined); // omit → codex uses its configured default
+  protected override readonly honorsNoTools = true;
 
   async available(): Promise<boolean> {
     try {
@@ -551,13 +568,13 @@ class CodexCliProvider extends PromptSynthProvider {
     }
   }
 
-  protected async run(prompt: string): Promise<string> {
+  protected async run(prompt: string, _output?: PromptOutput, opts?: ProseOptions): Promise<string> {
     // `codex exec --json --skip-git-repo-check -` reads the prompt from STDIN
     // (the `-`) and emits JSONL events. The skip flag is required because the
     // shared runner deliberately uses a neutral temp cwd. Strip OPENAI_API_KEY so
     // it uses ChatGPT (subscription) auth, not the pay-per-token API — consistent
     // with the subscription-only rule.
-    const args = codexExecArgs(this.model);
+    const args = codexExecArgs(this.model, opts);
     const out = await this.runCli("codex", args, ["OPENAI_API_KEY"], prompt);
     return extractCodexText(out);
   }

@@ -15,6 +15,8 @@
  * /api/memory runs `hunch new` (the CLI owns validation, git and the store), one at a time,
  * and answers with the move plus its Undo.
  * A write also needs a JSON body and, when the browser sends an Origin, this server's own.
+ * Ask: GET /api/ask lists who can be asked; POST /api/ask, guarded like a write since it spends
+ * the person's subscription, asks one of them one question at a time and writes nothing.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
@@ -28,6 +30,7 @@ import { MEMORY_KINDS, countMemory, filterMemory, memoryDetail, memoryItems, typ
 import { uiCss, uiHtml, uiJs } from "./page.js";
 import { memoryHistory, type HistorySource } from "./history.js";
 import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
+import { askContext, askPrompt, askRequest, defaultAskRunner, parseAnswer, type AskRunner } from "./ask.js";
 
 export interface RepoInfo { root: string; branch: string | null; remote: string | null; webUrl: string | null }
 export interface GithubInfo { installed: boolean; authenticated: boolean; user: string | null; repo: string | null }
@@ -48,6 +51,8 @@ export interface UiServerOptions {
   /** How to run this CLI: the node binary plus the args before the verb (execArgv + entry).
    *  Without it every write answers 503. */
   cli?: { file: string; args: string[]; env?: NodeJS.ProcessEnv };
+  /** Test seam; defaults to the installed subscription CLIs. */
+  asker?: AskRunner;
 }
 
 const PROBE_TIMEOUT_MS = 8000;
@@ -140,15 +145,45 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
   });
   // One CLI write at a time: each one commits, and two commits must not race.
   let writing: Promise<unknown> = Promise.resolve();
+  const asker = opts.asker ?? defaultAskRunner(opts.root);
+  // One question at a time: each one spends the person's subscription.
+  let asking = false;
+
+  // Sends the refusal and answers true unless this POST came from this page, as JSON.
+  const refused = (req: IncomingMessage, res: ServerResponse): boolean => {
+    // A browser always sends Origin on a cross-site POST; it must be this page's own.
+    const origin = req.headers.origin;
+    if (origin !== undefined && origin !== `http://${req.headers.host}`) { send(res, 403, { error: "Changes are only accepted from this page." }); return true; }
+    if (!/^application\/json(?:;|$)/i.test(req.headers["content-type"] ?? "")) { send(res, 415, { error: "Send the change as JSON." }); return true; }
+    return false;
+  };
+
+  const ask = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    if (refused(req, res)) return;
+    const body = await readJson(req);
+    if (!body.ok) return send(res, body.status, { error: body.error });
+    const parsed = askRequest(body.value);
+    if (!parsed.ok) return send(res, 400, { error: parsed.error });
+    if (asking) return send(res, 409, { error: "Still waiting on your last question." });
+    asking = true;
+    try {
+      const { assistants, blocked } = await asker.assistants();
+      const assistant = assistants.find((a) => a.name === parsed.assistant);
+      if (blocked || !assistant) return send(res, 409, { error: "That assistant can't be asked right now." });
+      if (parsed.about && !memoryDetail(source(), parsed.about)) return send(res, 404, { error: `No memory with id ${parsed.about}.` });
+      const { prompt, used } = askPrompt(parsed.question, askContext(source(), parsed.question, parsed.about));
+      let reply: string;
+      try { reply = await asker.ask(assistant.name, prompt); }
+      catch (error) { return send(res, 502, { error: `${assistant.label} did not answer: ${(error instanceof Error ? error.message : String(error)).slice(0, 300)}` }); }
+      return send(res, 200, { assistant: { name: assistant.name, label: assistant.label }, ...parseAnswer(reply), used: used.map((m) => ({ id: m.id, title: m.title })) });
+    } finally { asking = false; }
+  };
 
   // id null: POST /api/memory, a new record (`hunch new`).
   const write = async (req: IncomingMessage, res: ServerResponse, id: string | null, action: string): Promise<void> => {
     if (id !== null && !isUiAction(action)) return send(res, 404, { error: "Not found." });
     const move = id === null ? "new" : (action as UiAction);
-    // A browser always sends Origin on a cross-site POST; it must be this page's own.
-    const origin = req.headers.origin;
-    if (origin !== undefined && origin !== `http://${req.headers.host}`) return send(res, 403, { error: "Changes are only accepted from this page." });
-    if (!/^application\/json(?:;|$)/i.test(req.headers["content-type"] ?? "")) return send(res, 415, { error: "Send the change as JSON." });
+    if (refused(req, res)) return;
     if (!opts.cli) return send(res, 503, { error: "Editing needs hunch ui started from the command line." });
     const body = await readJson(req);
     if (!body.ok) return send(res, body.status, { error: body.error });
@@ -176,9 +211,11 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const writeRoute = req.method === "POST" ? WRITE_ROUTE.exec(url.pathname) : null;
     const createRoute = req.method === "POST" && url.pathname === "/api/memory";
-    if (req.method !== "GET" && !writeRoute && !createRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
-    if (writeRoute || createRoute) {
+    const askRoute = req.method === "POST" && url.pathname === "/api/ask";
+    if (req.method !== "GET" && !writeRoute && !createRoute && !askRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
+    if (writeRoute || createRoute || askRoute) {
       if (!tokenMatches(req.headers.authorization, opts.token)) return send(res, 401, { error: "Access key missing or expired." });
+      if (askRoute) return ask(req, res);
       return writeRoute ? write(req, res, writeRoute[1]!, writeRoute[2]!) : write(req, res, null, "new");
     }
     const asset = ASSETS.get(url.pathname);
@@ -221,6 +258,7 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
       const titles = new Map(memoryItems(source()).map((m) => [m.id, m.title]));
       return send(res, 200, { items: memoryHistory(sources, { limit: HISTORY_LIMIT, id }, titles), private: !!store.privateDir });
     }
+    if (url.pathname === "/api/ask") return send(res, 200, await asker.assistants());
     if (url.pathname === "/api/connections") {
       const [repo, github, assistants] = await Promise.all([probes.repo(), probes.github(), probes.assistants()]);
       return send(res, 200, { repo, github, assistants });
