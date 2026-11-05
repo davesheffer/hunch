@@ -1135,8 +1135,10 @@ function rebuildFreshIndex(store: HunchStore): string | undefined {
 }
 
 /** Prepare and validate a complete root context before publishing it to handlers.
- *  A failed re-home therefore leaves the previous graph fully active. */
-function prepareRoot(root: string, explicitOverlay: boolean, requireIndex: boolean): PreparedRoot {
+ *  A failed re-home therefore leaves the previous graph fully active. `deferSync`
+ *  keeps the validation but leaves the overlay pull and reindex to the caller, so
+ *  a slow remote or a large overlay cannot hold up the MCP handshake. */
+function prepareRoot(root: string, explicitOverlay: boolean, requireIndex: boolean, deferSync = false): PreparedRoot {
   // Team auto-discovery: a committed .hunch/team.json advertises the shared store — a
   // fresh clone (a new teammate, a headless agent, a CI workflow) wires itself BEFORE the
   // store is constructed, so every consumer resolves the same single source of truth.
@@ -1170,7 +1172,7 @@ function prepareRoot(root: string, explicitOverlay: boolean, requireIndex: boole
 
     let nextRemotePullAt = 0;
     let consecutivePullFailures = 0;
-    if (store.privateDir) {
+    if (store.privateDir && !deferSync) {
       try {
         const { status, detail } = pullHunchStatusDetailed(store.privateDir, {
           remote: startupTeamRoute ?? advertisedTeamRemoteContract(root, join(store.privateDir, "..")),
@@ -1183,11 +1185,13 @@ function prepareRoot(root: string, explicitOverlay: boolean, requireIndex: boole
     }
 
     let indexedSourceStamp: string | undefined;
-    try {
-      indexedSourceStamp = rebuildFreshIndex(store);
-    } catch (error) {
-      if (requireIndex) throw error;
-      console.error("[hunch-mcp] reindex on startup failed:", (error as Error).message);
+    if (!deferSync) {
+      try {
+        indexedSourceStamp = rebuildFreshIndex(store);
+      } catch (error) {
+        if (requireIndex) throw error;
+        console.error("[hunch-mcp] reindex on startup failed:", (error as Error).message);
+      }
     }
 
     return {
@@ -1219,11 +1223,17 @@ export type RootControlledServer = {
    *  wiring calls this when a LATER resolution is ambiguous, so a stale parked
    *  swap can never apply after the client stopped unambiguously advertising it. */
   cancelPendingRoot: () => void;
+  /** Run the startup pull and reindex held back by `deferStartupSync`, unless a tool
+   *  call already took them over or the server closed. */
+  runStartupSync: () => void;
 };
 
 export interface RootControlOptions {
   /** Serve exactly `initialRoot`; never re-home to client roots or `cwd` hints. */
   pinned?: boolean;
+  /** Validate the root now but pull and reindex after construction: on the first tool
+   *  call or `runStartupSync`, whichever comes first. */
+  deferStartupSync?: boolean;
 }
 
 /** Delivered to every MCP client at initialize — the one grounding channel that
@@ -1239,7 +1249,8 @@ export const MCP_INSTRUCTIONS = [
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
   const pinned = options.pinned === true;
   const explicitOverlay = !!process.env.HUNCH_PRIVATE_DIR?.trim();
-  const initial = prepareRoot(initialRoot, explicitOverlay, false);
+  let startupPullPending = options.deferStartupSync === true;
+  const initial = prepareRoot(initialRoot, explicitOverlay, false, startupPullPending);
   let root = initial.root;
   let teamFile = initial.teamFile;
   let teamAdvertised = initial.teamAdvertised;
@@ -1390,6 +1401,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     const canonical = canonicalRootPath(findRoot(next));
     if (canonical === canonicalRootPath(root)) return;
     const prepared = prepareRoot(canonical, explicitOverlay, true);
+    startupPullPending = false;
     const previous = store;
     root = prepared.root;
     teamFile = prepared.teamFile;
@@ -1444,6 +1456,17 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     closed = true;
     pendingRoot = null;
     store.close();
+  };
+
+  const runStartupSync = (): void => {
+    if (closed || activeRequests || !startupPullPending) return;
+    startupPullPending = false;
+    pullTeamMemory();
+    try {
+      if (store.sourceStamp() !== indexedSourceStamp) refreshIndex();
+    } catch (error) {
+      console.error("[hunch-mcp] reindex on startup failed:", (error as Error).message);
+    }
   };
   const underlyingClose = server.close.bind(server);
   server.close = async (): Promise<void> => {
@@ -1524,7 +1547,10 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           return refused("The committed team memory destination is invalid or no longer matches this process. Refusing the stale graph; reconnect Hunch first.");
         }
         let pulledFresh = false;
-        if (store.mode === "shared" && store.privateDir) {
+        // A deferred startup pull is the only read-side sync a private overlay gets, so
+        // the first tool call must not serve memory that startup would have refreshed.
+        if (store.privateDir && (store.mode === "shared" || startupPullPending)) {
+          startupPullPending = false;
           const pulled = pullTeamMemory();
           pulledFresh = pulled !== "cooldown" && pulled !== "not_shared" && teamPullIsFresh(pulled);
           // Recompute the full semantic + physical snapshot after the synchronous
@@ -3863,6 +3889,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     setRoot: (next: string) => { if (!pinned) setRoot(next); },
     pinned,
     cancelPendingRoot: () => { pendingRoot = null; },
+    runStartupSync,
   };
 }
 
@@ -3920,11 +3947,22 @@ export function wireClientRoots(control: RootControlledServer, fallback: string)
   );
 }
 
-/** Start the stdio server (called by `hunch mcp`). */
+/** Long enough for the client's initialize and tools/list to be answered before the
+ *  synchronous startup sync blocks this process's event loop. */
+const STARTUP_SYNC_DELAY_MS = 5_000;
+
+/** Start the stdio server (called by `hunch mcp`). Answers the handshake first: hosts
+ *  give a server a fixed connect budget (30s in Claude Code), and pulling and reindexing
+ *  a large overlay can take longer than that. */
 export async function startServer(cwd: string = process.cwd(), options: RootControlOptions = {}): Promise<void> {
   const fallback = options.pinned ? cwd : findRoot(cwd);
-  const control = buildServerWithRootControl(fallback, options);
+  const control = buildServerWithRootControl(fallback, { ...options, deferStartupSync: true });
   wireClientRoots(control, fallback);
+  const onInitialized = control.server.server.oninitialized;
+  control.server.server.oninitialized = () => {
+    onInitialized?.();
+    setTimeout(control.runStartupSync, STARTUP_SYNC_DELAY_MS).unref();
+  };
   const transport = new StdioServerTransport();
   await control.server.connect(transport);
   // Exit through process.exit on a termination signal (same conventional codes as
