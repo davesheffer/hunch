@@ -414,8 +414,16 @@ export class JsonStore {
     maxBytes: number,
   ): FileStat | null {
     const lexical = this.assertFileBelongsTo(directory, file);
-    const stat = this.lstatOrMissing(lexical);
+    let stat = this.lstatOrMissing(lexical);
     if (!stat) return null;
+    // create() publishes by hard link, so a fresh record sits at nlink=2 until its
+    // writer unlinks the temp. Wait that out instead of skipping a healthy record
+    // as corrupt; a link that lasts is still refused below.
+    for (let tries = 0; stat.isFile() && stat.nlink !== 1 && tries < 10; tries++) {
+      Atomics.wait(RMW_LOCK_WAITER, 0, 0, 25);
+      stat = this.lstatOrMissing(lexical);
+      if (!stat) return null;
+    }
     if (stat.isSymbolicLink() || !stat.isFile()) {
       throw unsafePath(lexical, "expected an ordinary file (symlinks and special files are not followed)");
     }

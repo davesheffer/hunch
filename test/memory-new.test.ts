@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import { linkSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
@@ -234,6 +235,23 @@ test("JsonStore.create: a second writer of the same id gets null and the first r
   } finally { cleanupDir(root); }
 });
 
+test("JsonStore: a record caught mid-publish at nlink=2 reads once it settles; a lasting hard link is still refused", async () => {
+  const root = fixtureRepo();
+  try {
+    const id = decisionId("manual:Linked");
+    new JsonStore(hunchPaths(root)).create("decisions", decision(id, { decision: "linked" }));
+    const file = join(root, ".hunch", "decisions", `${id}.json`);
+    const tmp = `${file}.tmp1.0`;
+    linkSync(file, tmp);
+    assert.equal(new JsonStore(hunchPaths(root)).get("decisions", id), undefined);
+    // The read blocks this thread, so the writer finishing its publish has to be another process.
+    const writer = spawn(process.execPath, ["-e", `console.log("ready"); setTimeout(() => require("node:fs").unlinkSync(${JSON.stringify(tmp)}), 40)`], { stdio: ["ignore", "pipe", "inherit"] });
+    await once(writer.stdout, "data");
+    assert.equal(new JsonStore(hunchPaths(root)).get("decisions", id)?.decision, "linked");
+    await once(writer, "close");
+  } finally { cleanupDir(root); }
+});
+
 test("cli:new racing itself on one id: one run succeeds, the rest refuse, and the file holds the winner's text", async () => {
   const root = fixtureRepo();
   try {
@@ -269,8 +287,29 @@ test("cli:new says so when the commit fails: the record stays, uncommitted", () 
     assert.equal(read<Finding>(root, "findings", findingId("Locked")).observation, "b");
     const text = spawnSync(process.execPath, hunchCliArgs("new", "finding", "--title", "Locked too", "--text", "c"), { cwd: root, encoding: "utf8", env: cliEnv() });
     assert.equal(text.status, 0, `${text.stdout}${text.stderr}`);
-    assert.match(text.stdout, /the commit failed/);
+    assert.match(text.stdout, /not committed/);
   } finally { rmSync(lock, { force: true }); cleanupDir(root); }
+});
+
+test("cli:new with the user's work staged: says check git status, leaves that work staged, and commits once it is out of the way", () => {
+  const root = fixtureRepo();
+  try {
+    writeFileSync(join(root, "mine.txt"), "my work\n");
+    git(root, "add", "mine.txt");
+    const head = git(root, "rev-parse", "HEAD");
+    const blocked = spawnSync(process.execPath, hunchCliArgs("new", "finding", "--title", "Blocked", "--text", "a"), { cwd: root, encoding: "utf8", env: cliEnv() });
+    assert.equal(blocked.status, 0, `${blocked.stdout}${blocked.stderr}`);
+    assert.match(blocked.stdout, /not committed.*Check git status/);
+    assert.equal(git(root, "rev-parse", "HEAD"), head);
+    assert.equal(git(root, "diff", "--cached", "--name-only").trim(), "mine.txt");
+    git(root, "commit", "-qm", "my work");
+    const later = spawnSync(process.execPath, hunchCliArgs("new", "finding", "--title", "Later", "--text", "b", "--json"), { cwd: root, encoding: "utf8", env: cliEnv() });
+    assert.equal(later.status, 0, `${later.stdout}${later.stderr}`);
+    assert.equal(parseJson(later.stdout).uncommitted, false);
+    const tracked = git(root, "ls-files", ".hunch/findings");
+    assert.match(tracked, new RegExp(findingId("Blocked")));
+    assert.match(tracked, new RegExp(findingId("Later")));
+  } finally { cleanupDir(root); }
 });
 
 test("cli:new never overwrites a record file the loader can't read", () => {

@@ -502,7 +502,7 @@ function pumpMemoryHome(store: HunchStore, root: string, home: MemoryHome, messa
   return flush;
 }
 
-const NOT_COMMITTED = "saved, but the commit failed (git refused or was busy). The next memory change commits it, or commit it yourself.";
+const NOT_COMMITTED = "saved, but not committed: git was busy, or other staged work or a stray file blocked the auto-commit. Check git status, then commit it yourself. A later memory change tries again.";
 
 /** A flush's null also means auto-commit is off or there was nothing to commit: only changes left behind mean it failed. */
 function commitFailed(store: HunchStore, root: string, home: MemoryHome, flush: ReturnType<typeof flushMemoryHome>): boolean {

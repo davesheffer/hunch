@@ -272,7 +272,7 @@ export const uiJs = String.raw`
     } catch (e) { if (gen === state.historyGen) { $('history-status').textContent = ''; failed(e); } }
   }
 
-  const NOT_COMMITTED = ' Saved, but the commit failed (git refused or was busy). The next change commits it.';
+  const NOT_COMMITTED = ' Saved, but not committed: git was busy, or other staged work or a stray file blocked it. Check git status.';
   // ---- changes: every one is a CLI move on the server; the page only collects what changed.
   // done: the line to show instead of DONE, for an Undo (which offers no Undo of its own).
   async function change(id, action, body, done) {
