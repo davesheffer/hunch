@@ -150,6 +150,29 @@ test("two-part camel prose words never lone-qualify; extensions and timestamps y
   assert.deepEqual(selectForTask(records({ decisions: [two] }), "GetOrders pagination").qualifying, ["dec_two_terms"]);
 });
 
+test("a two-capital acronym counts as a term; lower case and two-letter English words do not", () => {
+  // GitHub sits in enough records to be one brand word, and under the DF cap so it still counts.
+  const base = [
+    ...Array.from({ length: 100 }, (_, i) => dec(`dec_fill_${i}`, `Unrelated filler ${i}`)),
+    ...Array.from({ length: 5 }, (_, i) => dec(`dec_gh_${i}`, `Publish via GitHub flow ${i}`)),
+  ];
+  const pr = dec("dec_pr", "Every change lands as a PR on GitHub");
+  const withPr = records({ decisions: [pr, ...base] });
+  // The brand is one term, so the acronym is what makes the second.
+  assert.deepEqual(selectForTask(withPr, "open a PR on GitHub").qualifying, ["dec_pr"]);
+  // Alone it stays one term, and lower case is not an acronym on either side.
+  assert.deepEqual(selectForTask(withPr, "review the PR").qualifying, []);
+  assert.deepEqual(selectForTask(withPr, "open a pr on GitHub").qualifying, []);
+  const prose = dec("dec_prose", "Every change lands as a pr on GitHub");
+  assert.deepEqual(selectForTask(records({ decisions: [prose, ...base] }), "open a PR on GitHub").qualifying, []);
+  // Shouted English is not an acronym, even when the record shouts the same word.
+  const shout = dec("dec_shout", "DO NOT force merge on GitHub");
+  assert.deepEqual(selectForTask(records({ decisions: [shout, ...base] }), "DO it on GitHub").qualifying, []);
+  // A common acronym names no task: the DF cap drops it like any other word.
+  const ci = [dec("dec_ci", "CI job on GitHub"), ...Array.from({ length: 8 }, (_, i) => dec(`dec_ci_${i}`, `CI job ${i}`))];
+  assert.deepEqual(selectForTask(records({ decisions: [...ci, ...base] }), "CI on GitHub").qualifying, []);
+});
+
 test("stack-frame identifiers, brand words and common strong identifiers do not qualify or rank", () => {
   const filler = Array.from({ length: 30 }, (_, i) => dec(`dec_fill_${String(i).padStart(2, "0")}`, `Write file sync helper ${i}`));
   const cites = dec("dec_cites", "Cache writeFileSync usage");

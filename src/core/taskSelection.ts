@@ -248,7 +248,21 @@ function promptWordText(prompt: string): string {
   return (trace ? lines.filter((line) => !FRAME_LINE.test(line)) : lines).join("\n").replace(/\(node:\d+\)/g, " ");
 }
 
-const termTokens = (text: string): Set<string> => new Set([...lexicalTokens(text), ...identifierTokens(text)]);
+/** English two-letter words a shouted prompt or rule writes in capitals ("DO NOT", "NO"). */
+const TWO_LETTER_WORDS: ReadonlySet<string> = new Set([
+  "am", "an", "as", "at", "be", "by", "do", "go", "he", "if", "in", "is", "it", "me", "my", "no", "of", "ok", "on", "or", "so", "to", "up", "us", "we",
+]);
+const TWO_CAPITALS = /(?<![\p{L}\p{N}_])[A-Z]{2}(?![\p{L}\p{N}_])/gu;
+
+/** Two-capital acronyms (PR, CI, DB), lowercased. `lexicalTokens` keeps no word under
+ *  three characters, which loses the word a task can be about ("open a PR"). Word tokens
+ *  are never two characters, so these cannot collide with them. Only the capitals count
+ *  on both sides, and the DF cap drops a common one like any other term. */
+function acronymTokens(text: string): string[] {
+  return (text.match(TWO_CAPITALS) ?? []).map((m) => m.toLowerCase()).filter((m) => !TWO_LETTER_WORDS.has(m));
+}
+
+const termTokens = (text: string): Set<string> => new Set([...lexicalTokens(text), ...identifierTokens(text), ...acronymTokens(text)]);
 
 interface Scored {
   id: string;
@@ -272,7 +286,7 @@ export function selectForTask(records: TaskSelectionRecords, promptText: string,
   // Stack-frame lines name library APIs (writeFileSync, processTicksAndRejections), not the task:
   // when the prompt holds a real trace, neither their words nor their identifiers count.
   const promptIdentifiers = promptWordText(promptText ?? "");
-  const taskTerms = new Set([...lexicalTokens(promptIdentifiers), ...identifierTokens(promptIdentifiers)]);
+  const taskTerms = termTokens(promptIdentifiers);
   // Without an existence check (pure/offline) only a slashed token is trusted as a
   // path: "e.g.", "Node.js" or "v1.2" would otherwise match a broad glob.
   const paths = promptPaths(promptText ?? "", opts.root).filter((p) => opts.pathExists ? opts.pathExists(p) : p.includes("/"));
