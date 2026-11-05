@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { linkSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
@@ -235,6 +235,15 @@ test("JsonStore.create: a second writer of the same id gets null and the first r
   } finally { cleanupDir(root); }
 });
 
+/** The read blocks this thread, so the writer finishing its publish has to be another process. */
+async function finishPublishSoon(file: string, tmp: string) {
+  const writer = spawn(process.execPath, ["-e", `console.log("ready"); setTimeout(() => require("node:fs").unlinkSync(${JSON.stringify(tmp)}), 40)`], { stdio: ["ignore", "pipe", "inherit"] });
+  await once(writer.stdout, "data");
+  // Refresh ctime so a slow spawn can't age the link out of the settle window.
+  utimesSync(file, new Date(), new Date());
+  return writer;
+}
+
 test("JsonStore: a record caught mid-publish at nlink=2 reads once it settles; a lasting hard link is still refused", async () => {
   const root = fixtureRepo();
   try {
@@ -244,15 +253,13 @@ test("JsonStore: a record caught mid-publish at nlink=2 reads once it settles; a
     const tmp = `${file}.tmp1.0`;
     linkSync(file, tmp);
     assert.equal(new JsonStore(hunchPaths(root)).get("decisions", id), undefined);
-    // The read blocks this thread, so the writer finishing its publish has to be another process.
-    const writer = spawn(process.execPath, ["-e", `console.log("ready"); setTimeout(() => require("node:fs").unlinkSync(${JSON.stringify(tmp)}), 40)`], { stdio: ["ignore", "pipe", "inherit"] });
-    await once(writer.stdout, "data");
+    const writer = await finishPublishSoon(file, tmp);
     assert.equal(new JsonStore(hunchPaths(root)).get("decisions", id)?.decision, "linked");
     await once(writer, "close");
   } finally { cleanupDir(root); }
 });
 
-test("JsonStore: a store full of lasting hard links spends one wait, not one per record", () => {
+test("JsonStore: old hard links are refused at once, however many there are", (t) => {
   const root = fixtureRepo();
   try {
     const writer = new JsonStore(hunchPaths(root));
@@ -262,10 +269,37 @@ test("JsonStore: a store full of lasting hard links spends one wait, not one per
       const file = join(root, ".hunch", "decisions", `${id}.json`);
       linkSync(file, `${file}.tmp1.${i}`);
     }
-    const started = Date.now();
-    assert.equal(new JsonStore(hunchPaths(root)).get("decisions", decisionId("manual:Linked 0")), undefined);
-    // One wait per record would be 10s; one shared budget is about 250ms.
-    assert.ok(Date.now() - started < 5000, `took ${Date.now() - started}ms`);
+    const now = Date.now();
+    t.mock.method(Date, "now", () => now + 60_000);
+    const waits = t.mock.method(Atomics, "wait");
+    assert.deepEqual(new JsonStore(hunchPaths(root)).loadAll("decisions").map((record) => record.id), ["dec_acc"]);
+    assert.equal(waits.mock.callCount(), 0);
+  } finally { cleanupDir(root); }
+});
+
+test("JsonStore: a long-lived store that refused an old hard link still waits out a later publish", async (t) => {
+  const root = fixtureRepo();
+  try {
+    const writer = new JsonStore(hunchPaths(root));
+    const paths = (id: string) => join(root, ".hunch", "decisions", `${id}.json`);
+    const leftover = decisionId("manual:Leftover");
+    writer.create("decisions", decision(leftover));
+    linkSync(paths(leftover), `${paths(leftover)}.tmp1.0`);
+
+    const reader = new JsonStore(hunchPaths(root));
+    const now = Date.now();
+    const clock = t.mock.method(Date, "now", () => now + 60_000);
+    assert.deepEqual(reader.loadAll("decisions").map((record) => record.id), ["dec_acc"]);
+    clock.mock.restore();
+
+    const id = decisionId("manual:Publishing");
+    writer.create("decisions", decision(id));
+    const tmp = `${paths(id)}.tmp2.0`;
+    linkSync(paths(id), tmp);
+    const finishing = await finishPublishSoon(paths(id), tmp);
+    reader.clearCache();
+    assert.ok(reader.loadAll("decisions").some((record) => record.id === id));
+    await once(finishing, "close");
   } finally { cleanupDir(root); }
 });
 
