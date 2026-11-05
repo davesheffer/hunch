@@ -7,8 +7,6 @@
   "precision_cases": 18,
   "recall_cases": 26,
   "precision": 1,
-  "recall": 0.9942,
-  "known_misses": [
-    "precision: brand: GitHub PR — dec_p_github_pr is not delivered for \"push to GitHub and open a PR\""
-  ]
+  "recall": 1,
+  "known_misses": []
 }
