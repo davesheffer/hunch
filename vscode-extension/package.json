@@ -114,6 +114,18 @@
         "icon": "$(shield)"
       },
       {
+        "command": "hunch.memory.groupByFeature",
+        "title": "Group memory by feature commit",
+        "category": "Hunch",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "hunch.memory.showTimeline",
+        "title": "Show memory as a timeline",
+        "category": "Hunch",
+        "icon": "$(list-flat)"
+      },
+      {
         "command": "hunch.revertMove",
         "title": "Revert this memory move",
         "category": "Hunch",
@@ -261,6 +273,16 @@
           "command": "hunch.memory.refresh",
           "when": "view == hunch.memory",
           "group": "navigation@4"
+        },
+        {
+          "command": "hunch.memory.groupByFeature",
+          "when": "view == hunch.memory && !hunch.memory.grouped",
+          "group": "navigation@5"
+        },
+        {
+          "command": "hunch.memory.showTimeline",
+          "when": "view == hunch.memory && hunch.memory.grouped",
+          "group": "navigation@5"
         },
         {
           "command": "hunch.contribution.refresh",
