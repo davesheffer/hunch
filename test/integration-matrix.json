@@ -84,6 +84,14 @@
         }
       ]
     },
+    "cli->ui": {
+      "tests": [
+        {
+          "file": "test/ui.test.ts",
+          "title": "cli:ui: hunch ui --port --no-open prints a keyed loopback link"
+        }
+      ]
+    },
     "cli->wiki": {
       "tests": [
         {
@@ -405,6 +413,38 @@
         {
           "file": "test/integration-capture-pipeline.test.ts",
           "title": "synthesis->extractors: the decision's file anchors"
+        }
+      ]
+    },
+    "ui->core": {
+      "tests": [
+        {
+          "file": "test/ui.test.ts",
+          "title": "ui server writes: edit, link and remove run the CLI"
+        }
+      ]
+    },
+    "ui->extractors": {
+      "tests": [
+        {
+          "file": "test/ui.test.ts",
+          "title": "memoryHistory: record commits from both homes"
+        }
+      ]
+    },
+    "ui->store": {
+      "tests": [
+        {
+          "file": "test/ui.test.ts",
+          "title": "ui server: memory list, detail, repo and connections"
+        }
+      ]
+    },
+    "ui->synthesis": {
+      "tests": [
+        {
+          "file": "test/ui.test.ts",
+          "title": "defaultAskRunner: runs the picked CLI under its own account"
         }
       ]
     },
