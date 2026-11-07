@@ -812,10 +812,7 @@ export class HunchStore {
       // the lesson/save/application record ids and touched files, so "what did
       // an agent do around X" and a record id both hit.
       const tasks = this.recs("tasks");
-      for (const t of tasks) {
-        fts(t.id, "tasks", t.title,
-          `${t.lessons.map((l) => `${l.record_id} ${l.title}`).join(" ")} ${t.applied.map((a) => a.record_id).join(" ")} ${t.saved.map((s) => s.record_id).join(" ")} ${t.files.join(" ")} ${t.state} ${t.coverage}`);
-      }
+      for (const t of tasks) fts(t.id, "tasks", t.title, taskSearchBody(t));
       counts.tasks = tasks.length;
 
       // nuryel.state/1 kinds (receipts, commitments, derived, entities, relationships):
@@ -839,6 +836,35 @@ export class HunchStore {
     // so this is what keeps them coherent across the many reindex() call sites.
     this.pruneStaleEmbeddings();
     return { counts };
+  }
+
+  /** Refresh the derived index for ONE task record after it was written.
+   *
+   *  Tasks are FTS-only (no SQL table), so the record's `search` row is its whole
+   *  derived state: replacing that row leaves the index exactly as reindex() would,
+   *  without re-reading and re-validating every other kind. The Stop hook writes one
+   *  task record per finished prompt; a full rebuild there was most of its latency.
+   *  An index that was never built (empty `search`) still gets the full rebuild. */
+  reindexTask(id: string): void {
+    const db = this.db;
+    if (db.prepare(`SELECT 1 AS x FROM search LIMIT 1`).get() === undefined) {
+      this.reindex();
+      return;
+    }
+    const priv = this.suppressPrivate ? undefined : this.privateJson?.get("tasks", id);
+    const rec = (priv ?? this.json.get("tasks", id)) as TaskRecord | undefined;
+    withTx(db, () => {
+      db.prepare(`DELETE FROM search WHERE ref = ? AND kind = 'tasks'`).run(id);
+      if (!rec) {
+        db.prepare(`DELETE FROM embeddings WHERE ref = ?`).run(id);
+        return;
+      }
+      const body = taskSearchBody(rec);
+      db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES (?,?,?,?)`).run(rec.id, "tasks", rec.title, body);
+      // Same rule as pruneStaleEmbeddings, for this one doc: a vector survives only
+      // while its text is unchanged.
+      db.prepare(`DELETE FROM embeddings WHERE ref = ? AND doc_hash <> ?`).run(rec.id, embedHash(rec.title, body));
+    });
   }
 
   // ---- read path ----------------------------------------------------------
@@ -2630,6 +2656,13 @@ export interface AssembledContext {
   /** Current, explicitly reviewed Engineering Landscape orientation. */
   landscape?: ReviewedLandscapeSelection;
   budget_tokens: number;
+}
+
+/** FTS body of a task record: lesson/application/save record ids, touched files,
+ *  state and coverage, so "what did an agent do around X" and a record id both hit.
+ *  Shared by reindex() and reindexTask() so the two can never index differently. */
+function taskSearchBody(t: TaskRecord): string {
+  return `${t.lessons.map((l) => `${l.record_id} ${l.title}`).join(" ")} ${t.applied.map((a) => a.record_id).join(" ")} ${t.saved.map((s) => s.record_id).join(" ")} ${t.files.join(" ")} ${t.state} ${t.coverage}`;
 }
 
 function sev(s: string): number {

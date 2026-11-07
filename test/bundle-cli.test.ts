@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +34,28 @@ test("bundle-cli.mjs: the bundle only imports Node builtins and the declared ext
   const specifiers = new Set([...bundle.matchAll(/^import\s[^;]*?from\s*"([^"]+)"/gm)].map((m) => m[1]!));
   const stray = [...specifiers].filter((s) => !s.startsWith("node:") && !/^(tree-sitter|@tree-sitter-grammars\/|@huggingface\/transformers)/.test(s));
   assert.deepEqual(stray, [], "a relative or npm import left in the bundle would load the module graph the bundle exists to avoid");
+});
+
+test("hook startup: the CLI's static import closure stays free of the MCP SDK", () => {
+  // Every agent hook is a fresh process that evaluates this closure, so a static
+  // import of the SDK (or the MCP server, which owns it) costs every tool call.
+  const src = fileURLToPath(new URL("../src/", import.meta.url));
+  const seen = new Set<string>();
+  const offenders: string[] = [];
+  const pending = [join(src, "cli/index.ts")];
+  while (pending.length) {
+    const file = pending.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = readFileSync(file, "utf8");
+    for (const m of text.matchAll(/^import\s+(?!type\b)(?:[^;"']*?\sfrom\s+)?"([^"]+)"/gm)) {
+      const spec = m[1]!;
+      if (spec.startsWith("@modelcontextprotocol/") || spec === "node:http") offenders.push(`${relative(src, file)} -> ${spec}`);
+      else if (spec.startsWith(".")) pending.push(resolve(dirname(file), spec).replace(/\.js$/, ".ts"));
+    }
+  }
+  assert.ok(seen.size > 100, `walked only ${seen.size} modules; the import pattern no longer matches`);
+  assert.deepEqual(offenders, [], "load these with a dynamic import inside the command that needs them");
 });
 
 test("bundle-cli.mjs: the bundled CLI runs through the published entry", compiled, () => {

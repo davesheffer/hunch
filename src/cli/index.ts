@@ -84,7 +84,6 @@ import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optOutMarkerAt, optOutMessage, planUninstall } from "../integrations/uninstall.js";
 import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
 import { HOOK_REMINDER } from "../core/hookText.js";
-import { measureFootprint } from "../core/footprint.js";
 import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
 import { mergeGroundingFile } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
@@ -6982,6 +6981,8 @@ program
   .option("--json", "emit the report (hunch.footprint/1) as JSON")
   .option("--target <file>", "file to measure the hunch_context result for (default: the file most decisions cite)")
   .action(async (opts: { json?: boolean; target?: string }) => {
+    // Lazy: footprint builds the whole MCP server, which a hook process must not load.
+    const { measureFootprint } = await import("../core/footprint.js");
     const report = await measureFootprint(findRoot(), { target: opts.target });
     if (opts.json) return console.log(JSON.stringify(report, null, 2));
     const width = Math.max(...report.surfaces.map((s) => s.id.length));
