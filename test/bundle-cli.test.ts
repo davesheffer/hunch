@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fastHookArgs } from "../src/cli/hookMain.js";
 import { OPT_OUT_FILE } from "../src/integrations/uninstall.js";
+import { cleanupDir } from "./fixtures.js";
 
 /**
  * tooling/bundle-cli.mjs turns the tsc output into one bundle behind a tiny
@@ -121,5 +122,5 @@ test("bundle-cli.mjs: the hook-only bundle stays silent and exits 0 in an opted-
     });
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, "");
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDir(dir); }
 });
