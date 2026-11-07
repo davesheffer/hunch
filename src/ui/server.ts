@@ -9,7 +9,7 @@
  *   - the page shell is static and holds no data, under the same strict CSP as /operator.
  *
  * Reads: GET /api/memory, /api/memory/:id, /api/components, /api/repo, /api/connections,
- * /api/attention, /api/map, /api/map/:id, /api/pulse?since= (what changed since the page last asked), and /api/history[?id=] (the memory commits in git,
+ * /api/attention, /api/review (what in memory deserves a person's judgment), /api/map, /api/map/:id, /api/pulse?since= (what changed since the page last asked), and /api/history[?id=] (the memory commits in git,
  * from each home).
  * Writes: POST /api/memory/:id/(edit|link|remove|restore) runs that CLI verb,
  * /api/memory/:id/(confirm|unconfirm) runs `hunch review --confirm|--unconfirm`, and POST
@@ -20,12 +20,15 @@
  * the person's subscription, asks one of them one question at a time and writes nothing.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { timingSafeEqual } from "node:crypto";
-import { realpathSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { existsSync, realpathSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
+import { computeDrift } from "../core/drift.js";
 import { boundedSpawn } from "../core/boundedSpawn.js";
+import { pathsAliveInRepo } from "../extractors/git.js";
+import { kindOfId } from "../core/memoryEdit.js";
 import { resolveSynthesisProvider } from "../synthesis/provider.js";
 import { MEMORY_KINDS, componentDetail, componentMap, countMemory, filterMemory, memoryDetail, memoryItems, needsAttention, type MemoryKind, type MemorySource, type MemoryView } from "./model.js";
 import { uiCss, uiHtml, uiJs } from "./page.js";
@@ -33,6 +36,7 @@ import { createPulse } from "./pulse.js";
 import { memoryHistory, type HistorySource } from "./history.js";
 import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
 import { askContext, askPrompt, askRequest, defaultAskRunner, parseAnswer, type AskRunner } from "./ask.js";
+import { reviewCards, type Review } from "./review.js";
 
 export interface RepoInfo { root: string; branch: string | null; remote: string | null; webUrl: string | null }
 export interface GithubInfo { installed: boolean; authenticated: boolean; user: string | null; repo: string | null }
@@ -64,6 +68,10 @@ const MAX_BODY = 64 * 1024;
 export const LIST_LIMIT = 200;
 /** Commits per history response. */
 export const HISTORY_LIMIT = 100;
+/** How long the review trusts what it saw in git and the working tree; the records it re-reads every time. */
+const REVIEW_TTL_MS = 5 * 60_000;
+/** When git couldn't say: the answer is partial, so ask again soon, but not on every click. */
+const REVIEW_RETRY_MS = 30_000;
 
 async function run(file: string, args: string[], cwd: string): Promise<{ ok: boolean; out: string }> {
   const r = await boundedSpawn(file, args, { cwd, timeoutMs: PROBE_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
@@ -151,6 +159,32 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
   const asker = opts.asker ?? defaultAskRunner(opts.root);
   // One question at a time: each one spends the person's subscription.
   let asking = false;
+  // The pass costs seconds and the page asks on every open, so it reruns only when a record's
+  // content changed. Git's answer about branches outlives a run: a write shouldn't re-ask it.
+  let reviewed: { key: string; until: number; value: Review } | null = null;
+  let gitFailed = false;
+  let branches: { at: number; alive: Map<string, boolean> } = { at: 0, alive: new Map() };
+  const alive = (paths: readonly string[]): ReadonlySet<string> => {
+    if (Date.now() - branches.at >= REVIEW_TTL_MS) branches = { at: Date.now(), alive: new Map() };
+    const known = branches.alive;
+    const onDisk = new Set(paths.filter((p) => existsSync(join(opts.root, p))));
+    const ask = paths.filter((p) => !onDisk.has(p) && !known.has(p));
+    const answer = pathsAliveInRepo(ask, opts.root);
+    // Git couldn't say: show nothing rather than call a live file gone, and ask again next time.
+    if (answer === null) { gitFailed = true; return new Set(paths); }
+    for (const p of ask) known.set(p, answer.has(p));
+    return new Set(paths.filter((p) => onDisk.has(p) || known.get(p)));
+  };
+  const review = (): Review => {
+    const src = source(), edges = store.recs("edges");
+    const key = createHash("sha1").update(JSON.stringify([src, edges])).digest("hex");
+    if (reviewed?.key === key && Date.now() < reviewed.until) return reviewed.value;
+    gitFailed = false;
+    const inOverlay = (id: string): boolean => { const target = kindOfId(id); return !!target && !!store.getPrivateRec(target.collection, id); };
+    const value: Review = { ...reviewCards(src, edges, { drift: computeDrift(store, opts.root, { recordsOnly: true }).findings, alive, inOverlay, limit: LIST_LIMIT }), gitFailed };
+    reviewed = { key, until: Date.now() + (gitFailed ? REVIEW_RETRY_MS : REVIEW_TTL_MS), value };
+    return value;
+  };
 
   // Sends the refusal and answers true unless this POST came from this page, as JSON.
   const refused = (req: IncomingMessage, res: ServerResponse): boolean => {
@@ -242,6 +276,7 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
       const { total, groups } = needsAttention(src, memoryItems(src));
       return send(res, 200, { total, groups: groups.map((g) => ({ key: g.key, total: g.items.length, items: g.items.slice(0, LIST_LIMIT) })) });
     }
+    if (url.pathname === "/api/review") return send(res, 200, review());
     if (url.pathname === "/api/pulse") {
       const since = Number(url.searchParams.get("since"));
       const src = source();

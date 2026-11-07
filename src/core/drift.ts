@@ -36,13 +36,17 @@ export interface DriftFinding {
   kind: DriftKind;
   id: string; // the record id or doc path the finding concerns
   detail: string;
+  path?: string; // the missing file, on dead-ref and a missing-file finding-stale
 }
 
 export interface DriftReport {
   findings: DriftFinding[];
 }
 
-export function computeDrift(store: HunchStore, root: string, deps: { commitResolvable?: (sha: string) => boolean } = {}): DriftReport {
+/** recordsOnly: judge the records alone, for a caller on a page-open budget. Skips the
+ *  markdown, wiki and MADR passes and the git commit check. */
+export function computeDrift(store: HunchStore, root: string, deps: { commitResolvable?: (sha: string) => boolean; recordsOnly?: boolean } = {}): DriftReport {
+  const { recordsOnly = false } = deps;
   const findings: DriftFinding[] = [];
   const decisions = store.recs("decisions");
   const byId = new Map(decisions.map((d) => [d.id, d] as const));
@@ -66,7 +70,7 @@ export function computeDrift(store: HunchStore, root: string, deps: { commitReso
   // default runs ONE batched existence check over every decision's commit (not a
   // process per decision), and outside a git repo the check is meaningless, so it
   // never flags anything there.
-  let commitResolvable = deps.commitResolvable;
+  let commitResolvable = recordsOnly ? () => true : deps.commitResolvable;
   if (!commitResolvable) {
     const inRepo = isGitRepo(root);
     const shas = inRepo ? [...new Set(decisions.map((d) => d.commit).filter((c): c is string => !!c))] : [];
@@ -81,8 +85,8 @@ export function computeDrift(store: HunchStore, root: string, deps: { commitReso
     if (inForce) {
       for (const f of d.related_files ?? []) {
         if (!f || f.includes("*")) continue; // skip globs / empties
-        if (!referenceExists(store, root, d.id, f)) {
-          findings.push({ kind: "dead-ref", id: d.id, detail: `references missing file "${f}"` });
+        if (!referenceExists(store, root, "decisions", d.id, f)) {
+          findings.push({ kind: "dead-ref", id: d.id, detail: `references missing file "${f}"`, path: f });
         }
       }
 
@@ -125,7 +129,7 @@ export function computeDrift(store: HunchStore, root: string, deps: { commitReso
       if (current && current.id !== d.id) {
         for (const f of d.related_files ?? []) {
           if (!f || f.includes("*") || governedByLiveDecision(f)) continue;
-          if (!referenceExists(store, root, d.id, f)) continue; // missing file is history → dead-ref's job
+          if (!referenceExists(store, root, "decisions", d.id, f)) continue; // missing file is history → dead-ref's job
           findings.push({
             kind: "anchor-stale",
             id: d.id,
@@ -150,7 +154,7 @@ export function computeDrift(store: HunchStore, root: string, deps: { commitReso
   }
 
   // One markdown pass feeds both prose checks (3 + 5): read each doc once.
-  for (const doc of markdownDocs(root)) {
+  for (const doc of recordsOnly ? [] : markdownDocs(root)) {
     const text = safeRead(doc.path);
 
     // 3. DOC-STALE — a doc that still advertises "proposed / not implemented" while
@@ -198,14 +202,14 @@ export function computeDrift(store: HunchStore, root: string, deps: { commitReso
   // 6. WIKI-STALE — generated wiki pages whose graph inputs drifted (or whose
   //    component vanished). Deterministic hash comparison against the manifest;
   //    fires only when a wiki was adopted. Advisory like every other kind here.
-  findings.push(...computeWikiDrift(store, root));
+  if (!recordsOnly) findings.push(...computeWikiDrift(store, root));
 
   // 6b. MADR-* — the exported ADR corpus drifted from the graph. PUBLIC decisions
   //     only: the corpus is a committable artifact, so its freshness must be
   //     computed from exactly the records allowed to reach it (an overlay record
   //     leaking into a public drift report is the same class of bug as one
   //     leaking into the export itself). Fires only where a corpus was exported.
-  findings.push(...computeMadrDrift(store.json.loadAll("decisions"), root));
+  if (!recordsOnly) findings.push(...computeMadrDrift(store.json.loadAll("decisions"), root));
 
   // 7. FINDING-STALE — a LIVE finding (observation, no diff) whose anchor evaporated:
   //    an affected file that no longer exists, or a violates_constraint pointing at a
@@ -216,8 +220,8 @@ export function computeDrift(store: HunchStore, root: string, deps: { commitReso
     if (f.triage === "resolved" || f.triage === "stale") continue;
     for (const file of f.affected_files) {
       if (!file || file.includes("*")) continue; // globs can't dead-ref
-      if (!existsSync(join(root, file))) {
-        findings.push({ kind: "finding-stale", id: f.id, detail: `live finding "${f.title}" references missing file "${file}" — re-verify${f.method ? ` (${f.method})` : ""} and re-record, or mark it stale` });
+      if (!referenceExists(store, root, "findings", f.id, file)) {
+        findings.push({ kind: "finding-stale", id: f.id, detail: `live finding "${f.title}" references missing file "${file}" — re-verify${f.method ? ` (${f.method})` : ""} and re-record, or mark it stale`, path: file });
       }
     }
     if (f.violates_constraint) {
@@ -239,12 +243,12 @@ export function computeDrift(store: HunchStore, root: string, deps: { commitReso
  * private overlay and resolves from that overlay repo's root. This lets a private
  * decision cite private docs while preventing a public record from silently
  * depending on unsharable local files. */
-function referenceExists(store: HunchStore, root: string, decisionId: string, ref: string): boolean {
+function referenceExists(store: HunchStore, root: string, kind: "decisions" | "findings", id: string, ref: string): boolean {
   const prefix = "private:";
   if (!ref.startsWith(prefix)) return existsSync(join(root, ref));
 
   const privatePath = ref.slice(prefix.length);
-  if (!privatePath || isAbsolute(privatePath) || !store.privateDir || !store.getPrivateRec("decisions", decisionId)) return false;
+  if (!privatePath || isAbsolute(privatePath) || !store.privateDir || !store.getPrivateRec(kind, id)) return false;
   const privateRoot = dirname(store.privateDir);
   const candidate = resolve(privateRoot, privatePath);
   // A private-scoped reference is an overlay-repo-relative path, not an escape

@@ -15,9 +15,9 @@ export type UiAction = (typeof UI_ACTIONS)[number];
 export const isUiAction = (v: string): v is UiAction => (UI_ACTIONS as readonly string[]).includes(v);
 
 const MAX_TEXT = 20_000;
-const MAX_LIST = 200;
+export const MAX_LIST = 200;
 /** Windows caps a command line near 32K characters; past it the CLI never starts. */
-const MAX_ARGV = 30_000;
+export const MAX_ARGV = 30_000;
 const ID = /^(?:dec|con|bug|fnd)_[A-Za-z0-9_-]{1,120}$/;
 
 type Args = { ok: true; args: string[] } | { ok: false; error: string };

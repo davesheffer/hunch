@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { uiHtml, uiJs } from "../src/ui/page.js";
 import { memoryHistory } from "../src/ui/history.js";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync } from "node:fs";
 import { askContext, askPrompt, askRequest, askableAssistants, defaultAskRunner, parseAnswer, type AskRunner } from "../src/ui/ask.js";
 import { DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudePrintArgs, codexExecArgs, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
 import { currentInitiator, withInitiator } from "../src/synthesis/initiator.js";
@@ -485,7 +485,7 @@ type Post = (path: string, body: unknown, headers?: Record<string, string>) => P
 
 /** A committed git fixture on a feature branch, served with a real CLI behind the write routes. */
 /** cli: the real CLI (true), none (false), or a stand-in command to probe how the server reads its result. */
-async function withWriteServer(fn: (post: Post, get: Get, origin: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner): Promise<void> {
+async function withWriteServer(fn: (post: Post, get: Get, origin: string, root: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner): Promise<void> {
   const root = tempDir("hunch-ui-write-");
   const env = isolatedCliEnv({ HOME: root, USERPROFILE: root, HUNCH_PRIVATE_DIR: "", NO_COLOR: "1", CI: "1" });
   const git = (...args: string[]): void => { execFileSync("git", args, { cwd: root, env, stdio: "ignore" }); };
@@ -516,9 +516,59 @@ async function withWriteServer(fn: (post: Post, get: Get, origin: string) => Pro
     return { status: r.status, body: JSON.parse(r.body || "{}") };
   };
   const get: Get = (path, headers = { authorization: `Bearer ${token}` }) => call("GET", path, null, headers);
-  try { await fn(post, get, `http://127.0.0.1:${port}`); }
+  try { await fn(post, get, `http://127.0.0.1:${port}`, root); }
   finally { await new Promise<void>((r) => server.close(() => r())); server.closeStore(); cleanupDir(root); }
 }
+
+test("ui server: /api/review says when git couldn't answer, shows nothing stale, and asks again", async () => {
+  await withWriteServer(async (post, get, _origin, root) => {
+    const read = async () => JSON.parse((await get("/api/review")).body) as { gitFailed?: boolean; groups: { kind: string; cards: { key: string }[] }[] };
+    const stale = (r: Awaited<ReturnType<typeof read>>) => r.groups.find((g) => g.kind === "stale")!.cards.map((c) => c.key);
+    assert.equal((await post("/api/memory/dec_loose/link", { addFiles: ["src/vanished.ts"] })).status, 200);
+    renameSync(join(root, ".git"), join(root, ".git-off"));
+    let failed: Awaited<ReturnType<typeof read>>;
+    try { failed = await read(); } finally { renameSync(join(root, ".git-off"), join(root, ".git")); }
+    assert.equal(failed.gitFailed, true);
+    assert.ok(!stale(failed).includes("stale:dec_loose"), "git couldn't say, so nothing is called gone");
+    assert.equal((await post("/api/memory/dec_loose/edit", { context: "Small PRs review faster." })).status, 200);
+    const back = await read();
+    assert.equal(back.gitFailed, false);
+    assert.ok(stale(back).includes("stale:dec_loose"));
+  });
+});
+
+test("ui server: /api/review needs the key, writes nothing, and reflects a change to any record", async () => {
+  await withWriteServer(async (post, get, _origin, root) => {
+    assert.equal((await get("/api/review", {})).status, 401);
+    const weak = async (): Promise<string[]> => {
+      const r = await get("/api/review");
+      assert.equal(r.status, 200);
+      const review = JSON.parse(r.body) as { total: number; groups: { kind: string; total: number; cards: { key: string }[] }[] };
+      assert.deepEqual(review.groups.map((g) => g.kind), ["conflict", "stale", "duplicate", "weak"]);
+      return review.groups.find((g) => g.kind === "weak")!.cards.map((c) => c.key);
+    };
+    const before = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" });
+    assert.ok((await weak()).includes("weak:dec_loose"), "no why, and nobody confirmed it");
+    assert.ok((await weak()).includes("weak:dec_loose"), "a second read answers the same");
+    assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }), before, "reading the review changes nothing");
+    assert.equal((await post("/api/memory/dec_loose/edit", { context: "Small PRs review faster." })).status, 200);
+    assert.ok(!(await weak()).includes("weak:dec_loose"), "a new why alone clears it, though the pulse can't see that edit");
+  });
+});
+
+test("ui server: a confirmed record keeps its confirmation when its dead links are dropped", async () => {
+  await withWriteServer(async (post, get) => {
+    assert.equal((await post("/api/memory/dec_live/confirm", {})).status, 200);
+    const before = JSON.parse((await get("/api/memory/dec_live")).body) as { files: string[]; actions: { signed: boolean } };
+    assert.equal(before.actions.signed, true);
+    assert.ok(before.files.length > 0);
+    const dropped = await post("/api/memory/dec_live/link", { removeFiles: [before.files[0]] });
+    assert.equal(dropped.status, 200);
+    const after = JSON.parse((await get("/api/memory/dec_live")).body) as { files: string[]; actions: { signed: boolean } };
+    assert.deepEqual(after.files, before.files.slice(1));
+    assert.equal(after.actions.signed, true);
+  });
+});
 
 test("ui server writes: key, Origin, JSON body and a CLI are all required; malformed requests never reach the CLI", async () => {
   await withWriteServer(async (post, get) => {
