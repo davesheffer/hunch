@@ -81,7 +81,7 @@ const OVERLAY_PATH = /\.hunch-private[\\/][A-Za-z0-9._-]+[\\/][A-Za-z0-9._-]+/g;
 /** Live credential shapes only. A bare `VSCE_PAT` / `AUTH_TOKEN` identifier is a
  *  variable name, not a secret, and flagging it produced a false positive on
  *  dec_cd37bf2d9a during tuning. */
-const SECRET_MATERIAL =
+export const SECRET_MATERIAL =
   /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g;
 
 const clip = (s: string, max = 120): string => {
