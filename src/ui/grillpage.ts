@@ -61,7 +61,7 @@ export const grillJs = String.raw`
     'made-up': ' named evidence it was never given, so its reply is not shown.',
   };
   const G_VERDICT = { keep: 'Keep it', 'fix-wording': 'Fix the wording', remove: 'Remove it', replace: 'Replace it' };
-  const G_HELD = { 'secret-path': 'looks like a secret', 'secret-content': 'holds a private key', 'secret-line': 'a line that looks like a credential was left out', private: 'in your private memory overlay', 'not-committed': 'not committed', 'not-a-file': 'a link, not a file', binary: 'not text', 'too-large': 'too large', 'over-limit': 'past the limit' };
+  const G_HELD = { 'secret-path': 'looks like a secret', 'secret-content': 'holds a private key', 'secret-line': 'a line that looks like a credential was left out', private: 'in your private memory overlay', 'not-committed': 'not committed', 'not-a-file': 'a link, not a file', binary: 'not text', 'too-large': 'too large', 'over-limit': 'past the limit', 'timed-out': 'git ran out of time', 'too-broad': 'a pattern over the whole repository' };
   const gPlural = (n, one) => n + ' ' + one + (n === 1 ? '' : 's');
 
   function gReset(id) { Object.assign(G, { id, data: null, turns: [], current: null, verdict: null, finished: false, waiting: false, busy: false, rejected: null, dropped: 0, problem: '', done: null, draft: '', back: null }); G.gen++; }

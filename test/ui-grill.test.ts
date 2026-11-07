@@ -15,7 +15,7 @@ import { hunchPaths } from "../src/core/paths.js";
 import { DecisionSchema, type Decision } from "../src/core/types.js";
 import { JsonStore } from "../src/store/jsonStore.js";
 import type { AskRunner } from "../src/ui/ask.js";
-import { MAX_QUESTIONS, evidenceView, gatherEvidence, grillPrompt, grillRequest, isSecretPath, pickLines, readTurn, type GrillEvidence } from "../src/ui/grill.js";
+import { MAX_QUESTIONS, evidenceView, gatherEvidence, grillPrompt, grillRequest, isSecretPath, pickLines, readCode, readTurn, setsCredential, type GrillEvidence } from "../src/ui/grill.js";
 import type { MemorySource } from "../src/ui/model.js";
 import { uiJs } from "../src/ui/page.js";
 import { createUiServer } from "../src/ui/server.js";
@@ -446,4 +446,147 @@ test("evidence view: the screen and the prompt draw from one list", () => {
   assert.deepEqual(v.memory.map((m) => m.id), ["dec_focus", "dec_other"]);
   assert.equal(v.code, ev.code);
   assert.equal(v.commits, ev.commits);
+});
+
+// ---- found by review: every way to name evidence is checked, and so is every answer
+
+/** fixed(), plus a Makefile with lines 1 and 2 sent. */
+function withMakefile(): GrillEvidence {
+  const ev = fixed();
+  ev.code.push({ path: "Makefile", lines: [{ n: 1, text: "build:" }, { n: 2, text: "\ttsc" }] });
+  return ev;
+}
+
+test("reply: a line named any way people write one is checked, and one not sent rejects the challenge", () => {
+  for (const words of ["Makefile:7 says so.", "Dockerfile:3 says so.", "Line 431 of src/store/jsonStore.ts says so.", "src/store/jsonStore.ts#L431 says so.", "src/store/jsonStore.ts (line 431) says so.",
+    "src/store/jsonStore.ts, line 431 says so.", "src/ghost.ts at 12 says so.", "lines 400-410 in jsonStore.ts say so.", "Commit 9F8E7D6C changed this.", "Commit 1234567 changed this.", "src/old.ts:9 says so."]) {
+    const t = readTurn(reply({ ...asking, question: words }), withMakefile(), 0);
+    assert.equal(t.rejected, "made-up", words);
+  }
+  for (const words of ["Line 11 of src/store/jsonStore.ts skips it.", "jsonStore.ts#L11 skips it.", "Makefile:2 builds it.", "src/store/jsonStore.ts (line 11) skips it.", "Commit 0123ABCD did it."]) {
+    const t = readTurn(reply({ question: words, citations: [] }), withMakefile(), 0);
+    assert.equal(t.rejected, null, words);
+    assert.equal(t.challenge!.citations.length, 1, words);
+  }
+  for (const words of ["At localhost:3000?", "See https://example.com:8080/src/a.ts for the spec.", "Is the ratio 3:1?", "Is 1234567 the limit?", "The limit at 12 still holds?"]) {
+    assert.equal(readTurn(reply({ ...asking, question: words }), withMakefile(), 0).rejected, null, words);
+  }
+});
+
+test("verdict: a made-up line in the why or the wording, written any way, isn't proposed", () => {
+  const why = readTurn(reply({ settled: true, verdict: { ...verdict, why: "Makefile:9 contradicts it." } }), withMakefile(), 2);
+  assert.deepEqual([why.verdict, why.rejected], [null, "made-up"]);
+  assert.equal(readTurn(reply({ settled: true, verdict: { ...verdict, wording: "Per line 431 of src/store/jsonStore.ts, readers wait 2s." } }), withMakefile(), 2).verdict!.wording, "");
+});
+
+test("reply: an answer naming evidence nobody sent isn't offered as a button", () => {
+  const t = readTurn(reply({ ...asking, answers: ["The record", "src/ghost.ts:12 shows 250ms, so the record is right", "The code at src/store/jsonStore.ts:10"] }), fixed(), 0);
+  assert.equal(t.rejected, null);
+  assert.deepEqual(t.challenge!.answers, ["The record", "The code at src/store/jsonStore.ts:10"]);
+  assert.equal(t.dropped, 1);
+});
+
+test("reply: an earlier turn echoed before the reply's own object isn't taken for it", () => {
+  const echo = reply({ question: "An old question about src/ghost.ts:1?", claim: "", answer: "yes" });
+  const t = readTurn(`${echo}\n${reply(asking)}`, fixed(), 1);
+  assert.equal(t.rejected, null);
+  assert.equal(t.challenge!.question, "Which is right?");
+});
+
+test("credential lines: a key naming a secret set to a value is held, code that only handles one is not", () => {
+  for (const line of ["password: hunter2", 'api_key: "AIzaSyA1234567890"', '  "client_secret": "abc123",', "DB_PASSWORD=s3cret", "export GITHUB_TOKEN=ghx_1234", "aws_access_key_id = AKIA1234"]) assert.equal(setsCredential(line, true), true, line);
+  for (const line of ['const token = "abc123";', "headers = { Authorization: 'Bearer abc123' }", "apiKey: 'sk-test-1234',"]) assert.equal(setsCredential(line, false), true, line);
+  for (const line of ["const token = await getToken();", "password: string;", "token: z.string(),", "if (token === undefined) return;", "apiKey: process.env.API_KEY,", 'password: "${DB_PASSWORD}"', "token: <your token>", "password: null"]) assert.equal(setsCredential(line, false), false, line);
+});
+
+test("evidence: a config file's credential lines are held, and files named for keys or tokens are held whole", async () => {
+  const ev = await evidenceFor({
+    "config/production.yml": "port: 8080\npassword: hunter2\napi_key: AIzaSyA1234567890\nregion: eu\n",
+    "src/auth/token.ts": "export const token = await getToken();\nexport const kind: string = \"bearer\";\n",
+  }, ["config/production.yml", "src/auth/token.ts"]);
+  assert.doesNotMatch(sent(ev), /hunter2|AIzaSy/);
+  assert.deepEqual(ev.code.find((c) => c.path === "config/production.yml")!.lines.map((l) => l.n), [1, 4]);
+  assert.deepEqual(held(ev, "secret-line"), ["config/production.yml"]);
+  assert.ok(ev.code.some((c) => c.path === "src/auth/token.ts"), "code that handles a token is still code");
+  for (const p of ["src/creds.ts", "src/apikeys.json", "auth/token.json", "service-account.json", "deploy/api-key.yaml"]) assert.equal(isSecretPath(p), true, p);
+  for (const p of ["src/auth/token.ts", "src/core/capturetoken.ts", "docs/tokens.md"]) assert.equal(isSecretPath(p), false, p);
+});
+
+test("evidence: a commit title setting a credential isn't sent", async () => {
+  const ev = await evidenceFor({ "src/a.ts": "export const a = 1;\n" }, ["src/a.ts"], (r) => {
+    writeFileSync(join(r.root, "src/a.ts"), "export const a = 2;\n");
+    r.git("add", "-A"); r.git("commit", "-qm", "set password: hunter2 for staging");
+  });
+  assert.doesNotMatch(JSON.stringify(ev.commits), /hunter2/);
+});
+
+test("evidence: a glob cut inside a name, and a doubled slash, still reach their files", async () => {
+  const ev = await evidenceFor({ "src/foobar.ts": "export const foobar = 1;\n", "src/a.ts": "export const a = 1;\n", "src/other.ts": "export const OTHER = 1;\n" }, ["src/foo*", "src//a.ts"]);
+  assert.deepEqual(ev.code.map((c) => c.path).sort(), ["src/a.ts", "src/foobar.ts"]);
+  assert.deepEqual(held(ev, "not-committed"), []);
+});
+
+test("credential lines: shell, Dockerfile, Makefile and docs take a bare value as a value; a huge line can't stall the server", () => {
+  for (const [path, text] of [["deploy.sh", "export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENG"], ["Dockerfile", "ENV API_KEY=AIzaSyA1234567890abcdef"], ["Makefile", "TOKEN=ghx_12345"], ["docs/setup.md", "password: hunter2"], ["prod.env.example", "DB_PASSWORD=hunter2"]] as const) {
+    assert.equal(pickLines(`x\n${text}\ny\n`, new Set(), path).withheld, true, path);
+  }
+  assert.equal(pickLines("const token = await getToken();\n", new Set(), "src/a.ts").withheld, false);
+  const started = Date.now();
+  pickLines("a".repeat(200_000), new Set(), "data.txt");
+  assert.ok(Date.now() - started < 1000, "one long line is checked as far as it is sent");
+});
+
+test("reply: the commit the code was read at may be quoted, and a range written with 'to' is checked whole", () => {
+  assert.equal(readTurn(reply({ ...asking, question: "At abc1234, which is right?" }), fixed(), 0).rejected, null);
+  assert.equal(readTurn(reply({ ...asking, question: "Lines 10 to 15 of src/store/jsonStore.ts say so." }), fixed(), 0).rejected, "made-up");
+});
+
+test("credential lines: token counts, tokenizers, messages and built-up headers aren't credentials; a literal still is", () => {
+  for (const line of ['Authorization: "Bearer " + token,', 'throw new Error("Invalid token: " + reason);', "const header = { token: `${prefix}${id}` };"]) assert.equal(setsCredential(line, false), false, line);
+  for (const line of ['tokenizer = "cl100k_base"', "max_tokens: 4096", "token_ttl_seconds: 3600", "refresh_token_lifetime: 86400"]) assert.equal(setsCredential(line, true), false, line);
+  for (const line of ["GITHUB_TOKEN_FOR_CI=ghx_12345", `password: "abc'def"`, "SECRET_KEY_BASE=abc123def"]) assert.equal(setsCredential(line, true), true, line);
+  assert.equal(setsCredential("secretKey: 'abc123',", false), true);
+});
+
+test("secret paths: a tokenizer isn't a token file; an env file named before .env still is", () => {
+  for (const p of ["tokenizer.json", "models/tokenizer_config.json", "src/environment.ts"]) assert.equal(isSecretPath(p), false, p);
+  for (const p of ["prod.env.example", "config/prod.env", "token-refresh.yml", "auth/token.json"]) assert.equal(isSecretPath(p), true, p);
+});
+
+test("reply: a host, a product version, or the readme in a sentence isn't a made-up line", () => {
+  for (const words of ["Does example.com:8080 still serve it?", "Is Node.js:22 required here?", "Is git@github.com:443 reachable?", "The readme at 3 steps says so?", "Is the MIT license at 2 pages?"]) {
+    assert.equal(readTurn(reply({ ...asking, question: words }), withMakefile(), 0).rejected, null, words);
+  }
+  for (const words of ["README:3 says so.", "src/ghost.com/a.ts:3 says so."]) assert.equal(readTurn(reply({ ...asking, question: words }), withMakefile(), 0).rejected, "made-up", words);
+});
+
+test("reply: L12, (12), ln 12 and '12:' after a path are lines too", () => {
+  for (const words of ["src/ghost.ts L12 says so.", "src/ghost.ts (12) says so.", "src/ghost.ts ln 12 says so.", "src/ghost.ts, 12: says so."]) {
+    assert.equal(readTurn(reply({ ...asking, question: words }), fixed(), 0).rejected, "made-up", words);
+  }
+  for (const words of ["src/store/jsonStore.ts L11 skips it.", "src/store/jsonStore.ts (11) skips it.", "src/store/jsonStore.ts ln 11 skips it."]) {
+    const t = readTurn(reply({ question: words, citations: [] }), fixed(), 0);
+    assert.equal(t.rejected, null, words);
+    assert.equal(t.challenge!.citations.length, 1, words);
+  }
+});
+
+test("reply: an earlier question echoed after the reply's own object isn't taken for it", () => {
+  const echo = reply({ question: "An old question?", claim: "", citations: ["src/store/jsonStore.ts:10"], answers: [] });
+  const t = readTurn(`${reply(asking)}\n${echo}`, fixed(), 1, false, ["An old question?"]);
+  assert.equal(t.challenge!.question, "Which is right?");
+});
+
+test("evidence: a root glob cut inside a name is named as held, a whole-repository rule isn't", async () => {
+  const ev = await evidenceFor({ "foobar.ts": "export const foobar = 1;\n" }, ["foo*", "**", "**/*.ts"]);
+  assert.deepEqual(held(ev, "too-broad"), ["foo*"]);
+});
+
+test("evidence: out of time is said as out of time, not as not committed", async () => {
+  const r = repo({ "src/a.ts": "export const a = 1;\n" });
+  try {
+    const ev = await readCode(["src/a.ts"], new Set(), r.root, 0);
+    assert.deepEqual(ev.held, [{ path: "src/a.ts", reason: "timed-out" }]);
+    assert.deepEqual(ev.code, []);
+  } finally { r.done(); }
 });

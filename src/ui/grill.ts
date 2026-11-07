@@ -36,6 +36,8 @@ const MAX_GREP_TERMS = 16;
 const HEAD_LINES = 40;
 const MAX_COMMITS = 6;
 const GIT_TIMEOUT_MS = 15_000;
+/** All the git one gather runs, together: past it, what's left is held back rather than waited on. */
+const GIT_BUDGET_MS = 30_000;
 const MAX_ANSWERS = 4;
 const MAX_REPLY_FIELD = 1500;
 const MAX_ANSWER_CHOICE = 200;
@@ -43,13 +45,32 @@ const CITED_CONTEXT = 2;
 const MAX_CITED_LINES = 12;
 
 /** Paths that look like they hold a secret. Errs toward holding back: the screen names what it held. */
-const SECRET_PATH = /(?:^|\/)(?:\.env[^/]*|\.npmrc|\.pypirc|\.netrc|\.git-credentials|\.ssh|\.aws|\.azure|\.gnupg|\.kube|\.hunch-private|id_(?:rsa|dsa|ecdsa|ed25519)[^/]*|[^/]*(?:secret|credential|password|passwd|private[-_.]?key)[^/]*|[^/]*\.(?:pem|key|p12|pfx|jks|keystore|ppk|kdbx|tfstate|tfvars|gpg|asc)(?:\.[^/]*)?)(?:\/|$)/i;
+const SECRET_PATH = /(?:^|\/)(?:\.env[^/]*|\.npmrc|\.pypirc|\.netrc|\.git-credentials|\.ssh|\.aws|\.azure|\.gnupg|\.kube|\.hunch-private|[^/]+\.env(?:\.[^/]*)?|id_(?:rsa|dsa|ecdsa|ed25519)[^/]*|[^/]*(?:secret|credential|creds|password|passwd|private[-_.]?key)[^/]*|[^/]*(?:token(?!i[sz]e)|api[-_]?keys?|service[-_]?account)[^/]*\.(?:json|ya?ml|toml|ini|cfg|conf|properties|txt|xml|env)|[^/]*\.(?:pem|key|p12|pfx|jks|keystore|ppk|kdbx|tfstate|tfvars|gpg|asc)(?:\.[^/]*)?)(?:\/|$)/i;
 const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
 
 export const isSecretPath = (path: string): boolean => SECRET_PATH.test(path.replace(/\\/g, "/"));
 const hasSecret = (text: string): boolean => text.search(SECRET_MATERIAL) >= 0;
+/** A key that names a credential, then `:` or `=`. */
+const CREDENTIAL_KEY = /(?:password|passwd|pwd|secret|token(?!s|i[sz]e|[-_.]?(?:ttl|type|count|limit|len|length|budget|usage|expir|lifetime|age|seconds|minutes|hours))|api[-_]?key|access[-_]?key|private[-_]?key|credential|auth[-_]?key|authorization|bearer)[A-Za-z0-9_.-]*["']?\s*(?::|=>?)\s*/gi;
+/** A value that is only a reference or a blank to fill, not the credential itself. */
+const NOT_A_VALUE = /^(?:\$|\{\{|<|%\(|(?:null|nil|none|true|false)$|~$|\*+$)/i;
+/** Code, where a bare word after `key:` is a variable or a type. Everything else (config, shell, Dockerfile, Makefile, docs, templates) takes a bare value as a value. */
+const CODE_FILE = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kts?|scala|cs|fs|swift|c|cc|cpp|h|hpp|m|php|lua|dart|exs?|erl|clj|hs|ml|r|jl|vue|svelte|astro)$/i;
 
-export type HeldReason = "secret-path" | "secret-content" | "secret-line" | "private" | "not-committed" | "not-a-file" | "binary" | "too-large" | "over-limit";
+/** A line that sets a credential to a value: `password: hunter2`, `"api_key": "AIza..."`, `token = "x"`. */
+export function setsCredential(line: string, data: boolean): boolean {
+  CREDENTIAL_KEY.lastIndex = 0;
+  for (let m = CREDENTIAL_KEY.exec(line); m; m = CREDENTIAL_KEY.exec(line)) {
+    const rest = line.slice(m.index + m[0].length);
+    // A literal is closed and stands alone: `"Bearer " + token` builds one, `"Invalid token: " + why` is a message.
+    const quoted = /^(?:"([^"]*)"|'([^']*)'|`([^`]*)`)(?!\s*\+)/.exec(rest);
+    const value = quoted ? (quoted[1] ?? quoted[2] ?? quoted[3])! : data ? /^["'`]?([^\s#;,"'`]*)/.exec(rest)![1]! : "";
+    if (value.length >= 3 && !NOT_A_VALUE.test(value) && !value.includes("${")) return true;
+  }
+  return false;
+}
+
+export type HeldReason = "secret-path" | "secret-content" | "secret-line" | "private" | "not-committed" | "not-a-file" | "binary" | "too-large" | "over-limit" | "timed-out" | "too-broad";
 export interface HeldBack { path: string; reason: HeldReason }
 export interface CodeLine { n: number; text: string }
 export interface Excerpt { path: string; lines: CodeLine[] }
@@ -71,13 +92,22 @@ export interface GrillEvidence {
   dirty: string[];
 }
 
-async function git(root: string, args: string[]): Promise<string | null> {
-  const r = await boundedSpawn("git", ["--no-optional-locks", "--literal-pathspecs", ...args], { cwd: root, timeoutMs: GIT_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 });
-  return !r.error && !r.timedOut && !r.overflowed && r.status === 0 ? r.stdout : null;
-}
+type Git = ((args: string[]) => Promise<string | null>) & { expired(): boolean };
+const gitIn = (root: string, deadline: number): Git => {
+  let out = false;
+  const run = async (args: string[]): Promise<string | null> => {
+    const left = Math.min(GIT_TIMEOUT_MS, deadline - Date.now());
+    if (left <= 0) { out = true; return null; }
+    const r = await boundedSpawn("git", ["--no-optional-locks", "--literal-pathspecs", ...args], { cwd: root, timeoutMs: left, maxBuffer: 8 * 1024 * 1024 });
+    if (r.timedOut && Date.now() >= deadline - 50) out = true;
+    return !r.error && !r.timedOut && !r.overflowed && r.status === 0 ? r.stdout : null;
+  };
+  return Object.assign(run, { expired: () => out });
+};
 
 /** The lines most about these words, with the lines around them; the file's start when none match. */
-export function pickLines(content: string, terms: ReadonlySet<string>): { lines: CodeLine[]; withheld: boolean } {
+export function pickLines(content: string, terms: ReadonlySet<string>, path = ""): { lines: CodeLine[]; withheld: boolean } {
+  const data = !CODE_FILE.test(path);
   const all = content.split(/\r?\n/);
   if (all[all.length - 1] === "") all.pop();
   const scored = all.flatMap((line, i) => {
@@ -99,7 +129,7 @@ export function pickLines(content: string, terms: ReadonlySet<string>): { lines:
   const lines: CodeLine[] = [];
   for (const i of [...keep].sort((a, b) => a - b)) {
     // Not sent at all, so it can't be cited either.
-    if (hasSecret(all[i]!)) { withheld = true; continue; }
+    if (hasSecret(all[i]!) || setsCredential(all[i]!.slice(0, MAX_LINE), data)) { withheld = true; continue; }
     lines.push({ n: i + 1, text: all[i]!.slice(0, MAX_LINE) });
   }
   return { lines, withheld };
@@ -107,8 +137,8 @@ export function pickLines(content: string, terms: ReadonlySet<string>): { lines:
 
 interface Blob { mode: string; type: string; sha: string; size: number; path: string }
 
-async function listBlobs(bases: readonly string[], root: string): Promise<Blob[] | null> {
-  const out = await git(root, ["ls-tree", "-r", "-z", "-l", "HEAD", "--", ...bases]);
+async function listBlobs(bases: readonly string[], git: Git): Promise<Blob[] | null> {
+  const out = await git(["ls-tree", "-r", "-z", "-l", "HEAD", "--", ...bases]);
   if (out === null) return null;
   return out.split("\0").flatMap((row) => {
     const m = /^(\d+) (\w+) ([0-9a-f]+)\s+(\S+)\t(.+)$/s.exec(row);
@@ -117,11 +147,11 @@ async function listBlobs(bases: readonly string[], root: string): Promise<Blob[]
 }
 
 /** Lines per path that use the record's words, read from HEAD. Empty when git can't say, which only loses the order. */
-async function wordHits(bases: readonly string[], terms: ReadonlySet<string>, root: string): Promise<Map<string, number>> {
+async function wordHits(bases: readonly string[], terms: ReadonlySet<string>, git: Git): Promise<Map<string, number>> {
   const hits = new Map<string, number>();
   const asked = [...terms].slice(0, MAX_GREP_TERMS).flatMap((t) => ["-e", t]);
   if (!asked.length) return hits;
-  const out = await git(root, ["grep", "-I", "-i", "-c", "-F", "-z", ...asked, "HEAD", "--", ...bases]);
+  const out = await git(["grep", "-I", "-i", "-c", "-F", "-z", ...asked, "HEAD", "--", ...bases]);
   for (const row of (out ?? "").split("\n")) {
     const m = /^HEAD:(.+)\0(\d+)$/s.exec(row);
     if (m) hits.set(m[1]!, Number(m[2]));
@@ -129,25 +159,34 @@ async function wordHits(bases: readonly string[], terms: ReadonlySet<string>, ro
   return hits;
 }
 
-async function readCode(entries: readonly string[], terms: ReadonlySet<string>, root: string): Promise<Pick<GrillEvidence, "head" | "code" | "commits" | "held" | "dirty">> {
+export async function readCode(entries: readonly string[], terms: ReadonlySet<string>, root: string, budgetMs = GIT_BUDGET_MS): Promise<Pick<GrillEvidence, "head" | "code" | "commits" | "held" | "dirty">> {
+  const git = gitIn(root, Date.now() + budgetMs);
+  // Out of time isn't "not committed": say which it was.
+  const missing = (): HeldReason => (git.expired() ? "timed-out" : "not-committed");
   const held: HeldBack[] = [];
   const asked: { entry: string; base: string; exact: boolean }[] = [];
   for (const raw of entries.slice(0, MAX_LINKS)) {
-    const entry = raw.replace(/\\/g, "/").replace(/^\.\//, "");
+    const entry = raw.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\.\//, "");
     if (raw.startsWith("private:")) { held.push({ path: raw, reason: "private" }); continue; }
     if (/^(?:[a-z]:|\/)/i.test(entry) || entry.split("/").includes("..")) { held.push({ path: raw, reason: "not-committed" }); continue; }
-    const base = globBase(entry);
-    if (base === "" || base === ".") continue; // A whole-repository rule names no file to read.
+    let base = globBase(entry);
+    // `src/foo*` cuts inside a name: what it reaches lives in `src`.
+    if (base !== entry && base !== "" && entry[base.length] !== "/") base = base.includes("/") ? base.slice(0, base.lastIndexOf("/")) : "";
+    if (base === "" || base === ".") {
+      // A whole-repository rule names no file to read; `foo*` at the root does, but reading the whole tree for it isn't worth it.
+      if (/^[^*?[{]/.test(entry) && entry !== ".") held.push({ path: raw, reason: "too-broad" });
+      continue;
+    }
     if (isSecretPath(base)) { held.push({ path: raw, reason: "secret-path" }); continue; }
     asked.push({ entry, base, exact: entry === base });
   }
   for (const raw of entries.slice(MAX_LINKS)) held.push({ path: raw, reason: "over-limit" });
 
-  const head = (await git(root, ["rev-parse", "--short", "HEAD"]))?.trim() || null;
+  const head = (await git(["rev-parse", "--short", "HEAD"]))?.trim() || null;
   const bases = [...new Set(asked.map((a) => a.base))];
-  const blobs = head && asked.length ? await listBlobs(bases, root) : [];
+  const blobs = head && asked.length ? await listBlobs(bases, git) : [];
   if (!head || blobs === null) {
-    for (const a of asked) held.push({ path: a.entry, reason: "not-committed" });
+    for (const a of asked) held.push({ path: a.entry, reason: missing() });
     return { head, code: [], commits: [], held, dirty: [] };
   }
 
@@ -163,7 +202,7 @@ async function readCode(entries: readonly string[], terms: ReadonlySet<string>, 
       (b.path === a.entry ? named : reached).push(b);
     }
   }
-  const hits = named.length + reached.length > MAX_FILES ? await wordHits(bases, terms, root) : new Map<string, number>();
+  const hits = named.length + reached.length > MAX_FILES ? await wordHits(bases, terms, git) : new Map<string, number>();
   const byHits = (x: Blob, y: Blob): number => (hits.get(y.path) ?? 0) - (hits.get(x.path) ?? 0) || x.path.length - y.path.length || x.path.localeCompare(y.path);
   named.sort(byHits);
   reached.sort(byHits);
@@ -175,11 +214,11 @@ async function readCode(entries: readonly string[], terms: ReadonlySet<string>, 
     if (b.type !== "blob" || (b.mode !== "100644" && b.mode !== "100755")) { held.push({ path: b.path, reason: "not-a-file" }); continue; }
     if (b.size > MAX_BLOB) { held.push({ path: b.path, reason: "too-large" }); continue; }
     if (code.length === MAX_FILES || size >= MAX_CODE) { held.push({ path: b.path, reason: "over-limit" }); continue; }
-    const content = await git(root, ["cat-file", "blob", b.sha]);
-    if (content === null) { held.push({ path: b.path, reason: "not-committed" }); continue; }
+    const content = await git(["cat-file", "blob", b.sha]);
+    if (content === null) { held.push({ path: b.path, reason: missing() }); continue; }
     if (content.includes("\0")) { held.push({ path: b.path, reason: "binary" }); continue; }
     if (PRIVATE_KEY_BLOCK.test(content)) { held.push({ path: b.path, reason: "secret-content" }); continue; }
-    const { lines, withheld } = pickLines(content, terms);
+    const { lines, withheld } = pickLines(content, terms, b.path);
     if (withheld) held.push({ path: b.path, reason: "secret-line" });
     const cost = lines.reduce((n, l) => n + l.text.length + 8, 0);
     if (size + cost > MAX_CODE) { held.push({ path: b.path, reason: "over-limit" }); continue; }
@@ -187,12 +226,15 @@ async function readCode(entries: readonly string[], terms: ReadonlySet<string>, 
   }
 
   const paths = code.map((c) => c.path);
-  const log = paths.length ? await git(root, ["log", `-n${MAX_COMMITS}`, "--format=%H%x1f%h%x1f%cs%x1f%s", "HEAD", "--", ...paths]) : "";
+  const log = paths.length ? await git(["log", `-n${MAX_COMMITS}`, "--format=%H%x1f%h%x1f%cs%x1f%s", "HEAD", "--", ...paths]) : "";
   const commits = (log ?? "").split(/\r?\n/).flatMap((row) => {
     const [hash, short, date, subject] = row.split("\x1f");
-    return hash && short && date !== undefined && subject !== undefined && !hasSecret(subject) ? [{ hash, short, date, subject: subject.slice(0, MAX_LINE) }] : [];
+    return hash && short && date !== undefined && subject !== undefined && !hasSecret(subject) && !setsCredential(subject, true) ? [{ hash, short, date, subject: subject.slice(0, MAX_LINE) }] : [];
   });
-  const changed = paths.length ? await git(root, ["diff", "--name-only", "-z", "HEAD", "--", ...paths]) : "";
+  if (log === null) held.push({ path: "commit history", reason: missing() });
+  const changed = paths.length ? await git(["diff", "--name-only", "-z", "HEAD", "--", ...paths]) : "";
+  // Unknown isn't clean: say the check didn't run rather than show no changes.
+  if (changed === null) held.push({ path: "changes since that commit", reason: missing() });
   return { head, code, commits, held, dirty: (changed ?? "").split("\0").filter(Boolean) };
 }
 
@@ -296,21 +338,84 @@ export interface GrillTurn {
   dropped: number;
 }
 
-// A file:line, a memory id, or a hash-looking word: anything in prose that claims to point at evidence.
-const REFS = /[\w./@+-]*[\w@+-]\.[A-Za-z]\w*:\d+(?:-\d+)?|\b(?:dec|con|bug|fnd)_[A-Za-z0-9_-]{3,}\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/g;
+// Anything in prose that claims to point at evidence: a line of a file in any of the ways people
+// write one, a memory id, a commit. Each is checked against what was sent.
+/** Files named without an extension that a sentence can still point into. */
+const BARE_FILES = new Set(["makefile", "gnumakefile", "dockerfile", "containerfile", "jenkinsfile", "gemfile", "rakefile", "procfile", "vagrantfile", "brewfile", "justfile", "caddyfile", "pipfile", "podfile", "codeowners", "license", "readme", "changelog"]);
+/** Bare names that are also plain words: "the readme at 3" is prose, `README:3` is a line. */
+const PROSE_FILES = new Set(["license", "readme", "changelog"]);
+/** A host, not a file: `example.com:8080`, `git@github.com:443`. Only without a slash. */
+const HOST = /\.(?:com|org|net|io|dev|app|ai|co|edu|gov|info|biz|cloud|local|internal|localhost|us|uk|de)$/i;
+/** Products named like files: `Node.js:22` is a version. */
+const PRODUCTS = new Set(["node.js", "vue.js", "next.js", "nuxt.js", "express.js", "three.js", "d3.js", "chart.js", "ember.js", "backbone.js", "nest.js", "deno.js"]);
+const PATH = String.raw`[\w./@+-]*[\w@+-]`;
+const SPAN = String.raw`(\d+)(?:\s*(?:[-–]|to)\s*L?(\d+))?`;
+/** Path first, then its line: `a.ts:12`, `a.ts#L12`, `a.ts line 12`, `a.ts (line 12)`, `a.ts at line 12`, `a.ts ln 12`, `a.ts L12`, `a.ts, 12:`. */
+const PATH_LINE = [
+  new RegExp(String.raw`(${PATH}):L?${SPAN}`, "gi"),
+  new RegExp(String.raw`(${PATH})#L${SPAN}`, "gi"),
+  new RegExp(String.raw`(${PATH}),?\s*\(?\s*(?:(?:at|on|in)\s+)?(?:lines?|ln\.?)\s*${SPAN}`, "gi"),
+  new RegExp(String.raw`(${PATH})\s+L${SPAN}\b`, "gi"),
+  new RegExp(String.raw`(${PATH}),\s+${SPAN}:`, "gi"),
+];
+/** Forms ordinary prose also takes: `a.ts at 12`, `a.ts (12)`. A bare word like readme doesn't count here. */
+const LOOSE_PATH_LINE = [
+  new RegExp(String.raw`(${PATH})\s+at\s+${SPAN}\b`, "gi"),
+  new RegExp(String.raw`(${PATH})\s+\(\s*L?${SPAN}\s*\)`, "gi"),
+];
+/** Line first: `line 12 of a.ts`, `lines 3-5 in a.ts`. */
+const LINE_PATH = new RegExp(String.raw`\blines?\s+${SPAN}\s+(?:of|in)\s+(${PATH})`, "gi");
+const IDS = /\b(?:dec|con|bug|fnd|cmp)_[A-Za-z0-9_-]{3,}\b/g;
+const HASH = /\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/gi;
+/** After the word commit, all digits is a hash too. */
+const COMMIT_HASH = /\bcommit(?:s|ted)?\s+(?:as\s+|in\s+)?([0-9a-f]{7,40})\b/gi;
+const URL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s)\]]+/gi;
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+type Ref = { kind: "line"; raw: string; path: string; ref: string; loose: boolean } | { kind: "id" | "hash"; raw: string; ref: string };
+
+function refsIn(text: string): Ref[] {
+  const prose = text.replace(URL, " ");
+  const refs: Ref[] = [];
+  const line = (raw: string, path: string, from: string, to: string | undefined, loose = false): void => {
+    refs.push({ kind: "line", raw, path, ref: `${path}:${from}${to ? `-${to}` : ""}`, loose });
+  };
+  for (const re of PATH_LINE) for (const m of prose.matchAll(re)) line(m[0], m[1]!, m[2]!, m[3]);
+  for (const re of LOOSE_PATH_LINE) for (const m of prose.matchAll(re)) line(m[0], m[1]!, m[2]!, m[3], true);
+  for (const m of prose.matchAll(LINE_PATH)) line(m[0], m[3]!, m[1]!, m[2]);
+  for (const m of prose.matchAll(IDS)) refs.push({ kind: "id", raw: m[0], ref: m[0] });
+  for (const m of prose.matchAll(HASH)) refs.push({ kind: "hash", raw: m[0], ref: m[0] });
+  for (const m of prose.matchAll(COMMIT_HASH)) refs.push({ kind: "hash", raw: m[1]!, ref: m[1]! });
+  return refs;
+}
+
 const clip = (v: unknown, max = MAX_REPLY_FIELD): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
-function resolver(ev: GrillEvidence): { resolve(ref: string): GrillCitation | null; given(token: string): boolean } {
+function resolver(ev: GrillEvidence): { resolve(ref: string): GrillCitation | null; given(ref: Ref): boolean; isPath(p: string, loose?: boolean): boolean } {
   const ids = new Map(ev.memory.map((m) => [m.id, m]));
   const files = new Map(ev.code.map((c) => [c.path, c.lines]));
-  const sentText = [...ev.records, JSON.stringify(ev.flags), ...ev.code.flatMap((c) => c.lines.map((l) => l.text)), ...ev.commits.map((c) => c.subject)].join("\n");
+  const sentText = [ev.head ?? "", ...ev.records, JSON.stringify(ev.flags), ...ev.code.flatMap((c) => c.lines.map((l) => l.text)), ...ev.commits.map((c) => c.subject)].join("\n");
+  const sentLower = sentText.toLowerCase();
   const pathOf = (p: string): string | null => {
     if (files.has(p)) return p;
-    const ends = [...files.keys()].filter((f) => f.endsWith(`/${p}`));
-    return ends.length === 1 ? ends[0]! : null;
+    const one = (match: (f: string) => boolean): string | null => { const all = [...files.keys()].filter(match); return all.length === 1 ? all[0]! : null; };
+    const low = p.toLowerCase();
+    return one((f) => f.endsWith(`/${p}`)) ?? one((f) => f.toLowerCase() === low || f.toLowerCase().endsWith(`/${low}`));
   };
+  // In the sent text as a whole token: the record's `src/old.ts:99` doesn't excuse `src/old.ts:9`.
+  const inSent = (token: string, after: string): boolean => new RegExp(`${escapeRe(token)}${after}`).test(sentText);
   return {
-    given: (token) => sentText.includes(token),
+    isPath(p, loose = false) {
+      if (pathOf(p) !== null) return true;
+      const name = p.split("/").pop()!.toLowerCase();
+      if (!p.includes("/") && (HOST.test(p) || PRODUCTS.has(name))) return false;
+      return (/\//.test(p) && /[A-Za-z]/.test(p)) || /\.[A-Za-z][\w-]*$/.test(p) || (BARE_FILES.has(name) && !(loose && PROSE_FILES.has(name)));
+    },
+    given(ref) {
+      if (ref.kind === "hash") return sentLower.includes(ref.ref.toLowerCase());
+      if (ref.kind === "id") return inSent(ref.ref, "(?![\\w-])");
+      return inSent(ref.raw, "(?!\\d)") || inSent(ref.ref, "(?!\\d)");
+    },
     resolve(raw) {
       const ref = raw.trim().replace(/\\/g, "/");
       const memory = ids.get(ref);
@@ -348,19 +453,27 @@ function verify(listed: unknown, text: string, r: ReturnType<typeof resolver>, s
     const c = typeof raw === "string" ? r.resolve(raw) : null;
     if (c) add(c); else dropped++;
   }
-  for (const m of text.matchAll(REFS)) {
-    const c = r.resolve(m[0]);
+  for (const ref of refsIn(text)) {
+    // `localhost:3000` or `ratio 3:1` points at no file.
+    if (ref.kind === "line" && !r.isPath(ref.path, ref.loose)) continue;
+    const c = r.resolve(ref.ref);
     if (c) add(c);
     // The record's own text may name a line nobody sent: quoting it isn't inventing it.
-    else if (!r.given(m[0])) madeUp = true;
+    else if (!r.given(ref)) madeUp = true;
   }
   return { citations: [...found.values()], dropped, madeUp };
 }
 
-/** Read one reply against the evidence it was sent. `asked`: questions answered before this reply. */
-export function readTurn(raw: string, ev: GrillEvidence, asked: number, finish = false): GrillTurn {
+/** Read one reply against the evidence it was sent. `asked`: questions answered before this reply; `before`: their words. */
+export function readTurn(raw: string, ev: GrillEvidence, asked: number, finish = false, before: readonly string[] = []): GrillTurn {
   const none: GrillTurn = { challenge: null, verdict: null, finished: false, rejected: "unreadable", dropped: 0 };
-  const o = extractJsonObjects(raw).find((x) => typeof x.question === "string" || x.settled === true || (x.verdict && typeof x.verdict === "object"));
+  // The reply's own object, not an earlier turn it echoed: the last that carries a citation or a verdict.
+  const objects = extractJsonObjects(raw).filter((x) => typeof x.question === "string" || x.settled === true || (x.verdict && typeof x.verdict === "object"));
+  // A turn that repeats a question already asked is an echo, even when it comes after the reply's own.
+  const echoed = new Set(before.map((q) => q.trim()));
+  const fresh = objects.filter((x) => !(typeof x.question === "string" && echoed.has(x.question.trim())));
+  const pool = fresh.length ? fresh : objects;
+  const o = pool.findLast((x) => Array.isArray(x.citations) || x.settled === true || (x.verdict && typeof x.verdict === "object")) ?? pool.at(-1);
   if (!o) return none;
   const r = resolver(ev);
   let dropped = 0;
@@ -392,6 +505,11 @@ export function readTurn(raw: string, ev: GrillEvidence, asked: number, finish =
   dropped += checked.dropped;
   if (checked.madeUp) return { ...none, rejected: "made-up", dropped };
   if (!checked.citations.length) return { ...none, rejected: "uncited", dropped };
-  const answers = Array.isArray(o.answers) ? o.answers.map((a: unknown) => clip(a, MAX_ANSWER_CHOICE)).filter(Boolean).slice(0, MAX_ANSWERS) : [];
+  // An answer is a button, and once clicked the person's own words: one naming evidence nobody sent goes.
+  const answers: string[] = [];
+  for (const a of Array.isArray(o.answers) ? o.answers.map((x: unknown) => clip(x, MAX_ANSWER_CHOICE)).filter(Boolean) : []) {
+    if (verify([], a, r, ev.focus.id).madeUp) dropped++;
+    else if (answers.length < MAX_ANSWERS) answers.push(a);
+  }
   return { challenge: { question, claim, citations: checked.citations, answers }, verdict, finished: false, rejected: null, dropped };
 }

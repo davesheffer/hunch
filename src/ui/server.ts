@@ -245,7 +245,7 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
       let reply: string;
       try { reply = await asker.ask(assistant.name, grillPrompt(evidence, parsed.turns, parsed.finish)); }
       catch (error) { return send(res, 502, { error: `${assistant.label} did not answer: ${(error instanceof Error ? error.message : String(error)).slice(0, 300)}` }); }
-      return send(res, 200, { assistant: { name: assistant.name, label: assistant.label }, ...readTurn(reply, evidence, parsed.turns.length, parsed.finish), evidence: evidenceView(evidence) });
+      return send(res, 200, { assistant: { name: assistant.name, label: assistant.label }, ...readTurn(reply, evidence, parsed.turns.length, parsed.finish, parsed.turns.map((t) => t.question)), evidence: evidenceView(evidence) });
     } finally { asking = false; }
   };
 

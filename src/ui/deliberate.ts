@@ -136,7 +136,8 @@ export const deliberateJs = String.raw`
     if (a.keep === 'confirm') add('Confirm as mine', false, () => dRun(c, [{ id, action: 'confirm', body: {} }], 'Confirmed as yours.'));
     if (a.keep === 'review-rule') add('Review rule', false, () => dOpen(id, 'confirm'));
     if (a.remove) add('Remove memory', c.recommend === 'remove' && !a.merge, () => dRun(c, [{ id, action: 'remove', body: { reason: c.claim } }], DONE.remove), 'danger');
-    add('Grill me on this', false, () => { location.hash = '#/grill/' + enc(id); });
+    // A pair: grill the one the review would let go, with the other beside it.
+    add('Grill me on this', false, () => { location.hash = '#/grill/' + enc(a.merge ? a.merge.duplicate : id); });
     add('Skip', false, () => { D.skipped.add(c.key); dNext(c); });
     const notes = [];
     if (a.merge && a.merge.oneWay) notes.push('No Undo here: the CLI would refuse the restore.');
