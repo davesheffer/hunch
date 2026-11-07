@@ -2791,8 +2791,9 @@ export function mergeRangeChanges(oldRef: string, newRef: string, cwd: string, m
 const HEX_COMMIT_RE = /^[0-9a-f]{7,64}$/i;
 const MAX_ALIVE_SPECS = 200_000;
 /** Every submodule entry in `cat-file --batch` output for these directories, in order. Raw tree
- *  format: `<mode> <name>\0<oid bytes>`. Throws on a header it can't read: callers fail open. */
-function gitlinksInTrees(output: Buffer, dirs: readonly string[]): Set<string> {
+ *  format: `<mode> <name>\0<oid bytes>`. Throws on a header it can't read: callers fail open.
+ *  Exported for tests: the header git prints for an absent submodule commit changed across versions. */
+export function gitlinksInTrees(output: Buffer, dirs: readonly string[]): Set<string> {
   const links = new Set<string>();
   let at = 0;
   for (const dir of dirs) {
@@ -2800,7 +2801,9 @@ function gitlinksInTrees(output: Buffer, dirs: readonly string[]): Set<string> {
     if (end < 0) throw new Error("cat-file answered too few objects");
     const header = output.toString("utf8", at, end);
     at = end + 1;
-    if (header.endsWith(" missing")) continue;
+    // No body follows these. Newer git (2.56 on CI) prints `<oid> submodule` for a submodule whose
+    // commit isn't here, where 2.48 said `<name> missing`.
+    if (/ (?:missing|submodule|ambiguous)$/.test(header)) continue;
     const parts = /^([0-9a-f]+) (\w+) (\d+)$/.exec(header);
     if (!parts) throw new Error(`cat-file header: ${header}`);
     const stop = at + Number(parts[3]);

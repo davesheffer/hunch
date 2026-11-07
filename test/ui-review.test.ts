@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ComponentSchema, DecisionSchema, EdgeSchema, FindingSchema, type Decision } from "../src/core/types.js";
 import type { DriftFinding } from "../src/core/drift.js";
-import { pathsAliveInRepo } from "../src/extractors/git.js";
+import { gitlinksInTrees, pathsAliveInRepo } from "../src/extractors/git.js";
 import { normalizeTitle, reviewCards, type Review, type ReviewCard, type ReviewKind } from "../src/ui/review.js";
 import type { MemorySource } from "../src/ui/model.js";
 import { mkConstraint, prov } from "./helpers.js";
@@ -475,4 +475,16 @@ test("stale: a glob next to a dead file is still something it links to", () => {
   const [card] = cards(r, "stale");
   assert.match(card!.claim, /1 of 2 linked paths is gone/);
   assert.equal(card!.recommend, "drop-links");
+});
+
+test("alive: a submodule's absent commit reads as no body, as newer git prints it and as older git did", () => {
+  const oid = "1".repeat(40), bin = Buffer.from("2".repeat(40), "hex");
+  const tree = Buffer.concat([Buffer.from("160000 sub\0"), bin, Buffer.from("100644 a.ts\0"), bin]);
+  const output = Buffer.concat([
+    Buffer.from(`${oid} submodule\n`),
+    Buffer.from(`${oid}:./vendor/sub/deep missing\n`),
+    Buffer.from(`${"3".repeat(40)} tree ${tree.length}\n`), tree, Buffer.from("\n"),
+  ]);
+  assert.deepEqual([...gitlinksInTrees(output, ["vendor/sub", "vendor/sub/deep", "vendor"])], ["vendor/sub"]);
+  assert.throws(() => gitlinksInTrees(Buffer.from(`${oid} blob\n`), ["x"]), "a header it can't read still fails open at the caller");
 });
