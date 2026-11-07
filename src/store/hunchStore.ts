@@ -678,8 +678,12 @@ export class HunchStore {
   reindex(): { counts: Record<string, number> } {
     const db = this.db;
     const counts: Record<string, number> = {};
+    // Taken before the reads: a write landing mid-rebuild leaves the stored stamp
+    // behind the sources, so the next incremental refresh rebuilds instead of trusting it.
+    const stamp = this.sourceStamp();
     withTx(db, () => {
       db.exec(RESET_SQL);
+      this.writeIndexedStamp(stamp);
       const j = (s: string) => s; // readability marker for JSON-encoded columns
       // Prepare the FTS insert ONCE (after RESET created the table), not per row.
       const insFts = db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES (?,?,?,?)`);
@@ -812,10 +816,7 @@ export class HunchStore {
       // the lesson/save/application record ids and touched files, so "what did
       // an agent do around X" and a record id both hit.
       const tasks = this.recs("tasks");
-      for (const t of tasks) {
-        fts(t.id, "tasks", t.title,
-          `${t.lessons.map((l) => `${l.record_id} ${l.title}`).join(" ")} ${t.applied.map((a) => a.record_id).join(" ")} ${t.saved.map((s) => s.record_id).join(" ")} ${t.files.join(" ")} ${t.state} ${t.coverage}`);
-      }
+      for (const t of tasks) fts(t.id, "tasks", t.title, taskSearchBody(t));
       counts.tasks = tasks.length;
 
       // nuryel.state/1 kinds (receipts, commitments, derived, entities, relationships):
@@ -839,6 +840,60 @@ export class HunchStore {
     // so this is what keeps them coherent across the many reindex() call sites.
     this.pruneStaleEmbeddings();
     return { counts };
+  }
+
+  /** Refresh the derived index for ONE task record after it was written.
+   *
+   *  Tasks are FTS-only (no SQL table), so the record's `search` row is its whole
+   *  derived state: replacing that row leaves the index exactly as reindex() would,
+   *  without re-reading and re-validating every other kind. The Stop hook writes one
+   *  task record per finished prompt; a full rebuild there was most of its latency.
+   *  An index that was never built (empty `search`) still gets the full rebuild.
+   *
+   *  The full rebuild used to be also where JSON changed by ANOTHER process (a team
+   *  pull, a branch switch, a teammate's capture) reached the index between turns.
+   *  `sourceBefore` is sourceStamp() taken just before the caller wrote this task:
+   *  when it differs from the stamp the index was built from, something besides this
+   *  write moved the sources, and the refresh is a full fresh rebuild. */
+  reindexTask(id: string, sourceBefore?: string): void {
+    const db = this.db;
+    // Taken after the caller's write and before the reads below. The caller's write
+    // may move only a tasks directory; any other segment moving since `sourceBefore`
+    // (a pull landing mid-write) means something this row does not carry changed.
+    const sourceAfter = this.sourceStamp();
+    if (db.prepare(`SELECT 1 AS x FROM search LIMIT 1`).get() === undefined
+      || sourceBefore === undefined
+      || this.readIndexedStamp() !== sourceBefore
+      || !onlyTasksMoved(sourceBefore, sourceAfter)) {
+      this.reindexFresh();
+      return;
+    }
+    const priv = this.suppressPrivate ? undefined : this.privateJson?.get("tasks", id);
+    const rec = (priv ?? this.json.get("tasks", id)) as TaskRecord | undefined;
+    withTx(db, () => {
+      db.prepare(`DELETE FROM search WHERE ref = ? AND kind = 'tasks'`).run(id);
+      if (!rec) {
+        db.prepare(`DELETE FROM embeddings WHERE ref = ?`).run(id);
+        return;
+      }
+      const body = taskSearchBody(rec);
+      db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES (?,?,?,?)`).run(rec.id, "tasks", rec.title, body);
+      // Same rule as pruneStaleEmbeddings, for this one doc: a vector survives only
+      // while its text is unchanged.
+      db.prepare(`DELETE FROM embeddings WHERE ref = ? AND doc_hash <> ?`).run(rec.id, embedHash(rec.title, body));
+      // The index now reflects the sources as of `sourceAfter`. A write landing after
+      // it leaves the stored stamp behind the sources, so the next refresh rebuilds.
+      this.writeIndexedStamp(sourceAfter);
+    });
+  }
+
+  private readIndexedStamp(): string | undefined {
+    const row = this.db.prepare(`SELECT value FROM index_state WHERE key = 'source_stamp'`).get() as { value?: unknown } | undefined;
+    return typeof row?.value === "string" ? row.value : undefined;
+  }
+
+  private writeIndexedStamp(stamp: string): void {
+    this.db.prepare(`INSERT OR REPLACE INTO index_state (key, value) VALUES ('source_stamp', ?)`).run(stamp);
   }
 
   // ---- read path ----------------------------------------------------------
@@ -2630,6 +2685,23 @@ export interface AssembledContext {
   /** Current, explicitly reviewed Engineering Landscape orientation. */
   landscape?: ReviewedLandscapeSelection;
   budget_tokens: number;
+}
+
+/** FTS body of a task record: lesson/application/save record ids, touched files,
+ *  state and coverage, so "what did an agent do around X" and a record id both hit.
+ *  Shared by reindex() and reindexTask() so the two can never index differently. */
+function taskSearchBody(t: TaskRecord): string {
+  return `${t.lessons.map((l) => `${l.record_id} ${l.title}`).join(" ")} ${t.applied.map((a) => a.record_id).join(" ")} ${t.saved.map((s) => s.record_id).join(" ")} ${t.files.join(" ")} ${t.state} ${t.coverage}`;
+}
+
+/** True when two sourceStamp() values differ at most in their `tasks:` segments
+ *  (either home). The stamp is `<public>::<overlay>`, each a `|`-joined list of
+ *  `<name>:<marker>` segments in a fixed order. */
+function onlyTasksMoved(before: string, after: string): boolean {
+  const segs = (s: string) => s.split("::").flatMap((home, h) => home.split("|").map((seg) => `${h}/${seg}`));
+  const a = segs(before), b = segs(after);
+  if (a.length !== b.length) return false;
+  return a.every((seg, i) => seg === b[i] || (seg.startsWith(`${seg[0]}/tasks:`) && b[i]!.startsWith(`${seg[0]}/tasks:`)));
 }
 
 function sev(s: string): number {

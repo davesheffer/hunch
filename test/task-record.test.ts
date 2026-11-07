@@ -15,6 +15,7 @@ import { canonicalReportRoot } from "../src/core/taskReportPaths.js";
 import { promptTaskTitle } from "../src/core/taskReportHook.js";
 import { withServedDatabase } from "../src/core/served.js";
 import { HunchStore } from "../src/store/hunchStore.js";
+import { embedHash } from "../src/store/schema.js";
 import { hunchPaths } from "../src/core/paths.js";
 
 type Ctx = { after: (f: () => void) => void };
@@ -168,6 +169,99 @@ test("a finished task with observations becomes a graph record; an empty task st
   const open = startReportTask(root, "Still working");
   recordTaskDelivery(root, open.task_id, envelope(), [record]);
   assert.equal(persistTaskRecord(root, store, open.task_id, { flush: false }), null);
+});
+
+test("persisting a task refreshes only its own search row, and the result equals a full rebuild", t => {
+  const root = fixture(t), store = openStore(root, t);
+  const constraint = { id: "con_indexed", type: "architecture", statement: "Indexed before the task", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } };
+  store.json.put("constraints", constraint as never);
+  store.reindex();
+  // A derived row no source backs: any full rebuild (RESET) inside persist deletes it.
+  store.db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES ('sentinel', 'constraints', 'sentinel', '')`).run();
+
+  const task = startReportTask(root, "Fix settings merge");
+  recordTaskDelivery(root, task.task_id, envelope(), [record]);
+  finishReportTask(root, task.task_id);
+  assert.ok(persistTaskRecord(root, store, task.task_id, { flush: false }));
+
+  const rows = (where: string) => store.db.prepare(`SELECT ref, kind, title, body FROM search WHERE ${where} ORDER BY ref`).all();
+  assert.ok(store.search("settings merge", 10).some(h => h.kind === "tasks" && h.ref === task.task_id), "the new task is searchable at once");
+  assert.equal(rows("ref = 'sentinel'").length, 1, "with no other source change, persisting a task must not rebuild the other kinds");
+  store.reindexTask(task.task_id, store.sourceStamp());
+  assert.equal(rows("ref = 'sentinel'").length, 1, "an unchanged source stamp keeps the refresh incremental");
+  assert.equal(rows(`ref = '${task.task_id}'`).length, 1, "a refresh replaces the row, never duplicates it");
+
+  const incremental = rows("kind = 'tasks'");
+  store.reindex();
+  assert.deepEqual(rows("kind = 'tasks'"), incremental, "the incremental row is exactly what a full rebuild writes");
+
+  // Vectors follow the same content-hash rule as pruneStaleEmbeddings.
+  const [row] = incremental as Array<{ title: string; body: string }>;
+  const vec = (hash: string) => store.db.prepare(`INSERT INTO embeddings (ref, kind, model, dim, doc_hash, vec) VALUES (?, 'tasks', 'm', 1, ?, ?)`).run(task.task_id, hash, Buffer.alloc(4));
+  vec(embedHash(row!.title, row!.body));
+  store.reindexTask(task.task_id, store.sourceStamp());
+  assert.equal((store.db.prepare(`SELECT count(*) AS c FROM embeddings WHERE ref = ?`).get(task.task_id) as { c: number }).c, 1, "an unchanged doc keeps its vector");
+  store.db.prepare(`DELETE FROM embeddings`).run();
+  vec("stale-hash");
+  store.reindexTask(task.task_id, store.sourceStamp());
+  assert.equal((store.db.prepare(`SELECT count(*) AS c FROM embeddings WHERE ref = ?`).get(task.task_id) as { c: number }).c, 0, "a changed doc drops its vector");
+});
+
+test("a source change since the last rebuild (a team pull, a branch switch) still reaches the index when a task is persisted", t => {
+  const root = fixture(t), store = openStore(root, t);
+  const constraint = { id: "con_indexed", type: "architecture", statement: "Indexed before the task", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } };
+  store.json.put("constraints", constraint as never);
+  store.reindex();
+  // Another process (a pull, a teammate's capture) writes after the rebuild; this
+  // process never sees the write, so only the source stamp can reveal it.
+  const other = openStore(root, t);
+  other.json.put("constraints", { ...constraint, id: "con_pulled", statement: "Pulled after the rebuild" } as never);
+
+  const task = startReportTask(root, "Fix settings merge");
+  recordTaskDelivery(root, task.task_id, envelope(), [record]);
+  finishReportTask(root, task.task_id);
+  assert.ok(persistTaskRecord(root, store, task.task_id, { flush: false }));
+  const refs = (store.db.prepare(`SELECT ref FROM search ORDER BY ref`).all() as Array<{ ref: string }>).map(r => r.ref);
+  assert.deepEqual(refs, ["con_indexed", "con_pulled", task.task_id].sort(), "the pulled constraint is indexed with the task");
+});
+
+test("a source change landing during the task write is not absorbed into the stored stamp", t => {
+  const root = fixture(t), store = openStore(root, t);
+  const constraint = { id: "con_indexed", type: "architecture", statement: "Indexed before the task", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } };
+  store.json.put("constraints", constraint as never);
+  const task = startReportTask(root, "Fix settings merge");
+  recordTaskDelivery(root, task.task_id, envelope(), [record]);
+  finishReportTask(root, task.task_id);
+  assert.ok(persistTaskRecord(root, store, task.task_id, { flush: false }));
+  const stored = store.json.get("tasks", task.task_id) as TaskRecord;
+
+  // The caller took its stamp; then another process writes a constraint while this
+  // process rewrites the task. The stored stamp would match `before` exactly.
+  const before = store.sourceStamp();
+  openStore(root, t).json.put("constraints", { ...constraint, id: "con_mid_write", statement: "Landed mid-write" } as never);
+  store.json.put("tasks", { ...stored, title: "Fix settings merge again" } as never);
+  store.reindexTask(task.task_id, before);
+  const refs = (store.db.prepare(`SELECT ref FROM search ORDER BY ref`).all() as Array<{ ref: string }>).map(r => r.ref);
+  assert.ok(refs.includes("con_mid_write"), "the mid-write constraint is indexed");
+
+  // With nothing else moving, the next task write stays incremental.
+  const again = store.sourceStamp();
+  store.db.prepare(`DELETE FROM search WHERE ref = 'con_indexed'`).run();
+  store.json.put("tasks", { ...stored, title: "Fix settings merge a third time" } as never);
+  store.reindexTask(task.task_id, again);
+  const after = (store.db.prepare(`SELECT ref FROM search ORDER BY ref`).all() as Array<{ ref: string }>).map(r => r.ref);
+  assert.ok(!after.includes("con_indexed"), "a task-only change replaces just the task row");
+});
+
+test("an index that was never built gets the full rebuild when the first task is persisted", t => {
+  const root = fixture(t), store = openStore(root, t);
+  store.json.put("constraints", { id: "con_fresh", type: "architecture", statement: "Present in a fresh clone", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } } as never);
+  const task = startReportTask(root, "Fix settings merge");
+  recordTaskDelivery(root, task.task_id, envelope(), [record]);
+  finishReportTask(root, task.task_id);
+  assert.ok(persistTaskRecord(root, store, task.task_id, { flush: false }));
+  const refs = (store.db.prepare(`SELECT ref FROM search ORDER BY ref`).all() as Array<{ ref: string }>).map(r => r.ref);
+  assert.deepEqual(refs, ["con_fresh", task.task_id].sort());
 });
 
 test("task list merges graph records with the ledger and keeps graph-only tasks visible", t => {

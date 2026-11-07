@@ -26,7 +26,8 @@ import { gitRun, isInside, planHookRemoval, worktreeTops } from "./hooks.js";
 import { ATTR_LINES, targetRepositoryEnv } from "./mergeDriver.js";
 import { antigravityMcpFile, isHunchProviderHook, readJsonObj, TOML_END, TOML_START, windsurfMcpFile } from "./providers.js";
 import { SLASH_COMMAND_FILES } from "./scaffold.js";
-import { isOptedOut, OPT_OUT_FILE } from "./optout.js";
+import { isOptedOut, OPT_OUT_FILE, optOutMarkerAt } from "./optout.js";
+export { optOutMarkerAt };
 
 export { isOptedOut, OPT_OUT_FILE };
 
@@ -38,23 +39,6 @@ export { isOptedOut, OPT_OUT_FILE };
  *  repository stays gated (fail closed). */
 export function optedOutAt(start: string): boolean {
   return optOutMarkerAt(start) !== null;
-}
-
-/** The opt-out marker that gates `start` (walked as in `optedOutAt`), or null. With
- *  `withinRepo`, a marker counts only when the walk reaches a repository: outside one,
- *  an ancestor's marker gates nothing. */
-export function optOutMarkerAt(start: string, opts: { withinRepo?: boolean } = {}): string | null {
-  let found: string | null = null;
-  for (let dir = resolve(start); ; ) {
-    if (!found && isOptedOut(dir)) {
-      found = join(dir, OPT_OUT_FILE);
-      if (!opts.withinRepo) return found;
-    }
-    if (existsSync(join(dir, ".git"))) return found;
-    const parent = dirname(dir);
-    if (parent === dir) return opts.withinRepo ? null : found;
-    dir = parent;
-  }
 }
 
 /** The refusal, naming the marker of the repository actually checked (#488). */
