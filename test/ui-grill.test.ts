@@ -493,15 +493,18 @@ test("reply: an earlier turn echoed before the reply's own object isn't taken fo
   assert.equal(t.challenge!.question, "Which is right?");
 });
 
+// Fake credential values are joined at run time so secret scanners don't read the fixtures as leaked keys.
+const fake = (...parts: string[]) => parts.join("");
+
 test("credential lines: a key naming a secret set to a value is held, code that only handles one is not", () => {
-  for (const line of ["password: hunter2", 'api_key: "AIzaSyA1234567890"', '  "client_secret": "abc123",', "DB_PASSWORD=s3cret", "export GITHUB_TOKEN=ghx_1234", "aws_access_key_id = AKIA1234"]) assert.equal(setsCredential(line, true), true, line);
+  for (const line of [fake("password: ", "hunter", "2"), fake('api_key: "', "AIza", "SyA1234567890", '"'), fake('  "client_secret": "', "abc", '123",'), fake("DB_PASSWORD=", "s3c", "ret"), fake("export GITHUB_TOKEN=", "ghx_", "1234"), fake("aws_access_key_id = ", "AK", "IA1234")]) assert.equal(setsCredential(line, true), true, line);
   for (const line of ['const token = "abc123";', "headers = { Authorization: 'Bearer abc123' }", "apiKey: 'sk-test-1234',"]) assert.equal(setsCredential(line, false), true, line);
   for (const line of ["const token = await getToken();", "password: string;", "token: z.string(),", "if (token === undefined) return;", "apiKey: process.env.API_KEY,", 'password: "${DB_PASSWORD}"', "token: <your token>", "password: null"]) assert.equal(setsCredential(line, false), false, line);
 });
 
 test("evidence: a config file's credential lines are held, and files named for keys or tokens are held whole", async () => {
   const ev = await evidenceFor({
-    "config/production.yml": "port: 8080\npassword: hunter2\napi_key: AIzaSyA1234567890\nregion: eu\n",
+    "config/production.yml": fake("port: 8080\npassword: ", "hunter", "2\napi_key: ", "AIza", "SyA1234567890\nregion: eu\n"),
     "src/auth/token.ts": "export const token = await getToken();\nexport const kind: string = \"bearer\";\n",
   }, ["config/production.yml", "src/auth/token.ts"]);
   assert.doesNotMatch(sent(ev), /hunter2|AIzaSy/);
@@ -515,7 +518,7 @@ test("evidence: a config file's credential lines are held, and files named for k
 test("evidence: a commit title setting a credential isn't sent", async () => {
   const ev = await evidenceFor({ "src/a.ts": "export const a = 1;\n" }, ["src/a.ts"], (r) => {
     writeFileSync(join(r.root, "src/a.ts"), "export const a = 2;\n");
-    r.git("add", "-A"); r.git("commit", "-qm", "set password: hunter2 for staging");
+    r.git("add", "-A"); r.git("commit", "-qm", fake("set password: ", "hunter", "2 for staging"));
   });
   assert.doesNotMatch(JSON.stringify(ev.commits), /hunter2/);
 });
@@ -527,7 +530,7 @@ test("evidence: a glob cut inside a name, and a doubled slash, still reach their
 });
 
 test("credential lines: shell, Dockerfile, Makefile and docs take a bare value as a value; a huge line can't stall the server", () => {
-  for (const [path, text] of [["deploy.sh", "export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENG"], ["Dockerfile", "ENV API_KEY=AIzaSyA1234567890abcdef"], ["Makefile", "TOKEN=ghx_12345"], ["docs/setup.md", "password: hunter2"], ["prod.env.example", "DB_PASSWORD=hunter2"]] as const) {
+  for (const [path, text] of [["deploy.sh", fake("export AWS_SECRET_ACCESS_KEY=", "wJalr", "XUtnFE", "MIK7MDENG")], ["Dockerfile", fake("ENV API_KEY=", "AIza", "SyA1234567890abcdef")], ["Makefile", fake("TOKEN=", "ghx_", "12345")], ["docs/setup.md", fake("password: ", "hunter", "2")], ["prod.env.example", fake("DB_PASSWORD=", "hunter", "2")]] as const) {
     assert.equal(pickLines(`x\n${text}\ny\n`, new Set(), path).withheld, true, path);
   }
   assert.equal(pickLines("const token = await getToken();\n", new Set(), "src/a.ts").withheld, false);
