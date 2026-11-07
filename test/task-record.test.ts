@@ -225,6 +225,34 @@ test("a source change since the last rebuild (a team pull, a branch switch) stil
   assert.deepEqual(refs, ["con_indexed", "con_pulled", task.task_id].sort(), "the pulled constraint is indexed with the task");
 });
 
+test("a source change landing during the task write is not absorbed into the stored stamp", t => {
+  const root = fixture(t), store = openStore(root, t);
+  const constraint = { id: "con_indexed", type: "architecture", statement: "Indexed before the task", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } };
+  store.json.put("constraints", constraint as never);
+  const task = startReportTask(root, "Fix settings merge");
+  recordTaskDelivery(root, task.task_id, envelope(), [record]);
+  finishReportTask(root, task.task_id);
+  assert.ok(persistTaskRecord(root, store, task.task_id, { flush: false }));
+  const stored = store.json.get("tasks", task.task_id) as TaskRecord;
+
+  // The caller took its stamp; then another process writes a constraint while this
+  // process rewrites the task. The stored stamp would match `before` exactly.
+  const before = store.sourceStamp();
+  openStore(root, t).json.put("constraints", { ...constraint, id: "con_mid_write", statement: "Landed mid-write" } as never);
+  store.json.put("tasks", { ...stored, title: "Fix settings merge again" } as never);
+  store.reindexTask(task.task_id, before);
+  const refs = (store.db.prepare(`SELECT ref FROM search ORDER BY ref`).all() as Array<{ ref: string }>).map(r => r.ref);
+  assert.ok(refs.includes("con_mid_write"), "the mid-write constraint is indexed");
+
+  // With nothing else moving, the next task write stays incremental.
+  const again = store.sourceStamp();
+  store.db.prepare(`DELETE FROM search WHERE ref = 'con_indexed'`).run();
+  store.json.put("tasks", { ...stored, title: "Fix settings merge a third time" } as never);
+  store.reindexTask(task.task_id, again);
+  const after = (store.db.prepare(`SELECT ref FROM search ORDER BY ref`).all() as Array<{ ref: string }>).map(r => r.ref);
+  assert.ok(!after.includes("con_indexed"), "a task-only change replaces just the task row");
+});
+
 test("an index that was never built gets the full rebuild when the first task is persisted", t => {
   const root = fixture(t), store = openStore(root, t);
   store.json.put("constraints", { id: "con_fresh", type: "architecture", statement: "Present in a fresh clone", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } } as never);

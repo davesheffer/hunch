@@ -857,9 +857,14 @@ export class HunchStore {
    *  write moved the sources, and the refresh is a full fresh rebuild. */
   reindexTask(id: string, sourceBefore?: string): void {
     const db = this.db;
+    // Taken after the caller's write and before the reads below. The caller's write
+    // may move only a tasks directory; any other segment moving since `sourceBefore`
+    // (a pull landing mid-write) means something this row does not carry changed.
+    const sourceAfter = this.sourceStamp();
     if (db.prepare(`SELECT 1 AS x FROM search LIMIT 1`).get() === undefined
       || sourceBefore === undefined
-      || this.readIndexedStamp() !== sourceBefore) {
+      || this.readIndexedStamp() !== sourceBefore
+      || !onlyTasksMoved(sourceBefore, sourceAfter)) {
       this.reindexFresh();
       return;
     }
@@ -876,8 +881,9 @@ export class HunchStore {
       // Same rule as pruneStaleEmbeddings, for this one doc: a vector survives only
       // while its text is unchanged.
       db.prepare(`DELETE FROM embeddings WHERE ref = ? AND doc_hash <> ?`).run(rec.id, embedHash(rec.title, body));
-      // The index now reflects the sources as of this write, and nothing else moved.
-      this.writeIndexedStamp(this.sourceStamp());
+      // The index now reflects the sources as of `sourceAfter`. A write landing after
+      // it leaves the stored stamp behind the sources, so the next refresh rebuilds.
+      this.writeIndexedStamp(sourceAfter);
     });
   }
 
@@ -2686,6 +2692,16 @@ export interface AssembledContext {
  *  Shared by reindex() and reindexTask() so the two can never index differently. */
 function taskSearchBody(t: TaskRecord): string {
   return `${t.lessons.map((l) => `${l.record_id} ${l.title}`).join(" ")} ${t.applied.map((a) => a.record_id).join(" ")} ${t.saved.map((s) => s.record_id).join(" ")} ${t.files.join(" ")} ${t.state} ${t.coverage}`;
+}
+
+/** True when two sourceStamp() values differ at most in their `tasks:` segments
+ *  (either home). The stamp is `<public>::<overlay>`, each a `|`-joined list of
+ *  `<name>:<marker>` segments in a fixed order. */
+function onlyTasksMoved(before: string, after: string): boolean {
+  const segs = (s: string) => s.split("::").flatMap((home, h) => home.split("|").map((seg) => `${h}/${seg}`));
+  const a = segs(before), b = segs(after);
+  if (a.length !== b.length) return false;
+  return a.every((seg, i) => seg === b[i] || (seg.startsWith(`${seg[0]}/tasks:`) && b[i]!.startsWith(`${seg[0]}/tasks:`)));
 }
 
 function sev(s: string): number {
