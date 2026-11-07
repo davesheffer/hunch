@@ -922,7 +922,7 @@ test("Ask needs a subscription login: anything else blocks it before the spend",
 });
 
 test("noTools: Claude takes it as flags, off otherwise; a provider that can't hold it refuses before running", async () => {
-  assert.deepEqual(claudePrintArgs("haiku"), ["-p", "--output-format", "json", "--model", "haiku", "--max-turns", "1", "--restricted"], "unattended synthesis reads no hooks or apiKeyHelper either, but keeps its tools off by prompt");
+  assert.deepEqual(claudePrintArgs("haiku"), ["-p", "--output-format", "json", "--model", "haiku", "--max-turns", "1", "--restricted"], "unattended synthesis reads no hooks or apiKeyHelper either");
   assert.deepEqual(claudePrintArgs("haiku", { noTools: true }).slice(-3), ["--restricted", "--tools=", "--strict-mcp-config"]);
   assert.ok(claudePrintArgs("haiku", { noTools: true }).every((a) => a !== "" && !/\s/.test(a)), "every token survives the cmd.exe line");
   assert.deepEqual(codexExecArgs("m"), ["exec", "--json", "--skip-git-repo-check", "-m", "m", "-"], "synthesis is unchanged");
