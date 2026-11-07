@@ -2484,6 +2484,11 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const resolved = decision.commit ? revParse(decision.commit, root) : null;
         const fullSha = resolved && /^[0-9a-f]{40}$/.test(resolved) ? resolved : null;
         const id = fullSha ? decisionId(fullSha) : decisionId(`manual:${decision.title}`);
+        // A record can't supersede itself. Re-recording under the same title lands on the same
+        // id, and the capture nudge below used to say "supersedes: <this id>". Taken literally,
+        // that overwrote the link to the decision this one really replaced. Read it as "no new
+        // predecessor", so the stored link is kept.
+        if (decision.supersedes === id) decision = { ...decision, supersedes: undefined };
 
         // Preserve the ADR lineage from the SAME home this write will use. A private
         // re-record must retain its own optional fields, but must never inherit a
@@ -2693,7 +2698,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
               ? `\n\nℹ Interview recorded, but a capture token is not a human signature and ${unconfirmedReason(confirmation!)}, so this record stands as agent_recorded TESTIMONY (advisory; it never carries human authority). The human confirms it by running: ${confirmCmd}`
               : capture_token
                 ? `\n\nℹ The capture token could not be verified (server restart or expiry), so this record is stamped agent_recorded. The human confirms it by running: ${confirmCmd}`
-                : `\n\n⚠ Recorded WITHOUT a capture interview — the record stands as agent_recorded TESTIMONY (advisory: it never carries human authority). Harden it NOW in one exchange instead of switching flows: answer the first grilling question directly — "What alternative did you seriously consider and reject for '${rec.title.slice(0, 60)}', and what breaks if a future session re-introduces it?" — then fold the answer into alternatives_rejected via a /capture interview (hunch_capture_decision → hunch_record_decision(supersedes: ${id})). Human authority needs the human's own confirmation: the client prompt during /capture, or \`${confirmCmd}\`. (A future major version will require a capture token here.)`;
+                : `\n\n⚠ Recorded WITHOUT a capture interview — the record stands as agent_recorded TESTIMONY (advisory: it never carries human authority). Harden it NOW in one exchange instead of switching flows: answer the first grilling question directly — "What alternative did you seriously consider and reject for '${rec.title.slice(0, 60)}', and what breaks if a future session re-introduces it?" — then fold the answer into alternatives_rejected via a /capture interview (hunch_capture_decision → hunch_record_decision with the same title, which updates ${id} in place; a new title needs supersedes: ${id}). Human authority needs the human's own confirmation: the client prompt during /capture, or \`${confirmCmd}\`. (A future major version will require a capture token here.)`;
         // Quality nudge only when the untokened deprecation nudge isn't already
         // grilling — one advisory voice per response, never two.
         const quality = gated || capture_token ? qualityNudge(rec) : "";
