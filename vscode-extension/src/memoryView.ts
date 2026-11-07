@@ -7,10 +7,13 @@
  * context menu reverts that single move LOCALLY (`hunch revert-move` → git revert,
  * never pushed). Title actions drive the seamless-but-inspectable flow: Sync now,
  * Adopt drafts, and Approve-to-push (the one outward step that needs a human).
+ * "Group by feature commit" swaps the flat timeline for `hunch log --for <branch>`:
+ * the moves nested under the code commit each one led to.
  */
 import * as vscode from "vscode";
 import * as os from "node:os";
 import { runHunch, runHunchWithProgress, type CliResult } from "./cli.js";
+import { featureFailure, featureQuery, groupText, headerText, isMemoryMove, parseMemoryFor, type FeatureGroup, type MemoryFor } from "./featureGroups.js";
 import { RootLoadFence } from "./rootBinding.js";
 
 /** One memory move — mirrors src/core/memorylog.MemoryMove (JSON consumer). */
@@ -26,9 +29,21 @@ export interface MemoryMove {
   modified: number;
   deleted: number;
   files: string[];
+  /** Code-link trailers (absent from an older CLI): the code branch and commit the
+   *  memory was captured against. */
+  codeBranch?: string | null;
+  codeHead?: string | null;
 }
 
 export type ViewRunner = (root: string, args: string[]) => Promise<CliResult>;
+/** The branch checked out in `root`'s repository; undefined when detached or unknown. */
+export type BranchOf = (root: string) => string | undefined;
+
+/** Max moves read for the flat timeline. */
+const TIMELINE_LIMIT = "150";
+/** Max commits `--for` searches on the default branch or below a commit (feature
+ *  branches are searched back to their fork regardless); keeps the view responsive. */
+const FEATURE_LIMIT = "50";
 
 const KIND_ICON: Record<MemoryMove["kind"], string> = {
   capture: "diff-added",
@@ -46,16 +61,19 @@ export class MoveNode extends vscode.TreeItem {
   constructor(public readonly move: MemoryMove, public readonly root: string) {
     super(move.subject.replace(/^hunch:\s*/, ""), vscode.TreeItemCollapsibleState.None);
     const ids = [...move.decisionIds, ...move.otherIds];
-    this.description = `${move.date.slice(0, 10)} · ${KIND_LABEL[move.kind]}${ids.length ? " · " + ids.slice(0, 2).join(",") : ""}`;
-    this.iconPath = new vscode.ThemeIcon(KIND_ICON[move.kind]);
+    // A kind a newer CLI added shows under its own name.
+    const kind = KIND_LABEL[move.kind] ?? move.kind;
+    this.description = `${move.date.slice(0, 10)} · ${kind}${ids.length ? " · " + ids.slice(0, 2).join(",") : ""}`;
+    this.iconPath = new vscode.ThemeIcon(KIND_ICON[move.kind] ?? "circle-outline");
     this.contextValue = "hunchMove";
     this.tooltip = new vscode.MarkdownString(
       [
-        `**${KIND_LABEL[move.kind]}** · \`${move.shortSha}\` · ${move.date.slice(0, 10)}`,
+        `**${kind}** · \`${move.shortSha}\` · ${move.date.slice(0, 10)}`,
         ``,
         move.subject,
         ``,
         ids.length ? `Records: ${ids.map((i) => `\`${i}\``).join(" ")}` : "",
+        move.codeHead ? `Captured at \`${move.codeHead.slice(0, 7)}\`${move.codeBranch ? ` on \`${move.codeBranch}\`` : ""}` : "",
         `Files: +${move.added} ~${move.modified} −${move.deleted}`,
         ``,
         `_Click to see the diff · right-click to revert (local only)._`,
@@ -140,25 +158,74 @@ class GroupNode extends vscode.TreeItem {
   }
 }
 
-type Node = MoveNode | EscalationNode | PolicyNode | GroupNode;
+/** One feature commit (or the in-progress tail) with the moves that led to it. */
+export class FeatureGroupNode extends vscode.TreeItem {
+  constructor(public readonly featureGroup: FeatureGroup, expanded: boolean, public readonly root: string) {
+    const text = groupText(featureGroup);
+    super(text.label, expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+    this.description = text.description;
+    this.iconPath = new vscode.ThemeIcon(featureGroup.commit ? "git-commit" : "circle-outline");
+    this.contextValue = "hunchFeatureGroup";
+    const c = featureGroup.commit;
+    this.tooltip = new vscode.MarkdownString([
+      c ? `**\`${c.shortSha}\`** · ${c.date.slice(0, 10)}` : "**After the last code commit**",
+      "", c ? c.subject : "Memory captured since the branch's newest code commit.",
+      featureGroup.landed ? `\nLanded on the default branch as \`${featureGroup.landed.slice(0, 7)}\`.` : "",
+    ].join("\n"));
+  }
+}
+
+/** A plain row: the grouped view's header, a CLI note, or why grouping failed. */
+class InfoNode extends vscode.TreeItem {
+  constructor(label: string, description: string, icon: string) {
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.description = description;
+    this.iconPath = new vscode.ThemeIcon(icon);
+    this.contextValue = "hunchInfo";
+    this.tooltip = label;
+  }
+}
+
+type Node = MoveNode | EscalationNode | PolicyNode | GroupNode | FeatureGroupNode | InfoNode;
 
 export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly _changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._changed.event;
   private moves: MemoryMove[] = [];
+  private feature: MemoryFor | null = null;
+  private featureError: { message: string; hint: string } | null = null;
   private escalations: EscalationEntry[] = [];
   private policies: PolicyEntry[] = [];
   private loaded = false;
   private loadedRoot: string | undefined;
+  /** The `--for` query the loaded data answers; undefined for the flat timeline. */
+  private loadedQuery: string | undefined;
+  private grouped = false;
   private readonly loadFence = new RootLoadFence();
 
   constructor(
     private readonly root: string | undefined | (() => string | undefined),
     private readonly runner: ViewRunner = runHunch,
+    private readonly branchOf: BranchOf = () => undefined,
   ) {}
 
   private currentRoot(): string | undefined {
     return typeof this.root === "function" ? this.root() : this.root;
+  }
+
+  /** What the view should show now: the flat timeline (undefined) or a `--for` query. */
+  private wantedQuery(root: string | undefined): string | undefined {
+    return this.grouped && root ? featureQuery(this.branchOf(root)) : undefined;
+  }
+
+  get isGrouped(): boolean { return this.grouped; }
+
+  /** Switch between the flat timeline and grouped-by-feature-commit. The host asks
+   *  for children on the change event, and that reload reads the new shape. */
+  setGrouped(on: boolean): void {
+    if (on === this.grouped) return;
+    this.grouped = on;
+    this._changed.fire();
   }
 
   refresh(): void {
@@ -171,18 +238,28 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
     const ticket = this.loadFence.begin(root);
     if (!root) {
       if (!this.loadFence.isCurrent(ticket, this.currentRoot())) return false;
-      this.moves = []; this.escalations = []; this.policies = []; this.loadedRoot = undefined;
+      this.moves = []; this.feature = null; this.featureError = null; this.escalations = []; this.policies = [];
+      this.loadedRoot = undefined; this.loadedQuery = undefined;
       return true;
     }
+    const query = this.wantedQuery(root);
     // Three independent reads; each degrades to empty on failure (a broken policy
     // store must not take the timeline down, and vice versa).
     const [log, esc, pol] = await Promise.all([
-      this.runner(root, ["log", "--json", "-n", "150"]),
+      this.runner(root, query === undefined ? ["log", "--json", "-n", TIMELINE_LIMIT] : ["log", "--json", "--for", query, "-n", FEATURE_LIMIT]),
       this.runner(root, ["escalations", "--json"]),
       this.runner(root, ["policy", "list", "--json"]),
     ]);
     if (!this.loadFence.isCurrent(ticket, this.currentRoot())) return false;
-    try { this.moves = log.ok ? JSON.parse(log.stdout) as MemoryMove[] : []; } catch { this.moves = []; }
+    this.moves = []; this.feature = null; this.featureError = null;
+    if (query === undefined) {
+      try { const v: unknown = log.ok ? JSON.parse(log.stdout) : []; this.moves = Array.isArray(v) ? v.filter(isMemoryMove) : []; } catch { this.moves = []; }
+    } else {
+      this.feature = log.ok ? parseMemoryFor(log.stdout) : null;
+      // Say why instead of an empty view: an older CLI without --for, an unknown ref.
+      if (!this.feature) this.featureError = featureFailure(log);
+    }
+    this.loadedQuery = query;
     // `hunch escalations --json` exits non-zero when actionable entries exist,
     // so the JSON must be parsed whatever the exit status.
     try { this.escalations = JSON.parse(esc.stdout) as EscalationEntry[]; } catch { this.escalations = []; }
@@ -198,7 +275,9 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
       // A root switch can occur between refreshes (or before the host asks for
       // children). Force a load for the newly selected repository so rows from
       // the previous folder are never presented as current.
-      if (!this.loaded || this.loadedRoot !== this.currentRoot()) await this.load();
+      // A mode toggle or branch switch changes the query; reload for that too.
+      const current = this.currentRoot();
+      if (!this.loaded || this.loadedRoot !== current || this.loadedQuery !== this.wantedQuery(current)) await this.load();
       const root = this.loadedRoot;
       if (!root) return [];
       const roots: Node[] = [];
@@ -209,14 +288,23 @@ export class MemoryTreeProvider implements vscode.TreeDataProvider<Node> {
         roots.push(new GroupNode(`⚖ Needs your decision (${actionableCount}${context ? `, +${context} for context` : ""})`, "issues", "escalations", root));
       }
       if (this.policies.length) roots.push(new GroupNode(`🏛 Constitution (${this.policies.length})`, "law", "policies", root));
-      return [...roots, ...this.moves.map((m) => new MoveNode(m, root))];
+      if (this.loadedQuery === undefined) return [...roots, ...this.moves.map((m) => new MoveNode(m, root))];
+      if (!this.feature) return [...roots, new InfoNode(`Could not group by feature commit: ${this.featureError?.message}`, this.featureError?.hint ?? "", "warning")];
+      const r = this.feature;
+      const head = headerText(r);
+      roots.push(new InfoNode(head.label, head.description, r.kind === "branch" ? "git-branch" : "git-commit"));
+      roots.push(...r.groups.map((g, i) => new FeatureGroupNode(g, i === 0, root)));
+      if (!r.groups.length) roots.push(new InfoNode(`No memory attributed to ${head.label}.`, "note", "info"));
+      roots.push(...r.notes.map((n) => new InfoNode(n, "note", "info")));
+      return roots;
     }
-    if (element instanceof GroupNode) {
+    if (element instanceof GroupNode || element instanceof FeatureGroupNode) {
       const root = this.loadedRoot;
       // A group row can outlive a root switch while the tree is being
       // refreshed. Do not populate an old group with the new repository's
       // entries; the next refresh creates a group carrying the new root.
       if (!root || element.root !== root) return [];
+      if (element instanceof FeatureGroupNode) return element.featureGroup.moves.map((m) => new MoveNode(m, root));
       return element.group === "escalations"
         ? this.escalations.map((e) => new EscalationNode(e, root))
         : this.policies.map((p) => new PolicyNode(p, root));

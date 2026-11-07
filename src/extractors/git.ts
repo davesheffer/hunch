@@ -7,6 +7,7 @@ import { isAbsolute, resolve, join, basename, dirname, relative, sep, posix } fr
 import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
+import { HUNCH_COMMIT_SUBJECT, HUNCH_MANAGED_FILES } from "../core/taskTouched.js";
 import { boundedExecFileSync } from "../core/boundedSpawn.js";
 import { writeFileAtomic } from "../core/io.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
@@ -650,6 +651,70 @@ function unsafeOverlayPublication(hunchDir: string, protectedRepoRoot: string): 
   return unsafe;
 }
 
+/** How far back a capture looks past its own earlier memory commits for the code head. */
+const CODE_HEAD_SEARCH_DEPTH = 200;
+
+/** The `Hunch-Code-Branch` / `Hunch-Code-Head` trailer lines for a PUBLIC memory commit
+ *  (memory lane Phase 1): the branch checked out and the code commit the memory was
+ *  captured against. Read before the memory commit moves HEAD. Walking first-parent
+ *  history, a memory commit (one carrying `Hunch-Code-Head`, or an older one whose
+ *  subject is `hunch:`) is skipped when it touched nothing but `.hunch/` and the
+ *  generated grounding docs; any other commit is the code head. An earlier trailer's
+ *  value is never copied: after a rebase it names a commit the branch no longer has. A
+ *  detached HEAD records the head only; anything git cannot answer (including a memory
+ *  commit at a shallow clone's boundary, whose listing is its whole tree) is omitted,
+ *  never guessed. Empty string when there is nothing to record. */
+function codeLinkTrailers(hunchDir: string, env: NodeJS.ProcessEnv): string {
+  const read = (args: string[], cwd = hunchDir): string => {
+    try {
+      return execFileSync("git", ["--no-replace-objects", "-C", cwd, ...args], {
+        encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: commitGitTimeoutMs(),
+        maxBuffer: 64 * 1024 * 1024,
+      }).trim();
+    } catch { return ""; }
+  };
+  const isSha = (value: string): boolean => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
+  const lines: string[] = [];
+  // Full ref, not --short: --short disambiguates against a same-named tag ("heads/x").
+  const ref = read(["symbolic-ref", "--quiet", "HEAD"]);
+  const branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : "";
+  if (branch && !/\s/.test(branch)) lines.push(`Hunch-Code-Branch: ${branch}`);
+  // `git log` paths are toplevel-relative, and the project may sit in a subdirectory.
+  const [shallow = "", prefix = ""] = read(["rev-parse", "--is-shallow-repository", "--show-prefix"], dirname(hunchDir)).split("\n");
+  const memoryDir = `${prefix}${basename(resolve(hunchDir))}/`;
+  const isMemoryFile = (file: string): boolean =>
+    !file || file.startsWith(memoryDir) || (file.startsWith(prefix) && HUNCH_MANAGED_FILES.has(file.slice(prefix.length)));
+  const history = read(["-c", "log.showSignature=false", "-c", "core.quotePath=false", "log", "--first-parent",
+    "--no-color", "--name-only", `--max-count=${CODE_HEAD_SEARCH_DEPTH}`,
+    "--format=%x1e%H%x1f%P%x1f%(trailers:key=Hunch-Code-Head,valueonly,separator=%x20)%x1f%s", "HEAD", "--"]);
+  for (const entry of history.split("\x1e").slice(1)) {
+    const [header = "", ...files] = entry.split("\n");
+    const [sha = "", parents = "", linked = "", ...subject] = header.split("\x1f");
+    if (!isSha(sha)) break;
+    const memoryCommit = linked !== "" || HUNCH_COMMIT_SUBJECT.test(subject.join("\x1f"));
+    if (memoryCommit && !parents && shallow === "true") break;
+    if (memoryCommit && files.every(isMemoryFile)) continue;
+    lines.push(`Hunch-Code-Head: ${sha}`);
+    break;
+  }
+  return lines.join("\n");
+}
+
+/** `-m` arguments for a memory commit. Git reads trailers from the LAST paragraph only,
+ *  so the code-link lines join a trailer paragraph the caller already ended with instead
+ *  of hiding it behind a new one. */
+function memoryCommitMessageArgs(message: string, trailers: string): string[] {
+  if (!trailers) return ["-m", message];
+  const body = message.replace(/\s+$/, "");
+  const paragraphs = body.split(/\n\s*\n/);
+  const last = paragraphs.length > 1 ? paragraphs[paragraphs.length - 1]!.split("\n") : [];
+  // Git's grammar: "Key: value" or "Key:value", with indented continuation lines.
+  return last.length && /^[A-Za-z0-9-]+:\s*\S/.test(last[0]!)
+    && last.every((line) => /^[A-Za-z0-9-]+:\s*\S/.test(line) || /^\s+\S/.test(line))
+    ? ["-m", `${body}\n${trailers}`]
+    : ["-m", message, "-m", trailers];
+}
+
 export function commitAndPushHunch(hunchDir: string, message: string, opts: HunchCommitOptions): "pushed" | "committed" | null {
   // Runtime callers may be older compiled JS even though TypeScript requires the
   // protected-repository contract. Preserve this helper's never-throw promise and
@@ -805,6 +870,8 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     const hooksDir = disabledHooksDir(hunchDir);
     if (!hooksDir) return null;
     const commitPaths = [...memoryPaths, ...(opts.alsoStage ?? [])];
+    // Only the public store links to code; the overlays are out of scope (hunch-private#62).
+    const trailers = opts.push === false ? codeLinkTrailers(hunchDir, env) : "";
     applyMachineIdentity(hunchDir, env);
     // One retry after healing a stranded index.lock (issue #53): a lock left by
     // a timeout-killed or crashed git otherwise fails EVERY later flush fast and
@@ -819,7 +886,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
           "-c", "core.autocrlf=false",
           "-c", "commit.gpgsign=false",
           "-c", "gc.auto=0",
-          "commit", "--no-gpg-sign", "--only", "-m", message, "--", ...commitPaths,
+          "commit", "--no-gpg-sign", "--only", ...memoryCommitMessageArgs(message, trailers), "--", ...commitPaths,
         ], { stdio: "ignore", env, timeout: commitGitTimeoutMs() });
         committed = true;
       } catch (error) {
