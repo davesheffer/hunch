@@ -13,24 +13,9 @@ import type { HunchStore } from "../store/hunchStore.js";
 import type { EntityKind } from "../core/types.js";
 import { commitAndPushHunch, hunchDirHasChanges, onDefaultBranch, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
 import { refreshCommittableGrounding } from "./providers.js";
-import { advertisedTeamRemoteContract } from "./team.js";
+import { pinSharedRemote, sharedRemoteFor } from "./sharedRoute.js";
 
-const pinnedSharedRoutes = new WeakMap<HunchStore, HunchRemoteContract>();
-
-/** Bind one command/server Store instance to the graph epoch that admitted it.
- * Every later flush from that instance reuses the same verifying contract. */
-export function pinSharedRemote(store: HunchStore, remote: HunchRemoteContract): void {
-  pinnedSharedRoutes.set(store, remote);
-}
-
-/** Return the route admitted for this Store instance. Command paths that flush
- * directly (rather than through flushCapture) must use this accessor too, or a
- * coherent team.json/origin rewrite could switch graphs mid-command. */
-export function sharedRemoteFor(store: HunchStore): HunchRemoteContract | undefined {
-  if (store.mode !== "shared" || !store.privateDir) return undefined;
-  return pinnedSharedRoutes.get(store)
-    ?? advertisedTeamRemoteContract(store.publicRoot, dirname(store.privateDir));
-}
+export { pinSharedRemote, sharedRemoteFor };
 
 export type MemoryHome = "public" | "private";
 
