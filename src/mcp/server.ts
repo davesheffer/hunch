@@ -102,6 +102,7 @@ import { scanRecord, publicationWarning, loadVocabulary } from "../core/publicat
 import { premiseEscalations } from "../core/premises.js";
 import { applyImportedAdrReview, pendingImportedAdrReviews } from "../core/importReview.js";
 import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken, HUMAN_CONFIRMATION_SCHEMA, isHumanConfirmationAnswer } from "../core/capturetoken.js";
+import { GRILL_ONE_AT_A_TIME } from "../core/grillrule.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync, lstatSync } from "node:fs";
 import { join, isAbsolute, resolve, relative, sep, parse, dirname } from "node:path";
@@ -1039,7 +1040,7 @@ function grillingProtocol(topic: string | undefined, token: string, deciding = f
     "You are capturing an engineering decision into Hunch's graph. Run the GRILLING LOOP, then commit.",
     "",
     "RULES:",
-    "1. Grill ONE focused question at a time. Push back on hand-wavy answers. Resolve every branch of the decision tree before committing — an unexamined decision poisons the graph.",
+    `1. ${GRILL_ONE_AT_A_TIME}`,
     `2. Confirm the TOPIC anchor with the human before committing${topic ? ` (proposed: "${topic}")` : ""}. Exactly one topic per decision; if it spans two, split into two captures.`,
     "3. Capture REJECTED alternatives explicitly — for each, what it was and why not. This is what makes the decision enforceable (Veto/drift check against it).",
     `4. Commit with hunch_record_decision, passing capture_token:"${token}" and the confirmed topic. The artifact is the graph write, not prose. The token is not a human signature: Hunch asks the human to confirm in the client when the client supports it; otherwise the record stays agent testimony until the human runs the \`hunch review --confirm <id>\` command the response prints.`,

@@ -18,6 +18,8 @@
  * A write also needs a JSON body and, when the browser sends an Origin, this server's own.
  * Ask: GET /api/ask lists who can be asked; POST /api/ask, guarded like a write since it spends
  * the person's subscription, asks one of them one question at a time and writes nothing.
+ * Grill: GET /api/grill/:id says what a grill of that memory would send, before anything is sent;
+ * POST /api/grill, guarded the same way and sharing Ask's one-at-a-time, runs one turn of it.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -36,6 +38,7 @@ import { createPulse } from "./pulse.js";
 import { memoryHistory, type HistorySource } from "./history.js";
 import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
 import { askContext, askPrompt, askRequest, defaultAskRunner, parseAnswer, type AskRunner } from "./ask.js";
+import { canGrill, evidenceView, gatherEvidence, grillPrompt, grillRequest, readTurn, type GrillFlag } from "./grill.js";
 import { reviewCards, type Review } from "./review.js";
 
 export interface RepoInfo { root: string; branch: string | null; remote: string | null; webUrl: string | null }
@@ -216,6 +219,36 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     } finally { asking = false; }
   };
 
+  // What the review already holds against this record, and the records it compared it with.
+  const flagged = (id: string): { flags: GrillFlag[]; partners: string[] } => {
+    try {
+      const cards = review().groups.flatMap((g) => g.cards).filter((c) => c.records.some((r) => r.id === id));
+      return { flags: cards.map((c) => ({ claim: c.claim, evidence: c.evidence })), partners: cards.flatMap((c) => c.records.map((r) => r.id)) };
+    } catch { return { flags: [], partners: [] }; }
+  };
+
+  const grill = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    if (refused(req, res)) return;
+    const body = await readJson(req);
+    if (!body.ok) return send(res, body.status, { error: body.error });
+    const parsed = grillRequest(body.value);
+    if (!parsed.ok) return send(res, 400, { error: parsed.error });
+    if (asking) return send(res, 409, { error: "Still waiting on your last question." });
+    asking = true;
+    try {
+      const { assistants, blocked } = await asker.assistants();
+      const assistant = assistants.find((a) => a.name === parsed.assistant);
+      if (blocked || !assistant) return send(res, 409, { error: "That assistant can't be asked right now." });
+      const evidence = await gatherEvidence(source(), parsed.about, opts.root, flagged(parsed.about));
+      if (!evidence) return send(res, 404, { error: `No memory with id ${parsed.about}.` });
+      if (!canGrill(evidence)) return send(res, 409, { error: "This memory links to no committed code and nothing relates to it, so there is nothing to challenge it with." });
+      let reply: string;
+      try { reply = await asker.ask(assistant.name, grillPrompt(evidence, parsed.turns, parsed.finish)); }
+      catch (error) { return send(res, 502, { error: `${assistant.label} did not answer: ${(error instanceof Error ? error.message : String(error)).slice(0, 300)}` }); }
+      return send(res, 200, { assistant: { name: assistant.name, label: assistant.label }, ...readTurn(reply, evidence, parsed.turns.length, parsed.finish), evidence: evidenceView(evidence) });
+    } finally { asking = false; }
+  };
+
   // id null: POST /api/memory, a new record (`hunch new`).
   const write = async (req: IncomingMessage, res: ServerResponse, id: string | null, action: string): Promise<void> => {
     if (id !== null && !isUiAction(action)) return send(res, 404, { error: "Not found." });
@@ -249,10 +282,12 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     const writeRoute = req.method === "POST" ? WRITE_ROUTE.exec(url.pathname) : null;
     const createRoute = req.method === "POST" && url.pathname === "/api/memory";
     const askRoute = req.method === "POST" && url.pathname === "/api/ask";
-    if (req.method !== "GET" && !writeRoute && !createRoute && !askRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
-    if (writeRoute || createRoute || askRoute) {
+    const grillRoute = req.method === "POST" && url.pathname === "/api/grill";
+    if (req.method !== "GET" && !writeRoute && !createRoute && !askRoute && !grillRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
+    if (writeRoute || createRoute || askRoute || grillRoute) {
       if (!tokenMatches(req.headers.authorization, opts.token)) return send(res, 401, { error: "Access key missing or expired." });
       if (askRoute) return ask(req, res);
+      if (grillRoute) return grill(req, res);
       return writeRoute ? write(req, res, writeRoute[1]!, writeRoute[2]!) : write(req, res, null, "new");
     }
     const asset = ASSETS.get(url.pathname);
@@ -317,6 +352,12 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
       return send(res, 200, { items: memoryHistory(sources, { limit: HISTORY_LIMIT, id }, titles, where), private: !!store.privateDir });
     }
     if (url.pathname === "/api/ask") return send(res, 200, await asker.assistants());
+    const grilled = /^\/api\/grill\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
+    if (grilled) {
+      const evidence = await gatherEvidence(source(), grilled[1]!, opts.root, flagged(grilled[1]!));
+      if (!evidence) return send(res, 404, { error: `No memory with id ${grilled[1]}.` });
+      return send(res, 200, { record: evidence.focus, evidence: evidenceView(evidence), ...(await asker.assistants()) });
+    }
     if (url.pathname === "/api/connections") {
       const [repo, github, assistants] = await Promise.all([probes.repo(), probes.github(), probes.assistants()]);
       return send(res, 200, { repo, github, assistants });
