@@ -26,7 +26,7 @@ type Body = Record<string, unknown>;
 const STRING_FIELDS: Record<UiAction, readonly string[]> = {
   edit: ["title", "text", "context", "rationale"],
   link: ["feature"],
-  remove: ["reason"],
+  remove: ["reason", "supersededBy"],
   restore: ["status"],
   confirm: ["severity"],
   unconfirm: ["severity"],
@@ -41,7 +41,7 @@ const LIST_FIELDS: Record<UiAction, readonly (readonly [string, string])[]> = {
 };
 const FLAG: Record<string, string> = {
   title: "--title", text: "--text", context: "--context", rationale: "--rationale",
-  feature: "--feature", reason: "--reason", status: "--status", severity: "--severity",
+  feature: "--feature", reason: "--reason", status: "--status", severity: "--severity", supersededBy: "--superseded-by",
 };
 /** Signing is a `hunch review` act, not a memory move of its own. */
 const isReview = (action: UiAction): boolean => action === "confirm" || action === "unconfirm";
@@ -52,7 +52,7 @@ export function actionArgs(action: UiAction, id: string, body: unknown, ctx: { p
   if (!ID.test(id)) return { ok: false, error: `"${id}" is not a memory id.` };
   if (body === null || typeof body !== "object" || Array.isArray(body)) return { ok: false, error: "Send a JSON object." };
   const b = body as Body;
-  const known = new Set([...STRING_FIELDS[action], ...LIST_FIELDS[action].map(([k]) => k), ...(action === "link" ? ["clearFeature"] : [])]);
+  const known = new Set([...STRING_FIELDS[action], ...LIST_FIELDS[action].map(([k]) => k), ...(action === "link" ? ["clearFeature"] : []), ...(action === "restore" ? ["clearSupersededBy"] : [])]);
   const unknown = Object.keys(b).filter((k) => !known.has(k));
   if (unknown.length) return { ok: false, error: `Unknown field for ${action}: ${unknown.join(", ")}.` };
 
@@ -74,6 +74,10 @@ export function actionArgs(action: UiAction, id: string, body: unknown, ctx: { p
   if (action === "link" && b.clearFeature !== undefined) {
     if (b.clearFeature !== true) return { ok: false, error: "clearFeature must be true when given." };
     args.push("--clear-feature");
+  }
+  if (action === "restore" && b.clearSupersededBy !== undefined) {
+    if (b.clearSupersededBy !== true) return { ok: false, error: "clearSupersededBy must be true when given." };
+    args.push("--clear-superseded-by");
   }
   if (isReview(action) && ctx.private) args.push("--private");
   args.push("--json");
@@ -203,7 +207,7 @@ export function undoFor(action: UiAction | "new", result: MoveResult): Undo | nu
     return Object.keys(body).length ? { action, body } : null;
   }
   if (action === "remove") {
-    if (kind === "decision" && typeof before.status === "string") return { action: "restore", body: { status: before.status } };
+    if (kind === "decision" && typeof before.status === "string") return { action: "restore", body: { status: before.status, ...(after.superseded_by && !before.superseded_by ? { clearSupersededBy: true } : {}) } };
     if (kind === "finding" && typeof before.triage === "string") return { action: "restore", body: { status: before.triage } };
     return { action: "restore", body: {} };
   }

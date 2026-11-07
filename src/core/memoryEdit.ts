@@ -209,12 +209,29 @@ export function linkRecord(kind: MemoryKind, rec: MemoryRecord, change: LinkChan
  *  (`retireConstraint`); this mirrors that result so the CLI can refuse uniformly.
  *  A record whose validity window already closed is refused: `restore` reopens the
  *  window, so removing it would not round-trip. */
-export function removeRecord(kind: MemoryKind, rec: MemoryRecord, now: string): EditResult {
+export interface RemoveChange {
+  /** The live decision that replaces this one. It must already say so: this closes a recorded
+   *  replacement, it doesn't invent one. */
+  supersededBy?: string;
+  /** That decision as found in this record's own store: a replacement never crosses stores. */
+  successor?: Decision;
+}
+
+export function removeRecord(kind: MemoryKind, rec: MemoryRecord, now: string, change: RemoveChange = {}): EditResult {
   if (kind === "bug") return refuse("a bug is the record of what broke; it can't be removed");
+  if (kind !== "decision" && change.supersededBy !== undefined) return refuse("--superseded-by is only for decisions");
   if (kind === "decision") {
     const dec = rec as Decision;
     if (dec.status === "rejected" || dec.status === "superseded") return refuse(`decision "${dec.id}" is already ${dec.status}`);
     if (dec.valid_to) return refuse(`decision "${dec.id}" already stopped applying on ${dec.valid_to}`);
+    if (change.supersededBy !== undefined) {
+      const by = change.supersededBy, next = change.successor;
+      if (by === dec.id) return refuse("a decision can't replace itself");
+      if (!next) return refuse(`decision "${by}" not found in the same store as "${dec.id}"`);
+      if (next.supersedes !== dec.id) return refuse(`decision "${by}" doesn't say it replaces "${dec.id}"`);
+      if (!isLive(next)) return refuse(`decision "${by}" is ${next.status}, not live, so it can't replace "${dec.id}"`);
+      return { ok: true, changed: true, record: stamp(dec, { status: "superseded", valid_to: now, superseded_by: by }, now) };
+    }
     const status = dec.status === "proposed" ? "rejected" : "superseded";
     return { ok: true, changed: true, record: stamp(dec, { status, valid_to: now }, now) };
   }
@@ -231,19 +248,25 @@ export function removeRecord(kind: MemoryKind, rec: MemoryRecord, now: string): 
 
 export const RESTORABLE_FINDING_TRIAGE = ["open", "accepted-risk", "scheduled"] as const;
 
-export interface RestoreChange { status?: string; decisions?: readonly Decision[] }
+export interface RestoreChange {
+  status?: string;
+  decisions?: readonly Decision[];
+  /** Also forget who replaced it: the undo of `remove --superseded-by`. */
+  clearSupersededBy?: boolean;
+}
 
 export function restoreRecord(kind: MemoryKind, rec: MemoryRecord, change: RestoreChange, now: string): EditResult {
   if (kind === "bug") return refuse("a bug can't be removed, so there is nothing to restore");
+  if (kind !== "decision" && change.clearSupersededBy) return refuse("--clear-superseded-by is only for decisions");
   if (kind === "decision") {
     const dec = rec as Decision;
     if (dec.status !== "rejected" && dec.status !== "superseded") return refuse(`decision "${dec.id}" is ${dec.status}, not removed`);
-    if (dec.superseded_by) return refuse(`decision "${dec.id}" was replaced by ${dec.superseded_by}; restoring it would fork the history`);
+    if (dec.superseded_by && !change.clearSupersededBy) return refuse(`decision "${dec.id}" was replaced by ${dec.superseded_by}; restoring it would fork the history. To undo the replacement, pass --clear-superseded-by`);
     // Invert `remove`: a rejected draft returns as a draft, a superseded decision as accepted.
     // Shipping a former draft takes an explicit --status accepted.
     const status = change.status ?? (dec.status === "rejected" ? "proposed" : "accepted");
     if (status !== "proposed" && status !== "accepted") return refuse(`--status for a decision must be proposed or accepted, not "${status}"`);
-    const next = stamp(dec, { status, valid_to: null }, now);
+    const next = stamp(dec, { status, valid_to: null, ...(change.clearSupersededBy ? { superseded_by: null } : {}) }, now);
     if (dec.topic && isLive(next)) {
       const conflict = topicConflict(next, dec.topic, change.decisions ?? []);
       if (conflict) return refuse(conflict);

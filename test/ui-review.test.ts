@@ -49,7 +49,7 @@ test("duplicate: equal titles with shared files are one memory; the signed one s
   const [card] = cards(r, "duplicate");
   assert.equal(card!.recommend, "merge");
   assert.deepEqual(card!.records.map((m) => m.id), ["dec_b", "dec_a"]);
-  assert.deepEqual(card!.actions.merge, { survivor: "dec_b", duplicate: "dec_a", reason: "Duplicate of dec_b: fix(x): keep the token", addFiles: ["src/b.ts"], addComponents: [], feature: null, leftBehind: [], oneWay: false });
+  assert.deepEqual(card!.actions.merge, { survivor: "dec_b", duplicate: "dec_a", reason: "Duplicate of dec_b: fix(x): keep the token", supersededBy: null, addFiles: ["src/b.ts"], addComponents: [], feature: null, leftBehind: [], oneWay: false });
 });
 
 test("duplicate: confidence, then the older record, then the lower id decide who stays", () => {
@@ -443,6 +443,18 @@ test("conflict: keeping one on a shared topic can't be undone, and the card says
   const [half] = cards(marked, "conflict");
   assert.equal(half!.actions.merge!.oneWay, true, "removing the old one can't be undone");
   assert.equal(half!.actions.swap!.oneWay, false, "removing the new one can");
+});
+
+test("conflict: keeping the newer one records the replacement, only when the CLI will take it", () => {
+  const drift = [{ kind: "supersede" as const, id: "dec_new", detail: "x" }];
+  const live = cards(review(empty({ decisions: [dec("dec_new", { supersedes: "dec_old" }), dec("dec_old", {})] }), drift), "conflict")[0]!;
+  assert.equal(live.actions.merge!.supersededBy, "dec_new");
+  assert.equal(live.actions.swap!.supersededBy, null, "keeping the older one replaces nothing");
+  const draft = cards(review(empty({ decisions: [dec("dec_new", { supersedes: "dec_old", status: "proposed" }), dec("dec_old", {})] }), drift), "conflict")[0]!;
+  assert.equal(draft.actions.merge!.supersededBy, null, "a draft can't replace a live decision");
+  const src = empty({ decisions: [dec("dec_new", { supersedes: "dec_old" }), dec("dec_old", {})] });
+  const crossing = cards(reviewCards(src, [], { drift, alive: () => new Set(), inOverlay: (id) => id === "dec_new" }), "conflict")[0]!;
+  assert.equal(crossing.actions.merge!.supersededBy, null, "a replacement never crosses stores");
 });
 
 test("stale: a private: link is the overlay's answer, never asked of git and never grounds a remove", () => {

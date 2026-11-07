@@ -8,7 +8,7 @@ import type { DriftFinding } from "../core/drift.js";
 import { dupTerms, jaccard } from "../core/dupdetect.js";
 import { isImportedAdrDecision } from "../core/importReview.js";
 import { fileLink } from "../core/memoryEdit.js";
-import { topicCollisions } from "../core/topics.js";
+import { isLive, topicCollisions } from "../core/topics.js";
 import type { Decision, Edge } from "../core/types.js";
 import { MAX_ARGV, MAX_LIST } from "./actions.js";
 import { globBase, memoryDetail, memoryItems, overlaps, type ComponentRef, type MemoryDetail, type MemoryItem, type MemoryKind, type MemorySource } from "./model.js";
@@ -37,6 +37,8 @@ export interface MergePlan {
   survivor: string;
   duplicate: string;
   reason: string;
+  /** Records the replacement on the record that goes, so drift stops reporting it. */
+  supersededBy: string | null;
   addFiles: string[];
   addComponents: string[];
   feature: string | null;
@@ -157,7 +159,7 @@ function mergePlan(survivor: MemoryDetail, duplicate: MemoryDetail, reason: stri
   const extraComponents = links ? duplicate.components.filter((c) => c.source === "recorded" && !survivor.components.some((s) => s.id === c.id && s.source === "recorded")).map((c) => c.id) : [];
   const addComponents = extraComponents.filter((id) => known.has(id)).slice(0, MAX_LIST).filter(fits("--add-component"));
   return {
-    survivor: survivor.id, duplicate: duplicate.id, reason, addFiles, addComponents, feature,
+    survivor: survivor.id, duplicate: duplicate.id, reason, supersededBy: null, addFiles, addComponents, feature,
     leftBehind: [...extraFiles.filter((f) => !addFiles.includes(f)), ...extraComponents.filter((id) => !addComponents.includes(id))],
     // Topics can't block this restore: Undo takes the topic off the survivor first.
     oneWay: !!duplicate.replacedBy,
@@ -165,8 +167,8 @@ function mergePlan(survivor: MemoryDetail, duplicate: MemoryDetail, reason: stri
 }
 
 /** Two answers, not one memory: one goes, and nothing of it moves onto the other. */
-const keepOver = (survivor: MemoryDetail, duplicate: MemoryDetail, reason: string): MergePlan => ({
-  survivor: survivor.id, duplicate: duplicate.id, reason, addFiles: [], addComponents: [], feature: null, leftBehind: [],
+const keepOver = (survivor: MemoryDetail, duplicate: MemoryDetail, reason: string, supersededBy: string | null = null): MergePlan => ({
+  survivor: survivor.id, duplicate: duplicate.id, reason, supersededBy, addFiles: [], addComponents: [], feature: null, leftBehind: [],
   oneWay: (!!survivor.feature && survivor.feature === duplicate.feature) || !!duplicate.replacedBy,
 });
 
@@ -276,8 +278,11 @@ export function reviewCards(src: MemorySource, edges: readonly Edge[], inputs: R
     if (!newer || !older || target === f.id || used.has(newer.id) || used.has(older.id)) continue;
     // A person's confirmation outranks a claim nobody confirmed, so that one is theirs to settle.
     const outranked = older.actions.signed && !newer.actions.signed;
+    // What `remove --superseded-by` takes: a live successor in the same store. Anything else is a plain remove.
+    const newerDecision = decisions.get(newer.id);
+    const records = !!newerDecision && isLive(newerDecision) && (inputs.inOverlay?.(newer.id) ?? false) === (inputs.inOverlay?.(older.id) ?? false);
     groups.conflict.push(card("conflict", [newer, older], "One says it replaced the other, but both are live.", [`${newer.id} says it replaces ${older.id}, which is still ${older.status}.`, ...(outranked ? [`${older.id} is confirmed by a person; ${newer.id} is not.`] : [])], outranked ? null : "remove",
-      { ...NONE, merge: keepOver(newer, older, `Replaced by ${newer.id}: ${newer.title}`), swap: keepOver(older, newer, `Kept ${older.id} over this: ${older.title}`) }));
+      { ...NONE, merge: keepOver(newer, older, `Replaced by ${newer.id}: ${newer.title}`, records ? newer.id : null), swap: keepOver(older, newer, `Kept ${older.id} over this: ${older.title}`) }));
   }
 
   // ---- Duplicate: greedy, best first. A cluster shows its next pair after this one is settled.

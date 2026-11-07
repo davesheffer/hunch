@@ -369,6 +369,11 @@ test("actionArgs: allowlists each action's fields into --flag=value argv", () =>
   assert.deepEqual(actionArgs("link", "dec_1", { clearFeature: true, addComponents: ["cmp_a"] }), { ok: true, args: ["link", "dec_1", "--add-component=cmp_a", "--clear-feature", "--json"] });
   assert.deepEqual(actionArgs("remove", "fnd_1", { reason: "dup" }), { ok: true, args: ["remove", "fnd_1", "--reason=dup", "--json"] });
   assert.deepEqual(actionArgs("restore", "dec_1", {}), { ok: true, args: ["restore", "dec_1", "--json"] });
+  assert.deepEqual(actionArgs("remove", "dec_1", { supersededBy: "dec_2" }), { ok: true, args: ["remove", "dec_1", "--superseded-by=dec_2", "--json"] });
+  assert.deepEqual(actionArgs("restore", "dec_1", { clearSupersededBy: true }), { ok: true, args: ["restore", "dec_1", "--clear-superseded-by", "--json"] });
+  assert.equal(actionArgs("restore", "dec_1", { clearSupersededBy: "yes" }).ok, false);
+  assert.equal(actionArgs("edit", "dec_1", { clearSupersededBy: true }).ok, false);
+  assert.equal(actionArgs("edit", "dec_1", { supersededBy: "dec_2" }).ok, false);
   // Signing is `hunch review`; with an overlay it must look there too.
   assert.deepEqual(actionArgs("confirm", "con_1", { severity: "blocking" }), { ok: true, args: ["review", "--confirm=con_1", "--severity=blocking", "--json"] });
   assert.deepEqual(actionArgs("unconfirm", "dec_1", {}, { private: true }), { ok: true, args: ["review", "--unconfirm=dec_1", "--private", "--json"] });
@@ -403,6 +408,8 @@ const move = (kind: MoveResult["kind"], before: Record<string, unknown>, after: 
 
 test("undoFor: each move's inverse, built from before/after", () => {
   assert.deepEqual(undoFor("edit", move("decision", { title: "A", decision: "x", context: "c" }, { title: "B", decision: "y", context: "c" })), { action: "edit", body: { title: "A", text: "x" } });
+  assert.deepEqual(undoFor("remove", move("decision", { status: "accepted", superseded_by: null }, { status: "superseded", superseded_by: "dec_2" })), { action: "restore", body: { status: "accepted", clearSupersededBy: true } }, "undoing a recorded replacement forgets it");
+  assert.deepEqual(undoFor("remove", move("decision", { status: "accepted", superseded_by: null }, { status: "superseded", superseded_by: null })), { action: "restore", body: { status: "accepted" } });
   assert.deepEqual(undoFor("edit", move("constraint", { statement: "s", rationale: "r" }, { statement: "t", rationale: "r" }, "con_1")), { action: "edit", body: { text: "s" } });
   const signed = undoFor("edit", move("decision", { title: "A", provenance: { source: "human_confirmed" } }, { title: "B", provenance: { source: "agent_recorded" } }));
   assert.match(signed!.note!, /not your confirmation.*Confirm as mine/);

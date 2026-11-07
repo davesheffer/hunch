@@ -145,7 +145,7 @@ export const deliberateJs = String.raw`
   }
   function dOpen(id, form) { state.openForm = { id, form }; location.hash = '#/memory/' + enc(id); }
   function dMerge(c, m) {
-    const steps = [{ id: m.duplicate, action: 'remove', body: { reason: m.reason }, noUndo: m.oneWay }];
+    const steps = [{ id: m.duplicate, action: 'remove', body: m.supersededBy ? { reason: m.reason, supersededBy: m.supersededBy } : { reason: m.reason }, noUndo: m.oneWay }];
     const link = {};
     if (m.addFiles.length) link.addFiles = m.addFiles;
     if (m.addComponents.length) link.addComponents = m.addComponents;
