@@ -2,6 +2,7 @@
 import { brainJs } from "./brain.js";
 import { deliberateJs } from "./deliberate.js";
 import { grillCss, grillJs } from "./grillpage.js";
+import { boardCss, boardJs } from "./boardpage.js";
 
 const SEARCH_ICON = `<svg class="ico" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>`;
 
@@ -46,7 +47,7 @@ export const uiHtml = `<!doctype html>
 <section id="deliberate-page" hidden aria-labelledby="deliberate-title">
 <div class="bar"><h1 id="deliberate-title">Deliberate</h1>
 <div role="group" aria-label="Kind" class="segmented" id="dlb-tabs"></div>
-<span id="dlb-status" class="muted small" role="status" aria-live="polite"></span></div>
+<span id="dlb-status" class="muted small" role="status" aria-live="polite"></span><button type="button" id="dlb-think" class="secondary grow-end">Think through a decision</button></div>
 <div class="split" id="deliberate-split">
 <div class="pane"><ul id="dlb-list" class="list"></ul></div>
 <article id="dlb-card" class="panel dlb" aria-live="polite"></article>
@@ -55,6 +56,11 @@ export const uiHtml = `<!doctype html>
 <section id="grill-page" hidden aria-labelledby="grill-title">
 <div class="bar"><h1 id="grill-title">Grill</h1><ol id="gr-steps" class="gr-steps" aria-label="Questions"></ol><a class="grow-end small" href="#/deliberate">Back to Deliberate</a></div>
 <div class="gr"><aside id="gr-record" class="gr-rec" aria-label="The memory"></aside><article id="gr-stage" class="panel dlb gr-stage" aria-live="polite"></article></div>
+</section>
+<section id="board-page" hidden aria-labelledby="board-title">
+<div class="bar"><h1 id="board-title">Think it through</h1><a class="grow-end small" href="#/deliberate">Back to Deliberate</a></div>
+<div class="bd"><article id="bd-stage" class="panel dlb bd-stage" aria-live="polite"></article>
+<aside class="bd-side" aria-label="What the options change"><div class="bd-cvwrap"><canvas id="bd-cv" tabindex="0" role="img" aria-label="Map of components. The option you point at lights up the components it changes, then what uses them."></canvas></div><p id="bd-touch" class="bd-touch" role="status" aria-live="polite"></p></aside></div>
 </section>
 <section id="attention-page" hidden aria-labelledby="attention-title">
 <div class="bar"><h1 id="attention-title">Needs you</h1>
@@ -242,6 +248,7 @@ details{margin-top:18px}summary{cursor:pointer;font:600 11px var(--mono);letter-
 .dlb-acts{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 20px;border-top:1px solid var(--line);background:var(--surface)}
 .dlb-acts .end{margin-left:auto}
 ${grillCss}
+${boardCss}
 @media(max-width:1100px){.recs.two{grid-template-columns:minmax(0,1fr)}.rec+.rec{border-left:0;border-top:1px solid var(--line)}}
 @media(pointer:coarse){button,input,select,textarea,.segmented button{min-height:44px}.list a{height:44px}.nu-done button,.feed button{min-height:44px}nav a{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -315,6 +322,7 @@ export const uiJs = String.raw`
   /*BRAIN*/
   /*DELIBERATE*/
   /*GRILL*/
+  /*BOARD*/
 
   // ---- text: a commit body is hard-wrapped, so single newlines join and blank lines split.
   // Lists and indented or fenced blocks keep their lines.
@@ -755,6 +763,7 @@ export const uiJs = String.raw`
     const links = button('Edit links', quiet('links')); links.addEventListener('click', () => open(linksForm(d, close))); bar.append(links);
     const asking = button('Ask about this', 'secondary'); asking.addEventListener('click', () => { location.hash = '#/ask/' + enc(d.id); }); bar.append(asking);
     if (d.active) { const g = button('Grill me on this', 'secondary'); g.addEventListener('click', () => { location.hash = '#/grill/' + enc(d.id); }); bar.append(g); }
+    if (d.kind === 'decision' || d.kind === 'rule') { const x = button(d.kind === 'rule' ? 'Explain this rule' : 'Explain this decision', 'secondary'); x.addEventListener('click', () => { location.hash = '#/board/' + enc(d.id); }); bar.append(x); }
     if (a.removable) { const b = button('Remove memory', 'danger end'); b.addEventListener('click', () => open(removeForm(d, close))); bar.append(b); }
     if (a.textLocked) bar.append(el('p', a.textLocked, 'muted small'));
     bar.append(problem);
@@ -1342,20 +1351,21 @@ export const uiJs = String.raw`
     finally { $('recheck').disabled = false; }
   }
 
-  const PAGES = ['brain', 'memory', 'deliberate', 'grill', 'attention', 'ask', 'history', 'setup'];
-  const TITLES = { brain: 'Brain', memory: 'Memory', deliberate: 'Deliberate', grill: 'Grill', attention: 'Needs you', ask: 'Ask', history: 'History', setup: 'Setup' };
+  const PAGES = ['brain', 'memory', 'deliberate', 'grill', 'board', 'attention', 'ask', 'history', 'setup'];
+  const TITLES = { brain: 'Brain', memory: 'Memory', deliberate: 'Deliberate', grill: 'Grill', board: 'Decision board', attention: 'Needs you', ask: 'Ask', history: 'History', setup: 'Setup' };
   function route() {
-    const m = /^#\/(brain|memory|deliberate|grill|attention|map|ask|history|setup|connections)(?:\/(.+))?$/.exec(location.hash);
+    const m = /^#\/(brain|memory|deliberate|grill|board|attention|map|ask|history|setup|connections)(?:\/(.+))?$/.exec(location.hash);
     let page = m ? m[1] : 'brain';
     if (page === 'map') { location.replace('#/brain' + (m[2] ? '/' + m[2] : '')); return; }
     if (page === 'connections') page = 'setup';
     if (page === 'grill' && !m[2]) { location.replace('#/deliberate'); return; }
     const entering = page !== state.page;
     state.page = page;
-    for (const a of document.querySelectorAll('[data-nav]')) { if (a.dataset.nav === (page === 'grill' ? 'deliberate' : page)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
+    for (const a of document.querySelectorAll('[data-nav]')) { if (a.dataset.nav === (page === 'grill' || page === 'board' ? 'deliberate' : page)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
     for (const p of PAGES) $(p + '-page').hidden = page !== p;
     document.title = TITLES[page] + ' · Hunch';
     if (!B.plain) Brain.active(page === 'brain');
+    bdActive(page === 'board');
     const id = m && m[2] ? decodeURIComponent(m[2]) : '';
     if (page === 'brain') {
       state.component = id;
@@ -1382,6 +1392,7 @@ export const uiJs = String.raw`
       markCurrent($('list'), id, '#/memory/');
       loadDetail(id);
     } else if (page === 'grill') loadGrill(id);
+    else if (page === 'board') loadBoard(id);
     else if (page === 'ask') loadAsk(id);
     else if (page === 'history') loadHistory();
     else loadSetup();
@@ -1427,4 +1438,4 @@ export const uiJs = String.raw`
   drawFeed();
   route();
 })();
-`.replace("/*BRAIN*/", () => brainJs).replace("/*DELIBERATE*/", () => deliberateJs).replace("/*GRILL*/", () => grillJs);
+`.replace("/*BRAIN*/", () => brainJs).replace("/*DELIBERATE*/", () => deliberateJs).replace("/*GRILL*/", () => grillJs).replace("/*BOARD*/", () => boardJs);

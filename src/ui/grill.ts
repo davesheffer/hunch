@@ -272,18 +272,25 @@ export function grillRequest(value: unknown): GrillRequest {
   if (typeof body.about !== "string" || !RECORD_ID.test(body.about)) return { ok: false, error: "That is not a memory id." };
   if (typeof body.assistant !== "string" || !body.assistant) return { ok: false, error: "Choose who to ask." };
   if (body.finish !== undefined && typeof body.finish !== "boolean") return { ok: false, error: "finish must be true or false." };
-  const raw = body.turns ?? [];
-  if (!Array.isArray(raw) || raw.length > MAX_QUESTIONS) return { ok: false, error: `A grill is at most ${MAX_QUESTIONS} questions.` };
+  const turns = parseTurns(body.turns);
+  if (typeof turns === "string") return { ok: false, error: turns };
+  return { ok: true, about: body.about, assistant: body.assistant, turns, finish: body.finish === true };
+}
+
+/** A grill's answered turns as the page sends them back, or why they can't be read. */
+export function parseTurns(value: unknown): GrillTurnInput[] | string {
+  const raw = value ?? [];
+  if (!Array.isArray(raw) || raw.length > MAX_QUESTIONS) return `A grill is at most ${MAX_QUESTIONS} questions.`;
   const turns: GrillTurnInput[] = [];
   for (const t of raw) {
     const v = (t && typeof t === "object" ? t : {}) as Record<string, unknown>;
-    if (typeof v.question !== "string" || typeof v.answer !== "string" || (v.claim !== undefined && typeof v.claim !== "string")) return { ok: false, error: "Each turn needs its question and answer." };
+    if (typeof v.question !== "string" || typeof v.answer !== "string" || (v.claim !== undefined && typeof v.claim !== "string")) return "Each turn needs its question and answer.";
     const claim = (v.claim as string | undefined) ?? "";
-    if (!v.answer.trim()) return { ok: false, error: "Answer the question first." };
-    if (v.question.length > MAX_TURN_FIELD || v.answer.length > MAX_TURN_FIELD || claim.length > MAX_TURN_FIELD) return { ok: false, error: `Keep your answer under ${MAX_TURN_FIELD} characters.` };
+    if (!v.answer.trim()) return "Answer the question first.";
+    if (v.question.length > MAX_TURN_FIELD || v.answer.length > MAX_TURN_FIELD || claim.length > MAX_TURN_FIELD) return `Keep your answer under ${MAX_TURN_FIELD} characters.`;
     turns.push({ question: v.question, claim, answer: v.answer.trim() });
   }
-  return { ok: true, about: body.about, assistant: body.assistant, turns, finish: body.finish === true };
+  return turns;
 }
 
 export function grillPrompt(ev: GrillEvidence, turns: readonly GrillTurnInput[], finish = false): string {
@@ -372,7 +379,7 @@ const COMMIT_HASH = /\bcommit(?:s|ted)?\s+(?:as\s+|in\s+)?([0-9a-f]{7,40})\b/gi;
 const URL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s)\]]+/gi;
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-type Ref = { kind: "line"; raw: string; path: string; ref: string; loose: boolean } | { kind: "id" | "hash"; raw: string; ref: string };
+export type Ref = { kind: "line"; raw: string; path: string; ref: string; loose: boolean } | { kind: "id" | "hash"; raw: string; ref: string };
 
 function refsIn(text: string): Ref[] {
   const prose = text.replace(URL, " ");
@@ -391,10 +398,15 @@ function refsIn(text: string): Ref[] {
 
 const clip = (v: unknown, max = MAX_REPLY_FIELD): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
-function resolver(ev: GrillEvidence): { resolve(ref: string): GrillCitation | null; given(ref: Ref): boolean; isPath(p: string, loose?: boolean): boolean } {
+/** What a reply is checked against: exactly what one prompt sent. */
+export type SentEvidence = Pick<GrillEvidence, "memory" | "records" | "flags" | "head" | "code" | "commits">;
+export type Resolver = ReturnType<typeof resolver>;
+
+/** `also`: other text the prompt sent, so quoting it isn't inventing it. It resolves to no citation. */
+export function resolver(ev: SentEvidence, also: readonly string[] = []): { resolve(ref: string): GrillCitation | null; given(ref: Ref): boolean; isPath(p: string, loose?: boolean): boolean } {
   const ids = new Map(ev.memory.map((m) => [m.id, m]));
   const files = new Map(ev.code.map((c) => [c.path, c.lines]));
-  const sentText = [ev.head ?? "", ...ev.records, JSON.stringify(ev.flags), ...ev.code.flatMap((c) => c.lines.map((l) => l.text)), ...ev.commits.map((c) => c.subject)].join("\n");
+  const sentText = [ev.head ?? "", ...ev.records, JSON.stringify(ev.flags), ...ev.code.flatMap((c) => c.lines.map((l) => l.text)), ...ev.commits.map((c) => c.subject), ...also].join("\n");
   const sentLower = sentText.toLowerCase();
   const pathOf = (p: string): string | null => {
     if (files.has(p)) return p;
@@ -439,8 +451,8 @@ function resolver(ev: GrillEvidence): { resolve(ref: string): GrillCitation | nu
   };
 }
 
-/** Check one piece of the reply: its listed citations, and every reference in its words. */
-function verify(listed: unknown, text: string, r: ReturnType<typeof resolver>, self: string): { citations: GrillCitation[]; dropped: number; madeUp: boolean } {
+/** Check one piece of the reply: its listed citations, and every reference in its words. `self`: a record that can't be its own evidence. */
+export function verify(listed: unknown, text: string, r: Resolver, self: string): { citations: GrillCitation[]; dropped: number; madeUp: boolean } {
   const found = new Map<string, GrillCitation>();
   const add = (c: GrillCitation): void => {
     // The record can't be evidence for itself, and a person is already reading it.

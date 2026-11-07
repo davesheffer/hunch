@@ -277,6 +277,10 @@ export const grillJs = String.raw`
       if (!a.confirmable && v && v.action === 'keep') add('Keep as it is', true, '', () => { location.hash = '#/deliberate'; });
     } else add('Back to Deliberate', true, '', () => { location.hash = '#/deliberate'; });
     const over = button('Start over', 'secondary'); over.disabled = G.busy; over.addEventListener('click', () => { const id = G.id; gReset(id); loadGrill(id); }); bar.append(over);
+    // What the grill settled goes along, so the board starts from the person's own answers.
+    const think = button('Think it through', 'secondary'); think.disabled = G.busy;
+    think.addEventListener('click', () => boardSeed({ question: v && v.action === 'replace' ? 'What should replace this?' : 'What should we do with this?', about: { id: d.id, title: d.title }, turns: G.turns.slice() }));
+    bar.append(think);
     if (v && v.action === 'replace') bar.append(el('span', 'To replace it, run /capture.', 'muted small end'));
     return [bar];
   }
