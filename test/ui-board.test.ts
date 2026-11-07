@@ -14,8 +14,9 @@ import { hunchPaths } from "../src/core/paths.js";
 import { ComponentSchema, ConstraintSchema, DecisionSchema, EdgeSchema, FindingSchema, type Decision } from "../src/core/types.js";
 import { JsonStore } from "../src/store/jsonStore.js";
 import type { AskRunner } from "../src/ui/ask.js";
-import { boardPrompt, boardRequest, canThink, explainBoard, gatherBoardEvidence, readBoard, splitReason, type BoardEvidence } from "../src/ui/board.js";
+import { boardPrompt, boardRequest, canThink, explainBoard, gatherBoardEvidence, questionTargets, readBoard, splitReason, type BoardEvidence } from "../src/ui/board.js";
 import type { MemoryDetail, MemorySource } from "../src/ui/model.js";
+import { readCode } from "../src/ui/grill.js";
 import { uiCss, uiHtml, uiJs } from "../src/ui/page.js";
 import { createUiServer } from "../src/ui/server.js";
 import { prov } from "./helpers.js";
@@ -145,6 +146,44 @@ test("evidence: the matched memory, its committed code, what it sits on first am
   assert.match(prompt, /READER_WAIT_MS = 2000/);
   assert.doesNotMatch(prompt, /SECRET=1/);
   assert.doesNotMatch(prompt, /GRILL/, "no grill, no grill section");
+});
+
+test("a question points at files by path and at components by id or whole name, never by a piece of a path", () => {
+  const cs = [{ id: "cmp_src", name: "Src", paths: ["src/**"] }, { id: "cmp_mcp", name: "MCP server", paths: ["src/mcp/**"] }, { id: "cmp_dot", name: "." }, { id: "cmp_ui", name: "Ui", paths: ["src/ui/**"] }, { id: "cmp_cli", name: "CLI", paths: ["src/cli/**"] }, { id: "cmp_client", name: "Client", paths: ["src/client/**"] }, { id: "cmp_test", name: "Test", paths: ["test/**"] }];
+  assert.deepEqual(questionTargets("Is `src/ui/server.ts:120` right, or ../etc/passwd.txt?", cs), { files: ["src/ui/server.ts"], components: [] }, "a path doesn't name Src or Ui");
+  assert.deepEqual(questionTargets("Should the mcp server cache? See cmp_cli.", cs).components, ["cmp_mcp", "cmp_cli"]);
+  assert.deepEqual(questionTargets("Does the UI. need it, and the CLI, and the MCP server?", cs).components, ["cmp_mcp", "cmp_ui"], "at most two");
+  assert.deepEqual(questionTargets("Should we test the src tree? See cmp_src.", cs).components, [], "a whole top-level folder never leads, by name or id");
+  assert.deepEqual(questionTargets("See cmp_client.", cs).components, ["cmp_client"], "an id is a whole word, not a prefix");
+  assert.deepEqual(questionTargets("Quick. Fine?", cs).components, [], "a name with no word in it names nothing");
+  assert.deepEqual(questionTargets("a/x.ts b/y.ts c/z.ts d/w.ts", cs).files, ["a/x.ts", "b/y.ts", "c/z.ts"]);
+  assert.deepEqual(questionTargets("Is src/ui/../../x.ts fine?", cs).files, []);
+});
+
+test("evidence: what the question names goes first, even when the matched memory names more files than are sent", async () => {
+  const files: Record<string, string> = { "src/cli/flags.ts": "export const parseFlags = () => 'flags';\n", "src/mcp/server.ts": "export const mcp = 1;\n" };
+  const many = Array.from({ length: 7 }, (_, i) => `src/store/s${i}.ts`);
+  for (const f of many) files[f] = "export const parse = 'flags';\n";
+  const ev = (await evidence(files, [dec("dec_flags", { title: "Parse flags in one pass", related_files: many })], "Should the CLI parse flags lazily?"))!;
+  assert.equal(ev.code[0]!.path, "src/cli/flags.ts", "the named component's code leads");
+  assert.equal(ev.code.length, 6);
+  assert.equal(ev.components[0]!.id, "cmp_cli");
+  const byPath = (await evidence(files, [dec("dec_flags", { title: "Parse flags in one pass", related_files: many })], "Is src/mcp/server.ts:1 parsing flags too?"))!;
+  assert.equal(byPath.code[0]!.path, "src/mcp/server.ts", "a file named by path leads, line number and all");
+});
+
+test("evidence: a file the record names keeps its place when a component the question names reaches it too", async () => {
+  const files: Record<string, string> = { "src/store/lock.ts": "export const x = 1;\n" };
+  for (let i = 0; i < 8; i++) files[`src/store/s${i}.ts`] = "// store lock wait sync store lock wait sync\n";
+  const r = repo(files);
+  try {
+    const terms = new Set(["store", "lock", "wait", "sync"]);
+    const out = await readCode(["src/store/**", "src/store/lock.ts"], terms, r.root, undefined, 1);
+    assert.ok(out.code.some((c) => c.path === "src/store/lock.ts"), "the record's own file is sent");
+    assert.equal(out.code.length, 6);
+    assert.equal(out.code.filter((c) => c.path !== "src/store/lock.ts").length, 5);
+    assert.deepEqual(out.code.slice(0, 3).map((c) => c.path).includes("src/store/lock.ts"), false, "the pointed files lead, the record's file follows them");
+  } finally { r.done(); }
 });
 
 test("evidence: about a memory sends it first with a grill's answers; one that isn't there, or a question matching nothing, sends nothing", async () => {

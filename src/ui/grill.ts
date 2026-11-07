@@ -24,6 +24,8 @@ export const MAX_QUESTIONS = 5;
 const MAX_TURN_FIELD = 2000;
 const MAX_LINKS = 40;
 const MAX_FILES = 6;
+/** Of those, how many a person pointed at may take before the record's own files. */
+const MAX_LEAD = 3;
 const MAX_BLOB = 512 * 1024;
 /** Characters of code in one prompt. */
 const MAX_CODE = 24_000;
@@ -159,13 +161,14 @@ async function wordHits(bases: readonly string[], terms: ReadonlySet<string>, gi
   return hits;
 }
 
-export async function readCode(entries: readonly string[], terms: ReadonlySet<string>, root: string, budgetMs = GIT_BUDGET_MS): Promise<Pick<GrillEvidence, "head" | "code" | "commits" | "held" | "dirty">> {
+/** `lead`: how many of the first entries a person pointed at; up to MAX_LEAD of their files go before anything else. */
+export async function readCode(entries: readonly string[], terms: ReadonlySet<string>, root: string, budgetMs = GIT_BUDGET_MS, lead = 0): Promise<Pick<GrillEvidence, "head" | "code" | "commits" | "held" | "dirty">> {
   const git = gitIn(root, Date.now() + budgetMs);
   // Out of time isn't "not committed": say which it was.
   const missing = (): HeldReason => (git.expired() ? "timed-out" : "not-committed");
   const held: HeldBack[] = [];
-  const asked: { entry: string; base: string; exact: boolean }[] = [];
-  for (const raw of entries.slice(0, MAX_LINKS)) {
+  const asked: { entry: string; base: string; exact: boolean; first: boolean }[] = [];
+  for (const [i, raw] of entries.slice(0, MAX_LINKS).entries()) {
     const entry = raw.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\.\//, "");
     if (raw.startsWith("private:")) { held.push({ path: raw, reason: "private" }); continue; }
     if (/^(?:[a-z]:|\/)/i.test(entry) || entry.split("/").includes("..")) { held.push({ path: raw, reason: "not-committed" }); continue; }
@@ -178,7 +181,7 @@ export async function readCode(entries: readonly string[], terms: ReadonlySet<st
       continue;
     }
     if (isSecretPath(base)) { held.push({ path: raw, reason: "secret-path" }); continue; }
-    asked.push({ entry, base, exact: entry === base });
+    asked.push({ entry, base, exact: entry === base, first: i < lead });
   }
   for (const raw of entries.slice(MAX_LINKS)) held.push({ path: raw, reason: "over-limit" });
 
@@ -190,26 +193,32 @@ export async function readCode(entries: readonly string[], terms: ReadonlySet<st
     return { head, code: [], commits: [], held, dirty: [] };
   }
 
-  // What the record names itself comes first; what its globs reach next. Within each, the files that use its words.
-  const named: Blob[] = [], reached: Blob[] = [];
+  // What a person pointed at comes first, a few files of it; then what the record names itself; then what its
+  // globs reach. Within each, the files that use its words.
+  const pointed: Blob[] = [], named: Blob[] = [], reached: Blob[] = [];
   const seen = new Set<string>();
+  // A file named outright, by the person or by the record, keeps that standing whichever glob reached it first.
+  const pointedExact = new Set(asked.filter((a) => a.first && a.exact).map((a) => a.entry));
+  const namedExact = new Set(asked.filter((a) => !a.first && a.exact).map((a) => a.entry));
   for (const a of asked) {
     const hits = blobs.filter((b) => b.path === a.base || (b.path.startsWith(`${a.base}/`) && (a.exact || pathMatchesGlob(b.path, a.entry))));
     if (!hits.length) held.push({ path: a.entry, reason: "not-committed" });
     for (const b of hits) {
       if (seen.has(b.path)) continue;
       seen.add(b.path);
-      (b.path === a.entry ? named : reached).push(b);
+      (pointedExact.has(b.path) ? pointed : namedExact.has(b.path) ? named : a.first ? pointed : b.path === a.entry ? named : reached).push(b);
     }
   }
-  const hits = named.length + reached.length > MAX_FILES ? await wordHits(bases, terms, git) : new Map<string, number>();
+  const hits = pointed.length + named.length + reached.length > MAX_FILES ? await wordHits(bases, terms, git) : new Map<string, number>();
   const byHits = (x: Blob, y: Blob): number => (hits.get(y.path) ?? 0) - (hits.get(x.path) ?? 0) || x.path.length - y.path.length || x.path.localeCompare(y.path);
+  // A file named outright beats one a glob reaches, whatever its words.
+  pointed.sort((x, y) => Number(pointedExact.has(y.path)) - Number(pointedExact.has(x.path)) || byHits(x, y));
   named.sort(byHits);
   reached.sort(byHits);
 
   const code: Excerpt[] = [];
   let size = 0;
-  for (const b of [...named, ...reached]) {
+  for (const b of [...pointed.slice(0, MAX_LEAD), ...named, ...pointed.slice(MAX_LEAD), ...reached]) {
     if (isSecretPath(b.path)) { held.push({ path: b.path, reason: "secret-path" }); continue; }
     if (b.type !== "blob" || (b.mode !== "100644" && b.mode !== "100755")) { held.push({ path: b.path, reason: "not-a-file" }); continue; }
     if (b.size > MAX_BLOB) { held.push({ path: b.path, reason: "too-large" }); continue; }

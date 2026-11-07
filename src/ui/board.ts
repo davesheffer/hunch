@@ -159,16 +159,42 @@ export interface BoardEvidence {
   dirty: string[];
 }
 
+const MAX_POINTED_FILES = 3;
+const MAX_POINTED_COMPONENTS = 2;
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** A component covering a whole top-level folder (`src/**`, `test/**`) is too broad to lead the code. */
+const wholeFolder = (paths: readonly string[]): boolean => paths.length > 0 && paths.every((p) => /^[^/*?[{]+\/\*\*$/.test(p));
+
+/** The files a question names by path, and the components it names by id or by whole name
+ *  (not a piece of a path: "src/x.ts" doesn't name a component called Src). A component that
+ *  covers a whole top-level folder never counts: its name is too often a plain word ("test", "src"). */
+export function questionTargets(question: string, components: readonly { id: string; name: string; paths?: readonly string[] }[]): { files: string[]; components: string[] } {
+  const files = [...new Set([...question.matchAll(/(?<![\w./-])((?:[\w.-]+\/)+[\w-][\w.-]*\.\w+)(?=[\s)`'",.:;!?]|$)/g)].map((m) => m[1]!))]
+    .filter((p) => !p.split("/").includes("..")).slice(0, MAX_POINTED_FILES);
+  const named = components.filter((c) => {
+    if (c.paths && wholeFolder(c.paths)) return false;
+    if (new RegExp(`(?<![\\w-])${escapeRe(c.id)}(?![\\w-])`).test(question)) return true;
+    const name = c.name.trim();
+    return name.length >= 2 && /\w/.test(name) && new RegExp(`(?<![\\w/.-])${escapeRe(name)}(?![\\w/-]|\\.\\w)`, "i").test(question);
+  });
+  return { files, components: named.slice(0, MAX_POINTED_COMPONENTS).map((c) => c.id) };
+}
+
 /** Everything one question may send. Null when it is about a memory that isn't there. */
 export async function gatherBoardEvidence(src: MemorySource, edges: readonly Edge[], question: string, about: string | null, root: string, turns: readonly GrillTurnInput[] = []): Promise<BoardEvidence | null> {
   const focus = about ? memoryDetail(src, about) : null;
   if (about && !focus) return null;
   const asked = [question, focus ? `${focus.title} ${focus.summary}` : "", ...turns.map((t) => t.answer)].join(" ");
   const { used, records } = fitMemory(askContext(src, asked, about));
-  const code = await readCode([...new Set(used.flatMap((m) => m.files))], words(asked), root);
-  const touched = new Set(used.flatMap((m) => m.components.map((c) => c.id)));
   const map = componentMap(src, edges).components;
-  const components = [...map.filter((c) => touched.has(c.id)), ...map.filter((c) => !touched.has(c.id))].slice(0, MAX_COMPONENTS).map((c): SentComponent => ({
+  // What the question points at outright goes first, so a question about some code gets that code.
+  const target = questionTargets(question, map);
+  const lead = [...target.files, ...map.filter((c) => target.components.includes(c.id)).flatMap((c) => c.paths.slice(0, MAX_POINTED_FILES))];
+  const code = await readCode([...new Set([...lead, ...used.flatMap((m) => m.files)])], words(asked), root, undefined, new Set(lead).size);
+  const touched = new Set([...target.components, ...used.flatMap((m) => m.components.map((c) => c.id))]);
+  const rank = (id: string): number => (target.components.includes(id) ? 0 : touched.has(id) ? 1 : 2);
+  const components = map.map((c, i) => ({ c, i })).sort((x, y) => rank(x.c.id) - rank(y.c.id) || x.i - y.i).map((x) => x.c).slice(0, MAX_COMPONENTS).map((c): SentComponent => ({
     id: c.id, name: c.name.slice(0, MAX_TITLE), does: c.responsibility.slice(0, MAX_DOES), paths: c.paths.slice(0, MAX_PATHS), uses: c.uses.map((u) => u.id).slice(0, MAX_USES),
   }));
   return { question, about: focus, turns: [...turns], memory: used, records, flags: [], components, componentLines: components.map((c) => JSON.stringify(c)), ...code };
