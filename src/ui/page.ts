@@ -1181,6 +1181,7 @@ export const uiJs = String.raw`
     'other-provider': 'Asking needs Claude Code, and this repository is set to use something else. Change it with hunch provider.',
     'unknown-origin': 'This page was started by a background process, so it can\'t choose an account. Run hunch ui from your terminal.',
     'not-subscription': 'Asking needs Claude Code signed in with a subscription, so nothing is billed per token. Run claude auth login, then reload.',
+    'subscription-unknown': 'Claude Code took too long to say how it is signed in, so nothing was asked. Reload to try again; if it keeps happening, run claude auth status.',
   };
   function resetAsk() { const a = state.ask; a.about = null; a.question = ''; a.answer = null; a.waiting = false; a.problem = ''; a.gen++; $('ask-status').textContent = ''; }
 
