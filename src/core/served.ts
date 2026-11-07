@@ -167,7 +167,8 @@ export function recordServed(root: string, entries: readonly ServedEntry[]): voi
       // One commit for the whole delivery: in rollback-journal mode every
       // autocommitted INSERT creates, syncs and deletes the journal on its own,
       // so a grounded edit paid one fsync per delivered record. A failure rolls
-      // the batch back, which is the same "drop the receipt" outcome as before.
+      // the whole batch back (all-or-nothing; per-row autocommit used to keep the
+      // rows before the failure). Either way the delivery itself already happened.
       db.exec("BEGIN IMMEDIATE");
       let committed = false;
       try {

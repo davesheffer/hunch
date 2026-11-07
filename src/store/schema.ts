@@ -107,6 +107,12 @@ CREATE TABLE IF NOT EXISTS embeddings (
   ref TEXT, kind TEXT, model TEXT, dim INTEGER, doc_hash TEXT, vec BLOB,
   PRIMARY KEY (ref, model)
 );
+
+-- The JSON source revision (HunchStore.sourceStamp) the derived rows were last
+-- built from. NOT in RESET_SQL: reindex() rewrites it after each full rebuild, and
+-- an incremental task refresh uses it to detect out-of-process JSON changes (a team
+-- pull, a branch switch) that still need a full rebuild.
+CREATE TABLE IF NOT EXISTS index_state (key TEXT PRIMARY KEY, value TEXT);
 `;
 
 /** Preferred search table when the host SQLite build includes FTS5. Kept

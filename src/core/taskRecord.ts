@@ -200,8 +200,9 @@ export function persistTaskRecord(root: string, store: HunchStore, taskId: strin
   const home: TaskRecordHome = inPrivate ? "private" : inPublic ? "public" : taskRecordHome(store, record);
   const existing = home === "private" ? inPrivate : inPublic;
   if (existing && existing.report_hash === record.report_hash) return { record: existing, home, flushed: null, changed: false };
+  const sourceBefore = store.sourceStamp();
   const stored = store.putCapture("tasks", record, home === "private");
-  store.reindexTask(stored.id);
+  store.reindexTask(stored.id, sourceBefore);
   const flushNow = options.flush ?? taskRecordFlushMode(root) === "each";
   const flushed = flushNow ? flushCapture(store, hunchPaths(root).hunch, home === "private", `hunch: task ${record.id}`, undefined, undefined, "tasks") : null;
   // The ranking evaluation follows the corpus: recomputed here, read at delivery. Never blocks a finish.

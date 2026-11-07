@@ -176,8 +176,8 @@ test("persisting a task refreshes only its own search row, and the result equals
   const constraint = { id: "con_indexed", type: "architecture", statement: "Indexed before the task", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } };
   store.json.put("constraints", constraint as never);
   store.reindex();
-  // Written after the last rebuild: a full reindex inside persist would index it.
-  store.json.put("constraints", { ...constraint, id: "con_unindexed", statement: "Written after the rebuild" } as never);
+  // A derived row no source backs: any full rebuild (RESET) inside persist deletes it.
+  store.db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES ('sentinel', 'constraints', 'sentinel', '')`).run();
 
   const task = startReportTask(root, "Fix settings merge");
   recordTaskDelivery(root, task.task_id, envelope(), [record]);
@@ -186,8 +186,9 @@ test("persisting a task refreshes only its own search row, and the result equals
 
   const rows = (where: string) => store.db.prepare(`SELECT ref, kind, title, body FROM search WHERE ${where} ORDER BY ref`).all();
   assert.ok(store.search("settings merge", 10).some(h => h.kind === "tasks" && h.ref === task.task_id), "the new task is searchable at once");
-  assert.deepEqual(rows("ref = 'con_unindexed'"), [], "persisting a task must not rebuild the other kinds");
-  store.reindexTask(task.task_id);
+  assert.equal(rows("ref = 'sentinel'").length, 1, "with no other source change, persisting a task must not rebuild the other kinds");
+  store.reindexTask(task.task_id, store.sourceStamp());
+  assert.equal(rows("ref = 'sentinel'").length, 1, "an unchanged source stamp keeps the refresh incremental");
   assert.equal(rows(`ref = '${task.task_id}'`).length, 1, "a refresh replaces the row, never duplicates it");
 
   const incremental = rows("kind = 'tasks'");
@@ -198,12 +199,30 @@ test("persisting a task refreshes only its own search row, and the result equals
   const [row] = incremental as Array<{ title: string; body: string }>;
   const vec = (hash: string) => store.db.prepare(`INSERT INTO embeddings (ref, kind, model, dim, doc_hash, vec) VALUES (?, 'tasks', 'm', 1, ?, ?)`).run(task.task_id, hash, Buffer.alloc(4));
   vec(embedHash(row!.title, row!.body));
-  store.reindexTask(task.task_id);
+  store.reindexTask(task.task_id, store.sourceStamp());
   assert.equal((store.db.prepare(`SELECT count(*) AS c FROM embeddings WHERE ref = ?`).get(task.task_id) as { c: number }).c, 1, "an unchanged doc keeps its vector");
   store.db.prepare(`DELETE FROM embeddings`).run();
   vec("stale-hash");
-  store.reindexTask(task.task_id);
+  store.reindexTask(task.task_id, store.sourceStamp());
   assert.equal((store.db.prepare(`SELECT count(*) AS c FROM embeddings WHERE ref = ?`).get(task.task_id) as { c: number }).c, 0, "a changed doc drops its vector");
+});
+
+test("a source change since the last rebuild (a team pull, a branch switch) still reaches the index when a task is persisted", t => {
+  const root = fixture(t), store = openStore(root, t);
+  const constraint = { id: "con_indexed", type: "architecture", statement: "Indexed before the task", scope: ["src/config.js"], severity: "warning", enforcement: "advisory_v1", match: null, forbids: null, rationale: "", source_decision: null, violations: [], status: "active", valid_from: "2026-09-11T00:00:00.000Z", valid_to: null, provenance: { source: "human_confirmed", confidence: 1, evidence: [] } };
+  store.json.put("constraints", constraint as never);
+  store.reindex();
+  // Another process (a pull, a teammate's capture) writes after the rebuild; this
+  // process never sees the write, so only the source stamp can reveal it.
+  const other = openStore(root, t);
+  other.json.put("constraints", { ...constraint, id: "con_pulled", statement: "Pulled after the rebuild" } as never);
+
+  const task = startReportTask(root, "Fix settings merge");
+  recordTaskDelivery(root, task.task_id, envelope(), [record]);
+  finishReportTask(root, task.task_id);
+  assert.ok(persistTaskRecord(root, store, task.task_id, { flush: false }));
+  const refs = (store.db.prepare(`SELECT ref FROM search ORDER BY ref`).all() as Array<{ ref: string }>).map(r => r.ref);
+  assert.deepEqual(refs, ["con_indexed", "con_pulled", task.task_id].sort(), "the pulled constraint is indexed with the task");
 });
 
 test("an index that was never built gets the full rebuild when the first task is persisted", t => {

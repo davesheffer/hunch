@@ -678,8 +678,12 @@ export class HunchStore {
   reindex(): { counts: Record<string, number> } {
     const db = this.db;
     const counts: Record<string, number> = {};
+    // Taken before the reads: a write landing mid-rebuild leaves the stored stamp
+    // behind the sources, so the next incremental refresh rebuilds instead of trusting it.
+    const stamp = this.sourceStamp();
     withTx(db, () => {
       db.exec(RESET_SQL);
+      this.writeIndexedStamp(stamp);
       const j = (s: string) => s; // readability marker for JSON-encoded columns
       // Prepare the FTS insert ONCE (after RESET created the table), not per row.
       const insFts = db.prepare(`INSERT INTO search (ref, kind, title, body) VALUES (?,?,?,?)`);
@@ -844,11 +848,19 @@ export class HunchStore {
    *  derived state: replacing that row leaves the index exactly as reindex() would,
    *  without re-reading and re-validating every other kind. The Stop hook writes one
    *  task record per finished prompt; a full rebuild there was most of its latency.
-   *  An index that was never built (empty `search`) still gets the full rebuild. */
-  reindexTask(id: string): void {
+   *  An index that was never built (empty `search`) still gets the full rebuild.
+   *
+   *  The full rebuild used to be also where JSON changed by ANOTHER process (a team
+   *  pull, a branch switch, a teammate's capture) reached the index between turns.
+   *  `sourceBefore` is sourceStamp() taken just before the caller wrote this task:
+   *  when it differs from the stamp the index was built from, something besides this
+   *  write moved the sources, and the refresh is a full fresh rebuild. */
+  reindexTask(id: string, sourceBefore?: string): void {
     const db = this.db;
-    if (db.prepare(`SELECT 1 AS x FROM search LIMIT 1`).get() === undefined) {
-      this.reindex();
+    if (db.prepare(`SELECT 1 AS x FROM search LIMIT 1`).get() === undefined
+      || sourceBefore === undefined
+      || this.readIndexedStamp() !== sourceBefore) {
+      this.reindexFresh();
       return;
     }
     const priv = this.suppressPrivate ? undefined : this.privateJson?.get("tasks", id);
@@ -864,7 +876,18 @@ export class HunchStore {
       // Same rule as pruneStaleEmbeddings, for this one doc: a vector survives only
       // while its text is unchanged.
       db.prepare(`DELETE FROM embeddings WHERE ref = ? AND doc_hash <> ?`).run(rec.id, embedHash(rec.title, body));
+      // The index now reflects the sources as of this write, and nothing else moved.
+      this.writeIndexedStamp(this.sourceStamp());
     });
+  }
+
+  private readIndexedStamp(): string | undefined {
+    const row = this.db.prepare(`SELECT value FROM index_state WHERE key = 'source_stamp'`).get() as { value?: unknown } | undefined;
+    return typeof row?.value === "string" ? row.value : undefined;
+  }
+
+  private writeIndexedStamp(stamp: string): void {
+    this.db.prepare(`INSERT OR REPLACE INTO index_state (key, value) VALUES ('source_stamp', ?)`).run(stamp);
   }
 
   // ---- read path ----------------------------------------------------------
