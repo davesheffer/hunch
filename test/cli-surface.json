@@ -255,6 +255,14 @@
       }
     ]
   },
+  "edit": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
   "embed": {
     "tests": [
       {
@@ -572,6 +580,14 @@
       {
         "file": "test/parser-load-failure.test.ts",
         "title": "landscape review discovers a valid SLO declaration when the parser is healthy"
+      }
+    ]
+  },
+  "link": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
       }
     ]
   },
@@ -903,6 +919,14 @@
       }
     ]
   },
+  "remove": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
+      }
+    ]
+  },
   "repair": {
     "tests": [
       {
@@ -940,6 +964,14 @@
       {
         "file": "test/task-report.test.ts",
         "title": "CLI start, verify, finish and HTML share the persisted task report"
+      }
+    ]
+  },
+  "restore": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
       }
     ]
   },
@@ -1350,6 +1382,14 @@
       }
     ]
   },
+  "ui": {
+    "tests": [
+      {
+        "file": "test/ui.test.ts",
+        "title": "cli:ui: hunch ui --port --no-open prints a keyed loopback link and serves the API with that key only"
+      }
+    ]
+  },
   "uninstall": {
     "tests": [
       {
@@ -1531,6 +1571,14 @@
       {
         "file": "test/memory-policy-cli.test.ts",
         "title": "§9 memory-policy forget drops this machine's profile entry for the origin"
+      }
+    ]
+  },
+  "new": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
       }
     ]
   }

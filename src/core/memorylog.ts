@@ -47,7 +47,7 @@ const LINK_SEP = "\x1f";
 /** The `--format` string that pairs with {@link parseMemoryLog}. */
 export const MEMLOG_FORMAT = `${MEMLOG_HEADER}%H\t%h\t%cI\t%s%x1f%(trailers:key=Hunch-Code-Branch,valueonly,separator=%x20)%x1f%(trailers:key=Hunch-Code-Head,valueonly,separator=%x20)`;
 
-const ID_RE = /\/((?:dec|bug|con|cmp|pol|fnd|htask)_[0-9a-f]+)\.json$/;
+const ID_RE = /\/((?:dec|bug|con|cmp|pol|fnd|htask)_[A-Za-z0-9_-]+)\.json$/;
 const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /** One trailer value, or null. Several values arrive space-joined; a ref name and a
@@ -58,8 +58,9 @@ function linkValue(raw: string | undefined): string | null {
 }
 
 /** Parse `git log <MEMLOG_FORMAT> --name-status -- .hunch/` output into classified
- *  moves, newest first (git's order). */
-export function parseMemoryLog(raw: string): MemoryMove[] {
+ *  moves, newest first (git's order). `dir` is the memory directory's name as the paths
+ *  spell it: `.hunch` in the code repo, whatever the overlay directory is called in its own. */
+export function parseMemoryLog(raw: string, dir = ".hunch"): MemoryMove[] {
   const moves: MemoryMove[] = [];
   let cur: MemoryMove | null = null;
   for (const line of raw.split("\n")) {
@@ -81,7 +82,7 @@ export function parseMemoryLog(raw: string): MemoryMove[] {
       continue;
     }
     if (!cur || !line.trim()) continue;
-    addFile(cur, line, ".hunch/");
+    addFile(cur, line, `${dir}/`);
   }
   if (cur) moves.push(classify(cur));
   return moves;

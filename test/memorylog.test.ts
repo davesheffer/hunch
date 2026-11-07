@@ -59,3 +59,14 @@ test("parseMemoryLog: ignores non-.hunch paths in a mixed commit", () => {
   assert.deepEqual(moves[0]!.decisionIds, ["dec_abcdef"]);
   assert.equal(moves[0]!.kind, "capture");
 });
+
+test("parseMemoryLog: an overlay's own directory name, and finding ids", () => {
+  const raw = [
+    `${H}ffff6666\tffff666\t2026-07-14T10:00:00Z\thunch: capture fnd_0a1b2c`,
+    "A\tmem/findings/fnd_0a1b2c.json",
+    "M\t.hunch/decisions/dec_abcdef.json",
+  ].join("\n");
+  const moves = parseMemoryLog(raw, "mem");
+  assert.deepEqual(moves[0]!.files, ["mem/findings/fnd_0a1b2c.json"], "only the named directory counts");
+  assert.deepEqual(moves[0]!.otherIds, ["fnd_0a1b2c"]);
+});

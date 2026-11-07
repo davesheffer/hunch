@@ -23,6 +23,18 @@ export function toPosixTarget(target: string): string {
   return target.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
+/** A repo-relative path or glob safe to store as a file link / scope, or null: refuses
+ *  empty, absolute (POSIX or drive-letter), `..`-escaping, NUL-bearing, oversized, and
+ *  `private:` references. Backslashes are flipped and a leading "./" dropped. */
+export function safeRepoScope(value: string): string | null {
+  const normalized = toPosixTarget(value.trim());
+  if (!normalized || normalized.length > 1_024 || normalized.includes("\0")
+    || isAbsolute(normalized) || /^[a-zA-Z]:/.test(normalized)
+    || normalized === ".." || normalized.startsWith("../") || normalized.includes("/../")
+    || normalized.startsWith("private:")) return null;
+  return normalized.replace(/^\.\//, "");
+}
+
 /** Canonical real path of `p`, tolerant of paths that do not exist yet (a file
  *  about to be written, a glob with non-literal segments): the longest existing
  *  ancestor is resolved through the native realpath and the missing trailing

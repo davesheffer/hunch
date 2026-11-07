@@ -30,6 +30,14 @@ export function withHumanSignature(source: string): string {
   return tokens.join("+");
 }
 
+/** The inverse of `withHumanSignature`: drop the human signature and mark the record as
+ *  agent testimony again ("llm_draft+human_confirmed" → "llm_draft+agent_recorded"). */
+export function withoutHumanSignature(source: string): string {
+  const tokens = source.split("+").filter((t) => t && t !== "human_confirmed");
+  if (!tokens.includes("agent_recorded")) tokens.push("agent_recorded");
+  return tokens.join("+");
+}
+
 /** Countersign a decision. Same tier + confidence the capture path grants a human-confirmed
  *  write; status, content, and tripwires are untouched (`hunch review --accept` is the path
  *  that ships a draft and arms its tripwires). */

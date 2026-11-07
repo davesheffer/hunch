@@ -23,7 +23,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, SCHEMAS, type EntityKind, type EntityFor } from "../core/types.js";
 import { BASELINE_VERSION, hasPendingMigration, migrateRaw, SCHEMA_VERSION } from "../core/migrate.js";
-import { writeFileAtomic } from "../core/io.js";
+import { writeFileAtomic, writeFileAtomicIfAbsent } from "../core/io.js";
 import { readStoreArtifact } from "../core/storeArtifact.js";
 import { createdAfterLock, heldLockNonces, judgeSameHostOwner, processStartedAt, selfStartToken, startTokenOf } from "../core/procstart.js";
 
@@ -66,6 +66,11 @@ type RmwOwner = { pid: number; host: string; nonce?: string; start?: string; at?
  *  fail once. A real refusal (hardlink, symlink, oversize) is persistent and
  *  still throws after the last attempt. */
 const RMW_OWNER_READ_ATTEMPTS = 3;
+
+/** 25ms waits a read may spend on one record caught mid-publish (nlink=2). */
+const LINK_SETTLE_WAITS = 10;
+/** Linking refreshes ctime, so a link older than this has outlived any publish. */
+const LINK_SETTLE_WINDOW_MS = 2000;
 
 function readRmwOwner(lock: string): RmwOwner | undefined {
   for (let attempt = 1; ; attempt++) {
@@ -414,8 +419,22 @@ export class JsonStore {
     maxBytes: number,
   ): FileStat | null {
     const lexical = this.assertFileBelongsTo(directory, file);
-    const stat = this.lstatOrMissing(lexical);
+    let stat = this.lstatOrMissing(lexical);
     if (!stat) return null;
+    // create() publishes by hard link, so a fresh record sits at nlink=2 until its
+    // writer unlinks the temp. Wait that out instead of skipping a healthy record
+    // as corrupt. Only a recent link can be mid-publish; an older one has lasted and
+    // is refused at once. Links age while a load waits, so its total wait stays bounded.
+    for (
+      let tries = 0;
+      stat.isFile() && stat.nlink !== 1 && tries < LINK_SETTLE_WAITS
+        && Math.abs(Date.now() - stat.ctimeMs) < LINK_SETTLE_WINDOW_MS;
+      tries++
+    ) {
+      Atomics.wait(RMW_LOCK_WAITER, 0, 0, 25);
+      stat = this.lstatOrMissing(lexical);
+      if (!stat) return null;
+    }
     if (stat.isSymbolicLink() || !stat.isFile()) {
       throw unsafePath(lexical, "expected an ordinary file (symlinks and special files are not followed)");
     }
@@ -467,7 +486,8 @@ export class JsonStore {
     }
   }
 
-  private writeContainedFile(directory: SafeDirectory, file: string, data: string, maxBytes: number): void {
+  /** Returns false only for createOnly, when the file already exists and was left alone. */
+  private writeContainedFile(directory: SafeDirectory, file: string, data: string, maxBytes: number, createOnly = false): boolean {
     const lexical = this.assertFileBelongsTo(directory, file);
     const bytes = Buffer.byteLength(data);
     if (bytes > maxBytes) {
@@ -476,12 +496,14 @@ export class JsonStore {
     // Refuse an existing symlink/hardlink/special file rather than relying on
     // rename semantics that differ across platforms.
     this.validateExistingFile(directory, lexical, maxBytes);
-    writeFileAtomic(lexical, data);
+    if (!createOnly) writeFileAtomic(lexical, data);
+    else if (!writeFileAtomicIfAbsent(lexical, data)) return false;
     this.validateExistingFile(directory, lexical, maxBytes);
     // Detect a kind-dir replacement around the atomic rename before reporting
     // success. (Node has no portable openat/renameat API; this closes the static
     // committed-symlink attack and detects the common concurrent replacement.)
     this.safeDirectory(directory.lexical, false);
+    return true;
   }
 
   private removeContainedFile(directory: SafeDirectory, file: string, maxBytes: number): boolean {
@@ -800,6 +822,19 @@ export class JsonStore {
     } else {
       this.writeContainedFile(directory, this.fileFor(kind, validated.id), encode(validated), this.maxBytes(kind));
     }
+    this.invalidate(kind);
+    return validated;
+  }
+
+  /** Write a new per-record file, or return null when a file for that id already exists.
+   *  Unlike put, a run that loses a race can't replace what the winner wrote. */
+  create<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] | null {
+    if (SINGLE_FILE[kind]) throw new Error(`[hunch] create is for per-record kinds, not ${kind}`);
+    this.writeGuard?.(kind);
+    const validated = SCHEMAS[kind].parse(record) as EntityFor[K] & { id: string };
+    this.assertSafeRecordId(validated.id);
+    const directory = this.safeKindDirectory(kind, true)!;
+    if (!this.writeContainedFile(directory, this.fileFor(kind, validated.id), encode(validated), this.maxBytes(kind), true)) return null;
     this.invalidate(kind);
     return validated;
   }

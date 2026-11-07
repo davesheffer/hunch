@@ -42,6 +42,7 @@ process.stdin.on("end", () => {
     name, argv, stdin: input, pid: process.pid,
     anthropicKey: process.env.ANTHROPIC_API_KEY ?? null,
     openaiKey: process.env.OPENAI_API_KEY ?? null,
+    codexKey: process.env.CODEX_API_KEY ?? null,
   }) + "\n");
   const mode = process.env.FAKE_MODE || "ok";
   if (mode === "exit") { process.stderr.write("fake failure"); process.exit(3); }
@@ -61,7 +62,7 @@ process.stdin.on("end", () => {
 });
 `;
 
-interface FakeCall { pid: number; name: string; argv: string[]; stdin: string; anthropicKey: string | null; openaiKey: string | null }
+interface FakeCall { pid: number; name: string; argv: string[]; stdin: string; anthropicKey: string | null; openaiKey: string | null; codexKey: string | null }
 
 function fakeBin(dir: string): void {
   const script = join(dir, "fake-provider.cjs");
@@ -79,7 +80,7 @@ function fakeBin(dir: string): void {
 }
 
 const ENV_KEYS = ["PATH", "FAKE_LOG", "FAKE_MODE", "HUNCH_SYNTH_PROVIDER", "HUNCH_INITIATOR", "CLAUDECODE", "CODEX_THREAD_ID",
-  "CODEX_SESSION_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HUNCH_SYNTH_BASE_URL", "HUNCH_SYNTH_MODEL"] as const;
+  "CODEX_SESSION_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY", "HUNCH_SYNTH_BASE_URL", "HUNCH_SYNTH_MODEL"] as const;
 
 /** A temp git repo with one substantive commit, fake provider binaries first on
  *  PATH, and fetch trapped (any network attempt fails the test). */
@@ -97,6 +98,7 @@ function providerFixture(t: { after: (fn: () => void) => void }) {
   process.env.FAKE_LOG = log;
   process.env.ANTHROPIC_API_KEY = "sk-ant-should-be-stripped";
   process.env.OPENAI_API_KEY = "sk-openai-should-be-stripped";
+  process.env.CODEX_API_KEY = "sk-codex-should-be-stripped";
   const realFetch = globalThis.fetch;
   let fetches = 0;
   globalThis.fetch = (async () => { fetches++; throw new Error("network forbidden in provider boundary test"); }) as typeof fetch;
@@ -153,6 +155,7 @@ for (const [selected, bin] of [["claude-cli", "claude"], ["codex-cli", "codex"],
       assert.deepEqual([call.argv[0], call.argv.at(-1)], ["exec", "-"]);
       assert.ok(call.argv.includes("--json"));
       assert.equal(call.openaiKey, null, "OPENAI_API_KEY stripped → subscription auth");
+      assert.equal(call.codexKey, null, "CODEX_API_KEY stripped → subscription auth");
     } else {
       assert.ok(call.argv.includes("-p") && call.argv.includes("--trust"));
     }

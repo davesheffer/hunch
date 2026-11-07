@@ -972,6 +972,46 @@
       }
     ]
   },
+  "edit --context": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
+  "edit --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
+  "edit --rationale": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit --rationale on a constraint; wrong-kind flags and unknown ids are refused with nothing written"
+      }
+    ]
+  },
+  "edit --text": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
+  "edit --title": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:edit rewrites a decision's title, text and context, commits one move, and --json returns before/after"
+      }
+    ]
+  },
   "embed --batch": {
     "tests": [
       {
@@ -1526,6 +1566,62 @@
       {
         "file": "test/cli-flags-gaps.test.ts",
         "title": "landscape review --ref inspects the named commit, not HEAD, and refuses a ref that is not a commit"
+      }
+    ]
+  },
+  "link --add-component": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --add-file": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --clear-feature": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --feature": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --remove-component": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
+      }
+    ]
+  },
+  "link --remove-file": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:link adds and removes files and components (repeatable), sets and clears a feature"
       }
     ]
   },
@@ -2269,6 +2365,22 @@
       }
     ]
   },
+  "remove --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
+      }
+    ]
+  },
+  "remove --reason": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
+      }
+    ]
+  },
   "repair --apply": {
     "tests": [
       {
@@ -2413,6 +2525,22 @@
       }
     ]
   },
+  "restore --json": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only"
+      }
+    ]
+  },
+  "restore --status": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove a proposed decision and a finding, cli:restore --status picks the reopened state"
+      }
+    ]
+  },
   "retire-constraint --reason": {
     "tests": [
       {
@@ -2481,6 +2609,14 @@
       }
     ]
   },
+  "review --json": {
+    "tests": [
+      {
+        "file": "test/capture-authority.test.ts",
+        "title": "hunch review --unconfirm takes a countersign back, and --json reports confirm and unconfirm as one move each"
+      }
+    ]
+  },
   "review --min-grounded": {
     "tests": [
       {
@@ -2526,6 +2662,14 @@
       {
         "file": "test/capture-authority.test.ts",
         "title": "hunch review --confirm: a human countersigns a correction (granting severity) and a decision (keeping status)"
+      }
+    ]
+  },
+  "review --unconfirm": {
+    "tests": [
+      {
+        "file": "test/capture-authority.test.ts",
+        "title": "hunch review --unconfirm takes a countersign back, and --json reports confirm and unconfirm as one move each"
       }
     ]
   },
@@ -3396,6 +3540,22 @@
       }
     ]
   },
+  "ui --no-open": {
+    "tests": [
+      {
+        "file": "test/ui.test.ts",
+        "title": "cli:ui: hunch ui --port --no-open prints a keyed loopback link and serves the API with that key only"
+      }
+    ]
+  },
+  "ui --port": {
+    "tests": [
+      {
+        "file": "test/ui.test.ts",
+        "title": "cli:ui: hunch ui --port --no-open prints a keyed loopback link and serves the API with that key only"
+      }
+    ]
+  },
   "uninstall --dry-run": {
     "tests": [
       {
@@ -3719,6 +3879,102 @@
       {
         "file": "test/cli-flags-risky.test.ts",
         "title": "worktree --no-share skips the shared overlay pointer that the default registers; --branch creates the named branch"
+      }
+    ]
+  },
+  "new --title": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --text": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --context": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --rejected": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --feature": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --file": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --component": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --status": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --json": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --rationale": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
+  },
+  "new --severity": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
+  },
+  "new --evidence": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
       }
     ]
   }
