@@ -25,7 +25,7 @@ import { uiHtml, uiJs } from "../src/ui/page.js";
 import { memoryHistory } from "../src/ui/history.js";
 import { mkdirSync, renameSync, rmSync } from "node:fs";
 import { askContext, askPrompt, askRequest, askableAssistants, defaultAskRunner, parseAnswer, type AskRunner } from "../src/ui/ask.js";
-import { DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudePrintArgs, codexExecArgs, isSubscriptionAuth, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
+import { CommandTimeoutError, DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudeOnSubscription, claudePrintArgs, codexExecArgs, isSubscriptionAuth, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
 import { currentInitiator, withInitiator } from "../src/synthesis/initiator.js";
 
 const now = "2026-11-04T00:00:00Z";
@@ -906,6 +906,14 @@ test("Ask needs a subscription login: anything else blocks it before the spend",
   assert.equal(isSubscriptionAuth(signed({ authMethod: "oauth_token" })), true);
   for (const bad of [signed({ loggedIn: false }), signed({ authMethod: "console" }), signed({ authMethod: "api_key" }), signed({ apiProvider: "bedrock" }), "{}", "not json", ""]) assert.equal(isSubscriptionAuth(bad), false, bad);
 
+  // The probe: a login check that runs past its timeout is unknown, not a "no"; any other failure is a "no".
+  const probe = (run: () => Promise<{ stdout: string }>) => claudeOnSubscription({}, run);
+  assert.equal(await probe(async () => ({ stdout: signed({}) })), true);
+  assert.equal(await probe(async () => ({ stdout: signed({ authMethod: "console" }) })), false);
+  assert.equal(await probe(async () => { throw new CommandTimeoutError("\"claude\" timed out after 15000ms"); }), null);
+  assert.equal(await probe(async () => { throw new Error("\"claude\" exited 1: not logged in"); }), false);
+  assert.equal(await probe(async () => { throw Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" }); }), false);
+
   const seen: string[] = [];
   const claude: SynthProvider = { ...new DeterministicProvider(), name: "claude-cli", available: async () => true, draftProse: async () => { seen.push("ran"); return "reply"; } };
   const root = tempDir("hunch-ui-ask-sub-");
@@ -916,6 +924,12 @@ test("Ask needs a subscription login: anything else blocks it before the spend",
     await assert.rejects(runner.ask("claude-cli", "p"), /not available/);
     assert.deepEqual(seen, [], "a Console login never reaches the model");
     assert.equal(asked, 2, "checked at the listing and again at the spend");
+    let slow = 0;
+    const unsure = defaultAskRunner(root, { providers: [claude, new DeterministicProvider()], env: {}, subscribed: async () => { slow++; return null; } });
+    assert.deepEqual(await unsure.assistants(), { assistants: [], blocked: "subscription-unknown" }, "a check that didn't answer says so, not 'not a subscription'");
+    await assert.rejects(unsure.ask("claude-cli", "p"), /not available/);
+    assert.deepEqual(seen, [], "an unconfirmed login never reaches the model either");
+    assert.equal(slow, 2);
     const off = defaultAskRunner(root, { providers: [claude, new DeterministicProvider()], env: { HUNCH_SYNTH_PROVIDER: "deterministic" }, subscribed: async () => { throw new Error("must not run"); } });
     assert.equal((await off.assistants()).blocked, "local-only", "local-only mode runs nothing, not even the check");
   } finally { cleanupDir(root); }

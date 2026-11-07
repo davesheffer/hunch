@@ -38,6 +38,9 @@ import type { PrContext } from "./prContext.js";
 
 const IS_WIN = process.platform === "win32";
 
+/** pexecIn's command ran past its timeout: it gave no answer, which is not the same as a "no". */
+export class CommandTimeoutError extends Error {}
+
 /**
  * Run a command, optionally feeding `input` to its stdin, and resolve its
  * stdout. Uses spawn (not execFile) so we can:
@@ -77,7 +80,7 @@ export async function pexecIn(
     maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
   });
   if (result.error) throw result.error;
-  if (result.timedOut) throw new Error(`"${cmd}" timed out after ${opts.timeout}ms`);
+  if (result.timedOut) throw new CommandTimeoutError(`"${cmd}" timed out after ${opts.timeout}ms`);
   if (result.overflowed) throw new Error(`"${cmd}" exceeded maxBuffer (${opts.maxBuffer ?? 16 * 1024 * 1024} bytes)`);
   if (result.status !== 0) throw new Error(`"${cmd}" exited ${result.status}: ${result.stderr.slice(0, 300)}`);
   return { stdout: result.stdout };
@@ -514,13 +517,18 @@ export function isSubscriptionAuth(raw: string): boolean {
   }
 }
 
-/** Whether headless Claude Code would run on a subscription, asked under the env it would run in. */
-export async function claudeOnSubscription(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+/** `claude auth status` has been seen taking ~10s on a cold start. */
+const SUBSCRIPTION_PROBE_MS = 15_000;
+
+/** Whether headless Claude Code would run on a subscription, asked under the env it would run in.
+ *  null when the login check didn't answer in time: unknown, so callers still refuse to spend,
+ *  but can say "couldn't confirm" instead of "not on a subscription". */
+export async function claudeOnSubscription(env: NodeJS.ProcessEnv = process.env, run: typeof pexecIn = pexecIn): Promise<boolean | null> {
   try {
-    const { stdout } = await pexecIn("claude", ["auth", "status", "--json"], { env: claudeChildEnv(env), cwd: tmpdir(), timeout: 8000 });
+    const { stdout } = await run("claude", ["auth", "status", "--json"], { env: claudeChildEnv(env), cwd: tmpdir(), timeout: SUBSCRIPTION_PROBE_MS });
     return isSubscriptionAuth(stdout);
-  } catch {
-    return false;
+  } catch (err) {
+    return err instanceof CommandTimeoutError ? null : false;
   }
 }
 

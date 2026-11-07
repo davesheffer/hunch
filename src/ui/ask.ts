@@ -27,8 +27,9 @@ const MAX_ANSWER_TEXT = 8000;
 
 export interface Assistant { name: string; label: string }
 /** Why nobody can be asked: local-only analysis is on, `hunch provider` names someone who can't
- *  be asked, this UI's origin can't pick an account, or Claude Code isn't on a subscription. */
-export type AskBlock = "local-only" | "other-provider" | "unknown-origin" | "not-subscription";
+ *  be asked, this UI's origin can't pick an account, Claude Code isn't on a subscription, or its
+ *  login check didn't answer in time (so whether it is can't be confirmed). */
+export type AskBlock = "local-only" | "other-provider" | "unknown-origin" | "not-subscription" | "subscription-unknown";
 /** The CLIs that can run with no tools (ProseOptions.noTools). */
 const ASKABLE = new Set(["claude-cli"]);
 export interface AskRunner {
@@ -47,7 +48,7 @@ export function askableAssistants(statuses: readonly ProviderStatus[], env: Node
     .map((s) => ({ name: s.name, label: s.label }));
 }
 
-export function defaultAskRunner(root: string, opts: Pick<ProviderSelectionOptions, "env" | "providers"> & { subscribed?: () => Promise<boolean> } = {}): AskRunner {
+export function defaultAskRunner(root: string, opts: Pick<ProviderSelectionOptions, "env" | "providers"> & { subscribed?: () => Promise<boolean | null> } = {}): AskRunner {
   const env = opts.env ?? process.env;
   const subscribed = opts.subscribed ?? (() => claudeOnSubscription(env));
   const assistants: AskRunner["assistants"] = async () => {
@@ -59,7 +60,11 @@ export function defaultAskRunner(root: string, opts: Pick<ProviderSelectionOptio
     const listed = preference === "auto" ? askable : askable.filter((a) => a.name === preference);
     if (preference !== "auto" && !listed.length) return { assistants: [], blocked: "other-provider" };
     // Only claude-cli is askable. `ask` comes through here too, so this holds at the spend.
-    if (listed.length && !(await subscribed())) return { assistants: [], blocked: "not-subscription" };
+    if (listed.length) {
+      const on = await subscribed();
+      if (on === null) return { assistants: [], blocked: "subscription-unknown" };
+      if (!on) return { assistants: [], blocked: "not-subscription" };
+    }
     return { assistants: listed, blocked: null };
   };
   return {
