@@ -27,8 +27,9 @@ const EXCLUDED_SEGMENTS = new Set([".hunch", ".hunch-cache", ".git"]);
 /** Files Hunch regenerates on every capture (src/integrations/providers.ts,
  * claudemd.ts): a fresh mtime on them is the capture, not the task's work. */
 export const HUNCH_MANAGED_FILES: ReadonlySet<string> = new Set(["CLAUDE.md", "AGENTS.md", ".cursor/rules/hunch.mdc", ".github/copilot-instructions.md", ".windsurf/rules/hunch.md"]);
-/** Commit subjects Hunch writes itself. */
-export const HUNCH_COMMIT_SUBJECT = /^hunch:/i;
+/** Commit subjects Hunch writes itself, and git's revert of one (`hunch revert-move`
+ * writes `Revert "hunch: ..."`; reverting that gives `Reapply "..."` or a nested `Revert "..."`). */
+export const HUNCH_COMMIT_SUBJECT = /^(?:(?:revert|reapply) ")*hunch:/i;
 
 function gitDate(ms: number): string {
   // Second resolution, a format every git accepts.

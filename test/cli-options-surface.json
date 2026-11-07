@@ -1633,6 +1633,14 @@
       }
     ]
   },
+  "log --for": {
+    "tests": [
+      {
+        "file": "test/log-for.test.ts",
+        "title": "hunch log --for <branch> --json emits the attribution"
+      }
+    ]
+  },
   "log --json": {
     "tests": [
       {

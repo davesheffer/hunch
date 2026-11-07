@@ -60,6 +60,7 @@ import {
 import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, fileAtRef, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeFilesOrNull, rangeGateDiff, rangeCommits, revExists, revParse, sameFilesystemEntry, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, worktreePaths, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
 import { runbookDraft } from "../core/runbookDraft.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
+import { memoryFor, type MemoryFor } from "../extractors/featurelog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
 import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
 import { readPendingRepairs, writePendingRepairs, readDroppedRepairs, writeDroppedRepairs, readActivePendingRepairs, withheldRewrites } from "../core/repairqueue.js";
@@ -6784,19 +6785,39 @@ program
   .option("--json", "emit the moves as JSON for tooling")
   .option("-n, --limit <n>", "max moves to show", "100")
   .option("--diff <sha>", "print one move's .hunch/ diff (the click-through), instead of the list")
-  .action((opts: { json?: boolean; limit?: string; diff?: string }) => {
+  .option("--for <commit|branch>", "group the memory by the feature commit it led to, for one commit or branch (--limit caps the commits searched on the default branch or below a commit; feature branches are searched back to where they fork, up to 500 commits)")
+  .action((opts: { json?: boolean; limit?: string; diff?: string; for?: string }) => {
     const root = findRoot();
     if (!isGitRepo(root)) return fail("not a git repo — the memory timeline needs git history.");
     if (opts.diff) { process.stdout.write(memoryMoveDiff(opts.diff, root)); return; }
     const limit = Number.isFinite(Number(opts.limit)) ? Number(opts.limit) : 100;
+    const icon: Record<MemoryMove["kind"], string> = { capture: "✚", adopt: "✓", supersede: "↻", prune: "✗", repair: "🔧", edit: "•" };
+    const line = (m: MemoryMove, indent = ""): string => {
+      const ids = [...m.decisionIds, ...m.otherIds].slice(0, 4).join(",");
+      return `${indent}${m.date.slice(0, 10)}  ${icon[m.kind]} ${m.kind.padEnd(9)} ${m.shortSha}  ${m.subject.slice(0, 60)}${ids ? "  " + dim(ids) : ""}`;
+    };
+    if (opts.for !== undefined) {
+      let r: MemoryFor;
+      try { r = memoryFor(root, opts.for, { limit }); } catch (e) { return fail((e as Error).message); }
+      if (opts.json) { console.log(JSON.stringify(r)); return; }
+      const v = r.merged;
+      const how = !v ? "" : v.status === "merged" ? ` — merged (${v.method}${v.pr ? `, PR #${v.pr}` : ""})` : ` — ${v.status}`;
+      console.log(`${r.kind === "branch" ? r.branch : r.sha.slice(0, 12)}${how}`);
+      if (!r.groups.length) console.log(dim("  No memory attributed."));
+      for (const g of r.groups) {
+        const landed = g.landed ? dim(`  → landed ${g.landed.slice(0, 7)}`) : "";
+        console.log(g.commit
+          ? `  ● ${g.commit.shortSha}  ${g.commit.subject.slice(0, 60)}${landed}`
+          : `  ○ after the last code commit${g.landed ? "" : " (in progress)"}${landed}`);
+        for (const m of g.moves) console.log(line(m, "      "));
+      }
+      for (const note of r.notes) console.log(dim(`  note: ${note}`));
+      return;
+    }
     const moves = parseMemoryLog(gitMemoryLog(root, limit));
     if (opts.json) { console.log(JSON.stringify(moves)); return; }
     if (!moves.length) { console.log("No memory moves yet — nothing has changed .hunch/."); return; }
-    const icon: Record<MemoryMove["kind"], string> = { capture: "✚", adopt: "✓", supersede: "↻", prune: "✗", repair: "🔧", edit: "•" };
-    for (const m of moves) {
-      const ids = [...m.decisionIds, ...m.otherIds].slice(0, 4).join(",");
-      console.log(`${m.date.slice(0, 10)}  ${icon[m.kind]} ${m.kind.padEnd(9)} ${m.shortSha}  ${m.subject.slice(0, 60)}${ids ? "  " + dim(ids) : ""}`);
-    }
+    for (const m of moves) console.log(line(m));
   });
 
 /** Self-repair (Phase 5): heal exact-path memory bindings after a commit's renames.

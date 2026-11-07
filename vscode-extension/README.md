@@ -31,6 +31,11 @@ A source-control-style view of everything Hunch does:
   transition.
 - **Memory timeline** — every move Hunch made: ✚ capture, ✓ adopt, ↻ supersede, ✗ prune,
   🔧 repair. Click a move for its diff; right-click to revert it locally (never pushed).
+- **Group by feature commit** — the title-bar toggle nests the moves under the code commit each
+  one led to on the checked-out branch, says whether and how the branch landed on the default
+  branch (merge, squash, or rebase), and shows the CLI's notes where git can't say. Needs Hunch
+  CLI with `hunch log --for`; the branch comes from VS Code's Git extension (detached HEAD
+  groups below the checked-out commit), and the view regroups on a branch switch or a new commit.
 - **Title actions** — 🛡 Strictness (advisory ↔ strict gate), Sync now, Adopt drafts, and
   **Approve-to-push**: memory auto-commits locally; publishing it to your remote is deliberately
   your click.

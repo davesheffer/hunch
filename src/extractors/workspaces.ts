@@ -259,7 +259,11 @@ function firstParentsOf(root: string, head: string): Set<string> | null {
 
 type DefaultFirstParents = () => Set<string> | null;
 
-function mergedVerdict(root: string, name: string, head: string, def: DefaultBranch | null, patchIds: DefaultPatchIds, firstParents: DefaultFirstParents, searched: number): MergedVerdict {
+/** Where a squash- or rebase-merged branch landed, filled in by {@link mergedVerdict}:
+ *  the one squash commit, or each branch commit's patch-equivalent copy. */
+interface Landing { squash?: string; rebase?: Map<string, string> }
+
+function mergedVerdict(root: string, name: string, head: string, def: DefaultBranch | null, patchIds: DefaultPatchIds, firstParents: DefaultFirstParents, searched: number, landing: Landing = {}): MergedVerdict {
   if (!def) return { status: "unknown", method: null, evidence: ["no default branch resolved (origin/HEAD, origin/main, origin/master, main, master)"] };
   const ancestor = predicate(root, ["merge-base", "--is-ancestor", head, def.head]);
   if (ancestor === null) return { status: "unknown", method: null, evidence: ["git merge-base failed"] };
@@ -298,6 +302,7 @@ function mergedVerdict(root: string, name: string, head: string, def: DefaultBra
       if (after === null) return { status: "unknown", method: null, evidence: ["git merge-base failed"] };
       if (after) {
         const verdict: MergedVerdict = { status: "merged", method: "squash", evidence: [`patch-id of ${base.slice(0, 12)}..${head.slice(0, 12)} equals ${def.ref} commit ${commit.slice(0, 12)}`] };
+        landing.squash = commit;
         return withPr(verdict, prFromSquashCommit(root, commit));
       }
     }
@@ -308,15 +313,49 @@ function mergedVerdict(root: string, name: string, head: string, def: DefaultBra
   const own = patchIdsOf(root, [`${base}..${head}`], null, 30_000);
   if (own.ok && own.map.size) {
     let all = true;
-    for (const id of own.map.keys()) {
+    const copies = new Map<string, string>();
+    for (const [id, mine] of own.map) {
       const commit = known.map.get(id);
       const after = commit ? landedAfterBase(commit) : false;
       if (after === null) return { status: "unknown", method: null, evidence: ["git merge-base failed"] };
       if (!after) { all = false; break; }
+      copies.set(mine, commit!);
     }
-    if (all) return { status: "merged", method: "rebase", evidence: [`all ${own.map.size} commit(s) have a patch-equivalent commit in ${def.ref} after the merge base (last ${searched} searched)`] };
+    if (all) {
+      landing.rebase = copies;
+      return { status: "merged", method: "rebase", evidence: [`all ${own.map.size} commit(s) have a patch-equivalent commit in ${def.ref} after the merge base (last ${searched} searched)`] };
+    }
   }
   return { status: "unmerged", method: null, evidence: [`not in ${def.ref}@${def.head.slice(0, 12)}; squash/rebase searched last ${searched} commits`] };
+}
+
+/** A branch's merged verdict plus where it landed on the default branch, for
+ *  `hunch log --for` (memory lane Phase 1). `squash` is the squash commit; `rebase`
+ *  maps each branch commit to its patch-equivalent copy. Both null otherwise. */
+export interface BranchLanding {
+  verdict: MergedVerdict;
+  defaultBranch: { name: string; ref: string; head: string } | null;
+  squash: string | null;
+  rebase: ReadonlyMap<string, string> | null;
+}
+
+export function branchLanding(root: string, name: string, head: string, searched = DEFAULT_SQUASH_SEARCH_COMMITS): BranchLanding {
+  const main = mainWorktreeRoot(root);
+  const def = defaultBranch(main);
+  const landing: Landing = {};
+  let firstParents: Set<string> | null | undefined;
+  const verdict = mergedVerdict(
+    main, name, head, def,
+    () => (def ? patchIdsOf(main, [def.head], searched, 60_000) : { map: new Map(), ok: true }),
+    () => (firstParents === undefined ? (firstParents = def ? firstParentsOf(main, def.head) : null) : firstParents),
+    searched, landing,
+  );
+  return { verdict, defaultBranch: def, squash: landing.squash ?? null, rebase: landing.rebase ?? null };
+}
+
+/** The default branch (origin/HEAD → origin/main|master → local main|master), or null. */
+export function resolveDefaultBranch(root: string): { name: string; ref: string; head: string } | null {
+  return defaultBranch(mainWorktreeRoot(root));
 }
 
 function realpath(path: string): string {

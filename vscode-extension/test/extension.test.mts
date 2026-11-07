@@ -17,9 +17,21 @@ const sources = readdirSync(join(EXT_ROOT, "src")).filter((f) => f.endsWith(".ts
 const allSource = sources.map((s) => s.text).join("\n");
 
 const settings = new Map<string, unknown>();
+class TreeItemStub {
+  description?: string; iconPath?: unknown; contextValue?: string; tooltip?: unknown; command?: unknown;
+  constructor(public label: string, public collapsibleState?: number) {}
+}
 const vscodeStub = {
   workspace: { getConfiguration: (section: string) => ({ get: (key: string, fallback?: unknown) => settings.has(`${section}.${key}`) ? settings.get(`${section}.${key}`) : fallback }) },
   window: {}, ProgressLocation: { Notification: 15 },
+  TreeItem: TreeItemStub,
+  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+  ThemeIcon: class { constructor(public id: string, public color?: unknown) {} },
+  ThemeColor: class { constructor(public id: string) {} },
+  MarkdownString: class { constructor(public value = "") {} },
+  EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} },
+  /** Replaced per test that needs the built-in Git extension. */
+  extensions: { getExtension: (_id: string): unknown => undefined },
 };
 const require = createRequire(import.meta.url);
 const Module = require("node:module") as { _load: (request: string, parent: unknown, isMain: boolean) => unknown };
@@ -30,6 +42,9 @@ let data: typeof import("../src/hunchData.js");
 let workspace: typeof import("../src/workspace.js");
 let fence: typeof import("../src/rootBinding.js");
 let spawnCore: typeof import("../src/spawnCore.js");
+let features: typeof import("../src/featureGroups.js");
+let memoryView: typeof import("../src/memoryView.js");
+let gitBranch: typeof import("../src/gitBranch.js");
 try {
   Module._load = function (request, parent, isMain) {
     return request === "vscode" ? vscodeStub : originalLoad.call(this, request, parent, isMain);
@@ -40,6 +55,9 @@ try {
   workspace = await import("../src/workspace.js");
   fence = await import("../src/rootBinding.js");
   spawnCore = await import("../src/spawnCore.js");
+  features = await import("../src/featureGroups.js");
+  memoryView = await import("../src/memoryView.js");
+  gitBranch = await import("../src/gitBranch.js");
 } finally {
   Module._load = originalLoad;
 }
@@ -324,3 +342,262 @@ test("loadHunch reads the committed store, skipping corrupt and non-JSON files",
 test("recordFilePath resolves component ids (core mints cmp_*)", () => {
   assert.equal(data.recordFilePath("/r", "cmp_abc"), join("/r", ".hunch", "components", "cmp_abc.json"));
 });
+
+// ---- memory grouped by feature commit (`hunch log --for`) ------------------
+const move = (sha: string, subject: string) => ({
+  sha, shortSha: sha.slice(0, 7), date: "2026-11-04T10:00:00+02:00", subject, kind: "capture",
+  decisionIds: ["dec_a"], otherIds: [], added: 1, modified: 0, deleted: 0, files: [".hunch/decisions/dec_a.json"],
+  codeBranch: "feat/x", codeHead: "c".repeat(40),
+});
+const forBranch = {
+  query: "feat/x", kind: "branch", sha: "f".repeat(40), branch: "feat/x",
+  merged: { status: "merged", method: "squash", evidence: ["patch-id"], pr: 7 },
+  groups: [
+    { commit: null, landed: null, moves: [move("1".repeat(40), "hunch: capture late")] },
+    { commit: { sha: "a".repeat(40), shortSha: "aaaaaaa", date: "2026-11-03T10:00:00+02:00", subject: "feat: add the thing" },
+      landed: "b".repeat(40), moves: [move("2".repeat(40), "hunch: capture one"), move("3".repeat(40), "hunch: capture two")] },
+  ],
+  notes: ["searched back to the fork point"],
+};
+
+test("parseMemoryFor accepts the CLI's --for JSON and rejects anything else", () => {
+  assert.deepEqual(features.parseMemoryFor(JSON.stringify(forBranch)), forBranch);
+  for (const bad of ["", "not json", "[]", "null", JSON.stringify({ ...forBranch, kind: "tag" }),
+    JSON.stringify({ ...forBranch, groups: {} }), JSON.stringify({ ...forBranch, notes: [3] }),
+    JSON.stringify({ ...forBranch, groups: [{ commit: null, landed: null }] })]) {
+    assert.equal(features.parseMemoryFor(bad), null, bad);
+  }
+});
+
+test("parseMemoryFor rejects a payload whose rows would break while rendering", () => {
+  const [late, done] = forBranch.groups;
+  const { decisionIds: _ids, ...moveWithoutIds } = move("4".repeat(40), "hunch: no ids");
+  for (const [why, bad] of [
+    ["commit without a date", { ...forBranch, groups: [{ ...done, commit: { sha: "a".repeat(40), shortSha: "aaaaaaa", subject: "s" } }] }],
+    ["move without decisionIds", { ...forBranch, groups: [{ ...late, moves: [moveWithoutIds] }] }],
+    ["move that is not an object", { ...forBranch, groups: [{ ...late, moves: ["x"] }] }],
+    ["landed that is not a sha", { ...forBranch, groups: [{ ...done, landed: 7 }] }],
+    ["merged without a status", { ...forBranch, merged: { method: "squash" } }],
+    ["query that is not a string", { ...forBranch, query: null }],
+  ] as const) {
+    assert.equal(features.parseMemoryFor(JSON.stringify(bad)), null, why);
+  }
+});
+
+test("a grouping failure hints at a CLI update only when the CLI lacks --for", () => {
+  assert.deepEqual(features.featureFailure({ ok: false, stderr: "error: unknown option '--for'\n" }), { message: "error: unknown option '--for'", hint: "update the Hunch CLI" });
+  assert.deepEqual(features.featureFailure({ ok: false, stderr: "error: \"nope\" is not a branch or commit\nmore\n" }), { message: "error: \"nope\" is not a branch or commit", hint: "" });
+  assert.deepEqual(features.featureFailure({ ok: false, stderr: "" }), { message: "the CLI failed", hint: "" });
+  assert.equal(features.featureFailure({ ok: true, stderr: "" }).message, "unexpected output");
+});
+
+test("feature query names the checked-out branch, or HEAD when there is none", () => {
+  assert.equal(features.featureQuery("feat/x"), "feat/x");
+  assert.equal(features.featureQuery(undefined), "HEAD");
+  assert.equal(features.featureQuery(""), "HEAD");
+});
+
+test("feature header and group rows say what the CLI says", () => {
+  assert.deepEqual(features.headerText(forBranch as never), { label: "feat/x", description: "merged (squash, PR #7)" });
+  assert.deepEqual(features.headerText({ ...forBranch, merged: { status: "unmerged", method: null, evidence: [] } } as never), { label: "feat/x", description: "unmerged" });
+  assert.deepEqual(features.headerText({ ...forBranch, merged: null } as never), { label: "feat/x", description: "default branch" });
+  assert.deepEqual(features.headerText({ ...forBranch, kind: "commit", branch: null, merged: null, query: "HEAD" } as never), { label: "fffffff", description: "commit HEAD" });
+  const [late, done] = forBranch.groups as never[];
+  assert.deepEqual(features.groupText(late!), { label: "After the last code commit", description: "in progress · 1 move" });
+  assert.deepEqual(features.groupText(done!), { label: "feat: add the thing", description: "aaaaaaa · 2 moves · landed bbbbbbb" });
+  assert.deepEqual(features.groupText({ ...(late as object), landed: "d".repeat(40) } as never), { label: "After the last code commit", description: "1 move · landed ddddddd" });
+});
+
+test("repoFor picks the git repository that owns the root, never an unrelated one", () => {
+  const a = resolve("/w/repo"), b = resolve("/w/repo-2");
+  assert.equal(features.repoFor([a, b], resolve("/w/repo-2/pkg")), b);
+  assert.equal(features.repoFor([resolve("/w"), b], resolve("/w/repo-2")), b, "the nearest repository wins");
+  assert.equal(features.repoFor([a], resolve("/elsewhere")), undefined);
+});
+
+type Run = (root: string, args: string[]) => Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }>;
+function fakeRunner(log: { ok: boolean; stdout: string; stderr?: string }): { run: Run; calls: string[][] } {
+  const calls: string[][] = [];
+  const run: Run = async (_root, args) => {
+    calls.push(args);
+    if (args[0] === "log") return { ok: log.ok, stdout: log.stdout, stderr: log.stderr ?? "", code: log.ok ? 0 : 1 };
+    return { ok: true, stdout: "[]", stderr: "", code: 0 };
+  };
+  return { run, calls };
+}
+const labels = (nodes: { label?: unknown; description?: unknown }[]) => nodes.map((n) => `${String(n.label)} | ${n.description ?? ""}`);
+
+test("the memory view keeps the flat timeline by default", async () => {
+  const fake = fakeRunner({ ok: true, stdout: JSON.stringify([move("9".repeat(40), "hunch: capture flat")]) });
+  const tree = new memoryView.MemoryTreeProvider("/r", fake.run, () => "feat/x");
+  const roots = await tree.getChildren();
+  assert.deepEqual(fake.calls.find((a) => a[0] === "log"), ["log", "--json", "-n", "150"]);
+  assert.equal(roots.length, 1);
+  assert.ok(roots[0] instanceof memoryView.MoveNode);
+});
+
+test("grouped by feature commit, the view reads `hunch log --for <branch>` and nests moves under commits", async () => {
+  const fake = fakeRunner({ ok: true, stdout: JSON.stringify(forBranch) });
+  const tree = new memoryView.MemoryTreeProvider("/r", fake.run, () => "feat/x");
+  tree.setGrouped(true);
+  const roots = await tree.getChildren();
+  assert.deepEqual(fake.calls.find((a) => a[0] === "log"), ["log", "--json", "--for", "feat/x", "-n", "50"]);
+  assert.deepEqual(labels(roots), [
+    "feat/x | merged (squash, PR #7)",
+    "After the last code commit | in progress · 1 move",
+    "feat: add the thing | aaaaaaa · 2 moves · landed bbbbbbb",
+    "searched back to the fork point | note",
+  ]);
+  const late = await tree.getChildren(roots[1]);
+  assert.deepEqual(late.map((n) => n.label), ["capture late"]);
+  assert.ok(late[0] instanceof memoryView.MoveNode);
+  assert.deepEqual((await tree.getChildren(roots[2])).map((n) => n.label), ["capture one", "capture two"]);
+  assert.deepEqual(await tree.getChildren(roots[0]), [], "the header has no children");
+});
+
+test("grouping follows a branch switch and falls back to HEAD without a branch", async () => {
+  let branch: string | undefined = "feat/x";
+  const fake = fakeRunner({ ok: true, stdout: JSON.stringify(forBranch) });
+  const tree = new memoryView.MemoryTreeProvider("/r", fake.run, () => branch);
+  tree.setGrouped(true);
+  await tree.getChildren();
+  branch = undefined;
+  await tree.getChildren();
+  assert.deepEqual(fake.calls.filter((a) => a[0] === "log").map((a) => a[3]), ["feat/x", "HEAD"]);
+  tree.setGrouped(false);
+  const flat = await tree.getChildren();
+  assert.deepEqual(fake.calls.filter((a) => a[0] === "log").at(-1), ["log", "--json", "-n", "150"]);
+  assert.deepEqual(flat, [], "a --for payload is never shown as a flat timeline");
+});
+
+test("a CLI that cannot group says so in the view instead of showing nothing", async () => {
+  const fake = fakeRunner({ ok: false, stdout: "", stderr: "error: unknown option '--for'\n" });
+  const tree = new memoryView.MemoryTreeProvider("/r", fake.run, () => "feat/x");
+  tree.setGrouped(true);
+  assert.deepEqual(labels(await tree.getChildren()), ["Could not group by feature commit: error: unknown option '--for' | update the Hunch CLI"]);
+  const badRef = fakeRunner({ ok: false, stdout: "", stderr: "error: \"nope\" is not a branch or commit\n" });
+  const tree3 = new memoryView.MemoryTreeProvider("/r", badRef.run, () => "nope");
+  tree3.setGrouped(true);
+  assert.deepEqual(labels(await tree3.getChildren()), ["Could not group by feature commit: error: \"nope\" is not a branch or commit | "]);
+  const empty = fakeRunner({ ok: true, stdout: JSON.stringify({ ...forBranch, groups: [], notes: [] }) });
+  const tree2 = new memoryView.MemoryTreeProvider("/r", empty.run, () => "feat/x");
+  tree2.setGrouped(true);
+  assert.deepEqual(labels(await tree2.getChildren()), ["feat/x | merged (squash, PR #7)", "No memory attributed to feat/x. | note"]);
+});
+
+test("a feature group row from before a root switch stays empty", async () => {
+  let root = "/r";
+  const fake = fakeRunner({ ok: true, stdout: JSON.stringify(forBranch) });
+  const tree = new memoryView.MemoryTreeProvider(() => root, fake.run, () => "feat/x");
+  tree.setGrouped(true);
+  const roots = await tree.getChildren();
+  root = "/other";
+  await tree.getChildren();
+  assert.deepEqual(await tree.getChildren(roots[2]), []);
+});
+
+test("the flat timeline drops malformed moves and shows a kind it does not know by name", async () => {
+  const { decisionIds: _ids, ...broken } = move("5".repeat(40), "hunch: broken");
+  const fake = fakeRunner({ ok: true, stdout: JSON.stringify([move("6".repeat(40), "hunch: kept"), broken, null, { ...move("7".repeat(40), "hunch: new kind"), kind: "graft" }]) });
+  const tree = new memoryView.MemoryTreeProvider("/r", fake.run);
+  assert.deepEqual(labels(await tree.getChildren()), [
+    "kept | 2026-11-04 · captured · dec_a",
+    "new kind | 2026-11-04 · graft · dec_a",
+  ]);
+});
+
+// ---- the checked-out branch, from the built-in Git extension ----------------
+function fakeEvent<T>() {
+  const listeners = new Set<(v: T) => void>();
+  return {
+    event: (l: (v: T) => void) => { listeners.add(l); return { dispose: () => { listeners.delete(l); } }; },
+    fire: (v: T) => { for (const l of [...listeners]) l(v); },
+    get size() { return listeners.size; },
+  };
+}
+type FakeHead = { name?: string; commit?: string; type?: number };
+function fakeRepo(fsPath: string, HEAD: FakeHead) {
+  const changed = fakeEvent<void>();
+  return { changed, repo: { rootUri: { fsPath }, state: { HEAD, onDidChange: changed.event } } };
+}
+function fakeGit(repos: ReturnType<typeof fakeRepo>["repo"][], activation?: Promise<void>) {
+  const opened = fakeEvent<unknown>(), closed = fakeEvent<unknown>();
+  const api = { repositories: repos, onDidOpenRepository: opened.event, onDidCloseRepository: closed.event };
+  const exports = { getAPI: () => api };
+  const ext = activation
+    ? { isActive: false, exports: undefined, activate: () => activation.then(() => exports) }
+    : { isActive: true, exports, activate: async () => exports };
+  vscodeStub.extensions.getExtension = () => ext;
+  return { api, opened, closed };
+}
+async function withGit<T>(fn: () => Promise<T> | T): Promise<T> {
+  try { return await fn(); } finally { vscodeStub.extensions.getExtension = () => undefined; }
+}
+
+test("GitBranches names the local branch only, and fires at once when Git is already active", () => withGit(() => {
+  const main = fakeRepo(resolve("/w/repo"), { name: "feat/x", commit: "a", type: 0 });
+  const detached = fakeRepo(resolve("/w/detached"), { commit: "b", type: 0 });
+  const tag = fakeRepo(resolve("/w/tag"), { name: "v1.0.0", commit: "c", type: 2 });
+  fakeGit([main.repo, detached.repo, tag.repo]);
+  let calls = 0;
+  const branches = new gitBranch.GitBranches(() => { calls++; });
+  assert.equal(calls, 1, "the first callback runs inside the constructor");
+  assert.equal(branches.branchOf(resolve("/w/repo/pkg")), "feat/x");
+  assert.equal(branches.branchOf(resolve("/w/detached")), undefined, "detached HEAD has no branch");
+  assert.equal(branches.branchOf(resolve("/w/tag")), undefined, "a checked-out tag is not a branch");
+  assert.equal(branches.branchOf(resolve("/elsewhere")), undefined);
+  branches.dispose();
+}));
+
+test("GitBranches fires on a branch switch or a new commit, not on unrelated state changes", () => withGit(() => {
+  const head: FakeHead = { name: "feat/x", commit: "a", type: 0 };
+  const r = fakeRepo(resolve("/w/repo"), head);
+  const detachedHead: FakeHead = { commit: "d1", type: 0 };
+  const d = fakeRepo(resolve("/w/detached"), detachedHead);
+  fakeGit([r.repo, d.repo]);
+  let calls = 0;
+  const branches = new gitBranch.GitBranches(() => { calls++; });
+  calls = 0;
+  r.changed.fire();
+  assert.equal(calls, 0, "same branch, same commit");
+  head.commit = "b"; r.changed.fire();
+  assert.equal(calls, 1, "a new commit regroups the branch");
+  head.name = "feat/y"; r.changed.fire();
+  assert.equal(calls, 2, "a branch switch");
+  detachedHead.commit = "d2"; d.changed.fire();
+  assert.equal(calls, 3, "a detached HEAD that moves");
+  branches.dispose();
+  assert.equal(r.changed.size + d.changed.size, 0, "dispose drops every listener");
+}));
+
+test("GitBranches stops watching a closed repository and tells the view", () => withGit(() => {
+  const r = fakeRepo(resolve("/w/repo"), { name: "feat/x", commit: "a", type: 0 });
+  const git = fakeGit([r.repo]);
+  let calls = 0;
+  const branches = new gitBranch.GitBranches(() => { calls++; });
+  calls = 0;
+  git.api.repositories = [];
+  git.closed.fire(r.repo);
+  assert.equal(calls, 1);
+  assert.equal(r.changed.size, 0, "the closed repository's listener is gone");
+  const reopened = fakeRepo(resolve("/w/repo"), { name: "feat/y", commit: "b", type: 0 });
+  git.api.repositories = [reopened.repo];
+  git.opened.fire(reopened.repo);
+  assert.equal(calls, 2);
+  assert.equal(branches.branchOf(resolve("/w/repo")), "feat/y");
+  branches.dispose();
+}));
+
+test("GitBranches disposed while Git activates never subscribes", () => withGit(async () => {
+  let activate!: () => void;
+  const r = fakeRepo(resolve("/w/repo"), { name: "feat/x", commit: "a", type: 0 });
+  const git = fakeGit([r.repo], new Promise<void>((res) => { activate = res; }));
+  let calls = 0;
+  const branches = new gitBranch.GitBranches(() => { calls++; });
+  branches.dispose();
+  activate();
+  await new Promise((res) => setImmediate(res));
+  assert.equal(calls, 0);
+  assert.equal(r.changed.size + git.opened.size + git.closed.size, 0);
+  assert.equal(branches.branchOf(resolve("/w/repo")), undefined);
+}));
