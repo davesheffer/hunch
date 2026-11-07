@@ -1170,6 +1170,7 @@ export const uiJs = String.raw`
     'local-only': 'Asking is off: this repository uses local-only analysis. Change it with hunch provider.',
     'other-provider': 'Asking needs Claude Code, and this repository is set to use something else. Change it with hunch provider.',
     'unknown-origin': 'This page was started by a background process, so it can\'t choose an account. Run hunch ui from your terminal.',
+    'not-subscription': 'Asking needs Claude Code signed in with a subscription, so nothing is billed per token. Run claude auth login, then reload.',
   };
   function resetAsk() { const a = state.ask; a.about = null; a.question = ''; a.answer = null; a.waiting = false; a.problem = ''; a.gen++; $('ask-status').textContent = ''; }
 

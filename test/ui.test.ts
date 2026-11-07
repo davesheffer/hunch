@@ -25,7 +25,7 @@ import { uiHtml, uiJs } from "../src/ui/page.js";
 import { memoryHistory } from "../src/ui/history.js";
 import { mkdirSync, renameSync, rmSync } from "node:fs";
 import { askContext, askPrompt, askRequest, askableAssistants, defaultAskRunner, parseAnswer, type AskRunner } from "../src/ui/ask.js";
-import { DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudePrintArgs, codexExecArgs, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
+import { DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudePrintArgs, codexExecArgs, isSubscriptionAuth, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
 import { currentInitiator, withInitiator } from "../src/synthesis/initiator.js";
 
 const now = "2026-11-04T00:00:00Z";
@@ -860,7 +860,7 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
   const providers = [fake("claude-cli"), fake("codex-cli"), fake("cursor-agent"), new DeterministicProvider()];
   const root = tempDir("hunch-ui-ask-");
   try {
-    const person = defaultAskRunner(root, { providers, env: {} });
+    const person = defaultAskRunner(root, { providers, subscribed: async () => true, env: {} });
     const list = await person.assistants();
     assert.equal(list.blocked, null);
     assert.deepEqual(list.assistants.map((a) => a.name), ["claude-cli"], "Codex and Cursor stay off: neither can run with no tools");
@@ -869,18 +869,18 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
     await assert.rejects(person.ask("codex-cli", "p"), /not available/);
     await assert.rejects(person.ask("cursor-agent", "p"), /not available/);
     await assert.rejects(person.ask("deterministic", "p"), /not available/);
-    await assert.rejects(defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "codex" } }).ask("claude-cli", "p"), /not available/, "the spend itself holds an agent session to its own account");
-    await assert.rejects(defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "unknown" } }).ask("claude-cli", "p"), /not available/);
+    await assert.rejects(defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "codex" } }).ask("claude-cli", "p"), /not available/, "the spend itself holds an agent session to its own account");
+    await assert.rejects(defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "unknown" } }).ask("claude-cli", "p"), /not available/);
     assert.equal(seen.length, 1, "none of those reached a model");
 
-    const named = defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "claude-cli" } });
+    const named = defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "claude-cli" } });
     assert.deepEqual((await named.assistants()).assistants.map((a) => a.name), ["claude-cli"], "a named provider is the person's spending choice");
     await assert.rejects(named.ask("codex-cli", "p"), /not available/);
-    assert.deepEqual(await defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "codex-cli" } }).assistants(), { assistants: [], blocked: "other-provider" });
-    assert.deepEqual(await defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "cursor-agent" } }).assistants(), { assistants: [], blocked: "other-provider" });
+    assert.deepEqual(await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "codex-cli" } }).assistants(), { assistants: [], blocked: "other-provider" });
+    assert.deepEqual(await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "cursor-agent" } }).assistants(), { assistants: [], blocked: "other-provider" });
 
     seen.length = 0;
-    const offline = defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "deterministic" } });
+    const offline = defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "deterministic" } });
     assert.deepEqual(await offline.assistants(), { assistants: [], blocked: "local-only" });
     await assert.rejects(offline.ask("claude-cli", "p"), /not available/);
     mkdirSync(join(root, ".hunch"), { recursive: true });
@@ -888,9 +888,9 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
     assert.deepEqual(await person.assistants(), { assistants: [], blocked: "local-only" }, "the per-user setting counts too");
     await assert.rejects(person.ask("claude-cli", "p"), /not available/);
     assert.deepEqual(seen, [], "local-only mode never reaches a model");
-    assert.equal((await defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "local-only");
+    assert.equal((await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "local-only");
     rmSync(join(root, ".hunch", "local.json"));
-    assert.equal((await defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "unknown-origin");
+    assert.equal((await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "unknown-origin");
   } finally { cleanupDir(root); }
 });
 
@@ -900,8 +900,29 @@ test("claudeChildEnv strips every switch that would route headless Claude to met
   assert.deepEqual(claudeChildEnv({ ...env, CLAUDE_CODE_OAUTH_TOKEN: "t", PATH: "p", CLAUDE_CODE_USE_POWERSHELL_TOOL: "1" }), { CLAUDE_CODE_OAUTH_TOKEN: "t", PATH: "p", CLAUDE_CODE_USE_POWERSHELL_TOOL: "1" });
 });
 
+test("Ask needs a subscription login: anything else blocks it before the spend", async () => {
+  const signed = (over: Record<string, unknown>): string => JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", ...over });
+  assert.equal(isSubscriptionAuth(signed({})), true);
+  assert.equal(isSubscriptionAuth(signed({ authMethod: "oauth_token" })), true);
+  for (const bad of [signed({ loggedIn: false }), signed({ authMethod: "console" }), signed({ authMethod: "api_key" }), signed({ apiProvider: "bedrock" }), "{}", "not json", ""]) assert.equal(isSubscriptionAuth(bad), false, bad);
+
+  const seen: string[] = [];
+  const claude: SynthProvider = { ...new DeterministicProvider(), name: "claude-cli", available: async () => true, draftProse: async () => { seen.push("ran"); return "reply"; } };
+  const root = tempDir("hunch-ui-ask-sub-");
+  try {
+    let asked = 0;
+    const runner = defaultAskRunner(root, { providers: [claude, new DeterministicProvider()], env: {}, subscribed: async () => { asked++; return false; } });
+    assert.deepEqual(await runner.assistants(), { assistants: [], blocked: "not-subscription" });
+    await assert.rejects(runner.ask("claude-cli", "p"), /not available/);
+    assert.deepEqual(seen, [], "a Console login never reaches the model");
+    assert.equal(asked, 2, "checked at the listing and again at the spend");
+    const off = defaultAskRunner(root, { providers: [claude, new DeterministicProvider()], env: { HUNCH_SYNTH_PROVIDER: "deterministic" }, subscribed: async () => { throw new Error("must not run"); } });
+    assert.equal((await off.assistants()).blocked, "local-only", "local-only mode runs nothing, not even the check");
+  } finally { cleanupDir(root); }
+});
+
 test("noTools: Claude takes it as flags, off otherwise; a provider that can't hold it refuses before running", async () => {
-  assert.deepEqual(claudePrintArgs("haiku"), ["-p", "--output-format", "json", "--model", "haiku", "--max-turns", "1"], "synthesis is unchanged");
+  assert.deepEqual(claudePrintArgs("haiku"), ["-p", "--output-format", "json", "--model", "haiku", "--max-turns", "1", "--restricted"], "unattended synthesis reads no hooks or apiKeyHelper either, but keeps its tools off by prompt");
   assert.deepEqual(claudePrintArgs("haiku", { noTools: true }).slice(-3), ["--restricted", "--tools=", "--strict-mcp-config"]);
   assert.ok(claudePrintArgs("haiku", { noTools: true }).every((a) => a !== "" && !/\s/.test(a)), "every token survives the cmd.exe line");
   assert.deepEqual(codexExecArgs("m"), ["exec", "--json", "--skip-git-repo-check", "-m", "m", "-"], "synthesis is unchanged");

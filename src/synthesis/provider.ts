@@ -452,9 +452,10 @@ export function codexExecArgs(model?: string): string[] {
 
 /** Headless Claude Code. `--tools=` is the empty tool list in one token, so it survives the
  *  cmd.exe line on Windows; MCP servers are separate from the built-in set. --restricted skips
- *  hooks and apiKeyHelper from settings files, which a planted temp-dir settings file could set. */
+ *  hooks and apiKeyHelper from settings files on every run, also the unattended ones from a git
+ *  hook: a planted temp-dir settings file could set them, and an apiKeyHelper bills per token. */
 export function claudePrintArgs(model: string, opts?: ProseOptions): string[] {
-  return ["-p", "--output-format", "json", "--model", model, "--max-turns", "1", ...(opts?.noTools ? ["--restricted", "--tools=", "--strict-mcp-config"] : [])];
+  return ["-p", "--output-format", "json", "--model", model, "--max-turns", "1", "--restricted", ...(opts?.noTools ? ["--tools=", "--strict-mcp-config"] : [])];
 }
 
 // The timeout drives an abort delay and max_tokens caps output length; neither is
@@ -500,6 +501,27 @@ export function claudeChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const child = { ...env };
   for (const key of CLAUDE_METERED_ENV) delete child[key];
   return child;
+}
+
+/** `claude auth status --json` names a subscription login. A Console login, another API provider
+ *  or an answer this can't read isn't one, and the spend isn't allowed on a guess (con_2ce3f2a547). */
+export function isSubscriptionAuth(raw: string): boolean {
+  try {
+    const s = JSON.parse(raw) as { loggedIn?: unknown; authMethod?: unknown; apiProvider?: unknown };
+    return s.loggedIn === true && s.apiProvider === "firstParty" && (s.authMethod === "claude.ai" || s.authMethod === "oauth_token");
+  } catch {
+    return false;
+  }
+}
+
+/** Whether headless Claude Code would run on a subscription, asked under the env it would run in. */
+export async function claudeOnSubscription(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  try {
+    const { stdout } = await pexecIn("claude", ["auth", "status", "--json"], { env: claudeChildEnv(env), cwd: tmpdir(), timeout: 8000 });
+    return isSubscriptionAuth(stdout);
+  } catch {
+    return false;
+  }
 }
 
 // --------------------------------------------------------------------------

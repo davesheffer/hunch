@@ -11,7 +11,7 @@
  * tools off or isn't offered. Cursor Agent has no such mode (Hunch launches it with --trust), and
  * Codex's read-only sandbox still leaves it the shell tool, MCP servers and web search.
  */
-import { extractJsonObjects, resolveSynthesisProvider, type ProviderSelectionOptions, type ProviderStatus } from "../synthesis/provider.js";
+import { claudeOnSubscription, extractJsonObjects, resolveSynthesisProvider, type ProviderSelectionOptions, type ProviderStatus } from "../synthesis/provider.js";
 import { detectInitiator, withInitiator } from "../synthesis/initiator.js";
 import { memoryDetail, memoryItems, overlaps, type MemoryDetail, type MemorySource } from "./model.js";
 
@@ -27,8 +27,8 @@ const MAX_ANSWER_TEXT = 8000;
 
 export interface Assistant { name: string; label: string }
 /** Why nobody can be asked: local-only analysis is on, `hunch provider` names someone who can't
- *  be asked, or this UI's origin can't pick an account. */
-export type AskBlock = "local-only" | "other-provider" | "unknown-origin";
+ *  be asked, this UI's origin can't pick an account, or Claude Code isn't on a subscription. */
+export type AskBlock = "local-only" | "other-provider" | "unknown-origin" | "not-subscription";
 /** The CLIs that can run with no tools (ProseOptions.noTools). */
 const ASKABLE = new Set(["claude-cli"]);
 export interface AskRunner {
@@ -47,17 +47,20 @@ export function askableAssistants(statuses: readonly ProviderStatus[], env: Node
     .map((s) => ({ name: s.name, label: s.label }));
 }
 
-export function defaultAskRunner(root: string, opts: Pick<ProviderSelectionOptions, "env" | "providers"> = {}): AskRunner {
+export function defaultAskRunner(root: string, opts: Pick<ProviderSelectionOptions, "env" | "providers"> & { subscribed?: () => Promise<boolean> } = {}): AskRunner {
   const env = opts.env ?? process.env;
+  const subscribed = opts.subscribed ?? (() => claudeOnSubscription(env));
   const assistants: AskRunner["assistants"] = async () => {
     const { preference, statuses } = await resolveSynthesisProvider({ root, ...opts });
     if (preference === "deterministic") return { assistants: [], blocked: "local-only" };
     const askable = askableAssistants(statuses, env);
     if (!askable) return { assistants: [], blocked: "unknown-origin" };
     // A named `hunch provider` is the person's own spending choice: the pick stays within it.
-    if (preference === "auto") return { assistants: askable, blocked: null };
-    const preferred = askable.filter((a) => a.name === preference);
-    return { assistants: preferred, blocked: preferred.length ? null : "other-provider" };
+    const listed = preference === "auto" ? askable : askable.filter((a) => a.name === preference);
+    if (preference !== "auto" && !listed.length) return { assistants: [], blocked: "other-provider" };
+    // Only claude-cli is askable. `ask` comes through here too, so this holds at the spend.
+    if (listed.length && !(await subscribed())) return { assistants: [], blocked: "not-subscription" };
+    return { assistants: listed, blocked: null };
   };
   return {
     assistants,
