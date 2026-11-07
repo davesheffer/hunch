@@ -2872,7 +2872,12 @@ export function pathsAliveInRepo(paths: readonly string[], cwd: string): Set<str
       for (const p of unanswered) if (isAtOrUnder(links, p)) alive.add(p);
     }
     // A directory not on disk only matches a directory pattern through a path under it.
-    const probes = new Map(asked.filter((p) => !inSubmodule(p)).flatMap((p) => [[p, p], [`${p}/x`, p]] as const));
+    // One probe can answer for two paths: `dir/x` is also asked, and is dir's probe too.
+    const probes = new Map<string, string[]>();
+    for (const p of asked) {
+      if (inSubmodule(p)) continue;
+      for (const probe of [p, `${p}/x`]) probes.set(probe, [...(probes.get(probe) ?? []), p]);
+    }
     let ignored = "";
     try {
       // -z: otherwise git quotes a non-ASCII path in its answer and the lookup misses it.
@@ -2881,7 +2886,7 @@ export function pathsAliveInRepo(paths: readonly string[], cwd: string): Set<str
       // check-ignore exits 1 when nothing matched: an answer, not a failure.
       if ((error as { status?: number }).status !== 1) throw error;
     }
-    for (const line of ignored.split("\0")) { const path = probes.get(line); if (path) alive.add(path); }
+    for (const line of ignored.split("\0")) for (const path of probes.get(line) ?? []) alive.add(path);
     return new Set([...at].filter(([, path]) => alive.has(path)).map(([p]) => p));
   } catch {
     return null;

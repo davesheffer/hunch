@@ -324,6 +324,7 @@ test("alive: a path on another branch or gitignored is alive; gone from every br
     assert.deepEqual(pathsAliveInRepo(["../x"], join(root, "no-such-directory")), new Set(), "nothing to ask git");
     writeFileSync(join(root, ".gitignore"), "/wiki/\nlocal.json\nignored-é.json\n");
     assert.deepEqual([...(pathsAliveInRepo(["ignored-é.json", "other-é.json"], root) ?? [])], ["ignored-é.json"], "git quotes this path unless asked not to");
+    assert.deepEqual([...(pathsAliveInRepo(["wiki", "wiki/x"], root) ?? [])].sort(), ["wiki", "wiki/x"], "wiki/x is asked and is also wiki's probe: it answers for both");
     assert.deepEqual([...(pathsAliveInRepo(["feat//only-here.ts", "feat/./only-here.ts"], root) ?? [])].sort(), ["feat/./only-here.ts", "feat//only-here.ts"], "git only finds the tidy spelling");
     // check-ignore dies on a path at or under a submodule, which used to empty all of Stale.
     const head = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { env, encoding: "utf8" }).trim();
