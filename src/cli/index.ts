@@ -5457,9 +5457,13 @@ program
   .description("Retire one memory record without deleting it (decision rejected/superseded, constraint retired, finding stale). A bug can't be removed. Undo with `hunch restore`.")
   .argument("<id>", "record id (dec_*, con_*, fnd_*)")
   .option("--reason <text>", "why — recorded in the commit body, never the subject")
+  .option("--superseded-by <dec_id>", "decisions only: record the live decision that already says it replaces this one")
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
-  .action((id: string, opts: { reason?: string; json?: boolean }) => {
-    runMemoryMove("remove", id, opts, (kind, rec, _store, now) => removeRecord(kind, rec, now));
+  .action((id: string, opts: { reason?: string; supersededBy?: string; json?: boolean }) => {
+    runMemoryMove("remove", id, opts, (kind, rec, store, now, home) => removeRecord(kind, rec, now, {
+      supersededBy: opts.supersededBy,
+      successor: opts.supersededBy === undefined ? undefined : store.decisionInStore(opts.supersededBy, home === "private"),
+    }));
   });
 
 program
@@ -5467,9 +5471,10 @@ program
   .description("Undo `hunch remove`: reopen a rejected/superseded decision, a retired constraint or a stale/resolved finding.")
   .argument("<id>", "record id (dec_*, con_*, fnd_*)")
   .option("--status <status>", "decision: proposed|accepted (default: the status before remove); finding: open|accepted-risk|scheduled (default open)")
+  .option("--clear-superseded-by", "decisions only: also forget who replaced it, undoing `remove --superseded-by`")
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
-  .action((id: string, opts: { status?: string; json?: boolean }) => {
-    runMemoryMove("restore", id, opts, (kind, rec, store, now) => restoreRecord(kind, rec, { status: opts.status, decisions: store.recs("decisions") }, now));
+  .action((id: string, opts: { status?: string; clearSupersededBy?: boolean; json?: boolean }) => {
+    runMemoryMove("restore", id, opts, (kind, rec, store, now) => restoreRecord(kind, rec, { status: opts.status, decisions: store.recs("decisions"), clearSupersededBy: opts.clearSupersededBy }, now));
   });
 
 program

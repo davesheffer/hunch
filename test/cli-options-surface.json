@@ -2381,6 +2381,14 @@
       }
     ]
   },
+  "remove --superseded-by": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove --superseded-by records the replacement the newer decision claims; restore --clear-superseded-by undoes it"
+      }
+    ]
+  },
   "repair --apply": {
     "tests": [
       {
@@ -2522,6 +2530,14 @@
       {
         "file": "test/cli-flags-misc-2.test.ts",
         "title": "report --revision and --before page lesson history"
+      }
+    ]
+  },
+  "restore --clear-superseded-by": {
+    "tests": [
+      {
+        "file": "test/memory-edit.test.ts",
+        "title": "cli:remove --superseded-by records the replacement the newer decision claims; restore --clear-superseded-by undoes it"
       }
     ]
   },

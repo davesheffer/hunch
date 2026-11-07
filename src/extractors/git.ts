@@ -12,6 +12,7 @@ import { boundedExecFileSync } from "../core/boundedSpawn.js";
 import { writeFileAtomic } from "../core/io.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
+import { safeRepoScope } from "../core/paths.js";
 import { DIFF_TRUNCATED_LINE } from "./diff.js";
 import { initiatorChildEnv } from "../synthesis/initiator.js";
 
@@ -2788,6 +2789,112 @@ export function mergeRangeChanges(oldRef: string, newRef: string, cwd: string, m
 }
 
 const HEX_COMMIT_RE = /^[0-9a-f]{7,64}$/i;
+const MAX_ALIVE_SPECS = 200_000;
+/** Every submodule entry in `cat-file --batch` output for these directories, in order. Raw tree
+ *  format: `<mode> <name>\0<oid bytes>`. Throws on a header it can't read: callers fail open.
+ *  Exported for tests: the header git prints for an absent submodule commit changed across versions. */
+export function gitlinksInTrees(output: Buffer, dirs: readonly string[]): Set<string> {
+  const links = new Set<string>();
+  let at = 0;
+  for (const dir of dirs) {
+    const end = output.indexOf(0x0a, at);
+    if (end < 0) throw new Error("cat-file answered too few objects");
+    const header = output.toString("utf8", at, end);
+    at = end + 1;
+    // No body follows these. Newer git (2.56 on CI) prints `<oid> submodule` for a submodule whose
+    // commit isn't here, where 2.48 said `<name> missing`.
+    if (/ (?:missing|submodule|ambiguous)$/.test(header)) continue;
+    const parts = /^([0-9a-f]+) (\w+) (\d+)$/.exec(header);
+    if (!parts) throw new Error(`cat-file header: ${header}`);
+    const stop = at + Number(parts[3]);
+    if (parts[2] === "tree") {
+      const oidBytes = parts[1]!.length / 2;
+      for (let p = at; p < stop;) {
+        const space = output.indexOf(0x20, p), nul = space < 0 ? -1 : output.indexOf(0, space);
+        if (nul < 0 || nul >= stop) throw new Error("cat-file tree entry");
+        const name = output.toString("utf8", space + 1, nul);
+        if (output.toString("latin1", p, space) === "160000") links.add(dir ? `${dir}/${name}` : name);
+        p = nul + 1 + oidBytes;
+      }
+    }
+    at = stop + 1;
+  }
+  return links;
+}
+const isAtOrUnder = (links: readonly string[], p: string): boolean => links.some((g) => p === g || p.startsWith(`${g}/`));
+
+/** Which of these repo-relative paths a checkout of this repo could still have: on the tip
+ *  of any local or remote branch, or gitignored (so its absence here says nothing). Memory is
+ *  shared across branches, so a file missing from this checkout may just not be merged here.
+ *  Returns null when git itself could not answer: callers fail open. */
+export function pathsAliveInRepo(paths: readonly string[], cwd: string): Set<string> | null {
+  // `tip:../x` kills git's whole batch and a newline shifts every later answer, so only what
+  // can be a repo path gets asked. The rest can't be alive.
+  const at = new Map(paths.flatMap((p) => {
+    const path = safeRepoScope(p)?.replace(/\/(?:\.?\/)+/g, "/");
+    return path && !/[\r\n]/.test(path) && !/(?:^|\/)\.\.(?:\/|$)/.test(path) ? [[p, path] as const] : [];
+  }));
+  const asked = [...new Set(at.values())];
+  if (!asked.length) return new Set();
+  // A hook's exported GIT_DIR would outrank -C and answer for the wrong base.
+  const env = foreignRepoEnv(process.env);
+  const git = (args: string[], input?: string): string => execFileSync("git", ["-C", cwd, ...args], {
+    input, env, encoding: "utf8", timeout: 10_000, stdio: ["pipe", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024,
+  });
+  // Git's own directory is per checkout: a linked worktree's .git isn't even a directory.
+  const alive = new Set(asked.filter((p) => p === ".git" || p.startsWith(".git/")));
+  try {
+    const tips = [...new Set(git(["for-each-ref", "--format=%(objectname)", "refs/heads", "refs/remotes"]).split("\n").filter(Boolean))];
+    // Past this git would only run out its timeout, and the page waits on it.
+    if (tips.length * asked.length > MAX_ALIVE_SPECS) return null;
+    // `./`: stored paths are relative to the Hunch root; `tip:path` alone means the git toplevel.
+    const specs = tips.flatMap((tip) => asked.map((path) => ({ path, spec: `${tip}:./${path}` })));
+    if (specs.length) {
+      const lines = git(["cat-file", "--batch-check"], specs.map((a) => a.spec).join("\n") + "\n").split("\n");
+      specs.forEach((a, i) => { if (lines[i] !== undefined && !/\bmissing$/.test(lines[i]!.trim())) alive.add(a.path); });
+    }
+    // What sits in a submodule is that repo's to answer, and check-ignore dies on any path there.
+    const gitlinks = git(["ls-files", "--stage", "-z"]).split("\0").filter((e) => e.startsWith("160000 ")).map((e) => e.slice(e.indexOf("\t") + 1));
+    const inSubmodule = (p: string): boolean => isAtOrUnder(gitlinks, p);
+    for (const p of asked) if (inSubmodule(p)) alive.add(p);
+    // A submodule only another branch has: its commit isn't in this repo, so the batch called it
+    // missing, and a path under it can't be walked. Read the directories above each path still
+    // unanswered, on every tip, in one process: spawning per tip stalls a repo with many branches.
+    const unanswered = asked.filter((p) => !alive.has(p));
+    const above = [...new Set(unanswered.flatMap((p) => {
+      const parts = p.split("/");
+      return parts.map((_, i) => parts.slice(0, i).join("/"));
+    }))];
+    if (tips.length * above.length > MAX_ALIVE_SPECS) return null;
+    if (tips.length && above.length) {
+      const pairs = tips.flatMap((tip) => above.map((dir) => ({ dir, spec: `${tip}:./${dir}` })));
+      const output = execFileSync("git", ["-C", cwd, "cat-file", "--batch"], {
+        input: pairs.map((a) => a.spec).join("\n") + "\n", env, timeout: 10_000, stdio: ["pipe", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024,
+      });
+      const links = [...gitlinksInTrees(output, pairs.map((a) => a.dir))];
+      for (const p of unanswered) if (isAtOrUnder(links, p)) alive.add(p);
+    }
+    // A directory not on disk only matches a directory pattern through a path under it.
+    // One probe can answer for two paths: `dir/x` is also asked, and is dir's probe too.
+    const probes = new Map<string, string[]>();
+    for (const p of asked) {
+      if (inSubmodule(p)) continue;
+      for (const probe of [p, `${p}/x`]) probes.set(probe, [...(probes.get(probe) ?? []), p]);
+    }
+    let ignored = "";
+    try {
+      // -z: otherwise git quotes a non-ASCII path in its answer and the lookup misses it.
+      if (probes.size) ignored = git(["check-ignore", "--stdin", "-z"], [...probes.keys()].join("\0") + "\0");
+    } catch (error) {
+      // check-ignore exits 1 when nothing matched: an answer, not a failure.
+      if ((error as { status?: number }).status !== 1) throw error;
+    }
+    for (const line of ignored.split("\0")) for (const path of probes.get(line) ?? []) alive.add(path);
+    return new Set([...at].filter(([, path]) => alive.has(path)).map(([p]) => p));
+  } catch {
+    return null;
+  }
+}
 
 /** Which of `shas` resolve to a commit, via one `git cat-file --batch-check`.
  *  Malformed values are dropped before the stdin lines are built (positional mapping).

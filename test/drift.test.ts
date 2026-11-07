@@ -31,6 +31,19 @@ test("drift dead-ref: in-force decision referencing a missing file is flagged (e
   assert.match(dead[0]!.detail, /ghost\.ts/);
 });
 
+test("drift: a missing file is named on the finding; recordsOnly reads no docs, wiki or commits", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  store.json.put("decisions", DEC({ id: "dec_live", commit: "abcdef1234", related_files: ["src/ghost.ts"] }) as never);
+  writeFileSync(join(root, "PLAN.md"), "Status: proposed. See src/ghost.ts\n<!-- hunch:topic t dec_nope -->\n");
+  const all = computeDrift(store, root, { commitResolvable: () => false }).findings;
+  assert.equal(all.find((f) => f.kind === "dead-ref")?.path, "src/ghost.ts");
+  assert.ok(all.some((f) => f.kind === "commit-unresolvable"));
+  assert.ok(all.some((f) => f.kind === "doc-anchor-dangling"));
+  const records = computeDrift(store, root, { commitResolvable: () => false, recordsOnly: true }).findings;
+  assert.deepEqual(records.map((f) => f.kind), ["dead-ref"]);
+});
+
 test("drift dead-ref: a SUPERSEDED decision's missing file is history, not drift (skipped)", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
@@ -54,6 +67,11 @@ test("drift dead-ref: private overlay decisions can cite portable private:<path>
   t.after(() => store.close());
   store.putPrivate("decisions", DEC({ id: "dec_private_doc", related_files: ["private:docs/runbooks.md"] }) as never);
   assert.equal(computeDrift(store, root).findings.filter((f) => f.kind === "dead-ref").length, 0);
+  const finding = (id: string, file: string) => ({ id, title: id, observation: "seen", affected_files: [file], affected_symbols: [], evidence: ["fixture"], observed_at: "2026-01-01T00:00:00Z", provenance: prov(0.9) });
+  store.putPrivate("findings", finding("fnd_there", "private:docs/runbooks.md") as never);
+  store.putPrivate("findings", finding("fnd_gone", "private:docs/gone.md") as never);
+  const stale = computeDrift(store, root).findings.filter((f) => f.kind === "finding-stale").map((f) => f.id);
+  assert.deepEqual(stale, ["fnd_gone"], "a finding's private: path is looked up in the overlay too");
 });
 
 test("drift dead-ref: public decisions cannot cite private overlay paths", (t) => {
