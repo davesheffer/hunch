@@ -190,3 +190,29 @@ test("same-topic human re-record may refine the title without minting a duplicat
   assert.equal(saved.title, "Clearer wording");
   assert.equal(saved.topic, "stable-topic");
 });
+
+test("re-recording a decision with supersedes set to its own id keeps the link to what it replaced", async (t) => {
+  const { root } = decisionRepo();
+  const { client, server } = await connect(root);
+  t.after(async () => {
+    await client.close().catch(() => {});
+    await server.close().catch(() => {});
+    try { cleanupDir(root); } catch { /* temp only */ }
+  });
+  const read = (id: string) => JSON.parse(readFileSync(join(root, ".hunch", "decisions", `${id}.json`), "utf8")) as { supersedes: string | null; superseded_by: string | null; status: string; alternatives_rejected: string[] };
+  const oldId = decisionId("manual:Old way");
+  const newId = decisionId("manual:New way");
+
+  assert.equal((await record(client, { title: "Old way", topic: "way", context: "c", decision: "Old" })).isError, false);
+  const replaced = await record(client, { title: "New way", topic: "way", context: "c", decision: "New", supersedes: oldId });
+  assert.equal(replaced.isError, false, replaced.text);
+  assert.match(replaced.text, /updates .+ in place; a new title needs supersedes/, "the nudge no longer says to supersede the record with itself");
+  assert.equal(read(newId).supersedes, oldId);
+
+  // What the old nudge told an agent to do: same title, supersedes: its own id.
+  const hardened = await record(client, { title: "New way", topic: "way", context: "c", decision: "New", alternatives_rejected: ["Old: too slow"], supersedes: newId });
+  assert.equal(hardened.isError, false, hardened.text);
+  assert.equal(read(newId).supersedes, oldId, "the predecessor link survives");
+  assert.deepEqual(read(newId).alternatives_rejected, ["Old: too slow"]);
+  assert.equal(read(oldId).superseded_by, newId);
+});
