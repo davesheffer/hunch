@@ -78,14 +78,18 @@ const IMPORT_EXCEPT = /\bexcept:\s*\[([^\]]*)\]/u;
 // Keyword form `name: 1` or tuple form `{:name, 1}`; both are legal filters.
 const KEYWORD_NAME = /(?:([a-z_]\w*[?!]?)\s*:\s*\d+|\{\s*:([a-z_]\w*[?!]?)\s*,\s*\d+\s*\})/gu;
 
-/** Name filters of an `import` directive's text. `only: :functions` and other
- *  non-list forms admit every name. */
+/** Name filters of an `import` directive's text. `only: :functions` admits every
+ *  name; `only: :macros` / `only: :sigils` admit none, since a def and a
+ *  defmacro look alike here and a wrong guess would be a false edge. */
 export function parseElixirImportFilter(text: string): { only: Set<string> | null; except: Set<string> } {
   const clean = text.replace(/#[^\n]*/gu, "");
   const names = (list: string | undefined): Set<string> =>
     new Set([...(list ?? "").matchAll(KEYWORD_NAME)].map((match) => (match[1] ?? match[2])!));
+  const except = names(IMPORT_EXCEPT.exec(clean)?.[1]);
   const only = IMPORT_ONLY.exec(clean);
-  return { only: only ? names(only[1]) : null, except: names(IMPORT_EXCEPT.exec(clean)?.[1]) };
+  if (only) return { only: names(only[1]), except };
+  if (/\bonly:\s*:(?:macros|sigils)\b/u.test(clean)) return { only: new Set(), except };
+  return { only: null, except };
 }
 
 /** One lexical scope: a module or function body, or the file's top level. Each
@@ -177,7 +181,7 @@ export function analyzeElixirFile(parsed: ParsedFile): ElixirFileAnalysis {
     if (written.startsWith("__MODULE__.")) {
       // `defmodule __MODULE__.Sub` names Outer.Sub outright: no nesting prefix
       // beyond the expansion and no implicit alias. At top level `__MODULE__`
-      // is nil, so the name is unknowable.
+      // is nil (the module would be plain `Sub`); left unnamed, conservatively.
       moduleFqn.set(index, parentFqn ? `${parentFqn}${written.slice("__MODULE__".length)}` : null);
       return;
     }

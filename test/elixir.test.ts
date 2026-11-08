@@ -148,6 +148,8 @@ end
     [["App.Other", ["k", "ok?"], []]]);
   assert.deepEqual(parseElixirImportFilter("import X, only: :functions"), { only: null, except: new Set() });
   assert.deepEqual(parseElixirImportFilter("import X, except: [{:g, 1}, h?: 0]"), { only: null, except: new Set(["g", "h?"]) });
+  assert.deepEqual(parseElixirImportFilter("import X, only: :macros"), { only: new Set(), except: new Set() });
+  assert.deepEqual(parseElixirImportFilter("import X, only: :sigils"), { only: new Set(), except: new Set() });
   assert.deepEqual(analysis.remoteCalls.get(index("a")), [{ callee: "redact", module: "App.Reason" }]);
   assert.deepEqual(analysis.remoteCalls.get(index("b")), [{ callee: "redact", module: "Reason" }]);
 });
