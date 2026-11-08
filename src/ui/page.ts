@@ -1186,9 +1186,10 @@ export const uiJs = String.raw`
       if (entering || !B.map) loadBrain(); else applySelection(true);
     } else if (page === 'deliberate') {
       // Coming back from another page (Open it, Grill, the nav) keeps your place; a card
-      // settled meanwhile drops out and drawDeliberate moves on to the next one.
+      // settled meanwhile drops out and drawDeliberate moves on to the next one. On a phone
+      // a bare #/deliberate is the list, so the nav still opens the list there.
       let key = id;
-      if (entering && !key && D.key) { key = D.key; history.replaceState(null, '', D_PREFIX + enc(key)); }
+      if (entering && !key && D.key && !onPhone()) { key = D.key; history.replaceState(null, '', D_PREFIX + enc(key)); }
       // Moving on by itself keeps the last change and its Undo; the person moving on doesn't.
       if (entering || key !== D.key) D.done = null;
       D.key = key;

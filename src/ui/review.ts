@@ -373,8 +373,9 @@ export function reviewCards(src: MemorySource, edges: readonly Edge[], inputs: R
         actions = { ...NONE, remove: d.actions.removable, link: true };
       } else {
         claim = "Agents get this, but no person has signed it.";
-        // Who recorded it and how sure it is are on the record line already, in plain words.
-        evidence = [`Delivered as ${d.delivery === "block" ? "a block" : d.delivery === "warn" ? "a warning" : "a note"}`];
+        // Who recorded it is on the record line in plain words; the confidence stays here too
+        // because the Grill prompt reads this evidence and not that line.
+        evidence = [`Delivered as ${d.delivery === "block" ? "a block" : d.delivery === "warn" ? "a warning" : "a note"}`, `Confidence ${percent(d.confidence)}`];
         actions = { ...NONE, keep: keepOf(d), remove: d.actions.removable };
       }
       groups[kind].push({ key: `${kind}:${d.id}`, kind, claim, evidence, reach: walk(d.components.map((c) => c.id)), records: [record(d)], recommend: null, actions });

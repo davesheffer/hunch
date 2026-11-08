@@ -516,12 +516,12 @@ test("needs-you order: findings by severity, unconfirmed by delivery; one record
   const rule = (id: string, severity: "blocking" | "warning") => mkConstraint({ id, statement: id, rationale: `${id} because`, severity, scope: files, provenance: { ...prov(), ...agent } });
   const r = review(empty({
     decisions: [dec("dec_note", { related_files: files }), dec("dec_both", { provenance: { source: "agent_recorded", confidence: 0.3 } })],
-    constraints: [rule("con_warn", "warning"), rule("con_block", "blocking")],
+    constraints: [rule("con_a_warn", "warning"), rule("con_z_block", "blocking")],
     findings: [finding("fnd_low", "low"), finding("fnd_crit", "critical"), finding("fnd_med", "medium")],
   }));
   assert.deepEqual(cards(r, "finding").map((c) => c.key), ["finding:fnd_crit", "finding:fnd_med", "finding:fnd_low"]);
   const unconfirmed = cards(r, "unconfirmed");
-  assert.deepEqual(unconfirmed.map((c) => c.records[0]!.id).slice(0, 2), ["con_block", "con_warn"], "a block outranks a warning outranks a note");
+  assert.deepEqual(unconfirmed.map((c) => c.records[0]!.id).slice(0, 2), ["con_z_block", "con_a_warn"], "a block outranks a warning outranks a note, whatever the ids say");
   assert.deepEqual(unconfirmed.slice(2).map((c) => c.records[0]!.id).sort(), ["dec_both", "dec_note"]);
   assert.deepEqual(unconfirmed.map((c) => c.actions.keep), ["review-rule", "review-rule", "confirm", "confirm"], "a rule is reviewed, never confirmed in one click");
   assert.deepEqual(cards(r, "weak").map((c) => c.key), ["weak:dec_both"]);
