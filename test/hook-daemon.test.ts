@@ -48,8 +48,9 @@ test("first hook runs in-process and starts the daemon; the next is served with 
   const input = payload(f.root, "s1");
   const off = hook(f.root, { ...f.env, HUNCH_HOOK_DAEMON: "0" }, input);
   const first = hook(f.root, f.env, input);
-  // Windows: no per-user pipe secret yet (only a daemon creates it); POSIX: no socket yet.
-  assert.match(lines(f.log).join("\n"), /fallback (?:connect:ENOENT|secret)/);
+  // Windows: no per-user pipe secret yet (only a daemon creates it); POSIX: the fixture's
+  // fresh TMPDIR has no endpoint dir yet.
+  assert.match(lines(f.log).join("\n"), /fallback (?:connect:ENOENT|secret|dir)/);
   await until(() => daemons(f.log).length === 1);
   const second = hook(f.root, f.env, input);
   assert.ok(lines(f.log).some((l) => l.endsWith(" served")), lines(f.log).join("\n"));
