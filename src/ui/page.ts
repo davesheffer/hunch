@@ -1185,11 +1185,15 @@ export const uiJs = String.raw`
       $('brain').classList.toggle('reading', !!id);
       if (entering || !B.map) loadBrain(); else applySelection(true);
     } else if (page === 'deliberate') {
+      // Coming back from another page (Open it, Grill, the nav) keeps your place; a card
+      // settled meanwhile drops out and drawDeliberate moves on to the next one.
+      let key = id;
+      if (entering && !key && D.key) { key = D.key; history.replaceState(null, '', D_PREFIX + enc(key)); }
       // Moving on by itself keeps the last change and its Undo; the person moving on doesn't.
-      if (entering || id !== D.key) D.done = null;
-      D.key = id;
-      if (id) D.tab = id.split(':')[0];
-      $('deliberate-split').classList.toggle('reading', !!id);
+      if (entering || key !== D.key) D.done = null;
+      D.key = key;
+      if (key) D.tab = key.split(':')[0];
+      $('deliberate-split').classList.toggle('reading', !!key);
       if (D.review) drawDeliberate();
       if (entering || !D.review) loadReview(!!D.review);
     } else if (page === 'memory') {

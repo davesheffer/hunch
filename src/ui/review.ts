@@ -313,7 +313,7 @@ export function reviewCards(src: MemorySource, edges: readonly Edge[], inputs: R
       evidence: [
         ...(commit ? [`Written from a commit: ${quote(d.summary)}`] : []),
         ...(noWhy ? [why.trim() ? `The why is a change list: ${quote(why.trim())}` : "The why is empty"] : []),
-        ...(low ? [`Confidence ${percent(d.confidence)}, source ${d.source}`] : []),
+        ...(low ? [`Confidence ${percent(d.confidence)}`] : []),
       ],
     };
   };
@@ -373,7 +373,8 @@ export function reviewCards(src: MemorySource, edges: readonly Edge[], inputs: R
         actions = { ...NONE, remove: d.actions.removable, link: true };
       } else {
         claim = "Agents get this, but no person has signed it.";
-        evidence = [`Delivered as ${d.delivery === "block" ? "a block" : d.delivery === "warn" ? "a warning" : "a note"}`, `Source ${d.source}, confidence ${percent(d.confidence)}`];
+        // Who recorded it and how sure it is are on the record line already, in plain words.
+        evidence = [`Delivered as ${d.delivery === "block" ? "a block" : d.delivery === "warn" ? "a warning" : "a note"}`];
         actions = { ...NONE, keep: keepOf(d), remove: d.actions.removable };
       }
       groups[kind].push({ key: `${kind}:${d.id}`, kind, claim, evidence, reach: walk(d.components.map((c) => c.id)), records: [record(d)], recommend: null, actions });
