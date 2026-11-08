@@ -369,7 +369,8 @@ export function reviewCards(src: MemorySource, edges: readonly Edge[], inputs: R
       } else if (kind === "unlinked") {
         claim = "Linked to no file or component, so no edit ever surfaces it.";
         evidence = ["No feature, component or file routes this memory to an agent."];
-        actions = { ...NONE, keep: keepOf(d), remove: d.actions.removable, link: true };
+        // No confirm here: it would not settle an unlinked card, so the card would drop and come back.
+        actions = { ...NONE, remove: d.actions.removable, link: true };
       } else {
         claim = "Agents get this, but no person has signed it.";
         evidence = [`Delivered as ${d.delivery === "block" ? "a block" : d.delivery === "warn" ? "a warning" : "a note"}`, `Source ${d.source}, confidence ${percent(d.confidence)}`];

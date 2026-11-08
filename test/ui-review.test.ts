@@ -505,7 +505,7 @@ test("needs-you kinds: an open finding, an unlinked record and an unconfirmed de
   assert.deepEqual(cards(r, "unconfirmed").map((c) => c.key), ["unconfirmed:dec_unsigned"]);
   assert.ok(cards(r, "finding")[0]!.evidence.includes("Severity high"));
   assert.deepEqual(cards(r, "finding").map((c) => [c.actions.open, c.actions.link]), [[true, false]]);
-  assert.deepEqual(cards(r, "unlinked").map((c) => [c.actions.open, c.actions.link]), [[false, true]]);
+  assert.deepEqual(cards(r, "unlinked").map((c) => [c.actions.open, c.actions.link, c.actions.keep]), [[false, true, null]]);
   assert.deepEqual(cards(r, "unconfirmed").map((c) => [c.actions.open, c.actions.link, c.actions.keep]), [[false, false, "confirm"]]);
   for (const kind of ["conflict", "stale", "duplicate", "weak"] as const) for (const c of cards(r, kind)) assert.deepEqual([c.actions.open, c.actions.link], [false, false]);
   assert.equal(r.total, 3);

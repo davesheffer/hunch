@@ -32,7 +32,9 @@ export const deliberateJs = String.raw`
   function drawDeliberate() {
     const body = D.review; if (!body) return;
     const count = (kind) => { const g = body.groups.find((x) => x.kind === kind); return g ? dCount(g) : 0; };
-    if (!D_TABS[D.tab] || (!count(D.tab) && !D.key)) D.tab = (body.groups.find((g) => dCount(g) > 0) || { kind: 'conflict' }).kind;
+    // An empty Needs-you tab (e.g. an old #/attention link) moves to the next Needs-you tab with cards first.
+    const firstWith = (gs) => gs.find((g) => dCount(g) > 0);
+    if (!D_TABS[D.tab] || (!count(D.tab) && !D.key)) D.tab = ((D_HINT[D.tab] && firstWith(body.groups.filter((g) => D_HINT[g.kind]))) || firstWith(body.groups) || { kind: 'conflict' }).kind;
     $('dlb-tabs').replaceChildren(...Object.keys(D_TABS).map((kind) => {
       const b = button(D_TABS[kind] + ' ', ''); b.dataset.tab = kind; b.setAttribute('aria-pressed', String(kind === D.tab));
       b.append(el('span', count(kind), 'mono')); return b;
