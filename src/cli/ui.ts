@@ -3,7 +3,6 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { findRoot } from "../core/paths.js";
 import { HUNCH_VERSION } from "../core/version.js";
-import { createUiServer } from "../ui/server.js";
 
 /** Best effort: a missing opener never fails the command, the URL is printed either way. */
 function openBrowser(url: string): void {
@@ -21,9 +20,12 @@ export function registerUiCommands(program: Command): void {
     .description("Open the local web UI for this repository's memory (binds 127.0.0.1; a new access key every launch)")
     .option("--port <n>", "port to listen on (default: any free port)")
     .option("--no-open", "print the link without opening a browser")
-    .action((opts: { port?: string; open: boolean }) => {
+    .action(async (opts: { port?: string; open: boolean }) => {
       const port = opts.port === undefined ? 0 : Number(opts.port);
       if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`invalid port ${opts.port}`);
+      // Loaded here, not at the top: every agent hook runs this CLI's static import closure,
+      // and the server brings node:http with it.
+      const { createUiServer } = await import("../ui/server.js");
       const token = randomBytes(24).toString("base64url");
       // execArgv carries the tsx loader in dev, so a write runs this same CLI the same way.
       // Debugger, watch and profiler flags would hang each write or drop files in the repo.
