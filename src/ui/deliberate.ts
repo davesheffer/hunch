@@ -7,7 +7,8 @@
  */
 export const deliberateJs = String.raw`
   // ---- deliberate: what in memory deserves a person's judgment, and the move it suggests.
-  const D = { review: null, tab: '', key: '', skipped: new Set(), done: null, busy: false, gen: 0 };
+  // picked: the tab the person clicked; it stays put even once it is empty.
+  const D = { review: null, tab: '', picked: '', key: '', skipped: new Set(), done: null, busy: false, gen: 0 };
   const D_TABS = { conflict: 'Conflict', stale: 'Stale', duplicate: 'Duplicate', weak: 'Weak', finding: 'Findings', unlinked: 'Unlinked', unconfirmed: 'Unconfirmed' };
   const D_PREFIX = '#/deliberate/';
   // The kinds that came from the Needs-you page keep its order and its one-line reason.
@@ -32,9 +33,10 @@ export const deliberateJs = String.raw`
   function drawDeliberate() {
     const body = D.review; if (!body) return;
     const count = (kind) => { const g = body.groups.find((x) => x.kind === kind); return g ? dCount(g) : 0; };
-    // An empty Needs-you tab (e.g. an old #/attention link) moves to the next Needs-you tab with cards first.
+    // Arriving on an empty tab (e.g. an old #/attention link, or the last card settled) moves to the
+    // next tab with cards, a Needs-you one first. A tab the person clicked stays, and says it is empty.
     const firstWith = (gs) => gs.find((g) => dCount(g) > 0);
-    if (!D_TABS[D.tab] || (!count(D.tab) && !D.key)) D.tab = ((D_HINT[D.tab] && firstWith(body.groups.filter((g) => D_HINT[g.kind]))) || firstWith(body.groups) || { kind: 'conflict' }).kind;
+    if (!D_TABS[D.tab] || (!count(D.tab) && !D.key && D.picked !== D.tab)) D.tab = ((D_HINT[D.tab] && firstWith(body.groups.filter((g) => D_HINT[g.kind]))) || firstWith(body.groups) || { kind: 'conflict' }).kind;
     $('dlb-tabs').replaceChildren(...Object.keys(D_TABS).map((kind) => {
       const b = button(D_TABS[kind] + ' ', ''); b.dataset.tab = kind; b.setAttribute('aria-pressed', String(kind === D.tab));
       b.append(el('span', count(kind), 'mono')); return b;
@@ -47,7 +49,7 @@ export const deliberateJs = String.raw`
     }
     $('dlb-list').replaceChildren(...shown.map((c) => dRow(c)));
     const total = g ? dCount(g) : 0;
-    $('dlb-status').textContent = (body.gitFailed ? 'Git did not answer, so Stale may be missing cards. ' : '') + (!total ? '' : g.total > g.cards.length ? 'Showing the first ' + g.cards.length + ' of ' + g.total + '.' : D_HINT[g.kind] || 'Ranked by reach.');
+    $('dlb-status').textContent = (body.gitFailed ? 'Git did not answer, so Stale may be missing cards. ' : '') + (!total ? (!onPhone() ? '' : body.groups.some((x) => dCount(x) > 0) ? 'Nothing left under ' + D_TABS[D.tab] + '.' : 'Nothing to review.') : g.total > g.cards.length ? 'Showing the first ' + g.cards.length + ' of ' + g.total + '.' : D_HINT[g.kind] || 'Ranked by reach.');
     drawCard();
   }
   function dRow(c) {
@@ -215,10 +217,12 @@ export const deliberateJs = String.raw`
     if (drop && at >= 0) { g.cards.splice(at, 1); g.total = Math.max(0, g.total - 1); }
     const after = g.cards.slice(Math.max(at, 0)).find((x) => !D.skipped.has(x.key)) || shown.filter((x) => x.key !== c.key && !D.skipped.has(x.key)).pop();
     D.key = after ? after.key : '';
+    // Settling or skipping the last card moves on, even on a tab the person picked.
+    if (!after) D.picked = '';
     if (after) history.replaceState(null, '', D_PREFIX + enc(after.key));
     else history.replaceState(null, '', '#/deliberate');
     $('deliberate-split').classList.toggle('reading', !!after);
     drawDeliberate();
   }
-  $('dlb-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || D.busy) return; D.tab = b.dataset.tab; D.key = ''; D.done = null; history.replaceState(null, '', '#/deliberate'); drawDeliberate(); });
+  $('dlb-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || D.busy) return; D.tab = D.picked = b.dataset.tab; D.key = ''; D.done = null; history.replaceState(null, '', '#/deliberate'); drawDeliberate(); });
 `;

@@ -1170,7 +1170,7 @@ export const uiJs = String.raw`
     if (page === 'ask') { location.replace(m[2] ? '#/memory/' + m[2] : '#/board'); return; }
     if (page === 'connections') page = 'setup';
     // The Needs-you page is Deliberate cards now; an old link opens the page, or the memory it named.
-    if (page === 'attention') { if (!m[2]) { D.tab = 'finding'; D.key = ''; } location.replace(m[2] ? '#/memory/' + m[2] : '#/deliberate'); return; }
+    if (page === 'attention') { if (!m[2]) { D.tab = 'finding'; D.key = ''; D.picked = ''; } location.replace(m[2] ? '#/memory/' + m[2] : '#/deliberate'); return; }
     if (page === 'grill' && !m[2]) { location.replace('#/deliberate'); return; }
     const entering = page !== state.page;
     state.page = page;
@@ -1192,6 +1192,8 @@ export const uiJs = String.raw`
       if (entering && !key && D.key && !onPhone()) { key = D.key; history.replaceState(null, '', D_PREFIX + enc(key)); }
       // Moving on by itself keeps the last change and its Undo; the person moving on doesn't.
       if (entering || key !== D.key) D.done = null;
+      // Arriving is not a click on a tab: an empty tab may move on again.
+      if (entering) D.picked = '';
       D.key = key;
       if (key) D.tab = key.split(':')[0];
       $('deliberate-split').classList.toggle('reading', !!key);

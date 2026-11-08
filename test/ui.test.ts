@@ -182,7 +182,12 @@ test("page script parses; the shell uses one vocabulary and redirects the old ma
   assert.match(uiJs, /Edit links/);
   assert.ok(!uiHtml.includes('href="#/attention"') && !uiHtml.includes("Needs you <span"), "Needs you is no page of its own");
   assert.match(uiHtml, /data-nav="deliberate">Deliberate <span id="attention-count"/, "Deliberate carries the waiting count");
-  assert.ok(uiJs.includes("if (page === 'attention') { if (!m[2]) { D.tab = 'finding'; D.key = ''; } location.replace(m[2] ? '#/memory/' + m[2] : '#/deliberate'); return; }"), "#/attention goes to Deliberate, or to the memory it named");
+  assert.ok(uiJs.includes("if (page === 'attention') { if (!m[2]) { D.tab = 'finding'; D.key = ''; D.picked = ''; } location.replace(m[2] ? '#/memory/' + m[2] : '#/deliberate'); return; }"), "#/attention goes to Deliberate, or to the memory it named");
+  // A clicked tab stays even when empty; only arriving moves on from an empty tab.
+  assert.ok(uiJs.includes("D.tab = D.picked = b.dataset.tab;"), "a tab click is remembered as the person's pick");
+  assert.ok(uiJs.includes("(!count(D.tab) && !D.key && D.picked !== D.tab)"), "an empty tab the person picked is not left for another");
+  assert.ok(uiJs.includes("if (entering) D.picked = '';"), "arriving on Deliberate forgets the last pick");
+  assert.ok(uiJs.includes("if (!after) D.picked = '';"), "settling the last card on a picked tab still moves on");
   assert.match(uiJs, /Links saved\./);
 });
 
