@@ -20,6 +20,7 @@ const NATIVE_PACKAGES = [
   "tree-sitter-go",
   "tree-sitter-php",
   "tree-sitter-yaml",
+  "tree-sitter-elixir",
 ] as const;
 
 type NodeGypBuild = ((root: string) => unknown) & { path(root: string): string };
@@ -32,6 +33,7 @@ export interface NativeTreeSitterRuntime {
   go: unknown;
   php: unknown;
   yaml: unknown;
+  elixir: unknown;
 }
 
 let runtime: NativeTreeSitterRuntime | null = null;
@@ -219,7 +221,7 @@ function loadRuntime(): NativeTreeSitterRuntime {
   // underscore form once let an already-loaded source build slip past isolation
   // (issue #52).
   const preloaded = Object.keys(runtimeRequire.cache).filter((path) =>
-    /(?:tree-sitter(?:-typescript|-python|-go|-php|-yaml)?|tree_sitter(?:_[a-z]+)*_binding)\.node$/.test(path)
+    /(?:tree-sitter(?:-typescript|-python|-go|-php|-yaml|-elixir)?|tree_sitter(?:_[a-z]+)*_binding)\.node$/.test(path)
     && !new RegExp(`(?:^|[\\\\/])(?:${COPY_PREFIX}\\d+-|${CACHE_PREFIX})`).test(path));
   if (preloaded.length) {
     throw new Error(`tree-sitter native addon was loaded before Hunch could isolate it: ${preloaded.join(", ")}`);
@@ -252,7 +254,8 @@ function loadRuntime(): NativeTreeSitterRuntime {
     const go = runtimeRequire("tree-sitter-go") as unknown;
     const php = runtimeRequire("tree-sitter-php") as { php: unknown };
     const yaml = runtimeRequire("tree-sitter-yaml") as unknown;
-    runtime = { Parser, typescript: languages.typescript, tsx: languages.tsx, python, go, php: php.php, yaml };
+    const elixir = runtimeRequire("tree-sitter-elixir") as unknown;
+    runtime = { Parser, typescript: languages.typescript, tsx: languages.tsx, python, go, php: php.php, yaml, elixir };
   } finally {
     for (const [key, value] of previous) {
       if (value === undefined) delete process.env[key];

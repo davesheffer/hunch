@@ -987,16 +987,16 @@ export interface DomainProfile {
 
 export const DEFAULT_PROFILES: Record<string, DomainProfile> = {
   backend: {
-    paths: /(^|\/)(src|lib|server|api|core|store|services?)\/|\.(ts|mts|cts|js|mjs|cjs|py|go|rs|java|rb|php)$/i,
-    verify: /vitest|jest|pytest|go test|cargo test|tsx --test|npm (run )?test|pnpm (run )?test|tsc|typecheck/i,
+    paths: /(^|\/)(src|lib|server|api|core|store|services?)\/|\.(ts|mts|cts|js|mjs|cjs|py|go|rs|java|rb|php|ex|exs)$/i,
+    verify: /vitest|jest|pytest|go test|cargo test|mix test|tsx --test|npm (run )?test|pnpm (run )?test|tsc|typecheck/i,
   },
   frontend: {
     paths: /\.(tsx|jsx|css|scss|html|vue|svelte)$|(^|\/)(components|pages|site|app|ui)\//i,
     verify: /vite|next (build|dev)|npm run (build|dev)|pnpm (run )?(build|dev)|playwright|storybook|tsc/i,
   },
   tests: {
-    paths: /(^|\/)(test|tests|__tests__|e2e|spec)\/|\.(test|spec)\./i,
-    verify: /vitest|jest|pytest|tsx --test|npm (run )?test|pnpm (run )?test|playwright/i,
+    paths: /(^|\/)(test|tests|__tests__|e2e|spec)\/|\.(test|spec)\.|_test\.exs$/i,
+    verify: /vitest|jest|pytest|mix test|tsx --test|npm (run )?test|pnpm (run )?test|playwright/i,
   },
   infra: {
     paths: /Dockerfile|docker-compose|\.tf$|\.tfvars$|(^|\/)(\.github|k8s|helm|terraform|infra|deploy)\/|\.ya?ml$/i,

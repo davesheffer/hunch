@@ -1,6 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pathMatchesGlob } from "../src/core/glob.js";
+import { matchSymbolsTiered, pathMatchesGlob } from "../src/core/glob.js";
+
+test("qualified-name tier: Class.method resolves; file names and variable fields do not", () => {
+  const symbols = [
+    { id: "s1", file: "app/models.py", name: "User", kind: "class" },
+    { id: "s2", file: "app/models.py", name: "save", kind: "method" },
+    { id: "s3", file: "src/config.ts", name: "config", kind: "variable" },
+    { id: "s4", file: "src/config.ts", name: "schema", kind: "function" },
+    { id: "s5", file: "build/tsconfig.ts", name: "tsconfig", kind: "variable" },
+    { id: "s6", file: "build/tsconfig.ts", name: "json", kind: "function" },
+  ];
+  assert.deepEqual(matchSymbolsTiered("User.save", symbols, false).map((s) => s.id), ["s2"]);
+  // Not a class/module qualifier: the qualified tier stays out of the way.
+  assert.deepEqual(matchSymbolsTiered("config.schema", symbols, false), []);
+  assert.deepEqual(matchSymbolsTiered("tsconfig.json", symbols, false), []);
+  // A real file target never reaches the tier.
+  assert.deepEqual(matchSymbolsTiered("User.save", symbols, true), []);
+});
 
 test("** matches across directories", () => {
   assert.ok(pathMatchesGlob("src/auth/session.ts", "src/auth/**"));

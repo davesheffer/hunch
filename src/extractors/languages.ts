@@ -6,6 +6,7 @@
  */
 import { basename } from "node:path";
 import { loadNativeTreeSitter } from "./nativeTreeSitter.js";
+import type { SyntaxNode } from "tree-sitter";
 import type { Edge } from "../core/types.js";
 
 export type ParsedSymbolKind = "function" | "method" | "class" | "interface" | "trait" | "enum" | "type" | "variable" | "file";
@@ -68,6 +69,25 @@ export interface LanguageSpec {
    *  every captured value from the original source at the tree's unchanged
    *  offsets. Keep replacements syntax-equivalent outside the grammar defect. */
   parseErrorRecovery?: (source: string) => string;
+  /** Extra test on a defNodeTypes node before a name capture attaches to it. For
+   *  grammars where every construct shares one node type (Elixir: everything is a
+   *  `call`), the nearest `call` above a def's name is the HEAD call `run(x)`,
+   *  not the `def` itself; this predicate lets the climb skip past it. */
+  isDefNode?(node: SyntaxNode): boolean;
+  /** When true, a qualified member call (`Mod.fun()`) never enters the plain
+   *  `calls` list: it lands only in `builtinMemberCalls` with its qualifier, for
+   *  the language's own module resolver (elixir.ts). For a language whose member
+   *  calls are module-qualified, a name-only fallback would link `Enum.map` to a
+   *  same-file `map`. */
+  memberCallsViaBindingsOnly?: boolean;
+  /** Merge CONSECUTIVE same-name, same-kind symbols into one (Elixir function
+   *  clauses: `def f(0)` and `def f(n)` are one function). Without it each clause
+   *  becomes its own symbol and every by-name resolution sees an ambiguity. */
+  mergeAdjacentClauses?: boolean;
+  /** True for a captured call site (the `call.id` / `call.member` node) that is
+   *  not a runtime call: Elixir typespecs and callbacks (`@spec f(t()) :: t()`)
+   *  parse as calls but name types and signatures, never functions to invoke. */
+  isInertCall?(node: SyntaxNode): boolean;
   /** Patterns whose presence anywhere in a file's text means the file is a
    *  template that renders into this language later (Go/Jinja/Helm delimiters in
    *  YAML). The real parse still runs, but the resulting error nodes must not make
@@ -441,7 +461,97 @@ const YAML: LanguageSpec = {
   alwaysTemplatedExtensions: [".tpl"],
 };
 
-export const LANGUAGES: LanguageSpec[] = [TYPESCRIPT, TSX, PYTHON, GO, PHP, YAML];
+/** Elixir: every construct is a `call` node, so definitions are recognised by the
+ *  target identifier's text (`defmodule`, `def`, ...) through #eq?/#match?
+ *  predicates. Directives keep their whole text; elixir.ts parses aliases,
+ *  multi-alias braces and `as:`, and the indexer resolves modules. Member calls
+ *  (`Mod.fun()`) resolve only through their module qualifier. */
+const ELIXIR_DEF_KEYWORDS = new Set([
+  "defmodule", "defprotocol", "defimpl",
+  "def", "defp", "defmacro", "defmacrop", "defguard", "defguardp", "defdelegate",
+]);
+
+const ELIXIR_QUERY = `
+  (call target: (identifier) @_mod (arguments . (alias) @module.name) (#eq? @_mod "defmodule")) @module.def
+  (call target: (identifier) @_proto (arguments . (alias) @proto.name) (#eq? @_proto "defprotocol")) @proto.def
+  (call target: (identifier) @_impl (arguments . (alias) @impl.name) (#eq? @_impl "defimpl")) @impl.def
+  (call
+     target: (identifier) @_def
+     (arguments . [
+       (identifier) @fn.name
+       (call target: (identifier) @fn.name)
+       (binary_operator left: (identifier) @fn.name operator: "when")
+       (binary_operator left: (call target: (identifier) @fn.name) operator: "when")
+     ])
+     (#match? @_def "^(def|defp|defmacro|defmacrop|defguard|defguardp|defdelegate)$")) @fn.def
+
+  ;; Whole directive text: elixir.ts parses \`alias A.{B, C}\`, \`as:\` and __MODULE__.
+  (call target: (identifier) @_dir (#match? @_dir "^(alias|import|require|use)$")) @import.src
+  (call target: (identifier) @_ra (#eq? @_ra "alias")) @relation.alias
+  (call target: (identifier) @_ri (#eq? @_ri "import")) @relation.import
+  (call target: (identifier) @_rr (#eq? @_rr "require")) @relation.require
+  (call target: (identifier) @_ru (#eq? @_ru "use")) @relation.use
+  (struct (alias) @relation.struct)
+  (unary_operator
+     operand: (call target: (identifier) @_attr (arguments . (alias) @relation.behaviour))
+     (#eq? @_attr "behaviour"))
+
+  (call target: (identifier) @call.id)
+  (call target: (dot left: (alias) right: (identifier) @call.member))
+  ;; Only a \`__MODULE__\` qualifier expands (elixir.ts); variable field access stays inert.
+  (call target: (dot left: (identifier) right: (identifier) @call.member))
+`;
+
+/** Local-call names never resolved to a repo symbol: definition and directive
+ *  macros, special forms and module-attribute names (`@spec` parses as a call
+ *  to `spec`). Kernel and ExUnit names (`inspect`, `describe`) are NOT listed:
+ *  Elixir local calls resolve only inside the caller's module and its
+ *  `import`s, so a same-named repo function there really is the callee. */
+const ELIXIR_BUILTIN_FUNCTIONS = new Set([
+  ...ELIXIR_DEF_KEYWORDS,
+  "alias", "import", "require", "use", "defstruct", "defexception", "defoverridable",
+  "case", "cond", "with", "for", "try", "receive", "quote", "unquote",
+  "unquote_splicing", "super", "fn",
+  "doc", "moduledoc", "typedoc", "spec", "type", "typep", "opaque", "callback",
+  "macrocallback", "impl", "behaviour", "derive", "enforce_keys", "dialyzer", "compile",
+]);
+
+/** A call inside a module attribute (`@spec`, `@callback`, `@type`, `@x expr`).
+ *  Typespecs name signatures and types, not callees; the rarer compile-time
+ *  `@x compute()` call is deliberately missed rather than mixed in with them. */
+function insideElixirModuleAttribute(node: SyntaxNode): boolean {
+  for (let cur = node.parent; cur; cur = cur.parent) {
+    if (cur.type === "unary_operator" && cur.childForFieldName("operator")?.type === "@") return true;
+  }
+  return false;
+}
+
+const ELIXIR: LanguageSpec = {
+  id: "elixir",
+  extensions: [".ex", ".exs"],
+  grammarKey: "elixir",
+  loadGrammar: () => loadNativeTreeSitter().elixir,
+  query: ELIXIR_QUERY,
+  defNodeTypes: new Set(["call"]),
+  isDefNode: (node) => ELIXIR_DEF_KEYWORDS.has(node.childForFieldName("target")?.text ?? ""),
+  defKindOf: { "module.def": "class", "proto.def": "interface", "impl.def": "class", "fn.def": "function" },
+  nameToDef: { "module.name": "module.def", "proto.name": "proto.def", "impl.name": "impl.def", "fn.name": "fn.def" },
+  relationKindOf: {
+    "relation.alias": { edgeType: "references", label: "alias" },
+    "relation.import": { edgeType: "references", label: "import" },
+    "relation.require": { edgeType: "references", label: "require" },
+    "relation.use": { edgeType: "references", label: "use" },
+    "relation.struct": { edgeType: "references", label: "struct" },
+    "relation.behaviour": { edgeType: "implements", label: "behaviour" },
+  },
+  builtinMethods: new Set(),
+  builtinFunctions: ELIXIR_BUILTIN_FUNCTIONS,
+  memberCallsViaBindingsOnly: true,
+  mergeAdjacentClauses: true,
+  isInertCall: insideElixirModuleAttribute,
+};
+
+export const LANGUAGES: LanguageSpec[] = [TYPESCRIPT, TSX, PYTHON, GO, PHP, YAML, ELIXIR];
 
 /** Every registered extension, de-duplicated, in registry order. */
 export const CODE_EXTENSIONS: string[] = [...new Set(LANGUAGES.flatMap((l) => l.extensions))];
