@@ -325,6 +325,18 @@ end
   "lib/app/helpers.ex": "defmodule App.Helpers do\n  def h(x), do: x\n  def k(x), do: x\nend\n",
   "lib/app/except.ex": "defmodule App.Except do\n  import App.Helpers, except: [h: 1]\n  def go, do: h(1)\nend\n",
   "lib/app/only.ex": "defmodule App.Only do\n  import App.Helpers, only: [h: 1]\n  def go, do: {h(1), k(2)}\nend\n",
+  "lib/app/outer.ex": `defmodule App.Outer do
+  def x, do: 1
+  defmodule __MODULE__.Sub do
+    def y, do: 2
+  end
+end
+`,
+  "lib/app/outer_caller.ex": `defmodule App.OuterCaller do
+  def go, do: {App.Outer.x(), App.Outer.Sub.y()}
+  def wrong, do: App.Outer.y()
+end
+`,
 };
 
 test("Elixir scoping: nested clauses, typespecs, per-module aliases and import filters", () => {
@@ -374,6 +386,11 @@ test("Elixir scoping: nested clauses, typespecs, per-module aliases and import f
     assert.ok(!calls(sym("lib/app/except.ex", "def go"), h), "except: [h: 1] hides h");
     assert.ok(calls(sym("lib/app/only.ex", "def go"), h), "only: [h: 1] admits h");
     assert.ok(!calls(sym("lib/app/only.ex", "def go"), k), "only: [h: 1] hides k");
+    // `defmodule __MODULE__.Sub` is App.Outer.Sub; its functions are not App.Outer's.
+    const x = sym("lib/app/outer.ex", "def x"), y = sym("lib/app/outer.ex", "def y");
+    assert.ok(calls(sym("lib/app/outer_caller.ex", "def go"), x), "App.Outer.x()");
+    assert.ok(calls(sym("lib/app/outer_caller.ex", "def go"), y), "App.Outer.Sub.y()");
+    assert.ok(!calls(sym("lib/app/outer_caller.ex", "def wrong"), y), "App.Outer.y() does not exist");
   } finally {
     store.close();
     cleanupDir(root);

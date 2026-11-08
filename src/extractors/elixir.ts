@@ -174,6 +174,13 @@ export function analyzeElixirFile(parsed: ParsedFile): ElixirFileAnalysis {
       return;
     }
     const written = stripElixirPrefix(symbol.name);
+    if (written.startsWith("__MODULE__.")) {
+      // `defmodule __MODULE__.Sub` names Outer.Sub outright: no nesting prefix
+      // beyond the expansion and no implicit alias. At top level `__MODULE__`
+      // is nil, so the name is unknowable.
+      moduleFqn.set(index, parentFqn ? `${parentFqn}${written.slice("__MODULE__".length)}` : null);
+      return;
+    }
     moduleFqn.set(index, parentFqn ? `${parentFqn}.${written}` : written);
     // `defmodule Outer do defmodule Inner` aliases Inner -> Outer.Inner (first
     // segment) in Outer's scope, from the nested module onward.

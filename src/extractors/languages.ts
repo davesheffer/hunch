@@ -473,6 +473,11 @@ const ELIXIR_DEF_KEYWORDS = new Set([
 
 const ELIXIR_QUERY = `
   (call target: (identifier) @_mod (arguments . (alias) @module.name) (#eq? @_mod "defmodule")) @module.def
+  ;; \`defmodule __MODULE__.Sub\`: elixir.ts expands it against the enclosing module.
+  (call
+     target: (identifier) @_modx
+     (arguments . (dot left: (identifier) @_self right: (alias)) @module.name)
+     (#eq? @_modx "defmodule") (#eq? @_self "__MODULE__")) @module.def
   (call target: (identifier) @_proto (arguments . (alias) @proto.name) (#eq? @_proto "defprotocol")) @proto.def
   (call target: (identifier) @_impl (arguments . (alias) @impl.name) (#eq? @_impl "defimpl")) @impl.def
   (call
