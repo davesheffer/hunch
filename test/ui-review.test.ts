@@ -34,6 +34,8 @@ function review(src: MemorySource, drift: DriftFinding[] = [], alive: (paths: re
 }
 const cards = (r: Review, kind: ReviewKind): ReviewCard[] => r.groups.find((g) => g.kind === kind)!.cards;
 const files = ["src/a.ts"];
+// The four judgment kinds; the Needs-you kinds list a record again on purpose.
+const judged = (r: Review) => r.groups.filter((g) => ["conflict", "stale", "duplicate", "weak"].includes(g.kind));
 
 test("title: a commit prefix and a PR number say nothing about the choice", () => {
   assert.equal(normalizeTitle("fix(mcp): Compare as JSON (#460)"), "compare as json");
@@ -124,7 +126,7 @@ test("duplicate: greedy, so a cluster of three shows one pair and the third wait
   const [card, ...rest] = cards(r, "duplicate");
   assert.deepEqual(card!.records.map((m) => m.id), ["dec_a", "dec_b"]);
   assert.equal(rest.length, 0);
-  const seen = r.groups.flatMap((g) => g.cards.flatMap((c) => c.records.map((m) => m.id)));
+  const seen = judged(r).flatMap((g) => g.cards.flatMap((c) => c.records.map((m) => m.id)));
   assert.equal(new Set(seen).size, seen.length, "each record appears in one card");
 });
 
@@ -137,7 +139,7 @@ test("conflict: two live decisions on a topic, kept apart from duplicates and we
   assert.match(card!.claim, /2 live decisions answer "auth"/);
   assert.equal(card!.recommend, null, "which answer is right is the person's call");
   assert.equal(card!.actions.merge!.survivor, "dec_a");
-  assert.equal(r.total, 1);
+  assert.equal(judged(r).reduce((n, g) => n + g.total, 0), 1);
 });
 
 const stillInForce = (id: string, target: string): DriftFinding => ({ kind: "supersede", id, detail: `supersedes "${target}", but it is still in force` });
@@ -295,7 +297,7 @@ test("limit: a group's total still counts what the answer left out", () => {
   const weak = r.groups.find((g) => g.kind === "weak")!;
   assert.equal(weak.total, 3);
   assert.equal(weak.cards.length, 2);
-  assert.equal(r.total, 3);
+  assert.equal(judged(r).reduce((n, g) => n + g.total, 0), 3);
 });
 
 test("alive: a path on another branch or gitignored is alive; gone from every branch isn't", () => {
@@ -487,4 +489,24 @@ test("alive: a submodule's absent commit reads as no body, as newer git prints i
   ]);
   assert.deepEqual([...gitlinksInTrees(output, ["vendor/sub", "vendor/sub/deep", "vendor"])], ["vendor/sub"]);
   assert.throws(() => gitlinksInTrees(Buffer.from(`${oid} blob\n`), ["x"]), "a header it can't read still fails open at the caller");
+});
+
+test("needs-you kinds: an open finding, an unlinked record and an unconfirmed decision each get one card", () => {
+  const r = review(empty({
+    decisions: [
+      dec("dec_loose", { title: "Loose choice", provenance: human }),
+      dec("dec_unsigned", { title: "Unsigned choice", related_files: files }),
+    ],
+    findings: [FindingSchema.parse({ id: "fnd_open", title: "Seen", observation: "It breaks", severity: "high", affected_files: files, observed_at: now, provenance: prov() })],
+  }));
+  assert.deepEqual(r.groups.map((g) => g.kind), ["conflict", "stale", "duplicate", "weak", "finding", "unlinked", "unconfirmed"]);
+  assert.deepEqual(cards(r, "finding").map((c) => c.key), ["finding:fnd_open"]);
+  assert.deepEqual(cards(r, "unlinked").map((c) => c.key), ["unlinked:dec_loose"]);
+  assert.deepEqual(cards(r, "unconfirmed").map((c) => c.key), ["unconfirmed:dec_unsigned"]);
+  assert.ok(cards(r, "finding")[0]!.evidence.includes("Severity high"));
+  assert.deepEqual(cards(r, "finding").map((c) => [c.actions.open, c.actions.link]), [[true, false]]);
+  assert.deepEqual(cards(r, "unlinked").map((c) => [c.actions.open, c.actions.link, c.actions.keep]), [[false, true, null]]);
+  assert.deepEqual(cards(r, "unconfirmed").map((c) => [c.actions.open, c.actions.link, c.actions.keep]), [[false, false, "confirm"]]);
+  for (const kind of ["conflict", "stale", "duplicate", "weak"] as const) for (const c of cards(r, kind)) assert.deepEqual([c.actions.open, c.actions.link], [false, false]);
+  assert.equal(r.total, 3);
 });

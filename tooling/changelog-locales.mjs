@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "בית זיכרון אחד לכל מאגר, זיכרון שמקושר לקוד, ו-hooks מהירים יותר",
       "תיקונים שמבטלים את הכלל שהם הופכים, וכשלים ש-Hunch זוכר",
       "כללים מהתיעוד שלכם, ו-hooks מהירים יותר",
       "פקודות אימות שעובדות בכל מעטפת",
@@ -103,6 +104,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Один дом памяти на репозиторий, память, связанная с кодом, и более быстрые хуки",
       "Исправления, которые отменяют прежнее правило, и сбои, которые Hunch помнит",
       "Правила из вашей документации и более быстрые хуки",
       "Подсказки проверки, которые работают в любой оболочке",
@@ -198,6 +200,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "موطن ذاكرة واحد لكل مستودع، وذاكرة مرتبطة بالشيفرة، وخطافات أسرع",
       "تصحيحات تُلغي القاعدة التي تعكسها، وإخفاقات يتذكرها Hunch",
       "قواعد من وثائقكم، وخطافات أسرع",
       "أوامر تحقق تعمل في كل صدفة أوامر",
@@ -293,6 +296,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Un solo hogar de memoria por repositorio, memoria ligada al código y hooks más rápidos",
       "Correcciones que retiran la regla que revierten y fallos que Hunch recuerda",
       "Reglas desde tu documentación y hooks más rápidos",
       "Comandos de verificación que funcionan en cualquier shell",

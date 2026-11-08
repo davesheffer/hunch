@@ -11,9 +11,9 @@ import { fileLink } from "../core/memoryEdit.js";
 import { isLive, topicCollisions } from "../core/topics.js";
 import type { Decision, Edge } from "../core/types.js";
 import { MAX_ARGV, MAX_LIST } from "./actions.js";
-import { globBase, memoryDetail, memoryItems, overlaps, type ComponentRef, type MemoryDetail, type MemoryItem, type MemoryKind, type MemorySource } from "./model.js";
+import { globBase, memoryDetail, memoryItems, needsAttention, overlaps, type ComponentRef, type MemoryDetail, type MemoryItem, type MemoryKind, type MemorySource } from "./model.js";
 
-export const REVIEW_KINDS = ["conflict", "stale", "duplicate", "weak"] as const;
+export const REVIEW_KINDS = ["conflict", "stale", "duplicate", "weak", "finding", "unlinked", "unconfirmed"] as const;
 export type ReviewKind = (typeof REVIEW_KINDS)[number];
 
 export interface ReviewRecord {
@@ -60,6 +60,10 @@ export interface ReviewActions {
   swap: MergePlan | null;
   /** Paths `link --remove-file` can drop. */
   dropLinks: string[];
+  /** Unlinked: the memory's links form is the move. */
+  link: boolean;
+  /** Finding: open it to triage. */
+  open: boolean;
 }
 
 export interface ReviewCard {
@@ -94,7 +98,7 @@ export interface ReviewInputs {
 
 const CLIP = 600;
 const LOW_CONFIDENCE = 0.5;
-const NONE: ReviewActions = { keep: null, remove: false, fixWording: false, merge: null, swap: null, dropLinks: [] };
+const NONE: ReviewActions = { keep: null, remove: false, fixWording: false, merge: null, swap: null, dropLinks: [], link: false, open: false };
 
 const clip = (s: string): string => (s.length > CLIP ? `${s.slice(0, CLIP)}…` : s);
 const quote = (s: string): string => `"${s.length > 120 ? `${s.slice(0, 120)}…` : s}"`;
@@ -260,7 +264,7 @@ export function reviewCards(src: MemorySource, edges: readonly Edge[], inputs: R
     for (const d of list) used.add(d.id);
     return { key: `${kind}:${list.map((d) => d.id).join("+")}`, kind, claim, evidence, reach: walk(list.flatMap((d) => d.components.map((c) => c.id))), records: list.map(record), recommend, actions };
   };
-  const groups: Record<ReviewKind, ReviewCard[]> = { conflict: [], stale: [], duplicate: [], weak: [] };
+  const groups: Record<ReviewKind, ReviewCard[]> = { conflict: [], stale: [], duplicate: [], weak: [], finding: [], unlinked: [], unconfirmed: [] };
 
   // ---- Conflict: two live decisions answer one question, or a "replaced" one is still live.
   for (const [topic, list] of topicCollisions(src.decisions)) {
@@ -348,9 +352,38 @@ export function reviewCards(src: MemorySource, edges: readonly Edge[], inputs: R
     groups.weak.push(card("weak", [d], claim, signals.evidence, recommend, { ...NONE, keep: keepOf(d), remove: d.actions.removable, fixWording: fixable }));
   }
 
+  // ---- What the Needs-you page used to list: same membership and order, one card per record,
+  // and no dedup against the kinds above (a record can be weak and unlinked at once).
+  const findings = new Map(src.findings.map((f) => [f.id, f]));
+  for (const g of needsAttention(src, items).groups) {
+    const kind = g.key === "open-findings" ? "finding" : g.key === "not-connected" ? "unlinked" : "unconfirmed";
+    for (const m of g.items) {
+      const d = details.get(m.id);
+      if (!d) continue;
+      let claim: string, evidence: string[], actions: ReviewActions;
+      if (kind === "finding") {
+        const f = findings.get(d.id);
+        claim = `An open finding nobody has settled: ${quote(d.title)}`;
+        evidence = [`Severity ${f?.severity ?? "unknown"}`, ...(f?.observation.trim() ? [`Seen: ${quote(f.observation.trim())}`] : [])];
+        actions = { ...NONE, remove: d.actions.removable, open: true };
+      } else if (kind === "unlinked") {
+        claim = "Linked to no file or component, so no edit ever surfaces it.";
+        evidence = ["No feature, component or file routes this memory to an agent."];
+        // No confirm here: it would not settle an unlinked card, so the card would drop and come back.
+        actions = { ...NONE, remove: d.actions.removable, link: true };
+      } else {
+        claim = "Agents get this, but no person has signed it.";
+        evidence = [`Delivered as ${d.delivery === "block" ? "a block" : d.delivery === "warn" ? "a warning" : "a note"}`, `Source ${d.source}, confidence ${percent(d.confidence)}`];
+        actions = { ...NONE, keep: keepOf(d), remove: d.actions.removable };
+      }
+      groups[kind].push({ key: `${kind}:${d.id}`, kind, claim, evidence, reach: walk(d.components.map((c) => c.id)), records: [record(d)], recommend: null, actions });
+    }
+  }
+
   const limit = inputs.limit ?? Number.POSITIVE_INFINITY;
   const ranked = REVIEW_KINDS.map((kind): ReviewGroup => {
-    const cards = groups[kind].sort((a, b) => b.reach - a.reach || a.key.localeCompare(b.key));
+    // The three Needs-you kinds keep that page's order (severity, delivery) rather than reach.
+    const cards = kind === "finding" || kind === "unlinked" || kind === "unconfirmed" ? groups[kind] : groups[kind].sort((a, b) => b.reach - a.reach || a.key.localeCompare(b.key));
     return { kind, total: cards.length, cards: cards.slice(0, limit) };
   });
   return { total: ranked.reduce((n, g) => n + g.total, 0), groups: ranked };

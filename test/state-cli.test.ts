@@ -79,7 +79,9 @@ test('state CLI refuses unsupported capabilities and redirects, times out, and b
     const redirected = await invoke(['capabilities'], '', env);
     assert.equal(redirected.code, 1); assert.equal(paths.length, 1); assert.ok(!paths.includes('/redirected'));
     paths.length = 0; mode = 'timeout';
-    const timeout = await invoke(['--timeout', '50', 'capabilities'], '', env);
+    // The server never answers; the budget only has to outlast request delivery on a loaded runner
+    // (at 50 ms the client could abort before the server saw the request, so paths stayed empty).
+    const timeout = await invoke(['--timeout', '1000', 'capabilities'], '', env);
     assert.equal(timeout.code, 1); assert.equal(JSON.parse(timeout.stderr).title, 'client-error');
     assert.equal(paths.length, 1);
     paths.length = 0;

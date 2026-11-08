@@ -164,21 +164,34 @@ export function recordServed(root: string, entries: readonly ServedEntry[]): voi
       const insert = db.prepare(
         "INSERT INTO served (at, session, event, kind, record_id, target, rank, delivery_reason, provenance_status, token_cost, delivery_profile, ranking_policy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
-      for (const entry of entries) {
-        insert.run(
-          at,
-          entry.session_id ?? null,
-          entry.event,
-          entry.kind,
-          entry.record_id,
-          entry.target,
-          entry.rank ?? null,
-          entry.delivery_reason ?? null,
-          entry.provenance_status ?? null,
-          entry.token_cost ?? null,
-          entry.delivery_profile ?? null,
-          entry.ranking_policy ?? null,
-        );
+      // One commit for the whole delivery: in rollback-journal mode every
+      // autocommitted INSERT creates, syncs and deletes the journal on its own,
+      // so a grounded edit paid one fsync per delivered record. A failure rolls
+      // the whole batch back (all-or-nothing; per-row autocommit used to keep the
+      // rows before the failure). Either way the delivery itself already happened.
+      db.exec("BEGIN IMMEDIATE");
+      let committed = false;
+      try {
+        for (const entry of entries) {
+          insert.run(
+            at,
+            entry.session_id ?? null,
+            entry.event,
+            entry.kind,
+            entry.record_id,
+            entry.target,
+            entry.rank ?? null,
+            entry.delivery_reason ?? null,
+            entry.provenance_status ?? null,
+            entry.token_cost ?? null,
+            entry.delivery_profile ?? null,
+            entry.ranking_policy ?? null,
+          );
+        }
+        db.exec("COMMIT");
+        committed = true;
+      } finally {
+        if (!committed) try { db.exec("ROLLBACK"); } catch { /* no open transaction */ }
       }
     } finally {
       db.close();
