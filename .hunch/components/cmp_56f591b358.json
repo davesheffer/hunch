@@ -1,0 +1,21 @@
+{
+  "id": "cmp_56f591b358",
+  "kind": "module",
+  "name": "Ui",
+  "responsibility": "",
+  "paths": [
+    "src/ui/**"
+  ],
+  "status": "active",
+  "owners": [],
+  "fragility": 0,
+  "provenance": {
+    "source": "inferred",
+    "confidence": 0.5,
+    "evidence": [
+      "src/ui"
+    ]
+  },
+  "created_at": "2026-11-04T07:28:40.639Z",
+  "updated_at": "2026-11-04T07:28:40.639Z"
+}

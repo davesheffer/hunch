@@ -180,6 +180,11 @@ export interface FailureInput {
   suspects: string[];
 }
 
+export interface ProseOptions {
+  /** The prompt carries text the person didn't write: run with no tools, or refuse to run. */
+  noTools?: boolean;
+}
+
 export interface SynthProvider {
   readonly name: string;
   available(): Promise<boolean>;
@@ -192,7 +197,7 @@ export interface SynthProvider {
   /** Optional free-form grounded prose (the wiki's Overview section). LLM-backed
    *  providers implement it through their normal guarded transport, so callers
    *  must feature-detect and degrade to a deterministic template when absent. */
-  draftProse?(prompt: string): Promise<string>;
+  draftProse?(prompt: string, opts?: ProseOptions): Promise<string>;
   /** Optional harness judgment of an auto-drafted decision's relevance, for
    *  `hunch auto-review`. Only LLM-backed providers implement it, so callers
    *  feature-detect. */
@@ -343,7 +348,9 @@ type PromptOutput = "json" | "text";
 abstract class PromptSynthProvider implements SynthProvider {
   abstract readonly name: string;
   abstract available(): Promise<boolean>;
-  protected abstract run(prompt: string, output?: PromptOutput): Promise<string>;
+  protected abstract run(prompt: string, output?: PromptOutput, opts?: ProseOptions): Promise<string>;
+  /** Whether `run` honors `noTools`. Off unless a provider has a real way to hold it. */
+  protected readonly honorsNoTools: boolean = false;
 
   /** Run a CLI with the prompt on stdin, stripping API-key env vars so the tool
    *  falls through to its SUBSCRIPTION credentials. Shared by codex/cursor. */
@@ -388,9 +395,10 @@ abstract class PromptSynthProvider implements SynthProvider {
   /** Grounded prose for the wiki. Uses text mode rather than the structured JSON
    *  mode required by the record mappers. Throws on empty output so the caller
    *  falls back to its deterministic template page. */
-  async draftProse(prompt: string): Promise<string> {
+  async draftProse(prompt: string, opts?: ProseOptions): Promise<string> {
     assertInitiatorProvider(this.name);
-    const text = (await this.run(prompt, "text")).trim();
+    if (opts?.noTools && !this.honorsNoTools) throw new Error(`${this.name} cannot run without tools`);
+    const text = (await this.run(prompt, "text", opts)).trim();
     if (!text) throw new Error(`${this.name}: empty prose output`);
     return text;
   }
@@ -442,6 +450,13 @@ export function codexExecArgs(model?: string): string[] {
   return ["exec", "--json", "--skip-git-repo-check", ...(model ? ["-m", model] : []), "-"];
 }
 
+/** Headless Claude Code. `--tools=` is the empty tool list in one token, so it survives the
+ *  cmd.exe line on Windows; MCP servers are separate from the built-in set. --restricted skips
+ *  hooks and apiKeyHelper from settings files, which a planted temp-dir settings file could set. */
+export function claudePrintArgs(model: string, opts?: ProseOptions): string[] {
+  return ["-p", "--output-format", "json", "--model", model, "--max-turns", "1", ...(opts?.noTools ? ["--restricted", "--tools=", "--strict-mcp-config"] : [])];
+}
+
 // The timeout drives an abort delay and max_tokens caps output length; neither is
 // a shell argv token. A garbage value would abort at once, never abort, or corrupt
 // the request body, so anything but a finite number > 0 falls back to the default.
@@ -461,6 +476,32 @@ export function safeMaxTokens(v: string | undefined, fallback: number): number {
   return positiveNumber(v, fallback);
 }
 
+// Force SUBSCRIPTION auth: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN outrank
+// subscription OAuth in Claude Code's precedence and are *always* used in
+// headless `-p` mode when present. Strip them so the CLI falls through to
+// CLAUDE_CODE_OAUTH_TOKEN / `/login` subscription credentials. (We never
+// bill the pay-per-token API — that's the whole point of this provider.)
+// Gateway ROUTING is metered per-token exactly like a raw API key: with a
+// CLAUDE_CODE_USE_* provider switch set (common in enterprise shell profiles
+// for interactive use), headless `claude -p` bills that cloud on every
+// significant commit — silently, from a post-commit hook (issue #39,
+// con_2ce3f2a547). Strip the routing switches and their endpoint overrides
+// so the CLI falls through to subscription auth here too.
+const CLAUDE_METERED_ENV = [
+  "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+  "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_USE_GATEWAY",
+  "CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+  "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+  "ANTHROPIC_VERTEX_BASE_URL", "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION",
+  "ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL", "ANTHROPIC_FOUNDRY_RESOURCE",
+];
+
+export function claudeChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const child = { ...env };
+  for (const key of CLAUDE_METERED_ENV) delete child[key];
+  return child;
+}
+
 // --------------------------------------------------------------------------
 // Provider A: headless `claude -p` CLI — billed to the user's Claude subscription
 // --------------------------------------------------------------------------
@@ -469,6 +510,7 @@ class ClaudeCliProvider extends PromptSynthProvider {
   // Default to the `haiku` alias (cheap/fast, and survives model retirements)
   // rather than a pinned dated id; override with HUNCH_SYNTH_MODEL if needed.
   private model = safeModel(process.env.HUNCH_SYNTH_MODEL, "haiku");
+  protected override readonly honorsNoTools = true;
 
   async available(): Promise<boolean> {
     try {
@@ -479,27 +521,8 @@ class ClaudeCliProvider extends PromptSynthProvider {
     }
   }
 
-  protected async run(prompt: string): Promise<string> {
-    // Force SUBSCRIPTION auth: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN outrank
-    // subscription OAuth in Claude Code's precedence and are *always* used in
-    // headless `-p` mode when present. Strip them so the CLI falls through to
-    // CLAUDE_CODE_OAUTH_TOKEN / `/login` subscription credentials. (We never
-    // bill the pay-per-token API — that's the whole point of this provider.)
-    const childEnv = { ...process.env };
-    delete childEnv.ANTHROPIC_API_KEY;
-    delete childEnv.ANTHROPIC_AUTH_TOKEN;
-    // Gateway ROUTING is metered per-token exactly like a raw API key: with
-    // CLAUDE_CODE_USE_BEDROCK/VERTEX set (common in enterprise shell profiles
-    // for interactive use), headless `claude -p` bills AWS/GCP on every
-    // significant commit — silently, from a post-commit hook (issue #39,
-    // con_2ce3f2a547). Strip the routing switches and their endpoint overrides
-    // so the CLI falls through to subscription auth here too.
-    delete childEnv.CLAUDE_CODE_USE_BEDROCK;
-    delete childEnv.CLAUDE_CODE_USE_VERTEX;
-    delete childEnv.ANTHROPIC_BEDROCK_BASE_URL;
-    delete childEnv.ANTHROPIC_VERTEX_BASE_URL;
-    delete childEnv.ANTHROPIC_VERTEX_PROJECT_ID;
-    delete childEnv.CLOUD_ML_REGION;
+  protected async run(prompt: string, _output?: PromptOutput, opts?: ProseOptions): Promise<string> {
+    const childEnv = claudeChildEnv(process.env);
 
     // Single-shot text synthesis: no tools, no agentic loop. The prompt carries
     // all needed context inline, so run from a neutral cwd to avoid loading this
@@ -508,7 +531,7 @@ class ClaudeCliProvider extends PromptSynthProvider {
     // user's home config, not cwd, so this doesn't affect subscription billing.
     // Prompt goes via STDIN (-p reads piped stdin), never argv — keeps untrusted
     // diff content out of any shell the spawn helper uses on Windows.
-    const args = ["-p", "--output-format", "json", "--model", this.model, "--max-turns", "1"];
+    const args = claudePrintArgs(this.model, opts);
     const { stdout } = await pexecIn("claude", args, {
       input: prompt,
       env: childEnv,
@@ -554,11 +577,11 @@ class CodexCliProvider extends PromptSynthProvider {
   protected async run(prompt: string): Promise<string> {
     // `codex exec --json --skip-git-repo-check -` reads the prompt from STDIN
     // (the `-`) and emits JSONL events. The skip flag is required because the
-    // shared runner deliberately uses a neutral temp cwd. Strip OPENAI_API_KEY so
+    // shared runner deliberately uses a neutral temp cwd. Strip the API keys so
     // it uses ChatGPT (subscription) auth, not the pay-per-token API — consistent
     // with the subscription-only rule.
     const args = codexExecArgs(this.model);
-    const out = await this.runCli("codex", args, ["OPENAI_API_KEY"], prompt);
+    const out = await this.runCli("codex", args, ["OPENAI_API_KEY", "CODEX_API_KEY"], prompt);
     return extractCodexText(out);
   }
 }

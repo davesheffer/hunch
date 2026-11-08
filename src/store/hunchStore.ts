@@ -12,7 +12,7 @@
  */
 import { resolve, join, dirname, isAbsolute, relative } from "node:path";
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { toPosixTarget, repoRelativeTarget, isRepoFile, hunchPathsForDir, type HunchPaths } from "../core/paths.js";
+import { toPosixTarget, repoRelativeTarget, isRepoFile, hunchPathsForDir, safeRepoScope, type HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, type Component, type Constraint, type Bug, type Decision, type Symbol, type Edge, type Finding, type RejectedTripwire, type EntityKind, type EntityFor, type TaskRecord } from "../core/types.js";
 import { openDb, withTx, type DB } from "./db.js";
 import { RESET_SQL, embedHash } from "./schema.js";
@@ -368,6 +368,22 @@ export class HunchStore {
    *  through here so all modes, branches, worktrees, teams, and agents agree on where
    *  memory lives. */
   putCapture<K extends EntityKind>(kind: K, record: EntityFor[K], isPrivate = false): EntityFor[K] {
+    const home = this.admitCapture(kind, record, isPrivate);
+    return home === "private" ? this.putPrivate(kind, record) : this.json.put(kind, record);
+  }
+
+  /** putCapture for a record that must not exist yet: null when its file appeared first. */
+  createCapture<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] | null {
+    const home = this.admitCapture(kind, record, false);
+    const target = home === "private" ? this.privateJson : this.json;
+    if (!target) {
+      throw new Error("No private store configured — set HUNCH_PRIVATE_DIR to a directory Hunch can write sensitive records into.");
+    }
+    target.ensureDirs();
+    return target.create(kind, record);
+  }
+
+  private admitCapture<K extends EntityKind>(kind: K, record: EntityFor[K], isPrivate: boolean): "public" | "private" {
     const home = this.captureHome(isPrivate, kind);
     const id = (record as { id: string }).id;
     const lookup = (json: JsonStore | undefined) => kind === "derived" || kind === "receipts" || kind === "commitments"
@@ -384,7 +400,7 @@ export class HunchStore {
       }
       throw new Error(`${kind} record ${id} already exists in the other memory home; refusing to create a public/private id collision`);
     }
-    return home === "private" ? this.putPrivate(kind, record) : this.json.put(kind, record);
+    return home;
   }
 
   /** Replace one capture kind in its routed home as a single bulk operation.
@@ -1264,7 +1280,7 @@ export class HunchStore {
     for (const decision of decisions) {
       const verifiedAt = Date.parse(decision.provenance.last_verified ?? "");
       if (!Number.isFinite(verifiedAt)) continue;
-      const scopes = [...new Set(decision.related_files.map(safeFreshnessScope).filter(Boolean) as string[])];
+      const scopes = [...new Set(decision.related_files.map(safeRepoScope).filter(Boolean) as string[])];
       if (scopes.length === 0 || scopeCount + scopes.length > DECISION_FRESHNESS_SCOPE_QUERY_CAP) continue;
       scopeCount += scopes.length;
       eligible.set(decision.id, { verifiedAt, scopes });
@@ -2829,14 +2845,6 @@ function allTokensPresent(tokens: readonly string[], doc: { title: string; body:
   if (!tokens.length) return false;
   const words = `${doc.title} ${doc.body}`.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
   return tokens.every((t) => words.some((w) => w.startsWith(t)));
-}
-function safeFreshnessScope(value: string): string | null {
-  const normalized = toPosixTarget(value.trim());
-  if (!normalized || normalized.length > 1_024 || normalized.includes("\0")
-    || isAbsolute(normalized) || /^[a-zA-Z]:/.test(normalized)
-    || normalized === ".." || normalized.startsWith("../") || normalized.includes("/../")
-    || normalized.startsWith("private:")) return null;
-  return normalized.replace(/^\.\//, "");
 }
 function freshnessScopeMatches(path: string, scope: string): boolean {
   try {

@@ -31,6 +31,7 @@ import { registerTaskReportCommands } from "./taskReport.js";
 import { registerStateCommands } from "./state.js";
 import { DEFAULT_CONFIG as SERVE_DEFAULT_CONFIG_FILE, registerServeCommands } from "./serve.js";
 import { readServeConfig } from "../serve/config.js";
+import { registerUiCommands } from "./ui.js";
 import { registerUpdateCommand } from "./update.js";
 import { registerVerifyCommand } from "./verify.js";
 import { registerReviewMemoryCommands } from "./reviewMemory.js";
@@ -70,7 +71,7 @@ import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
 import { extractInlineIntent } from "../extractors/comments.js";
 import { parseDocRules, planDocRules, docRulePlanIsDirty, withoutMarkedRules, recordedDocRuleKey, recordedDocRuleSource, recordedDocRuleHash, docRuleHash, type DocRule, type DocRuleIssue } from "../extractors/docRules.js";
-import { trackedFiles } from "../extractors/git.js";
+import { hunchDirHasChanges, trackedFiles } from "../extractors/git.js";
 import { createRepoFileReader } from "../core/safeRepoFile.js";
 import { proposalPrompt, validateProposals, readProposalQueue, writeProposalQueue, enqueueProposals, acceptProposal, type DocRuleProposal } from "../core/docRuleProposals.js";
 import { renderText, renderMarkdown, renderSarif, renderImpact, reportFailsStrict, type CheckReport, type SarifExtras } from "../core/checkreport.js";
@@ -159,8 +160,10 @@ import { renderCompilerScorecard, scoreCompilerCaseBank } from "../constitution/
 import { generateWiki, wikiStatus, wikiPrompt, publicHome, privateHome, readWikiManifestAt, nowData, unconfirmedRoadmapMarker, type WikiPack } from "../wiki/wiki.js";
 import { adoptProsePrompt } from "../wiki/adopt.js";
 import { topicCollisions, isInForce, liveForTopic } from "../core/topics.js";
+import { kindOfId, editRecord, linkRecord, removeRecord, restoreRecord, unsign, type EditResult, type MemoryKind, type MemoryRecord } from "../core/memoryEdit.js";
+import { NEW_KINDS, isNewKind, newRecord } from "../core/memoryNew.js";
 import { ADR_DIR_CANDIDATES, ADR_FILE_RE, mapAdrCorpus } from "../extractors/adrImport.js";
-import { countersignConstraint, countersignDecision } from "../core/countersign.js";
+import { confirmCommand, countersignConstraint, countersignDecision } from "../core/countersign.js";
 import { applyImportedAdrReview, carryImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, isImportedAdrDecision, pendingImportedAdrReviews } from "../core/importReview.js";
 import { exportMadrCorpus, isRegenerableMadr } from "../integrations/madrExport.js";
 import { buildMadrManifest, writeMadrManifest, refreshMadrCorpus } from "../integrations/madrManifest.js";
@@ -233,6 +236,7 @@ registerIntegrationCommands(program, () => {
 });
 registerTaskReportCommands(program, () => { const { store, root } = storeFor(); return { store, root }; });
 registerServeCommands(program);
+registerUiCommands(program);
 registerStateCommands(program);
 registerUpdateCommand(program);
 registerVerifyCommand(program);
@@ -420,6 +424,15 @@ function pumpMemoryHome(store: HunchStore, root: string, home: MemoryHome, messa
   const flush = flushMemoryHome(store, hunchPaths(root).hunch, home, message);
   if (flush === "held") noteHeld();
   return flush;
+}
+
+const notCommitted = (home: MemoryHome): string => `saved, but not committed: git was busy, or other staged work or a stray file blocked the auto-commit. Check git status${home === "private" ? " in the memory overlay repo" : ""}, then commit it yourself. A later memory change tries again.`;
+
+/** A flush's null also means auto-commit is off or there was nothing to commit: only changes left behind mean it failed. */
+function commitFailed(store: HunchStore, root: string, home: MemoryHome, flush: ReturnType<typeof flushMemoryHome>): boolean {
+  if (flush !== null) return false;
+  if (home === "private") return store.privateAutoCommit && !!store.privateDir && hunchDirHasChanges(store.privateDir);
+  return store.autoCommit && hunchDirHasChanges(hunchPaths(root).hunch);
 }
 
 function pumpPolicyHome(store: HunchStore, root: string, service: ConstitutionService, policyId: string, message: string): void {
@@ -5274,6 +5287,166 @@ program
     store.close();
   });
 
+// ---- edit / link / remove / restore (one memory record, human channel) -----
+/** Shared wiring for the four single-record verbs: resolve the id's kind, run the pure
+ *  transform (src/core/memoryEdit.ts), write into the home the record already lives in,
+ *  reindex, refresh grounding, and auto-commit as ONE move. The subject is fixed
+ *  (`hunch: <verb> <id>`, no user text; `hunch log` files it under "edit"); `--reason`
+ *  rides the body only. `--json` prints exactly one object so a UI can undo by issuing
+ *  the inverse command from `before`/`after`. */
+function runMemoryMove(
+  verb: "edit" | "link" | "remove" | "restore",
+  id: string,
+  opts: { json?: boolean; reason?: string },
+  transform: (kind: MemoryKind, rec: MemoryRecord, store: HunchStore, now: string, home: MemoryHome) => EditResult,
+): void {
+  const target = kindOfId(id);
+  if (!target) return fail(`"${id}" is not a memory id — expected a dec_, con_, bug_ or fnd_ prefix`);
+  const { store, root } = storeFor();
+  try {
+    const existing = store.getRec(target.collection, id) as MemoryRecord | undefined;
+    if (!existing) return fail(`${target.kind} "${id}" not found`);
+    const home: MemoryHome = (target.collection === "decisions" ? decisionMemoryHome(store, id) : store.getPrivateRec(target.collection, id) ? "private" : "public");
+    const result = transform(target.kind, existing, store, new Date().toISOString(), home);
+    if (!result.ok) return fail(result.reason);
+    if (!result.changed) {
+      if (opts.json) console.log(JSON.stringify({ changed: false, id, kind: target.kind, home, before: existing, after: existing, flush: null }));
+      else console.log(`${id} unchanged — nothing to write.`);
+      return;
+    }
+    const after = store.putWhereItLives(target.collection, result.record as never) as MemoryRecord;
+    store.reindex();
+    // Same grounding gap retire-constraint closes: a public flush that won't commit the
+    // tracked grounding docs must still refresh them on disk.
+    if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+    const willCommit = home === "private" ? store.privateAutoCommit : store.autoCommit;
+    const flush = pumpMemoryHome(store, root, home, `hunch: ${verb} ${id}${opts.reason ? `\n\n${opts.reason}` : ""}`);
+    const uncommitted = commitFailed(store, root, home, flush);
+    if (opts.json) {
+      console.log(JSON.stringify({ changed: true, id, kind: target.kind, home, before: existing, after, flush, uncommitted }));
+      return;
+    }
+    console.log(`✓ ${id} ${verb === "edit" ? "edited" : verb === "link" ? "relinked" : verb === "remove" ? "removed (retired, not deleted)" : "restored"}.`);
+    if (uncommitted) console.log(`  ⚠ ${notCommitted(home)}`);
+    if (opts.reason && !willCommit) console.log("  ⚠ --reason is not recorded anywhere: auto-commit is off, so no commit message captured it.");
+    else if (opts.reason && flush === "held") console.log("  ⚠ --reason is not recorded anywhere: the commit was held on the default branch, so no commit message captured it.");
+  } finally {
+    store.close();
+  }
+}
+
+const collectOption = (value: string, previous: string[]): string[] => [...previous, value];
+
+program
+  .command("edit")
+  .description("Edit one memory record's text (decision, constraint, bug or finding) by id; auto-committed as one memory move.")
+  .argument("<id>", "record id (dec_*, con_*, bug_*, fnd_*)")
+  .option("--title <text>", "new title (decision, bug, finding)")
+  .option("--text <text>", "new decision / statement / symptom / observation")
+  .option("--context <text>", "new context (decisions only)")
+  .option("--rationale <text>", "new rationale (constraints only)")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { title?: string; text?: string; context?: string; rationale?: string; json?: boolean }) => {
+    runMemoryMove("edit", id, opts, (kind, rec, _store, now) => editRecord(kind, rec, opts, now));
+  });
+
+program
+  .command("link")
+  .description("Link one memory record to files, components or a feature (topic); removing an absent link is a no-op.")
+  .argument("<id>", "record id (dec_*, con_*, bug_*, fnd_*)")
+  .option("--feature <topic>", "set the decision's topic (one live decision per topic)")
+  .option("--clear-feature", "unset the decision's topic")
+  .option("--add-file <path>", "link a file (repeatable)", collectOption, [] as string[])
+  .option("--remove-file <path>", "unlink a file (repeatable)", collectOption, [] as string[])
+  .option("--add-component <cmp_id>", "link a component (decisions only; repeatable)", collectOption, [] as string[])
+  .option("--remove-component <cmp_id>", "unlink a component (decisions only; repeatable)", collectOption, [] as string[])
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { feature?: string; clearFeature?: boolean; addFile: string[]; removeFile: string[]; addComponent: string[]; removeComponent: string[]; json?: boolean }) => {
+    runMemoryMove("link", id, opts, (kind, rec, store, now, home) => linkRecord(kind, rec, {
+      feature: opts.feature,
+      clearFeature: opts.clearFeature,
+      addFiles: opts.addFile,
+      removeFiles: opts.removeFile,
+      addComponents: opts.addComponent,
+      removeComponents: opts.removeComponent,
+      knownComponents: new Set(store.recs("components").map((c) => c.id)),
+      decisions: store.recs("decisions"),
+      home,
+    }, now));
+  });
+
+program
+  .command("remove")
+  .description("Retire one memory record without deleting it (decision rejected/superseded, constraint retired, finding stale). A bug can't be removed. Undo with `hunch restore`.")
+  .argument("<id>", "record id (dec_*, con_*, fnd_*)")
+  .option("--reason <text>", "why — recorded in the commit body, never the subject")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { reason?: string; json?: boolean }) => {
+    runMemoryMove("remove", id, opts, (kind, rec, _store, now) => removeRecord(kind, rec, now));
+  });
+
+program
+  .command("restore")
+  .description("Undo `hunch remove`: reopen a rejected/superseded decision, a retired constraint or a stale/resolved finding.")
+  .argument("<id>", "record id (dec_*, con_*, fnd_*)")
+  .option("--status <status>", "decision: proposed|accepted (default: the status before remove); finding: open|accepted-risk|scheduled (default open)")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((id: string, opts: { status?: string; json?: boolean }) => {
+    runMemoryMove("restore", id, opts, (kind, rec, store, now) => restoreRecord(kind, rec, { status: opts.status, decisions: store.recs("decisions") }, now));
+  });
+
+program
+  .command("new")
+  .description("Add one memory record by hand (decision, constraint or finding); auto-committed as one capture. It lands unconfirmed — sign it with `hunch review --confirm <id>`.")
+  .argument("<kind>", `what to add: ${NEW_KINDS.join(" | ")}`)
+  .option("--title <text>", "title (decision, finding)")
+  .option("--text <text>", "the decision / statement / observation")
+  .option("--context <text>", "why it came up (decisions only)")
+  .option("--rationale <text>", "why it must hold (constraints only)")
+  .option("--rejected <text>", "an alternative the decision rejected (repeatable)", collectOption, [] as string[])
+  .option("--evidence <text>", "what showed it: a command and its output (findings only; repeatable)", collectOption, [] as string[])
+  .option("--feature <topic>", "the decision's topic (one live decision per topic)")
+  .option("--file <path>", "a file or glob it concerns; a constraint without one applies repo-wide (repeatable)", collectOption, [] as string[])
+  .option("--component <cmp_id>", "a component it concerns (decisions only; repeatable)", collectOption, [] as string[])
+  .option("--severity <s>", "constraint: advisory | warning (blocking is granted on confirm); finding: low | medium | high | critical")
+  .option("--status <status>", "decision: accepted (default) | proposed")
+  .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .action((kind: string, opts: { title?: string; text?: string; context?: string; rationale?: string; rejected: string[]; evidence: string[]; feature?: string; file: string[]; component: string[]; severity?: string; status?: string; json?: boolean }) => {
+    if (!isNewKind(kind)) return fail(`"${kind}" can't be added — choose ${NEW_KINDS.join(", ")}`);
+    if (opts.text === undefined) return fail("--text is required");
+    const collection = `${kind}s` as "decisions" | "constraints" | "findings";
+    const { store, root } = storeFor();
+    try {
+      const home = store.captureHome(false, collection);
+      const result = newRecord(kind, {
+        title: opts.title, text: opts.text, context: opts.context, rationale: opts.rationale, rejected: opts.rejected,
+        evidence: opts.evidence, feature: opts.feature, files: opts.file, components: opts.component, severity: opts.severity, status: opts.status,
+      }, {
+        now: new Date().toISOString(), root, knownDeps: kind === "constraint" ? knownRepoDeps(root) : undefined,
+        knownComponents: new Set(store.recs("components").map((c) => c.id)), decisions: store.recs("decisions"), home,
+        existing: (_k, id) => (store.getRec(collection, id) ?? store.json.get(collection, id) ?? store.getPrivateRec(collection, id)) as { title?: string; statement?: string; status?: string; triage?: string } | undefined,
+        unreadable: (_k, id) => store.json.hasRecordFile(collection, id) || store.hasPrivateRecordFile(collection, id),
+      });
+      if (!result.ok) return fail(result.reason);
+      store.json.ensureDirs();
+      const after = store.createCapture(collection, result.record as never) as MemoryRecord | null;
+      if (!after) return fail(`${result.record.id} was just added by another run — edit it instead of adding it again`);
+      store.reindex();
+      // Same grounding gap as runMemoryMove: a public flush that won't commit the docs must still refresh them.
+      if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+      const flush = pumpMemoryHome(store, root, home, `hunch: capture ${after.id}`);
+      const uncommitted = commitFailed(store, root, home, flush);
+      if (opts.json) {
+        console.log(JSON.stringify({ changed: true, id: after.id, kind, home, before: null, after, flush, uncommitted }));
+        return;
+      }
+      console.log(`✓ added ${kind} ${after.id} (unconfirmed). To sign it as yours: ${confirmCommand(after.id, { private: home === "private" })}`);
+      if (uncommitted) console.log(`  ⚠ ${notCommitted(home)}`);
+    } finally {
+      store.close();
+    }
+  });
+
 // ---- firmness (agent-hook enforcement level) ------------------------------
 program
   .command("firmness")
@@ -5588,7 +5761,9 @@ program
   .option("--accept <id>", "promote a decision to accepted/human-confirmed (confirms its tripwires)")
   .option("--reject <id>", "reject a draft decision with a durable lifecycle tombstone")
   .option("--confirm <id>", "countersign an agent-recorded decision (dec_…) or correction (con_…) as human-confirmed WITHOUT changing its status or content — the human act a capture token alone cannot stand in for")
-  .option("--severity <s>", "with --confirm on a correction: the severity you grant (advisory | warning | blocking); default keeps its current severity")
+  .option("--unconfirm <id>", "take your countersign back: the decision (dec_…) or correction (con_…) is agent testimony again; status and content are untouched")
+  .option("--severity <s>", "with --confirm on a correction: the severity you grant (advisory | warning | blocking); with --unconfirm: the severity it goes back to (advisory | warning); default keeps its current severity, except blocking becomes warning")
+  .option("--json", "with --confirm or --unconfirm: print { changed, id, kind, home, before, after, flush } as one JSON object")
   .option("--approve-import <id>", "approve one exact imported ADR as human-confirmed authority")
   .option("--decline-import <id>", "record that one exact imported ADR was reviewed and must stay advisory")
   .option("--expected-source-hash <hash>", "exact sha256 source hash printed with the imported-ADR question")
@@ -5598,13 +5773,14 @@ program
   .option("--reject-duplicates", "batch-reject drafts that near-duplicate an accepted record (deterministic term+file similarity — hygiene, not judgment)")
   .option("--min-grounded <n>", "grounded-ness threshold for the ready group / --accept-verified", String(READY_MIN_GROUNDED))
   .option("--private", "include local private/shared-overlay drafts; terminal output may contain private memory")
-  .action((opts: { accept?: string; reject?: string; confirm?: string; severity?: string; approveImport?: string; declineImport?: string; expectedSourceHash?: string; expectedReviewHash?: string; reviewedBy?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string; private?: boolean }) => {
+  .action((opts: { accept?: string; reject?: string; confirm?: string; unconfirm?: string; severity?: string; json?: boolean; approveImport?: string; declineImport?: string; expectedSourceHash?: string; expectedReviewHash?: string; reviewedBy?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string; private?: boolean }) => {
     const { store, root } = storeFor();
     const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
-    const actionCount = [opts.accept, opts.reject, opts.confirm, opts.approveImport, opts.declineImport, opts.acceptVerified, opts.rejectDuplicates].filter(Boolean).length;
+    const actionCount = [opts.accept, opts.reject, opts.confirm, opts.unconfirm, opts.approveImport, opts.declineImport, opts.acceptVerified, opts.rejectDuplicates].filter(Boolean).length;
     if (actionCount > 1) { store.close(); return fail("choose exactly one review action at a time"); }
-    if (opts.severity && !opts.confirm) { store.close(); return fail("--severity applies only with --confirm on a correction"); }
+    if (opts.severity && !opts.confirm && !opts.unconfirm) { store.close(); return fail("--severity applies only with --confirm or --unconfirm on a correction"); }
+    if (opts.json && !opts.confirm && !opts.unconfirm) { store.close(); return fail("--json applies only with --confirm or --unconfirm"); }
     const decisions = () => opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
     let publicGroundingChanged = false;
     const touchedHomes = new Set<MemoryHome>();
@@ -5638,40 +5814,62 @@ program
         store.close();
         return fail(error instanceof Error ? error.message : String(error));
       }
-    } else if (opts.confirm) {
+    } else if (opts.confirm || opts.unconfirm) {
       // Human countersign of agent testimony. A capture token proves only that the
       // interview tool was called (inside the agent's channel), so agent-written records
       // land as agent_recorded; this is the out-of-channel human act that signs them.
       // Content and status are untouched: confirming a proposed decision is not shipping it.
-      const id = opts.confirm;
-      const SEV = ["advisory", "warning", "blocking"] as const;
-      if (opts.severity && !(SEV as readonly string[]).includes(opts.severity)) { store.close(); return fail(`--severity must be one of: ${SEV.join(", ")}`); }
+      // --unconfirm takes the signature back (the UI's Undo). It only lowers authority —
+      // never grants blocking — and `hunch edit` already drops a signature, so it opens
+      // no new channel. Each is one move with its own commit, so `--json` can report it.
+      const signing = !!opts.confirm;
+      const id = (opts.confirm ?? opts.unconfirm)!;
+      const SEV: readonly Constraint["severity"][] = signing ? ["advisory", "warning", "blocking"] : ["advisory", "warning"];
+      if (opts.severity && !(SEV as readonly string[]).includes(opts.severity)) {
+        store.close();
+        return fail(signing ? `--severity must be one of: ${SEV.join(", ")}` : `--unconfirm takes --severity ${SEV.join(" or ")}: an unconfirmed rule cannot block edits`);
+      }
+      const severity = opts.severity as Constraint["severity"] | undefined;
       const now = new Date().toISOString();
       const d = opts.private ? store.getRec("decisions", id) : store.json.get("decisions", id);
       const c = d ? undefined : opts.private ? store.getRec("constraints", id) : store.json.get("constraints", id);
       if (!d && !c) { store.close(); return fail(`no decision or constraint ${id} found${opts.private ? "" : " in the public home (add --private for overlay records)"}`); }
+      if (!signing && !isHumanConfirmed((d ?? c)!.provenance.source)) { store.close(); return fail(`${id} is not confirmed; there is no signature to take back`); }
       let home: MemoryHome;
+      let after: Decision | Constraint;
       if (d) {
-        if (opts.severity) { store.close(); return fail("--severity applies only when confirming a correction (con_…), not a decision"); }
+        if (severity) { store.close(); return fail(`--severity applies only when ${signing ? "confirming" : "unconfirming"} a correction (con_…), not a decision`); }
         if (isImportedAdrDecision(d)) { store.close(); return fail(`imported ADR ${d.id} requires the hash-bound --approve-import flow shown by hunch review`); }
         home = opts.private ? decisionMemoryHome(store, d.id) : "public";
-        putDecisionInHome(store, countersignDecision(d, now), home);
-        console.log(`✓ confirmed decision ${id} as human_confirmed (status ${d.status} unchanged)`);
+        after = signing ? countersignDecision(d, now) : unsign(d, false);
+        putDecisionInHome(store, after, home);
+        if (!opts.json) {
+          console.log(signing
+            ? `✓ confirmed decision ${id} as human_confirmed (status ${d.status} unchanged)`
+            : `✓ unconfirmed decision ${id}: agent testimony again (status ${d.status} unchanged)`);
+          const armed = d.rejected_tripwires.filter((tw) => isHumanConfirmed(tw.provenance.source)).length;
+          if (!signing && armed) console.log(`  ⚠ its ${armed} confirmed tripwire(s) still veto: unconfirming the decision doesn't disarm them.`);
+        }
       } else {
         home = opts.private && store.getPrivateRec("constraints", id) ? "private" : "public";
-        const next = countersignConstraint(c!, now, opts.severity as (typeof SEV)[number] | undefined);
+        // The edit hook denies on severity alone, so an unconfirmed rule never stays blocking.
+        const next = signing ? countersignConstraint(c!, now, severity)
+          : { ...unsign(c!, false), severity: severity ?? (c!.severity === "blocking" ? "warning" : c!.severity) };
+        after = next;
         if (home === "private") store.putPrivate("constraints", next);
         else store.json.put("constraints", next);
         const repoWide = next.scope.length === 1 && next.scope[0] === "**";
-        console.log(`✓ confirmed ${next.severity} constraint ${id} as human_confirmed (scope: ${next.scope.join(", ")})`);
-        if (next.severity === "blocking" && repoWide) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
+        if (!opts.json && signing) {
+          console.log(`✓ confirmed ${next.severity} constraint ${id} as human_confirmed (scope: ${next.scope.join(", ")})`);
+          if (next.severity === "blocking" && repoWide) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
+        } else if (!opts.json) {
+          console.log(`✓ unconfirmed ${next.severity} constraint ${id}: agent testimony again (scope: ${next.scope.join(", ")})`);
+        }
       }
-      touchedHomes.add(home);
       store.reindex();
-      if (home === "public") {
-        publicGroundingChanged = true;
-        if (!publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
-      }
+      if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+      const flush = pumpMemoryHome(store, root, home, `hunch: ${signing ? "confirm" : "unconfirm"} ${id}`);
+      if (opts.json) console.log(JSON.stringify({ changed: true, id, kind: d ? "decision" : "constraint", home, before: (d ?? c)!, after, flush }));
     } else if (opts.accept) {
       const d = opts.private ? store.getRec("decisions", opts.accept) : store.json.get("decisions", opts.accept);
       if (!d) { store.close(); return fail(`decision ${opts.accept} not found`); }

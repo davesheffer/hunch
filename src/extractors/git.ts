@@ -2419,12 +2419,21 @@ export function commitFiles(sha: string, cwd: string): string[] {
 
 /** Raw `git log` over `.hunch/`, paired with parseMemoryLog — the memory-move
  *  timeline (each commit that changed the graph). Newest first; empty on any error
- *  (no repo / no history), so the caller degrades to an empty timeline. */
-export function gitMemoryLog(root: string, limit = 200): string {
+ *  (no repo / no history), so the caller degrades to an empty timeline. `pathspecs`
+ *  narrows it (e.g. to the record directories); paths print relative to `root`. */
+export function gitMemoryLog(root: string, limit = 200, pathspecs: readonly string[] = [".hunch/"]): string {
   return gitSafe(
-    ["log", `--max-count=${limit}`, "--no-color", `--format=${MEMLOG_FORMAT}`, "--name-status", "--", ".hunch/"],
+    ["log", `--max-count=${limit}`, "--no-color", "--relative", `--format=${MEMLOG_FORMAT}`, "--name-status", "--", ...pathspecs],
     root,
   );
+}
+
+/** The memory commits on HEAD that no remote-tracking branch has yet: what exists only
+ *  on this machine. Same `limit` and `pathspecs` as the gitMemoryLog it pairs with, so
+ *  every unpushed move of that log is in the set. Empty on any error. */
+export function gitUnpushedMemoryShas(root: string, limit: number, pathspecs: readonly string[]): Set<string> {
+  const out = gitSafe(["log", `--max-count=${limit}`, "--format=%H", "HEAD", "--not", "--remotes", "--", ...pathspecs], root);
+  return new Set(out.split("\n").filter(Boolean));
 }
 
 /** The diff of a single commit restricted to `.hunch/` — what one memory move
