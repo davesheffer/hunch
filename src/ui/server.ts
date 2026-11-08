@@ -20,6 +20,9 @@
  * the person's subscription, asks one of them one question at a time and writes nothing.
  * Grill: GET /api/grill/:id says what a grill of that memory would send, before anything is sent;
  * POST /api/grill, guarded the same way and sharing Ask's one-at-a-time, runs one turn of it.
+ * Board: GET /api/board/:id lays a recorded decision or rule out as a board, asking nobody;
+ * POST /api/board/preview says what a question would send, sending nothing; POST /api/board,
+ * guarded like Grill and sharing its one-at-a-time, asks it and returns the checked board.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -40,6 +43,7 @@ import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, ty
 import { askContext, askPrompt, askRequest, defaultAskRunner, parseAnswer, type AskRunner } from "./ask.js";
 import { canGrill, evidenceView, gatherEvidence, grillPrompt, grillRequest, readTurn, type GrillFlag } from "./grill.js";
 import { reviewCards, type Review } from "./review.js";
+import { boardEvidenceView, boardPrompt, boardRequest, canThink, explainBoard, gatherBoardEvidence, readBoard } from "./board.js";
 
 export interface RepoInfo { root: string; branch: string | null; remote: string | null; webUrl: string | null }
 export interface GithubInfo { installed: boolean; authenticated: boolean; user: string | null; repo: string | null }
@@ -249,6 +253,35 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     } finally { asking = false; }
   };
 
+  // spend false: what the question would send; nothing is sent or spent.
+  const board = async (req: IncomingMessage, res: ServerResponse, spend: boolean): Promise<void> => {
+    if (refused(req, res)) return;
+    const body = await readJson(req);
+    if (!body.ok) return send(res, body.status, { error: body.error });
+    const parsed = boardRequest(body.value, spend);
+    if (!parsed.ok) return send(res, 400, { error: parsed.error });
+    const gather = () => gatherBoardEvidence(source(), store.recs("edges"), parsed.question, parsed.about, opts.root, parsed.turns);
+    if (!spend) {
+      const evidence = await gather();
+      if (!evidence) return send(res, 404, { error: `No memory with id ${parsed.about}.` });
+      return send(res, 200, { evidence: boardEvidenceView(evidence), ...(await asker.assistants()) });
+    }
+    if (asking) return send(res, 409, { error: "Still waiting on your last question." });
+    asking = true;
+    try {
+      const { assistants, blocked } = await asker.assistants();
+      const assistant = assistants.find((a) => a.name === parsed.assistant);
+      if (blocked || !assistant) return send(res, 409, { error: "That assistant can't be asked right now." });
+      const evidence = await gather();
+      if (!evidence) return send(res, 404, { error: `No memory with id ${parsed.about}.` });
+      if (!canThink(evidence)) return send(res, 409, { error: "No memory matched and no code could be read, so the options would rest on nothing." });
+      let reply: string;
+      try { reply = await asker.ask(assistant.name, boardPrompt(evidence)); }
+      catch (error) { return send(res, 502, { error: `${assistant.label} did not answer: ${(error instanceof Error ? error.message : String(error)).slice(0, 300)}` }); }
+      return send(res, 200, { assistant: { name: assistant.name, label: assistant.label }, ...readBoard(reply, evidence), evidence: boardEvidenceView(evidence) });
+    } finally { asking = false; }
+  };
+
   // id null: POST /api/memory, a new record (`hunch new`).
   const write = async (req: IncomingMessage, res: ServerResponse, id: string | null, action: string): Promise<void> => {
     if (id !== null && !isUiAction(action)) return send(res, 404, { error: "Not found." });
@@ -283,11 +316,13 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     const createRoute = req.method === "POST" && url.pathname === "/api/memory";
     const askRoute = req.method === "POST" && url.pathname === "/api/ask";
     const grillRoute = req.method === "POST" && url.pathname === "/api/grill";
-    if (req.method !== "GET" && !writeRoute && !createRoute && !askRoute && !grillRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
-    if (writeRoute || createRoute || askRoute || grillRoute) {
+    const boardRoute = req.method === "POST" && (url.pathname === "/api/board" || url.pathname === "/api/board/preview");
+    if (req.method !== "GET" && !writeRoute && !createRoute && !askRoute && !grillRoute && !boardRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
+    if (writeRoute || createRoute || askRoute || grillRoute || boardRoute) {
       if (!tokenMatches(req.headers.authorization, opts.token)) return send(res, 401, { error: "Access key missing or expired." });
       if (askRoute) return ask(req, res);
       if (grillRoute) return grill(req, res);
+      if (boardRoute) return board(req, res, url.pathname === "/api/board");
       return writeRoute ? write(req, res, writeRoute[1]!, writeRoute[2]!) : write(req, res, null, "new");
     }
     const asset = ASSETS.get(url.pathname);
@@ -357,6 +392,12 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
       const evidence = await gatherEvidence(source(), grilled[1]!, opts.root, flagged(grilled[1]!));
       if (!evidence) return send(res, 404, { error: `No memory with id ${grilled[1]}.` });
       return send(res, 200, { record: evidence.focus, evidence: evidenceView(evidence), ...(await asker.assistants()) });
+    }
+    const explained = /^\/api\/board\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
+    if (explained) {
+      const found = explainBoard(source(), explained[1]!);
+      if (!found) return send(res, 404, { error: memoryDetail(source(), explained[1]!) ? "Only a decision or a rule can be explained." : `No memory with id ${explained[1]}.` });
+      return send(res, 200, { board: found, ...(await asker.assistants()) });
     }
     if (url.pathname === "/api/connections") {
       const [repo, github, assistants] = await Promise.all([probes.repo(), probes.github(), probes.assistants()]);

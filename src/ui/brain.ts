@@ -9,7 +9,8 @@
  * Plain JS in a String.raw string, like page.ts: no backticks and no dollar-brace here.
  */
 export const brainJs = String.raw`
-  const Brain = (() => {
+  // One engine per canvas: the Brain page has one, the decision board its own.
+  function makeBrain() {
     const HOP = 350, FIT_PAD_X = 48, FIT_PAD_Y = 36;
     const reduceQ = window.matchMedia('(prefers-reduced-motion: reduce)');
     const css = {};
@@ -112,12 +113,13 @@ export const brainJs = String.raw`
 
     // ---- labels: below the node when there is room, else the nearest free spot
     function layoutLabels() {
-      const sel = tr ? tr.id : focus, key = [W, H, sel, T.k.toFixed(3), T.x.toFixed(1), T.y.toFixed(1), nodes.map((n) => n.x.toFixed(0) + n.y.toFixed(0)).join('')].join('|');
+      // Every root of a trace keeps its label, even on a small canvas.
+      const sel = tr ? tr.roots : new Set(focus ? [focus] : []), key = [W, H, [...sel].join(','), T.k.toFixed(3), T.x.toFixed(1), T.y.toFixed(1), nodes.map((n) => n.x.toFixed(0) + n.y.toFixed(0)).join('')].join('|');
       if (key === labelKey && !dirty) return;
       labelKey = key; dirty = false; labels = new Map();
       ctx.font = '11px ' + css.mono;
       const placed = [];
-      const order = nodes.slice().sort((a, b) => b.total - a.total || (a.id < b.id ? -1 : 1)).filter((n, i) => W >= 800 || i < 8 || n.id === sel);
+      const order = nodes.slice().sort((a, b) => b.total - a.total || (a.id < b.id ? -1 : 1)).filter((n, i) => W >= 800 || i < 8 || sel.has(n.id));
       const hits = (r, self) => {
         let c = 0;
         if (r.x < 4 || r.y < 4 || r.x + r.w > W - 4 || r.y + r.h > H - 4) c += 2;
@@ -138,16 +140,17 @@ export const brainJs = String.raw`
       }
     }
 
-    // ---- trace: a breadth-first walk over usedBy, cycle-safe
+    // ---- trace: a breadth-first walk over usedBy, cycle-safe, from one component or several at once
     function trace(id) {
       tr = null;
-      if (id && byId.has(id)) {
-        const dist = new Map([[id, 0]]), q = [id];
+      const roots = (Array.isArray(id) ? id : id ? [id] : []).filter((x, i, all) => byId.has(x) && all.indexOf(x) === i);
+      if (roots.length) {
+        const dist = new Map(roots.map((r) => [r, 0])), q = roots.slice();
         for (let i = 0; i < q.length; i++) for (const u of byId.get(q[i]).usedBy) if (!dist.has(u) && byId.has(u)) { dist.set(u, dist.get(q[i]) + 1); q.push(u); }
         let max = 0, direct = 0; for (const d of dist.values()) { max = Math.max(max, d); if (d === 1) direct++; }
-        tr = { id, dist, max, start: reduced() ? -1e9 : performance.now() };
+        tr = { id: roots[0], roots: new Set(roots), dist, max, start: reduced() ? -1e9 : performance.now() };
         wake();
-        return { reach: dist.size - 1, direct, hops: max };
+        return { reach: dist.size - roots.length, direct, hops: max };
       }
       wake();
       return null;
@@ -251,7 +254,7 @@ export const brainJs = String.raw`
         grad.addColorStop(0, css.accent); grad.addColorStop(1, tint(css.accent, 0));
         ctx.globalAlpha = a * (0.28 + 0.18 * g); ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, r + 32, 0, 7); ctx.fill(); ctx.globalAlpha = a;
       }
-      const lit = tr && litAt(n.id, now), root = tr && tr.id === n.id;
+      const lit = tr && litAt(n.id, now), root = tr && tr.roots.has(n.id);
       if (lit && !root) {
         const age = now - (tr.start + tr.dist.get(n.id) * HOP);
         if (age >= 0 && age < 520 && !reduced()) { ctx.globalAlpha = (1 - age / 520) * 0.8; ctx.strokeStyle = css.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 5 + (age / 520) * 18, 0, 7); ctx.stroke(); ctx.globalAlpha = a; }
@@ -400,5 +403,6 @@ export const brainJs = String.raw`
       node: (id) => byId.get(id),
       screen: (id) => { const n = byId.get(id); return n ? [sx(n), sy(n), rad(n)] : null; },
     };
-  })();
+  }
+  const Brain = makeBrain();
 `;
