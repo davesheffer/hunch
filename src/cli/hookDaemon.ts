@@ -481,6 +481,7 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
   const temp = `${endpoint.token}.${process.pid}`;
   writeFileSync(temp, token, { mode: 0o600 });
   renameSync(temp, endpoint.token);
+  debugLog("listening");
   touch();
   setInterval(() => { if (buildId() !== build) void shutdown(); }, BUILD_POLL_MS).unref();
 }
