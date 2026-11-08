@@ -18,7 +18,7 @@
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
-import { appendFileSync, chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, linkSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
@@ -64,6 +64,8 @@ export const allowListed = (name: string): boolean => {
 type Env = Record<string, string>;
 interface HookRequest { v: number; buildId: string; provider: string; cwd: string; root: string; env: Env; token: string; payload: string }
 interface HookReply { stdout: string; stderr: string; exitCode: number }
+/** Thrown before the handler starts: the client may safely run the hook in-process. */
+class NotRun extends Error {}
 /** What the daemon runs for one request: the same function the in-process path runs.
  *  It owns the per-request reset (core/hookMemo.ts) and closing whatever it opened. */
 export type HookHandler = (provider: string, payload: string) => Promise<void>;
@@ -88,23 +90,55 @@ function canonicalRoot(root: string): string {
   return process.platform === "win32" ? real.toLowerCase() : real;
 }
 
-/** The endpoint, its token file and the spawn marker for one (user, root, build). */
-function endpointFor(root: string, build: string): { path: string; dir: string; token: string; spawned: string } {
+/** Windows: a per-user random secret mixed into the pipe name. Any local user can create
+ *  names under \\.\pipe\, so a name derived only from public facts (user, root, build)
+ *  could be squatted; the secret lives in the per-user LOCALAPPDATA dir. Published with
+ *  link() so a concurrent reader never sees a half-written file. Null: none yet (`create`
+ *  false) or unreadable. */
+function pipeSecret(dir: string, create: boolean): string | null {
+  const file = join(dir, "pipe.secret");
+  const read = (): string | null => {
+    try {
+      const text = readFileSync(file, "utf8").trim();
+      return /^[0-9a-f]{64}$/.test(text) ? text : null;
+    } catch { return null; }
+  };
+  const existing = read();
+  if (existing || !create) return existing;
+  const temp = `${file}.${process.pid}`;
+  try {
+    writeFileSync(temp, randomBytes(32).toString("hex"), { mode: 0o600 });
+    try { linkSync(temp, file); } catch { /* a concurrent daemon published first */ }
+  } catch { /* unwritable: no daemon */ } finally {
+    try { rmSync(temp, { force: true }); } catch { /* gone */ }
+  }
+  return read();
+}
+
+/** The endpoint, its token file and the spawn marker for one (user, root, build). On
+ *  Windows `path` is empty until the per-user pipe secret exists (only a daemon creates it). */
+function endpointFor(root: string, build: string, createSecret = false): { path: string; dir: string; token: string; spawned: string } {
   let user = "";
   try { user = userInfo().username; } catch { /* no passwd entry */ }
   const uid = process.getuid?.() ?? user;
   const h = createHash("sha256").update(`${user}\0${uid}\0${canonicalRoot(root)}\0${build}`).digest("hex").slice(0, 32);
   if (process.platform === "win32") {
     const dir = join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "hunch", "hook-daemon");
-    return { path: `\\\\.\\pipe\\hunch-${h}`, dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
+    if (createSecret) { try { ensurePrivateDir(dir); } catch { /* pipeSecret then finds no dir */ } }
+    const secret = pipeSecret(dir, createSecret);
+    const pipe = secret ? createHash("sha256").update(`${secret}\0${h}`).digest("hex").slice(0, 32) : "";
+    return { path: pipe ? `\\\\.\\pipe\\hunch-${pipe}` : "", dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
   }
   const dir = join(tmpdir(), `hunch-${uid}`);
   return { path: join(dir, `${h}.sock`), dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
 }
 
 function ensurePrivateDir(dir: string): void {
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  if (process.platform !== "win32") chmodSync(dir, 0o700);
+  if (mkdirSync(dir, { recursive: true, mode: 0o700 }) !== undefined || process.platform === "win32") return;
+  // Pre-existing: tighten it only when it is a real directory we own. chmod follows a
+  // symlink, so one planted at this path must never be chmodded (dirState rejects it).
+  const st = lstatSync(dir);
+  if (st.isDirectory() && !st.isSymbolicLink() && st.uid === process.getuid?.()) chmodSync(dir, 0o700);
 }
 
 /** Diagnostics only, and only when HUNCH_HOOK_DAEMON_LOG names a file. */
@@ -253,6 +287,10 @@ async function attempt(provider: string, payload: string): Promise<boolean> {
     if (dir === "missing") spawnDaemonAfterExit(root, endpoint);
     return fallback("dir");
   }
+  if (!endpoint.path) {
+    spawnDaemonAfterExit(root, endpoint);
+    return fallback("secret");
+  }
   const { socket, code } = await connectWithin(endpoint.path, CONNECT_BUDGET_MS);
   if (!socket) {
     if (code === "ENOENT" || code === "ECONNREFUSED") spawnDaemonAfterExit(root, endpoint);
@@ -276,8 +314,10 @@ async function attempt(provider: string, payload: string): Promise<boolean> {
   if (!ready || ready.ready !== true) { socket.destroy(); return fallback(`queue:${ready?.error ?? "none"}`); }
   // Past `go` the daemon runs the hook: never fall back (it would run twice), never time out.
   socket.write(`${JSON.stringify({ go: true })}\n`);
-  const reply = await reader.next<HookReply & { error?: string }>();
+  const reply = await reader.next<HookReply & { error?: string; ran?: boolean }>();
   socket.destroy();
+  // The daemon could not even start this hook (its cwd is gone): nothing ran, so run it here.
+  if (reply?.ran === false) return fallback(`notrun:${reply.error ?? ""}`);
   if (!reply || reply.error !== undefined || typeof reply.stdout !== "string" || typeof reply.stderr !== "string"
     || !Number.isInteger(reply.exitCode)) {
     process.stderr.write("hunch: hook daemon lost the reply\n");
@@ -325,11 +365,16 @@ function listen(server: Server, path: string): Promise<boolean> {
 export async function runHookDaemon(root: string, handle: HookHandler): Promise<void> {
   const build = buildId();
   if (!build) return;
-  const endpoint = endpointFor(root, build);
+  const endpoint = endpointFor(root, build, true);
+  if (!endpoint.path) return;
   const served = canonicalRoot(root);
   const pristineEnv: Env = {};
   for (const [name, value] of Object.entries(process.env)) if (value !== undefined) pristineEnv[name] = value;
   const pristineCwd = process.cwd();
+  // Workers the handler spawns (sibling-warm) re-run `process.argv[1]` with a hidden
+  // command the hook bundle this daemon runs from does not route: point it at the CLI
+  // entry beside the bundle, as in a hook process.
+  process.argv[1] = fileURLToPath(new URL("./index.js", import.meta.url));
 
   try { ensurePrivateDir(endpoint.dir); } catch { return; }
   if (dirState(endpoint.dir) !== "ok") return;
@@ -351,9 +396,9 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
     }) as typeof process.stdout.write;
     const writeOut = process.stdout.write, writeErr = process.stderr.write;
     let exitCode = 0;
+    try { process.chdir(request.cwd); } catch (e) { throw new NotRun(e instanceof Error ? e.message : String(e)); }
     setEnv(requestEnv(pristineEnv, request.env));
     try {
-      process.chdir(request.cwd);
       process.exitCode = undefined;
       process.stdout.write = capture(stdout);
       process.stderr.write = capture(stderr);
@@ -407,10 +452,12 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
       socket.write(`${JSON.stringify({ ready: true })}\n`);
       const go = await reader.next<{ go?: boolean }>(GO_BUDGET_MS);
       if (!go || go.go !== true) { socket.destroy(); return; }
-      let reply: HookReply | { error: string };
+      let reply: HookReply | { error: string; ran?: false };
       const started = Date.now();
       const watchdog = setTimeout(() => { debugLog(`stuck ${RUN_DEADLINE_MS}ms`); process.exit(1); }, RUN_DEADLINE_MS);
-      try { reply = await execute(request); } catch (e) { reply = { error: `run:${e instanceof Error ? e.message : String(e)}` }; }
+      try { reply = await execute(request); } catch (e) {
+        reply = { error: `run:${e instanceof Error ? e.message : String(e)}`, ...(e instanceof NotRun ? { ran: false as const } : {}) };
+      }
       finally { clearTimeout(watchdog); }
       debugLog(`run ${Date.now() - started}ms`);
       // A shutdown waits for this: the reply is flushed before the process may exit.
@@ -483,5 +530,11 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
   renameSync(temp, endpoint.token);
   debugLog("listening");
   touch();
-  setInterval(() => { if (buildId() !== build) void shutdown(); }, BUILD_POLL_MS).unref();
+  // A rebuilt CLI, or a token file removed (a temp cleaner) or replaced: clients can no
+  // longer reach this daemon, so exit and let the next hook start a fresh one.
+  setInterval(() => {
+    let current = "";
+    try { current = readFileSync(endpoint.token, "utf8").trim(); } catch { /* gone */ }
+    if (buildId() !== build || current !== token) void shutdown();
+  }, BUILD_POLL_MS).unref();
 }
