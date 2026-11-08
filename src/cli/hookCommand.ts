@@ -42,9 +42,11 @@ import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../cor
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
-export async function runHookCommand(opts: { provider?: string }): Promise<void> {
-    // Every entry (full CLI, the hook-only bundle) comes through here: one hook
-    // invocation, one memo scope.
+/** `input` supplies the event JSON; it defaults to the process's stdin. The hook daemon passes
+ *  the payload it already holds. */
+export async function runHookCommand(opts: { provider?: string }, input: () => Promise<string> = readStdin): Promise<void> {
+    // Every entry (full CLI, the hook-only bundle, the hook daemon) comes through
+    // here: one hook invocation, one memo scope.
     beginHookInvocation();
     // A hook MUST NEVER break the agent: on ANY error or unrecognized input we
     // exit 0 and never deny (the action defers to the host's normal flow).
@@ -57,7 +59,7 @@ export async function runHookCommand(opts: { provider?: string }): Promise<void>
     try {
       provider = hookProvider(opts.provider);
       if (!provider) return;
-      const evt = normalizeHookEvent(JSON.parse(await readStdin()), provider);
+      const evt = normalizeHookEvent(JSON.parse(await input()), provider);
       if (!evt) return;
       eventName = evt.hook_event_name;
       // Grounding reads the store of the checkout the event's file is in; the prompt's
