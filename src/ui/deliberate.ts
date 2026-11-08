@@ -8,8 +8,10 @@
 export const deliberateJs = String.raw`
   // ---- deliberate: what in memory deserves a person's judgment, and the move it suggests.
   const D = { review: null, tab: '', key: '', skipped: new Set(), done: null, busy: false, gen: 0 };
-  const D_TABS = { conflict: 'Conflict', stale: 'Stale', duplicate: 'Duplicate', weak: 'Weak' };
+  const D_TABS = { conflict: 'Conflict', stale: 'Stale', duplicate: 'Duplicate', weak: 'Weak', finding: 'Findings', unlinked: 'Unlinked', unconfirmed: 'Unconfirmed' };
   const D_PREFIX = '#/deliberate/';
+  // The kinds that came from the Needs-you page keep its order and its one-line reason.
+  const D_HINT = { finding: 'Problems someone saw that nobody has settled.', unlinked: 'No feature, component or file routes these to an agent.', unconfirmed: 'Agents treat these as notes, not your word, until you confirm them.' };
   const dShown = (g) => g.cards.filter((c) => !D.skipped.has(c.key));
   const dCount = (g) => g.total - (g.cards.length - dShown(g).length);
   const dGroup = () => (D.review ? D.review.groups.find((g) => g.kind === D.tab) : null);
@@ -43,7 +45,7 @@ export const deliberateJs = String.raw`
     }
     $('dlb-list').replaceChildren(...shown.map((c) => dRow(c)));
     const total = g ? dCount(g) : 0;
-    $('dlb-status').textContent = (body.gitFailed ? 'Git did not answer, so Stale may be missing cards. ' : '') + (!total ? '' : g.total > g.cards.length ? 'Showing the first ' + g.cards.length + ' of ' + g.total + '.' : 'Ranked by reach.');
+    $('dlb-status').textContent = (body.gitFailed ? 'Git did not answer, so Stale may be missing cards. ' : '') + (!total ? '' : g.total > g.cards.length ? 'Showing the first ' + g.cards.length + ' of ' + g.total + '.' : D_HINT[g.kind] || 'Ranked by reach.');
     drawCard();
   }
   function dRow(c) {
@@ -78,7 +80,7 @@ export const deliberateJs = String.raw`
     if (!c) {
       const rest = D.review.groups.filter((x) => dCount(x) > 0);
       body.append(el('h2', rest.length ? 'Nothing left under ' + D_TABS[D.tab] + '.' : 'Nothing to review.'));
-      if (!rest.length) body.append(el('p', 'Checked for conflicts, dead links and duplicates, and for commits nobody explained. That is not proof memory is right.', 'muted'));
+      if (!rest.length) body.append(el('p', 'Checked for conflicts, dead links and duplicates, commits nobody explained, open findings, and memory nobody linked or confirmed. That is not proof memory is right.', 'muted'));
       box.replaceChildren(body);
       return;
     }
@@ -133,9 +135,12 @@ export const deliberateJs = String.raw`
     const id = c.records[0].id;
     if (a.dropLinks.length) add('Remove missing links', c.recommend === 'drop-links', () => dRun(c, [{ id, action: 'link', body: { removeFiles: a.dropLinks } }], 'Removed ' + a.dropLinks.length + (a.dropLinks.length === 1 ? ' missing link.' : ' missing links.')));
     if (a.fixWording) add('Fix wording', c.recommend === 'fix-wording', () => dOpen(id, 'text'));
-    if (a.keep === 'confirm') add('Confirm as mine', false, () => dRun(c, [{ id, action: 'confirm', body: {} }], 'Confirmed as yours.'));
-    if (a.keep === 'review-rule') add('Review rule', false, () => dOpen(id, 'confirm'));
-    if (a.remove) add('Remove memory', c.recommend === 'remove' && !a.merge, () => dRun(c, [{ id, action: 'remove', body: { reason: c.claim } }], DONE.remove), 'danger');
+    // Needs-you cards: the move that settles them leads.
+    if (a.open) add('Open it', true, () => { location.hash = '#/memory/' + enc(id); });
+    if (a.link) add('Link it', true, () => dOpen(id, 'links'));
+    if (a.keep === 'confirm') add('Confirm as mine', c.kind === 'unconfirmed', () => dRun(c, [{ id, action: 'confirm', body: {} }], 'Confirmed as yours.'));
+    if (a.keep === 'review-rule') add('Review rule', c.kind === 'unconfirmed', () => dOpen(id, 'confirm'));
+    if (a.remove) add('Remove memory', c.recommend === 'remove' && !a.merge, () => dRun(c, [{ id, action: 'remove', body: { reason: D_HINT[c.kind] ? 'Removed from Deliberate (' + D_TABS[c.kind] + ').' : c.claim } }], DONE.remove), 'danger');
     // A pair: grill the one the review would let go, with the other beside it.
     add('Grill me on this', false, () => { location.hash = '#/grill/' + enc(a.merge ? a.merge.duplicate : id); });
     add('Skip', false, () => { D.skipped.add(c.key); dNext(c); });
