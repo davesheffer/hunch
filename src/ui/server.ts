@@ -16,10 +16,11 @@
  * /api/memory runs `hunch new` (the CLI owns validation, git and the store), one at a time,
  * and answers with the move plus its Undo.
  * A write also needs a JSON body and, when the browser sends an Origin, this server's own.
- * Ask: GET /api/ask lists who can be asked; POST /api/ask, guarded like a write since it spends
- * the person's subscription, asks one of them one question at a time and writes nothing.
+ * GET /api/ask lists who can be asked, and why nobody can when nobody can. Asking spends the
+ * person's subscription, so each POST that asks is guarded like a write, writes nothing, and
+ * waits for the last question to be answered.
  * Grill: GET /api/grill/:id says what a grill of that memory would send, before anything is sent;
- * POST /api/grill, guarded the same way and sharing Ask's one-at-a-time, runs one turn of it.
+ * POST /api/grill runs one turn of it.
  * Board: GET /api/board/:id lays a recorded decision or rule out as a board, asking nobody;
  * POST /api/board/preview says what a question would send, sending nothing; POST /api/board,
  * guarded like Grill and sharing its one-at-a-time, asks it and returns the checked board.
@@ -40,7 +41,7 @@ import { uiCss, uiHtml, uiJs } from "./page.js";
 import { createPulse } from "./pulse.js";
 import { memoryHistory, type HistorySource } from "./history.js";
 import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
-import { askContext, askPrompt, askRequest, defaultAskRunner, parseAnswer, type AskRunner } from "./ask.js";
+import { defaultAskRunner, type AskRunner } from "./ask.js";
 import { canGrill, evidenceView, gatherEvidence, grillPrompt, grillRequest, readTurn, type GrillFlag } from "./grill.js";
 import { reviewCards, type Review } from "./review.js";
 import { boardEvidenceView, boardPrompt, boardRequest, canThink, explainBoard, gatherBoardEvidence, readBoard } from "./board.js";
@@ -202,27 +203,6 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     return false;
   };
 
-  const ask = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    if (refused(req, res)) return;
-    const body = await readJson(req);
-    if (!body.ok) return send(res, body.status, { error: body.error });
-    const parsed = askRequest(body.value);
-    if (!parsed.ok) return send(res, 400, { error: parsed.error });
-    if (asking) return send(res, 409, { error: "Still waiting on your last question." });
-    asking = true;
-    try {
-      const { assistants, blocked } = await asker.assistants();
-      const assistant = assistants.find((a) => a.name === parsed.assistant);
-      if (blocked || !assistant) return send(res, 409, { error: "That assistant can't be asked right now." });
-      if (parsed.about && !memoryDetail(source(), parsed.about)) return send(res, 404, { error: `No memory with id ${parsed.about}.` });
-      const { prompt, used } = askPrompt(parsed.question, askContext(source(), parsed.question, parsed.about));
-      let reply: string;
-      try { reply = await asker.ask(assistant.name, prompt); }
-      catch (error) { return send(res, 502, { error: `${assistant.label} did not answer: ${(error instanceof Error ? error.message : String(error)).slice(0, 300)}` }); }
-      return send(res, 200, { assistant: { name: assistant.name, label: assistant.label }, ...parseAnswer(reply), used: used.map((m) => ({ id: m.id, title: m.title })) });
-    } finally { asking = false; }
-  };
-
   // What the review already holds against this record, and the records it compared it with.
   const flagged = (id: string): { flags: GrillFlag[]; partners: string[] } => {
     try {
@@ -314,13 +294,11 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const writeRoute = req.method === "POST" ? WRITE_ROUTE.exec(url.pathname) : null;
     const createRoute = req.method === "POST" && url.pathname === "/api/memory";
-    const askRoute = req.method === "POST" && url.pathname === "/api/ask";
     const grillRoute = req.method === "POST" && url.pathname === "/api/grill";
     const boardRoute = req.method === "POST" && (url.pathname === "/api/board" || url.pathname === "/api/board/preview");
-    if (req.method !== "GET" && !writeRoute && !createRoute && !askRoute && !grillRoute && !boardRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
-    if (writeRoute || createRoute || askRoute || grillRoute || boardRoute) {
+    if (req.method !== "GET" && !writeRoute && !createRoute && !grillRoute && !boardRoute) { res.setHeader("allow", "GET, POST"); return send(res, 405, { error: `${req.method} is not allowed.` }); }
+    if (writeRoute || createRoute || grillRoute || boardRoute) {
       if (!tokenMatches(req.headers.authorization, opts.token)) return send(res, 401, { error: "Access key missing or expired." });
-      if (askRoute) return ask(req, res);
       if (grillRoute) return grill(req, res);
       if (boardRoute) return board(req, res, url.pathname === "/api/board");
       return writeRoute ? write(req, res, writeRoute[1]!, writeRoute[2]!) : write(req, res, null, "new");

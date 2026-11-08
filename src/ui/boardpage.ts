@@ -335,6 +335,8 @@ export const boardJs = String.raw`
     const o = b.options[i], lead = b.recommended === i;
     const why = lead && b.why ? b.why + (o.for ? '\n\n' + o.for : '') : o.for;
     if (bdGated(b)) { BD.capture = { title: o.title, why, rejected: bdRejectedLines(b, i) }; drawBoard(); return; }
+    // No feature carried over: a live decision with one goes through /capture above, so the one
+    // left is a retired decision's, and its topic belongs to whatever replaced it.
     state.draft = { title: o.title, text: o.title, context: why, rejected: bdRejectedLines(b, i).join('\n') };
     location.hash = '#/memory/new';
   }
