@@ -56,7 +56,7 @@ function dirtyPaths(root: string): string[] | null {
   // A `.git` entry at the root makes it the toplevel (no prefix to ask git for),
   // unless the environment redirects git elsewhere.
   const redirected = !!(process.env.GIT_DIR || process.env.GIT_WORK_TREE || process.env.GIT_PREFIX);
-  if (!redirected && existsSync(join(root, ".git"))) { /* toplevel: prefix stays empty */ } else try {
+  if (!redirected && isGitToplevel(root)) { /* toplevel: prefix stays empty */ } else try {
     prefix = execFileSync("git", ["-C", root, "rev-parse", "--show-prefix"], { encoding: "utf8", timeout: 2_000, stdio: ["ignore", "pipe", "ignore"] }).trim();
   } catch {
     return null;
@@ -114,6 +114,19 @@ function save(file: string, fp: Fingerprints): void {
 
 /** Record the working tree as it stands, so later shell writes are measured
  *  from here (a prompt, or any tool call that is not a shell command). */
+/** A `.git` entry git itself would accept at `root`: a directory holding HEAD, or
+ *  a `gitdir:` file. A stray or empty `.git` dir is skipped by git's discovery,
+ *  which then walks up, so it must not be taken as the toplevel. */
+function isGitToplevel(root: string): boolean {
+  const dotGit = join(root, ".git");
+  try {
+    if (statSync(dotGit).isDirectory()) return existsSync(join(dotGit, "HEAD"));
+    return readFileSync(dotGit, "utf8").startsWith("gitdir:");
+  } catch {
+    return false;
+  }
+}
+
 export function refreshShellBaseline(root: string, sessionId: string | undefined, agentId?: string): void {
   if (!sessionId) return;
   const fp = fingerprint(root);

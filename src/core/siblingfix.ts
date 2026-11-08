@@ -617,7 +617,9 @@ interface Pair { target: FnRange; sibling: FnRange; siblingFile: string; similar
 function cachedOnly(root: string, target: string, cacheFile: string, env: NodeJS.ProcessEnv, budget: Budget, now: number, miss: () => SiblingLesson[]): SiblingLesson[] {
   // Inside a hook invocation the HEAD lookup may already have happened (co-change
   // ranking asks the same question for the same file).
-  const known = recall<HeadBlob>("headblob", root, target);
+  // A failed lookup (timeout) is not an answer: take its own budgeted try.
+  const recalled = recall<HeadBlob>("headblob", root, target);
+  const known = recalled?.head ? recalled : undefined;
   const [head, targetBlob] = known ? [known.head, known.blob] : (git(root, ["rev-parse", "HEAD", `HEAD:${target}`], env, budget) ?? "").trim().split(/\r?\n/);
   if (!known && head && targetBlob) { remember<HeadBlob>("headblob", root, target, { head, blob: targetBlob }); remember("head", root, "", head); }
   if (!head || !targetBlob) return [];

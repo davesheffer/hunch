@@ -4,6 +4,7 @@
  * MUST NOT import ./index.js (directly or transitively).
  */
 import { existsSync, readFileSync } from "node:fs";
+import { beginHookInvocation } from "../core/hookMemo.js";
 import { join, relative, dirname, resolve, isAbsolute } from "node:path";
 import { hunchPaths, findRoot, toPosixTarget, isDir, repoRelativeTarget } from "../core/paths.js";
 import { looksLikeCorrection, CORRECTION_NUDGE, stripHostBlocks } from "../core/correction.js";
@@ -42,6 +43,9 @@ import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
 export async function runHookCommand(opts: { provider?: string }): Promise<void> {
+    // Every entry (full CLI, the hook-only bundle) comes through here: one hook
+    // invocation, one memo scope.
+    beginHookInvocation();
     // A hook MUST NEVER break the agent: on ANY error or unrecognized input we
     // exit 0 and never deny (the action defers to the host's normal flow).
     // Unrecognized input stays silent; an error after the event was recognized

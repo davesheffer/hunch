@@ -38,8 +38,12 @@ function gitDate(ms: number): string {
 
 /** True only when HEAD provably has not moved since `sinceMs`: the checkout's
  *  HEAD reflog (written by every commit, checkout, reset, pull, merge that moves
- *  it) was last modified before then. Reads files only; anything unusual
- *  (no reflog, unreadable git dir) answers false and the caller asks git. */
+ *  it) and, on a branch, that branch's reflog in the common git dir (a commit
+ *  from another worktree with the same branch checked out moves the branch
+ *  without touching this HEAD's log) were last modified before then. Reads
+ *  files only; anything unusual (no reflog, unreadable git dir) answers false
+ *  and the caller asks git. A filesystem whose clock lags this process by more
+ *  than the margin can still hide a commit made in the window's first seconds. */
 export function headUnmovedSince(root: string, sinceMs: number): boolean {
   try {
     let dir = resolve(root);
@@ -53,7 +57,16 @@ export function headUnmovedSince(root: string, sinceMs: number): boolean {
           gitDir = isAbsolute(m[1]!) ? m[1]! : resolve(dir, m[1]!);
         }
         // Margin for filesystem timestamp granularity.
-        return statSync(join(gitDir, "logs", "HEAD")).mtimeMs < sinceMs - 2_000;
+        const before = (file: string): boolean => statSync(file).mtimeMs < sinceMs - 2_000;
+        if (!before(join(gitDir, "logs", "HEAD"))) return false;
+        const ref = /^ref:\s*(refs\/\S+)\s*$/m.exec(readFileSync(join(gitDir, "HEAD"), "utf8"))?.[1];
+        if (!ref) return true; // detached: only this HEAD's log moves it
+        let common = gitDir;
+        try {
+          const c = readFileSync(join(gitDir, "commondir"), "utf8").trim();
+          if (c) common = isAbsolute(c) ? c : resolve(gitDir, c);
+        } catch { /* not a linked worktree */ }
+        return before(join(common, "logs", ...ref.split("/")));
       }
       const parent = dirname(dir);
       if (parent === dir) return false;

@@ -208,7 +208,6 @@ import { repairDecisionReference } from "../core/refrepair.js";
 import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } from "./invocation.js";
 import { formatUpdateNotice, isNewerVersion, scheduleUpdateCheck, shouldCheckForUpdate } from "../core/updatecheck.js";
 import { runHookCommand } from "./hookCommand.js";
-import { beginHookInvocation } from "../core/hookMemo.js";
 import { openTeamStore, clearTrackedStore, trackedStore, type TeamStoreOptions } from "./teamStore.js";
 import { markerFor } from "./optOutGate.js";
 
@@ -5664,7 +5663,7 @@ program
   .command("hook")
   .description("Agent-agnostic hook handler: normalizes Claude, VS Code, Cursor, Windsurf, and Antigravity events into Hunch context and strict policy checks. Reads hook JSON on stdin.")
   .option("--provider <provider>", "hook event dialect: claude | vscode | cursor | windsurf | antigravity", "claude")
-  .action(async (opts: { provider?: string }) => { beginHookInvocation(); await runHookCommand(opts); });
+  .action(async (opts: { provider?: string }) => { await runHookCommand(opts); });
 
 // ---- review (curate loop) -------------------------------------------------
 /** Promote a draft to accepted/human-confirmed and CONFIRM its drafted tripwires —
