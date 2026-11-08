@@ -11,6 +11,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { headAndBlob, hookActive, knownHead } from "./hookMemo.js";
 import type { CochangeStrength } from "./taskRanking.js";
 
 export interface CochangeOptions {
@@ -71,7 +72,9 @@ export function cochangeFor(root: string, file: string, options: CochangeOptions
   const timeoutMs = options.timeoutMs ?? 2_000;
   const target = file.replace(/\\/g, "/");
   const env = gitEnv();
-  const head = headSha(root, env, timeoutMs);
+  // Inside a hook invocation one git call answers HEAD for every lookup (and the
+  // file's blob for the sibling-fix cache read that follows).
+  const head = hookActive() ? (knownHead(root) ?? headAndBlob(root, target, env, timeoutMs).head) : headSha(root, env, timeoutMs);
   if (!head) return new Map();
   const cacheDir = join(root, ".hunch-cache", "cochange");
   const cacheFile = join(cacheDir, `${head.slice(0, 12)}-${createHash("sha256").update(`${target}\n${maxCommits}\n${maxFiles}`).digest("hex").slice(0, 16)}.json`);

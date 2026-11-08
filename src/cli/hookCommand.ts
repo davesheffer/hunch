@@ -37,7 +37,7 @@ import { premiseEscalations } from "../core/premises.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
-import { refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
+import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
@@ -102,7 +102,11 @@ export async function runHookCommand(opts: { provider?: string }): Promise<void>
               if (!stale) shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
             }
           } else {
-            refreshShellBaseline(root, evt.session_id, evt.agent_id);
+            // An edit tool wrote known files: move just those baseline entries.
+            // Any other tool (and a first observation) re-reads the tree.
+            const edited = EDIT_TOOLS.has(evt.tool_name ?? "") || evt.tool_input?.patch_files?.length ? editTargets(root, evt.tool_input).map((t) => t.target) : [];
+            if (edited.length) noteEditedFiles(root, evt.session_id, evt.agent_id, edited);
+            else refreshShellBaseline(root, evt.session_id, evt.agent_id);
           }
         } catch { shellGround = ""; }
         // A failed check that matches a recorded bug says so; anything else stays silent.
@@ -866,6 +870,9 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
  *  Move-to destination is its own entry, carrying the section's added lines);
  *  every other edit tool yields its single `file_path`. Paths outside the repo
  *  ("..") or on another drive ("D:/…") are skipped. */
+/** Host tools that write exactly the files named in their input. */
+const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+
 function editTargets(root: string, input: HunchToolInput | undefined): Array<{ abs: string; target: string; lines: string[] }> {
   const raw = input?.patch_files?.length
     ? input.patch_files.flatMap((f) => (f.moved_to ? [f.path, f.moved_to] : [f.path]).map((abs) => ({ abs, lines: f.added_lines })))
