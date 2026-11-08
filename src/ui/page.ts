@@ -11,7 +11,7 @@ export const uiHtml = `<!doctype html>
 <title>Hunch</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/ui.css"><script src="/ui.js" defer></script></head>
 <body>
 <header class="top"><div class="brand"><span class="mark" aria-hidden="true"></span><strong>Hunch</strong><span id="repo-name" class="muted mono"></span></div>
-<nav aria-label="Sections"><a href="#/brain" data-nav="brain">Brain</a><a href="#/memory" data-nav="memory">Memory</a><a href="#/deliberate" data-nav="deliberate">Deliberate</a><a href="#/attention" data-nav="attention">Needs you <span id="attention-count" class="count"></span></a><a href="#/ask" data-nav="ask">Ask</a><a href="#/history" data-nav="history">History</a><a href="#/setup" data-nav="setup" class="apart">Setup</a></nav></header>
+<nav aria-label="Sections"><a href="#/brain" data-nav="brain">Brain</a><a href="#/memory" data-nav="memory">Memory</a><a href="#/deliberate" data-nav="deliberate">Deliberate</a><a href="#/attention" data-nav="attention">Needs you <span id="attention-count" class="count"></span></a><a href="#/history" data-nav="history">History</a><a href="#/setup" data-nav="setup" class="apart">Setup</a></nav></header>
 <p id="error" role="alert" hidden></p>
 <main>
 <section id="brain-page" hidden aria-labelledby="brain-title">
@@ -70,10 +70,6 @@ export const uiHtml = `<!doctype html>
 <div class="pane"><ul id="attention" class="list"></ul></div>
 <article id="attn-detail" class="panel" aria-live="polite"><p class="muted">Select a memory.</p></article>
 </div>
-</section>
-<section id="ask-page" hidden aria-labelledby="ask-title">
-<div class="bar"><h1 id="ask-title">Ask</h1><span id="ask-status" class="muted small" role="status" aria-live="polite"></span></div>
-<div id="ask" class="ask"></div>
 </section>
 <section id="history-page" hidden aria-labelledby="history-title">
 <div class="bar"><h1 id="history-title">History</h1><span id="history-status" class="muted small" role="status" aria-live="polite"></span></div>
@@ -184,13 +180,6 @@ details{margin-top:18px}summary{cursor:pointer;font:600 11px var(--mono);letter-
 .history .v{flex:none;min-width:116px}.history .t{flex:none;color:var(--muted);font:12px var(--mono)}
 #detail .history .h,#attn-detail .history .h{padding:4px 0}
 #detail .history .v,#attn-detail .history .v{min-width:0}
-.ask{flex:1;min-height:0;display:grid;grid-template-columns:minmax(320px,440px) minmax(0,1fr)}
-.ask>*{min-height:0;overflow:auto;padding:16px}
-.ask-q{border-right:1px solid var(--line)}
-.ask .editor{margin:0}.ask p{margin:0 0 8px;overflow-wrap:anywhere;white-space:pre-wrap}
-.ask .card{border:0;padding:0}.ask .card h3:first-child{margin-top:0}.options{list-style:none;margin:0;padding:0;display:grid;gap:12px}
-.options>li{border-top:1px solid var(--line);padding-top:12px}.options>li:first-child{border-top:0;padding-top:0}
-.ph{color:var(--muted)}
 .ok{color:var(--accent);font-weight:600}.no{color:var(--muted)}
 #error{margin:0;flex:none;color:var(--error);border-bottom:1px solid var(--error);padding:8px 16px;background:var(--surface)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -257,10 +246,9 @@ body{height:auto;overflow:visible;display:block}
 .top{height:auto;min-height:48px;flex-wrap:wrap;padding:6px 12px}nav{flex:1 1 100%;flex-wrap:nowrap;height:auto;overflow-x:auto;max-width:100%;scrollbar-width:none}nav a{height:40px;padding:0 9px;flex:none;white-space:nowrap}nav a.apart{margin-left:0}
 main{overflow:visible}main>section{height:auto;display:block}
 .bar{padding:8px 12px}.search{width:100%}.segmented{flex-wrap:wrap}
-.split,.ask,.brain{display:block}
+.split,.brain{display:block}
 .pane{border-right:0}.panel{padding:14px 12px;overflow:visible}
 .split.reading .pane{display:none}.split:not(.reading) .panel{display:none}.split.reading .back,.brain.reading .back{display:inline-block}
-.ask>*{overflow:visible}.ask-q{border-right:0}
 .stage{display:flex;flex-direction:column}.canvas-wrap{height:300px;flex:none}
 .clist{position:static;width:auto;height:auto;overflow:visible;clip:auto}.clist a{display:flex;justify-content:space-between;align-items:center;min-height:44px;padding:0 12px;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none}
 .brain.reading .clist,.brain.reading .nextup{display:none}.brain:not(.reading)>.panel{display:none}
@@ -295,12 +283,11 @@ export const uiJs = String.raw`
   const DONE = { edit: 'Saved.', link: 'Links saved.', remove: 'Removed. Agents no longer get this memory.', restore: 'Restored. Agents get this memory again.', confirm: 'Confirmed as yours.', unconfirm: 'Confirmation taken back.' };
 
   // flash: the last change on the open memory, with its Undo, until another memory is opened.
-  // ask: the question in progress and its answer, kept while the person looks around.
   // draft: what the next New memory form starts with.
   // shownAll: the long lists opened past their first rows.
   // openForm: a form to open as soon as the next memory shows (links, confirm, text).
   const state = { page: '', kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, attentionGen: 0, mapGen: 0, component: '', shownAll: new Set(), flash: null, draft: null, openForm: '',
-    attn: null, attnTab: '', askRoute: '', ask: { about: null, question: '', assistant: '', answer: null, waiting: false, problem: '', gen: 0 } };
+    attn: null, attnTab: '' };
 
   function showError(text) { $('error').textContent = text; $('error').hidden = !text; }
   async function request(path, init) {
@@ -761,7 +748,7 @@ export const uiJs = String.raw`
     let wording = null;
     if (!a.textLocked) { wording = button('Edit text', 'secondary'); wording.addEventListener('click', () => open(textForm(d, close))); bar.append(wording); }
     const links = button('Edit links', quiet('links')); links.addEventListener('click', () => open(linksForm(d, close))); bar.append(links);
-    const asking = button('Ask about this', 'secondary'); asking.addEventListener('click', () => { location.hash = '#/ask/' + enc(d.id); }); bar.append(asking);
+    const think = button('Think this through', 'secondary'); think.addEventListener('click', () => boardSeed({ about: { id: d.id, title: d.title } })); bar.append(think);
     if (d.active) { const g = button('Grill me on this', 'secondary'); g.addEventListener('click', () => { location.hash = '#/grill/' + enc(d.id); }); bar.append(g); }
     if (d.kind === 'decision' || d.kind === 'rule') { const x = button(d.kind === 'rule' ? 'Explain this rule' : 'Explain this decision', 'secondary'); x.addEventListener('click', () => { location.hash = '#/board/' + enc(d.id); }); bar.append(x); }
     if (a.removable) { const b = button('Remove memory', 'danger end'); b.addEventListener('click', () => open(removeForm(d, close))); bar.append(b); }
@@ -1183,8 +1170,7 @@ export const uiJs = String.raw`
   }
   $('replay').addEventListener('click', () => { if (B.replay) stopReplay(false); else startReplay(); });
 
-  // ---- ask: one question to an assistant the person picks. The answer is a suggestion:
-  // recording it opens the New memory form, filled in, for them to change and add.
+  // Why nobody can be asked, for the board and the grill.
   const NOBODY = {
     'local-only': 'Asking is off: this repository uses local-only analysis. Change it with hunch provider.',
     'other-provider': 'Asking needs Claude Code, and this repository is set to use something else. Change it with hunch provider.',
@@ -1192,142 +1178,6 @@ export const uiJs = String.raw`
     'not-subscription': 'Asking needs Claude Code signed in with a subscription, so nothing is billed per token. Run claude auth login, then reload.',
     'subscription-unknown': 'Claude Code took too long to say how it is signed in, so nothing was asked. Reload to try again; if it keeps happening, run claude auth status.',
   };
-  function resetAsk() { const a = state.ask; a.about = null; a.question = ''; a.answer = null; a.waiting = false; a.problem = ''; a.gen++; $('ask-status').textContent = ''; }
-
-  function recordOption(a, r, option) {
-    const recommended = r.recommended !== null && r.options[r.recommended] === option;
-    state.draft = {
-      title: option.title, text: option.title, context: recommended ? r.why || option.for : option.for,
-      rejected: r.options.filter((o) => o !== option).map((o) => o.title).join('\n'),
-      feature: (a.about && a.about.feature) || '',
-    };
-    location.hash = '#/memory/new';
-  }
-  function answerView(a) {
-    const r = a.answer;
-    const box = el('section', undefined, 'card');
-    box.append(el('p', 'Suggestion from ' + r.assistant.label + '. Nothing is saved until you record it.', 'muted small'));
-    if (r.text) {
-      box.append(el('h3', 'Answer'), el('p', r.text));
-      const b = button('Record as a decision', 'secondary');
-      b.addEventListener('click', () => { state.draft = { text: r.text, feature: (a.about && a.about.feature) || '' }; location.hash = '#/memory/new'; });
-      box.append(b);
-    } else {
-      if (r.recommended !== null) box.append(el('h3', 'Recommended'), el('h2', r.options[r.recommended].title));
-      if (r.why) box.append(el('p', r.why));
-      box.append(el('h3', 'Options'));
-      const ul = el('ul', undefined, 'options');
-      for (const o of r.options) {
-        const li = el('li'); li.append(el('h2', o.title));
-        if (o.for) li.append(el('p', 'For: ' + o.for));
-        if (o.against) li.append(el('p', 'Against: ' + o.against));
-        const b = button('Record this decision', 'secondary'); b.addEventListener('click', () => recordOption(a, r, o));
-        li.append(b); ul.append(li);
-      }
-      box.append(ul);
-      if (r.unknowns.length) { box.append(el('h3', 'Still unknown')); const u = el('ul'); for (const x of r.unknowns) u.append(el('li', x)); box.append(u); }
-    }
-    box.append(el('h3', 'Based on'));
-    if (r.used.length) { const u = el('ul'); for (const m of r.used) { const li = el('li'); li.append(memoryLink(m.id, m.title)); u.append(li); } box.append(u); }
-    else box.append(el('p', 'No memory matched. The answer rests on your question alone.', 'muted'));
-    return box;
-  }
-  function drawAsk(who) {
-    const a = state.ask, box = $('ask');
-    const parts = [];
-    const sides = (left) => {
-      const l = el('div', undefined, 'ask-q'), r = el('div', undefined, 'ask-a');
-      l.append(...left);
-      if (a.answer) r.append(answerView(a)); else r.append(el('p', a.waiting ? 'Waiting for the answer…' : 'The answer appears here.', 'ph'));
-      box.replaceChildren(l, r);
-    };
-    if (a.about) {
-      const row = el('p', 'About: ');
-      row.append(memoryLink(a.about.id, a.about.title));
-      parts.push(row);
-    }
-    if (!who.assistants.length) {
-      parts.push(el('p', NOBODY[who.blocked] || 'Claude Code not found. Install it, sign in, then start hunch ui again.', 'callout'));
-      $('ask-status').textContent = '';
-      return sides(parts);
-    }
-    if (!who.assistants.some((x) => x.name === a.assistant)) a.assistant = who.assistants[0].name;
-    const chosen = () => who.assistants.find((x) => x.name === a.assistant);
-
-    const form = el('form', undefined, 'editor'); form.noValidate = true;
-    const question = el('textarea'); question.rows = 4; question.value = a.question; question.maxLength = 2000;
-    question.addEventListener('input', () => { a.question = question.value; });
-    form.append(...labelled('Your question', question, 'ask-question'));
-    const send = button('', '', 'submit');
-    const note = el('p', '', 'muted small');
-    const label = () => { const c = chosen(); send.textContent = 'Ask ' + c.label; note.textContent = 'Sends your question and related memory to ' + c.label + ', on the account it is signed in to. Nothing is saved.'; };
-    if (who.assistants.length > 1) {
-      const pick = select(who.assistants.map((x) => [x.name, x.label])); pick.value = a.assistant;
-      pick.addEventListener('change', () => { a.assistant = pick.value; label(); });
-      form.append(...labelled('Who to ask', pick, 'ask-who'));
-    }
-    label();
-    const problem = problemLine(); say(problem, a.problem);
-    const row = el('div', undefined, 'form-actions'); row.append(send);
-    if (a.about || a.answer || a.question) {
-      const clear = button('Start over', 'secondary');
-      clear.addEventListener('click', () => { resetAsk(); if (location.hash === '#/ask') drawAsk(who); else location.hash = '#/ask'; });
-      row.append(clear);
-    }
-    form.append(note, problem, row);
-    if (a.waiting) for (const b of form.querySelectorAll('button')) b.disabled = true;
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const text = question.value.trim();
-      if (!text) { question.focus(); return say(problem, 'Write your question first.'); }
-      const gen = a.gen, name = chosen();
-      a.waiting = true; a.answer = null; a.problem = '';
-      drawAsk(who);
-      $('ask-status').textContent = 'Waiting for ' + name.label + '. This can take a couple of minutes.';
-      let status = '';
-      try {
-        const body = { question: text, assistant: name.name };
-        if (a.about) body.about = a.about.id;
-        const r = await post('/api/ask', body);
-        if (gen !== a.gen) return;
-        a.answer = r; status = 'Answer from ' + r.assistant.label + ' below.';
-      } catch (err) {
-        if (gen !== a.gen) return;
-        if (err.status === 401) failed(err); else a.problem = err.message;
-      }
-      a.waiting = false;
-      $('ask-status').textContent = status;
-      drawAsk(who);
-      const card = $('ask').querySelector('section.card');
-      if (card && window.matchMedia('(max-width:800px)').matches) card.scrollIntoView({ block: 'start' });
-    });
-    parts.push(form);
-    sides(parts);
-  }
-  async function loadAsk(id) {
-    const a = state.ask;
-    state.askRoute = id;
-    showError('');
-    if (id && (!a.about || a.about.id !== id)) {
-      resetAsk();
-      $('ask').replaceChildren(el('p', 'Loading…', 'muted'));
-      try {
-        const d = await api('/api/memory/' + enc(id));
-        if (state.askRoute !== id) return;
-        a.about = { id: d.id, title: d.title, feature: d.kind === 'decision' ? d.feature : null };
-      } catch (e) {
-        if (state.askRoute !== id) return;
-        if (e.status === 404) $('ask').replaceChildren(el('p', 'That memory is gone. It may have been removed or renamed.', 'muted'));
-        else failed(e);
-        return;
-      }
-    }
-    try {
-      const who = await api('/api/ask');
-      if (state.askRoute === id) drawAsk(who);
-    } catch (e) { if (state.askRoute === id) failed(e); }
-  }
-
   async function loadSetup() {
     $('setup-status').textContent = 'Checking…';
     $('recheck').disabled = true;
@@ -1352,12 +1202,14 @@ export const uiJs = String.raw`
     finally { $('recheck').disabled = false; }
   }
 
-  const PAGES = ['brain', 'memory', 'deliberate', 'grill', 'board', 'attention', 'ask', 'history', 'setup'];
-  const TITLES = { brain: 'Brain', memory: 'Memory', deliberate: 'Deliberate', grill: 'Grill', board: 'Decision board', attention: 'Needs you', ask: 'Ask', history: 'History', setup: 'Setup' };
+  const PAGES = ['brain', 'memory', 'deliberate', 'grill', 'board', 'attention', 'history', 'setup'];
+  const TITLES = { brain: 'Brain', memory: 'Memory', deliberate: 'Deliberate', grill: 'Grill', board: 'Decision board', attention: 'Needs you', history: 'History', setup: 'Setup' };
   function route() {
     const m = /^#\/(brain|memory|deliberate|grill|board|attention|map|ask|history|setup|connections)(?:\/(.+))?$/.exec(location.hash);
     let page = m ? m[1] : 'brain';
     if (page === 'map') { location.replace('#/brain' + (m[2] ? '/' + m[2] : '')); return; }
+    // Ask is part of the board now: a link to it opens the memory it was about, or the board.
+    if (page === 'ask') { location.replace(m[2] ? '#/memory/' + m[2] : '#/board'); return; }
     if (page === 'connections') page = 'setup';
     if (page === 'grill' && !m[2]) { location.replace('#/deliberate'); return; }
     const entering = page !== state.page;
@@ -1394,7 +1246,6 @@ export const uiJs = String.raw`
       loadDetail(id);
     } else if (page === 'grill') loadGrill(id);
     else if (page === 'board') loadBoard(id);
-    else if (page === 'ask') loadAsk(id);
     else if (page === 'history') loadHistory();
     else loadSetup();
   }

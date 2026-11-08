@@ -397,7 +397,7 @@ test("ui server grill: says what it would send first, guarded like a write, one 
     const first = post(turn);
     while (prompts.length < 2) await new Promise((done) => setTimeout(done, 5));
     assert.equal((await post(turn)).status, 409, "a second turn waits");
-    assert.equal((await call("POST", "/api/ask", JSON.stringify({ question: "q", assistant: "claude-cli" }), { ...auth, "content-type": "application/json" })).status, 409, "and so does Ask");
+    assert.equal((await call("POST", "/api/board", JSON.stringify({ question: "q", assistant: "claude-cli" }), { ...auth, "content-type": "application/json" })).status, 409, "and so does the board");
     release("nothing useful");
     assert.equal((await first).body.rejected, "unreadable");
 
