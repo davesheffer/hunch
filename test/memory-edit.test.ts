@@ -426,6 +426,50 @@ test("cli:link refuses an unknown component, a component on a constraint, and a 
   } finally { cleanupDir(root); }
 });
 
+test("cli:remove --superseded-by records the replacement the newer decision claims; restore --clear-superseded-by undoes it", () => {
+  const root = fixtureRepo();
+  const run = (...args: string[]) => spawnSync(process.execPath, hunchCliArgs(...args), { cwd: root, encoding: "utf8", env: cliEnv() });
+  try {
+    const store = new JsonStore(hunchPaths(root));
+    store.put("decisions", decision("dec_new", { title: "New", supersedes: "dec_acc" }));
+    store.put("decisions", decision("dec_stranger", { title: "Stranger" }));
+    store.put("decisions", decision("dec_draft", { title: "Draft", status: "proposed", supersedes: "dec_acc" }));
+    store.put("decisions", decision("dec_self", { title: "Self", supersedes: "dec_self" }));
+    const before = read<Decision>(root, "decisions", "dec_acc");
+    assert.match(run("drift").stdout, /\[supersede\] dec_new/);
+
+    for (const [args, pattern] of [
+      [["remove", "dec_acc", "--superseded-by", "dec_stranger"], /doesn't say it replaces "dec_acc"/],
+      [["remove", "dec_acc", "--superseded-by", "dec_missing"], /"dec_missing" not found in the same store/],
+      [["remove", "dec_acc", "--superseded-by", "dec_draft"], /proposed, not live/],
+      [["remove", "dec_self", "--superseded-by", "dec_self"], /can't replace itself/],
+      [["remove", "con_axios", "--superseded-by", "dec_new"], /only for decisions/],
+      [["restore", "con_axios", "--clear-superseded-by"], /only for decisions/],
+    ] as const) {
+      const refused = run(...args);
+      assert.notEqual(refused.status, 0, args.join(" "));
+      assert.match(`${refused.stdout}${refused.stderr}`, pattern);
+    }
+    assert.deepEqual(read<Decision>(root, "decisions", "dec_acc"), before, "a refusal writes nothing");
+
+    const removed = run("remove", "dec_acc", "--superseded-by", "dec_new", "--json");
+    assert.equal(removed.status, 0, `${removed.stdout}${removed.stderr}`);
+    const after = parseJson(removed.stdout).after;
+    assert.equal(after.status, "superseded");
+    assert.equal(after.superseded_by, "dec_new");
+    assert.ok(after.valid_to);
+    assert.doesNotMatch(run("drift").stdout, /\[supersede\] dec_new/, "drift stops reporting the replacement");
+
+    const plain = run("restore", "dec_acc");
+    assert.notEqual(plain.status, 0);
+    assert.match(`${plain.stdout}${plain.stderr}`, /--clear-superseded-by/);
+    const restored = run("restore", "dec_acc", "--clear-superseded-by", "--json");
+    assert.equal(restored.status, 0, `${restored.stdout}${restored.stderr}`);
+    const back = read<Decision>(root, "decisions", "dec_acc");
+    assert.deepEqual({ ...back, provenance: undefined }, { ...before, provenance: undefined }, "the undo puts it all back");
+  } finally { cleanupDir(root); }
+});
+
 test("cli:remove then cli:restore round-trip a decision and a constraint; --reason lands in the body only", () => {
   const root = fixtureRepo();
   try {

@@ -1,5 +1,6 @@
 /** The `hunch ui` page shell: static, no embedded data. All data comes from the token-gated /api routes. */
 import { brainJs } from "./brain.js";
+import { deliberateJs } from "./deliberate.js";
 
 const SEARCH_ICON = `<svg class="ico" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>`;
 
@@ -8,7 +9,7 @@ export const uiHtml = `<!doctype html>
 <title>Hunch</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/ui.css"><script src="/ui.js" defer></script></head>
 <body>
 <header class="top"><div class="brand"><span class="mark" aria-hidden="true"></span><strong>Hunch</strong><span id="repo-name" class="muted mono"></span></div>
-<nav aria-label="Sections"><a href="#/brain" data-nav="brain">Brain</a><a href="#/memory" data-nav="memory">Memory</a><a href="#/attention" data-nav="attention">Needs you <span id="attention-count" class="count"></span></a><a href="#/ask" data-nav="ask">Ask</a><a href="#/history" data-nav="history">History</a><a href="#/setup" data-nav="setup" class="apart">Setup</a></nav></header>
+<nav aria-label="Sections"><a href="#/brain" data-nav="brain">Brain</a><a href="#/memory" data-nav="memory">Memory</a><a href="#/deliberate" data-nav="deliberate">Deliberate</a><a href="#/attention" data-nav="attention">Needs you <span id="attention-count" class="count"></span></a><a href="#/ask" data-nav="ask">Ask</a><a href="#/history" data-nav="history">History</a><a href="#/setup" data-nav="setup" class="apart">Setup</a></nav></header>
 <p id="error" role="alert" hidden></p>
 <main>
 <section id="brain-page" hidden aria-labelledby="brain-title">
@@ -39,6 +40,15 @@ export const uiHtml = `<!doctype html>
 <div class="split" id="memory-split">
 <div id="list-pane" class="pane"><ul id="list" class="list"></ul></div>
 <article id="detail" class="panel" aria-live="polite"><p class="muted">Select a memory.</p></article>
+</div>
+</section>
+<section id="deliberate-page" hidden aria-labelledby="deliberate-title">
+<div class="bar"><h1 id="deliberate-title">Deliberate</h1>
+<div role="group" aria-label="Kind" class="segmented" id="dlb-tabs"></div>
+<span id="dlb-status" class="muted small" role="status" aria-live="polite"></span></div>
+<div class="split" id="deliberate-split">
+<div class="pane"><ul id="dlb-list" class="list"></ul></div>
+<article id="dlb-card" class="panel dlb" aria-live="polite"></article>
 </div>
 </section>
 <section id="attention-page" hidden aria-labelledby="attention-title">
@@ -205,6 +215,28 @@ details{margin-top:18px}summary{cursor:pointer;font:600 11px var(--mono);letter-
 .plist .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .mem{list-style:none;margin:0 0 6px;padding:0}.mem li{padding:3px 0;border-bottom:1px solid var(--line)}.mem li:last-child{border:0}
 .more{margin-top:4px;min-height:28px}
+/* deliberate */
+.reach-n{flex:none;min-width:22px;text-align:right;font-size:11.5px;color:var(--muted)}
+.panel.dlb{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.dlb-body{flex:1;min-height:0;overflow:auto;padding:16px 20px}
+.dlb-body>h2{font-size:18px;max-width:72ch}
+.dlb-body .flash{margin-top:0}
+.ev{list-style:none;margin:6px 0 14px;padding:0;font:12px/1.6 var(--mono);color:var(--muted)}
+.ev li{padding:0 0 0 10px;border-left:2px solid var(--line2);overflow-wrap:anywhere;white-space:pre-line}
+.recs{display:grid;grid-template-columns:minmax(0,1fr);border:1px solid var(--line);border-radius:8px}
+.recs.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rec{min-width:0;padding:12px 14px}.rec+.rec{border-left:1px solid var(--line)}
+.rec .prose{font-size:13px}.rec .prose p{margin-bottom:.5em}
+.rec-head{display:flex;align-items:center;gap:8px;margin:0 0 6px;font:12px var(--mono)}.rec-head .k{width:auto}
+.stays{font-weight:700;color:var(--accent)}.goes{font-weight:700;color:var(--muted)}
+.rec-title{font:600 14px/1.35 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink);margin:0 0 4px;overflow-wrap:anywhere}
+.rec-label{font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
+.rec-files{list-style:none;margin:10px 0 0;padding:8px 0 0;border-top:1px solid var(--line);font:12px/1.6 var(--mono);color:var(--muted)}
+.rec-files li{overflow-wrap:anywhere}.rec-files .gone{color:var(--warn);text-decoration:line-through}.rec-files .gone span{display:inline-block;margin-left:6px;text-decoration:none;font-family:var(--sans)}
+.reach{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:12px 0 0;font-size:12.5px;color:var(--muted)}
+.dlb-acts{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 20px;border-top:1px solid var(--line);background:var(--surface)}
+.dlb-acts .end{margin-left:auto}
+@media(max-width:1100px){.recs.two{grid-template-columns:minmax(0,1fr)}.rec+.rec{border-left:0;border-top:1px solid var(--line)}}
 @media(pointer:coarse){button,input,select,textarea,.segmented button{min-height:44px}.list a{height:44px}.nu-done button,.feed button{min-height:44px}nav a{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 @media(max-width:800px){
@@ -221,6 +253,7 @@ main{overflow:visible}main>section{height:auto;display:block}
 .brain.reading .clist,.brain.reading .nextup{display:none}.brain:not(.reading)>.panel{display:none}
 .brain>.panel{border-left:0;border-top:1px solid var(--line)}
 .nu{flex-wrap:wrap}.nu-title{flex-basis:100%;order:2;white-space:normal}.nu-why{max-width:none;white-space:normal;order:3}.nu-act{order:4}
+.panel.dlb{display:block;overflow:visible}.dlb-body{overflow:visible;padding:14px 12px}.dlb-acts{position:sticky;bottom:0;padding:8px 12px}
 .history .h{flex-wrap:wrap}.history .what{flex-basis:100%;order:3;white-space:normal}.history .v{min-width:0}
 .legend{white-space:normal;right:8px}
 }
@@ -252,7 +285,7 @@ export const uiJs = String.raw`
   // ask: the question in progress and its answer, kept while the person looks around.
   // draft: what the next New memory form starts with.
   // shownAll: the long lists opened past their first rows.
-  // openForm: a form to open as soon as the next memory shows (links, confirm).
+  // openForm: a form to open as soon as the next memory shows (links, confirm, text).
   const state = { page: '', kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, attentionGen: 0, mapGen: 0, component: '', shownAll: new Set(), flash: null, draft: null, openForm: '',
     attn: null, attnTab: '', askRoute: '', ask: { about: null, question: '', assistant: '', answer: null, waiting: false, problem: '', gen: 0 } };
 
@@ -274,6 +307,7 @@ export const uiJs = String.raw`
   const base = () => (state.page === 'attention' ? '#/attention/' : '#/memory/');
 
   /*BRAIN*/
+  /*DELIBERATE*/
 
   // ---- text: a commit body is hard-wrapped, so single newlines join and blank lines split.
   // Lists and indented or fenced blocks keep their lines.
@@ -413,6 +447,7 @@ export const uiJs = String.raw`
     loadList();
     if (state.page === 'attention') loadAttention(true);
     else refreshAttentionCount();
+    if (state.page === 'deliberate') loadReview(true);
     if (B.map) loadBrain(true);
   }
   async function refreshAttentionCount() { try { setCount((await api('/api/pulse?since=' + P.seq)).attention); } catch {} }
@@ -706,14 +741,15 @@ export const uiJs = String.raw`
       bar.append(confirm);
     }
     if (a.restorable) { const b = button('Restore memory', quiet('restore')); b.addEventListener('click', () => run(bar, problem, () => change(d.id, 'restore', {}))); bar.append(b); }
-    if (!a.textLocked) { const b = button('Edit text', 'secondary'); b.addEventListener('click', () => open(textForm(d, close))); bar.append(b); }
+    let wording = null;
+    if (!a.textLocked) { wording = button('Edit text', 'secondary'); wording.addEventListener('click', () => open(textForm(d, close))); bar.append(wording); }
     const links = button('Edit links', quiet('links')); links.addEventListener('click', () => open(linksForm(d, close))); bar.append(links);
     const asking = button('Ask about this', 'secondary'); asking.addEventListener('click', () => { location.hash = '#/ask/' + enc(d.id); }); bar.append(asking);
     if (a.removable) { const b = button('Remove memory', 'danger end'); b.addEventListener('click', () => open(removeForm(d, close))); bar.append(b); }
     if (a.textLocked) bar.append(el('p', a.textLocked, 'muted small'));
     bar.append(problem);
     const want = state.openForm; state.openForm = null;
-    if (want && want.id === d.id) { if (want.form === 'links') links.click(); else if (confirm) confirm.click(); }
+    if (want && want.id === d.id) { if (want.form === 'links') links.click(); else if (want.form === 'text') { if (wording) wording.click(); } else if (confirm) confirm.click(); }
     return [bar, panel, leads];
   }
 
@@ -1077,6 +1113,7 @@ export const uiJs = String.raw`
     if (B.map) loadBrain(true);
     if (state.page === 'memory') loadList();
     if (state.page === 'attention') loadAttention(true);
+    if (state.page === 'deliberate') loadReview(true);
     const box = detailBox();
     if (ids.has(state.selected) && !box.querySelector('form') && state.selected !== 'new') loadDetail(state.selected);
   }
@@ -1133,6 +1170,8 @@ export const uiJs = String.raw`
     'local-only': 'Asking is off: this repository uses local-only analysis. Change it with hunch provider.',
     'other-provider': 'Asking needs Claude Code, and this repository is set to use something else. Change it with hunch provider.',
     'unknown-origin': 'This page was started by a background process, so it can\'t choose an account. Run hunch ui from your terminal.',
+    'not-subscription': 'Asking needs Claude Code signed in with a subscription, so nothing is billed per token. Run claude auth login, then reload.',
+    'subscription-unknown': 'Claude Code took too long to say how it is signed in, so nothing was asked. Reload to try again; if it keeps happening, run claude auth status.',
   };
   function resetAsk() { const a = state.ask; a.about = null; a.question = ''; a.answer = null; a.waiting = false; a.problem = ''; a.gen++; $('ask-status').textContent = ''; }
 
@@ -1294,10 +1333,10 @@ export const uiJs = String.raw`
     finally { $('recheck').disabled = false; }
   }
 
-  const PAGES = ['brain', 'memory', 'attention', 'ask', 'history', 'setup'];
-  const TITLES = { brain: 'Brain', memory: 'Memory', attention: 'Needs you', ask: 'Ask', history: 'History', setup: 'Setup' };
+  const PAGES = ['brain', 'memory', 'deliberate', 'attention', 'ask', 'history', 'setup'];
+  const TITLES = { brain: 'Brain', memory: 'Memory', deliberate: 'Deliberate', attention: 'Needs you', ask: 'Ask', history: 'History', setup: 'Setup' };
   function route() {
-    const m = /^#\/(brain|memory|attention|map|ask|history|setup|connections)(?:\/(.+))?$/.exec(location.hash);
+    const m = /^#\/(brain|memory|deliberate|attention|map|ask|history|setup|connections)(?:\/(.+))?$/.exec(location.hash);
     let page = m ? m[1] : 'brain';
     if (page === 'map') { location.replace('#/brain' + (m[2] ? '/' + m[2] : '')); return; }
     if (page === 'connections') page = 'setup';
@@ -1312,6 +1351,14 @@ export const uiJs = String.raw`
       state.component = id;
       $('brain').classList.toggle('reading', !!id);
       if (entering || !B.map) loadBrain(); else applySelection(true);
+    } else if (page === 'deliberate') {
+      // Moving on by itself keeps the last change and its Undo; the person moving on doesn't.
+      if (entering || id !== D.key) D.done = null;
+      D.key = id;
+      if (id) D.tab = id.split(':')[0];
+      $('deliberate-split').classList.toggle('reading', !!id);
+      if (D.review) drawDeliberate();
+      if (entering || !D.review) loadReview(!!D.review);
     } else if (page === 'attention') {
       state.selected = id;
       if (state.flash && state.flash.id !== id) state.flash = null;
@@ -1350,10 +1397,10 @@ export const uiJs = String.raw`
       return;
     }
     if (e.key === 'Escape' && state.page === 'brain') { if (!clearBrainSearch() && state.component) location.hash = '#/brain'; return; }
-    if (state.page !== 'memory' && state.page !== 'attention') return;
+    if (state.page !== 'memory' && state.page !== 'attention' && state.page !== 'deliberate') return;
     const k = e.key, dir = k === 'j' ? 1 : k === 'k' ? -1 : (k === 'ArrowDown' || k === 'ArrowUp') && (t === document.body || t.closest('.list')) ? (k === 'ArrowDown' ? 1 : -1) : 0;
     if (!dir) return;
-    const rows = [...(state.page === 'memory' ? $('list') : $('attention')).querySelectorAll('a')];
+    const rows = [...(state.page === 'memory' ? $('list') : state.page === 'deliberate' ? $('dlb-list') : $('attention')).querySelectorAll('a')];
     if (!rows.length) return;
     e.preventDefault();
     const at = rows.findIndex((a) => a.getAttribute('aria-current') === 'true');
@@ -1369,4 +1416,4 @@ export const uiJs = String.raw`
   drawFeed();
   route();
 })();
-`.replace("/*BRAIN*/", () => brainJs);
+`.replace("/*BRAIN*/", () => brainJs).replace("/*DELIBERATE*/", () => deliberateJs);

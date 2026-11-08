@@ -81,7 +81,7 @@ export interface MemorySource {
 }
 
 /** The literal directory a glob or path names, e.g. "src/auth/**" -> "src/auth". */
-function globBase(pattern: string): string {
+export function globBase(pattern: string): string {
   const cut = pattern.search(/[*?[{]/);
   const literal = (cut < 0 ? pattern : pattern.slice(0, cut)).replace(/\\/g, "/");
   return literal.replace(/\/+$/, "").replace(/^\.\//, "");
@@ -275,8 +275,8 @@ export function componentDetail(src: MemorySource, edges: readonly Edge[], id: s
   return mapDetails(src, edges).details.find((c) => c.id === id) ?? null;
 }
 
-export function memoryDetail(src: MemorySource, id: string): MemoryDetail | null {
-  const base = memoryItems(src).find((m) => m.id === id);
+export function memoryDetail(src: MemorySource, id: string, items: readonly MemoryItem[] = memoryItems(src)): MemoryDetail | null {
+  const base = items.find((m) => m.id === id);
   if (!base) return null;
   const decision = src.decisions.find((d) => d.id === id);
   if (decision) {

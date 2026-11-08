@@ -23,9 +23,9 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { uiHtml, uiJs } from "../src/ui/page.js";
 import { memoryHistory } from "../src/ui/history.js";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync } from "node:fs";
 import { askContext, askPrompt, askRequest, askableAssistants, defaultAskRunner, parseAnswer, type AskRunner } from "../src/ui/ask.js";
-import { DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudePrintArgs, codexExecArgs, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
+import { CommandTimeoutError, DeterministicProvider, OpenAICompatProvider, claudeChildEnv, claudeOnSubscription, claudePrintArgs, codexExecArgs, isSubscriptionAuth, type ProviderStatus, type SynthProvider } from "../src/synthesis/provider.js";
 import { currentInitiator, withInitiator } from "../src/synthesis/initiator.js";
 
 const now = "2026-11-04T00:00:00Z";
@@ -369,6 +369,11 @@ test("actionArgs: allowlists each action's fields into --flag=value argv", () =>
   assert.deepEqual(actionArgs("link", "dec_1", { clearFeature: true, addComponents: ["cmp_a"] }), { ok: true, args: ["link", "dec_1", "--add-component=cmp_a", "--clear-feature", "--json"] });
   assert.deepEqual(actionArgs("remove", "fnd_1", { reason: "dup" }), { ok: true, args: ["remove", "fnd_1", "--reason=dup", "--json"] });
   assert.deepEqual(actionArgs("restore", "dec_1", {}), { ok: true, args: ["restore", "dec_1", "--json"] });
+  assert.deepEqual(actionArgs("remove", "dec_1", { supersededBy: "dec_2" }), { ok: true, args: ["remove", "dec_1", "--superseded-by=dec_2", "--json"] });
+  assert.deepEqual(actionArgs("restore", "dec_1", { clearSupersededBy: true }), { ok: true, args: ["restore", "dec_1", "--clear-superseded-by", "--json"] });
+  assert.equal(actionArgs("restore", "dec_1", { clearSupersededBy: "yes" }).ok, false);
+  assert.equal(actionArgs("edit", "dec_1", { clearSupersededBy: true }).ok, false);
+  assert.equal(actionArgs("edit", "dec_1", { supersededBy: "dec_2" }).ok, false);
   // Signing is `hunch review`; with an overlay it must look there too.
   assert.deepEqual(actionArgs("confirm", "con_1", { severity: "blocking" }), { ok: true, args: ["review", "--confirm=con_1", "--severity=blocking", "--json"] });
   assert.deepEqual(actionArgs("unconfirm", "dec_1", {}, { private: true }), { ok: true, args: ["review", "--unconfirm=dec_1", "--private", "--json"] });
@@ -403,6 +408,8 @@ const move = (kind: MoveResult["kind"], before: Record<string, unknown>, after: 
 
 test("undoFor: each move's inverse, built from before/after", () => {
   assert.deepEqual(undoFor("edit", move("decision", { title: "A", decision: "x", context: "c" }, { title: "B", decision: "y", context: "c" })), { action: "edit", body: { title: "A", text: "x" } });
+  assert.deepEqual(undoFor("remove", move("decision", { status: "accepted", superseded_by: null }, { status: "superseded", superseded_by: "dec_2" })), { action: "restore", body: { status: "accepted", clearSupersededBy: true } }, "undoing a recorded replacement forgets it");
+  assert.deepEqual(undoFor("remove", move("decision", { status: "accepted", superseded_by: null }, { status: "superseded", superseded_by: null })), { action: "restore", body: { status: "accepted" } });
   assert.deepEqual(undoFor("edit", move("constraint", { statement: "s", rationale: "r" }, { statement: "t", rationale: "r" }, "con_1")), { action: "edit", body: { text: "s" } });
   const signed = undoFor("edit", move("decision", { title: "A", provenance: { source: "human_confirmed" } }, { title: "B", provenance: { source: "agent_recorded" } }));
   assert.match(signed!.note!, /not your confirmation.*Confirm as mine/);
@@ -485,7 +492,7 @@ type Post = (path: string, body: unknown, headers?: Record<string, string>) => P
 
 /** A committed git fixture on a feature branch, served with a real CLI behind the write routes. */
 /** cli: the real CLI (true), none (false), or a stand-in command to probe how the server reads its result. */
-async function withWriteServer(fn: (post: Post, get: Get, origin: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner): Promise<void> {
+async function withWriteServer(fn: (post: Post, get: Get, origin: string, root: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner): Promise<void> {
   const root = tempDir("hunch-ui-write-");
   const env = isolatedCliEnv({ HOME: root, USERPROFILE: root, HUNCH_PRIVATE_DIR: "", NO_COLOR: "1", CI: "1" });
   const git = (...args: string[]): void => { execFileSync("git", args, { cwd: root, env, stdio: "ignore" }); };
@@ -516,9 +523,59 @@ async function withWriteServer(fn: (post: Post, get: Get, origin: string) => Pro
     return { status: r.status, body: JSON.parse(r.body || "{}") };
   };
   const get: Get = (path, headers = { authorization: `Bearer ${token}` }) => call("GET", path, null, headers);
-  try { await fn(post, get, `http://127.0.0.1:${port}`); }
+  try { await fn(post, get, `http://127.0.0.1:${port}`, root); }
   finally { await new Promise<void>((r) => server.close(() => r())); server.closeStore(); cleanupDir(root); }
 }
+
+test("ui server: /api/review says when git couldn't answer, shows nothing stale, and asks again", async () => {
+  await withWriteServer(async (post, get, _origin, root) => {
+    const read = async () => JSON.parse((await get("/api/review")).body) as { gitFailed?: boolean; groups: { kind: string; cards: { key: string }[] }[] };
+    const stale = (r: Awaited<ReturnType<typeof read>>) => r.groups.find((g) => g.kind === "stale")!.cards.map((c) => c.key);
+    assert.equal((await post("/api/memory/dec_loose/link", { addFiles: ["src/vanished.ts"] })).status, 200);
+    renameSync(join(root, ".git"), join(root, ".git-off"));
+    let failed: Awaited<ReturnType<typeof read>>;
+    try { failed = await read(); } finally { renameSync(join(root, ".git-off"), join(root, ".git")); }
+    assert.equal(failed.gitFailed, true);
+    assert.ok(!stale(failed).includes("stale:dec_loose"), "git couldn't say, so nothing is called gone");
+    assert.equal((await post("/api/memory/dec_loose/edit", { context: "Small PRs review faster." })).status, 200);
+    const back = await read();
+    assert.equal(back.gitFailed, false);
+    assert.ok(stale(back).includes("stale:dec_loose"));
+  });
+});
+
+test("ui server: /api/review needs the key, writes nothing, and reflects a change to any record", async () => {
+  await withWriteServer(async (post, get, _origin, root) => {
+    assert.equal((await get("/api/review", {})).status, 401);
+    const weak = async (): Promise<string[]> => {
+      const r = await get("/api/review");
+      assert.equal(r.status, 200);
+      const review = JSON.parse(r.body) as { total: number; groups: { kind: string; total: number; cards: { key: string }[] }[] };
+      assert.deepEqual(review.groups.map((g) => g.kind), ["conflict", "stale", "duplicate", "weak"]);
+      return review.groups.find((g) => g.kind === "weak")!.cards.map((c) => c.key);
+    };
+    const before = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" });
+    assert.ok((await weak()).includes("weak:dec_loose"), "no why, and nobody confirmed it");
+    assert.ok((await weak()).includes("weak:dec_loose"), "a second read answers the same");
+    assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }), before, "reading the review changes nothing");
+    assert.equal((await post("/api/memory/dec_loose/edit", { context: "Small PRs review faster." })).status, 200);
+    assert.ok(!(await weak()).includes("weak:dec_loose"), "a new why alone clears it, though the pulse can't see that edit");
+  });
+});
+
+test("ui server: a confirmed record keeps its confirmation when its dead links are dropped", async () => {
+  await withWriteServer(async (post, get) => {
+    assert.equal((await post("/api/memory/dec_live/confirm", {})).status, 200);
+    const before = JSON.parse((await get("/api/memory/dec_live")).body) as { files: string[]; actions: { signed: boolean } };
+    assert.equal(before.actions.signed, true);
+    assert.ok(before.files.length > 0);
+    const dropped = await post("/api/memory/dec_live/link", { removeFiles: [before.files[0]] });
+    assert.equal(dropped.status, 200);
+    const after = JSON.parse((await get("/api/memory/dec_live")).body) as { files: string[]; actions: { signed: boolean } };
+    assert.deepEqual(after.files, before.files.slice(1));
+    assert.equal(after.actions.signed, true);
+  });
+});
 
 test("ui server writes: key, Origin, JSON body and a CLI are all required; malformed requests never reach the CLI", async () => {
   await withWriteServer(async (post, get) => {
@@ -803,7 +860,7 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
   const providers = [fake("claude-cli"), fake("codex-cli"), fake("cursor-agent"), new DeterministicProvider()];
   const root = tempDir("hunch-ui-ask-");
   try {
-    const person = defaultAskRunner(root, { providers, env: {} });
+    const person = defaultAskRunner(root, { providers, subscribed: async () => true, env: {} });
     const list = await person.assistants();
     assert.equal(list.blocked, null);
     assert.deepEqual(list.assistants.map((a) => a.name), ["claude-cli"], "Codex and Cursor stay off: neither can run with no tools");
@@ -812,18 +869,18 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
     await assert.rejects(person.ask("codex-cli", "p"), /not available/);
     await assert.rejects(person.ask("cursor-agent", "p"), /not available/);
     await assert.rejects(person.ask("deterministic", "p"), /not available/);
-    await assert.rejects(defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "codex" } }).ask("claude-cli", "p"), /not available/, "the spend itself holds an agent session to its own account");
-    await assert.rejects(defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "unknown" } }).ask("claude-cli", "p"), /not available/);
+    await assert.rejects(defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "codex" } }).ask("claude-cli", "p"), /not available/, "the spend itself holds an agent session to its own account");
+    await assert.rejects(defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "unknown" } }).ask("claude-cli", "p"), /not available/);
     assert.equal(seen.length, 1, "none of those reached a model");
 
-    const named = defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "claude-cli" } });
+    const named = defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "claude-cli" } });
     assert.deepEqual((await named.assistants()).assistants.map((a) => a.name), ["claude-cli"], "a named provider is the person's spending choice");
     await assert.rejects(named.ask("codex-cli", "p"), /not available/);
-    assert.deepEqual(await defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "codex-cli" } }).assistants(), { assistants: [], blocked: "other-provider" });
-    assert.deepEqual(await defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "cursor-agent" } }).assistants(), { assistants: [], blocked: "other-provider" });
+    assert.deepEqual(await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "codex-cli" } }).assistants(), { assistants: [], blocked: "other-provider" });
+    assert.deepEqual(await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "cursor-agent" } }).assistants(), { assistants: [], blocked: "other-provider" });
 
     seen.length = 0;
-    const offline = defaultAskRunner(root, { providers, env: { HUNCH_SYNTH_PROVIDER: "deterministic" } });
+    const offline = defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_SYNTH_PROVIDER: "deterministic" } });
     assert.deepEqual(await offline.assistants(), { assistants: [], blocked: "local-only" });
     await assert.rejects(offline.ask("claude-cli", "p"), /not available/);
     mkdirSync(join(root, ".hunch"), { recursive: true });
@@ -831,9 +888,9 @@ test("defaultAskRunner: runs the picked CLI under its own account; local-only mo
     assert.deepEqual(await person.assistants(), { assistants: [], blocked: "local-only" }, "the per-user setting counts too");
     await assert.rejects(person.ask("claude-cli", "p"), /not available/);
     assert.deepEqual(seen, [], "local-only mode never reaches a model");
-    assert.equal((await defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "local-only");
+    assert.equal((await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "local-only");
     rmSync(join(root, ".hunch", "local.json"));
-    assert.equal((await defaultAskRunner(root, { providers, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "unknown-origin");
+    assert.equal((await defaultAskRunner(root, { providers, subscribed: async () => true, env: { HUNCH_INITIATOR: "unknown" } }).assistants()).blocked, "unknown-origin");
   } finally { cleanupDir(root); }
 });
 
@@ -843,8 +900,43 @@ test("claudeChildEnv strips every switch that would route headless Claude to met
   assert.deepEqual(claudeChildEnv({ ...env, CLAUDE_CODE_OAUTH_TOKEN: "t", PATH: "p", CLAUDE_CODE_USE_POWERSHELL_TOOL: "1" }), { CLAUDE_CODE_OAUTH_TOKEN: "t", PATH: "p", CLAUDE_CODE_USE_POWERSHELL_TOOL: "1" });
 });
 
+test("Ask needs a subscription login: anything else blocks it before the spend", async () => {
+  const signed = (over: Record<string, unknown>): string => JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", ...over });
+  assert.equal(isSubscriptionAuth(signed({})), true);
+  assert.equal(isSubscriptionAuth(signed({ authMethod: "oauth_token" })), true);
+  for (const bad of [signed({ loggedIn: false }), signed({ authMethod: "console" }), signed({ authMethod: "api_key" }), signed({ apiProvider: "bedrock" }), "{}", "not json", ""]) assert.equal(isSubscriptionAuth(bad), false, bad);
+
+  // The probe: a login check that runs past its timeout is unknown, not a "no"; any other failure is a "no".
+  const probe = (run: () => Promise<{ stdout: string }>) => claudeOnSubscription({}, run);
+  assert.equal(await probe(async () => ({ stdout: signed({}) })), true);
+  assert.equal(await probe(async () => ({ stdout: signed({ authMethod: "console" }) })), false);
+  assert.equal(await probe(async () => { throw new CommandTimeoutError("\"claude\" timed out after 15000ms"); }), null);
+  assert.equal(await probe(async () => { throw new Error("\"claude\" exited 1: not logged in"); }), false);
+  assert.equal(await probe(async () => { throw Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" }); }), false);
+
+  const seen: string[] = [];
+  const claude: SynthProvider = { ...new DeterministicProvider(), name: "claude-cli", available: async () => true, draftProse: async () => { seen.push("ran"); return "reply"; } };
+  const root = tempDir("hunch-ui-ask-sub-");
+  try {
+    let asked = 0;
+    const runner = defaultAskRunner(root, { providers: [claude, new DeterministicProvider()], env: {}, subscribed: async () => { asked++; return false; } });
+    assert.deepEqual(await runner.assistants(), { assistants: [], blocked: "not-subscription" });
+    await assert.rejects(runner.ask("claude-cli", "p"), /not available/);
+    assert.deepEqual(seen, [], "a Console login never reaches the model");
+    assert.equal(asked, 2, "checked at the listing and again at the spend");
+    let slow = 0;
+    const unsure = defaultAskRunner(root, { providers: [claude, new DeterministicProvider()], env: {}, subscribed: async () => { slow++; return null; } });
+    assert.deepEqual(await unsure.assistants(), { assistants: [], blocked: "subscription-unknown" }, "a check that didn't answer says so, not 'not a subscription'");
+    await assert.rejects(unsure.ask("claude-cli", "p"), /not available/);
+    assert.deepEqual(seen, [], "an unconfirmed login never reaches the model either");
+    assert.equal(slow, 2);
+    const off = defaultAskRunner(root, { providers: [claude, new DeterministicProvider()], env: { HUNCH_SYNTH_PROVIDER: "deterministic" }, subscribed: async () => { throw new Error("must not run"); } });
+    assert.equal((await off.assistants()).blocked, "local-only", "local-only mode runs nothing, not even the check");
+  } finally { cleanupDir(root); }
+});
+
 test("noTools: Claude takes it as flags, off otherwise; a provider that can't hold it refuses before running", async () => {
-  assert.deepEqual(claudePrintArgs("haiku"), ["-p", "--output-format", "json", "--model", "haiku", "--max-turns", "1"], "synthesis is unchanged");
+  assert.deepEqual(claudePrintArgs("haiku"), ["-p", "--output-format", "json", "--model", "haiku", "--max-turns", "1", "--restricted"], "unattended synthesis reads no hooks or apiKeyHelper either");
   assert.deepEqual(claudePrintArgs("haiku", { noTools: true }).slice(-3), ["--restricted", "--tools=", "--strict-mcp-config"]);
   assert.ok(claudePrintArgs("haiku", { noTools: true }).every((a) => a !== "" && !/\s/.test(a)), "every token survives the cmd.exe line");
   assert.deepEqual(codexExecArgs("m"), ["exec", "--json", "--skip-git-repo-check", "-m", "m", "-"], "synthesis is unchanged");
