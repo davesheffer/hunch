@@ -20,7 +20,7 @@ import { STATE_PROOF_CAPABILITY } from '../core/stateProof.js';
  *                                       (src/serve/mcpHttp.ts), through the same dispatcher
  * Request bodies are the contract's request schemas minus `schema` and `principal`.
  */
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "../core/paths.js";
 import { flushStateWrite } from "../integrations/sync.js";
@@ -237,7 +237,9 @@ export function createServeApp(config: ServeConfig, opts: ServeOptions = {}): Se
     return { id: credential.id, kind: credential.kind, grants: credential.grants, ...(credential.display ? { display: credential.display } : {}) };
   };
 
-  const server = createServer(async (req, res) => {
+  // A bundled `import` of node:http is hoisted, so every hook process would pay its
+  // ~40 ms ESM facade (it loads undici). Resolve it only when a server is built.
+  const server = process.getBuiltinModule("node:http").createServer(async (req, res) => {
     try {
       let activeConfig: ServeConfig;
       try { activeConfig = configFile ? readServeConfig(configFile) : config; }
