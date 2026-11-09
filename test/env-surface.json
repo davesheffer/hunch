@@ -127,6 +127,16 @@
       }
     ]
   },
+  "GIT_DIR": {
+    "class": "git",
+    "purpose": "Ambient git redirection: shell-write attribution stops assuming the Hunch root is the git toplevel",
+    "tests": [
+      {
+        "file": "test/shellwrites.test.ts",
+        "title": "a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still reports a shell write at the root"
+      }
+    ]
+  },
   "GIT_INDEX_FILE": {
     "class": "git",
     "purpose": "Detects a git-hook alternate index so checks never mutate the user's index",
@@ -138,6 +148,26 @@
       {
         "file": "test/dependency-snapshot-isolation.test.ts",
         "title": "behavior execution cannot mutate its shared dependency snapshot and ordinary-file tampering invalidates reuse"
+      }
+    ]
+  },
+  "GIT_PREFIX": {
+    "class": "git",
+    "purpose": "Set by git inside aliases/hooks; shell-write attribution asks git for the prefix instead of assuming a toplevel",
+    "tests": [
+      {
+        "file": "test/shellwrites.test.ts",
+        "title": "a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still reports a shell write at the root"
+      }
+    ]
+  },
+  "GIT_WORK_TREE": {
+    "class": "git",
+    "purpose": "Ambient git redirection: shell-write attribution stops assuming the Hunch root is the git toplevel",
+    "tests": [
+      {
+        "file": "test/shellwrites.test.ts",
+        "title": "a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still reports a shell write at the root"
       }
     ]
   },
@@ -279,6 +309,26 @@
     "purpose": "Graph-expansion token cap (bounded)",
     "todo": "no test exercises this read yet (pre-existing gap when the gate landed)"
   },
+  "HUNCH_HOOK_DAEMON": {
+    "class": "hunch-config",
+    "purpose": "Experimental: serve hooks from a long-lived per-user daemon (set to 1); anything else runs in-process",
+    "tests": [
+      {
+        "file": "test/hook-daemon.test.ts",
+        "title": "first hook runs in-process and starts the daemon; the next is served with identical output"
+      }
+    ]
+  },
+  "HUNCH_HOOK_DAEMON_LOG": {
+    "class": "hunch-config",
+    "purpose": "Diagnostics: file the hook daemon and its clients append fallback/served lines to",
+    "tests": [
+      {
+        "file": "test/hook-daemon.test.ts",
+        "title": "first hook runs in-process and starts the daemon; the next is served with identical output"
+      }
+    ]
+  },
   "HUNCH_HOOK_DEDUP": {
     "class": "hunch-config",
     "purpose": "Controls per-session hook injection dedup",
@@ -296,6 +346,16 @@
       {
         "file": "test/fixture-environment.test.ts",
         "title": "fixture CLI environment drops every inherited initiator and preserves explicit fixture choices"
+      }
+    ]
+  },
+  "HUNCH_LEAN_GROUNDING": {
+    "class": "hunch-config",
+    "purpose": "Experimental: lean always-loaded grounding block and compact MCP instructions",
+    "tests": [
+      {
+        "file": "test/lean-grounding.test.ts",
+        "title": "lean-grounding: the flag is read at call time"
       }
     ]
   },

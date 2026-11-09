@@ -83,9 +83,9 @@ import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade, memoryIgnoreRule, describeMemoryIgnoreRule, policyNotCommitted, describePolicyNotCommitted } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
 import { applyUninstall, formatUninstallPlan, isOptedOut, OPT_OUT_FILE, optOutMarkerAt, optOutMessage, planUninstall } from "../integrations/uninstall.js";
-import { updateClaudeMd, renderHunchSection } from "../integrations/claudemd.js";
+import { updateClaudeMd, renderHunchSectionAs } from "../integrations/claudemd.js";
 import { HOOK_REMINDER } from "../core/hookText.js";
-import { classifyGroundingBlock, describeGroundingFreshness } from "../core/groundingLag.js";
+import { classifyGroundingBlock, groundingVariant, describeGroundingFreshness } from "../core/groundingLag.js";
 import { mergeGroundingFile } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
 import { scaffoldProviders, detectAssistants, PROVIDER_ASSISTANTS, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding, GROUNDING_DOC_PATHS } from "../integrations/providers.js";
@@ -6715,13 +6715,14 @@ program
     process.env.HUNCH_PRIVATE_DIR = emptyPrivate;
     const store = new HunchStore(hunchPaths(root));
     try {
-      const rendered = renderHunchSection(store, root);
-      const generated = groundingBlockContent(rendered) ?? rendered.trim();
       const verdicts = GROUNDING_DOC_PATHS.map((rel) => {
         const file = join(root, ...rel.split("/"));
         if (!existsSync(file)) return { doc: rel, verdict: { kind: "absent" as const } };
         const committed = groundingBlockContent(readFileSync(file, "utf8"));
         if (committed === null) return { doc: rel, verdict: { kind: "diverged" as const, reason: "no managed HUNCH block" } };
+        // Stamp-driven: expected block in the variant the committed one was written in.
+        const rendered = renderHunchSectionAs(store, root, groundingVariant(committed));
+        const generated = groundingBlockContent(rendered) ?? rendered.trim();
         return { doc: rel, verdict: classifyGroundingBlock(committed, generated) };
       });
       const refreshed = opts.refresh ? refreshExistingGrounding(root, store, { force: opts.force }) : [];

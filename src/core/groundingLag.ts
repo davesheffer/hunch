@@ -35,6 +35,17 @@ export function groundingTemplate(block: string): number {
   return m ? Number(m[1]) : 1;
 }
 
+/** Stamp the experimental lean block carries inside the managed block; the full block has none. */
+export const GROUNDING_VARIANT_LEAN = "<!-- hunch:variant lean -->";
+
+/** Which variant a block (or doc containing one) was written in. */
+export function groundingVariant(text: string): "lean" | "full" {
+  const iStart = text.indexOf("<!-- HUNCH:START");
+  const iEnd = text.indexOf("<!-- HUNCH:END -->");
+  const block = iStart >= 0 && iEnd > iStart ? text.slice(iStart, iEnd) : iStart >= 0 || iEnd >= 0 ? "" : text;
+  return block.includes(GROUNDING_VARIANT_LEAN) ? "lean" : "full";
+}
+
 const COUNTS_RE = /\*\*(\d+) decisions?, (\d+) bugs?, (\d+) constraints?, (\d+) components?, (\d+) polic(?:y|ies)(?:, (\d+) open findings?)?\*\*/;
 
 export interface GroundingCounts {

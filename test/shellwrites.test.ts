@@ -172,3 +172,27 @@ test("a shell write grounds once: the same file written again by another command
   assert.match(run("export const a = 2;\n", 1), /this shell command wrote src\/a\.ts/);
   assert.doesNotMatch(run("export const a = 3;\n", 2), /this shell command wrote/, "the same grounding is not served twice");
 });
+
+test("a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still reports a shell write at the root", t => {
+  // The root looks like a toplevel (a .git dir with HEAD) but the environment points git
+  // at an OUTER work tree: porcelain paths are then "pkg/src/a.ts", and only the
+  // rev-parse --show-prefix branch strips "pkg/".
+  const outer = repo(t);
+  const root = join(outer, "pkg");
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src", "a.ts"), "export const a = 1;\n");
+  execFileSync("git", ["-C", outer, "add", "-A"]);
+  execFileSync("git", ["-C", outer, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "pkg"]);
+  mkdirSync(join(root, ".git"));
+  writeFileSync(join(root, ".git", "HEAD"), "ref: refs/heads/main\n");
+  const prior = { dir: process.env.GIT_DIR, tree: process.env.GIT_WORK_TREE, prefix: process.env.GIT_PREFIX };
+  const restore = (name: string, v: string | undefined) => { if (v === undefined) delete process.env[name]; else process.env[name] = v; };
+  t.after(() => { restore("GIT_DIR", prior.dir); restore("GIT_WORK_TREE", prior.tree); restore("GIT_PREFIX", prior.prefix); });
+  process.env.GIT_DIR = join(outer, ".git");
+  process.env.GIT_WORK_TREE = outer;
+  process.env.GIT_PREFIX = "pkg/";
+  const s = session();
+  refreshShellBaseline(root, s);
+  write(join(root, "src", "a.ts"), "export const a = 2;\n", 3);
+  assert.deepEqual(shellWrittenFiles(root, s), ["src/a.ts"]);
+});

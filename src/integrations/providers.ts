@@ -264,15 +264,19 @@ export function writeCodexConfig(root: string, inv: Invocation): string {
   return file;
 }
 
+function readIfExists(file: string): string | undefined {
+  return existsSync(file) ? readFileSync(file, "utf8") : undefined;
+}
+
 /** AGENTS.md — the cross-tool ambient-instruction standard (Codex and a growing
  *  set of assistants read it). Marker-delimited so user prose is preserved. */
 export function writeAgentsMd(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
-  return upsertSection(join(root, "AGENTS.md"), renderHunchSection(store, root), "# AGENTS.md", opts);
+  return upsertSection(join(root, "AGENTS.md"), renderHunchSection(store, root, readIfExists(join(root, "AGENTS.md"))), "# AGENTS.md", opts);
 }
 
 /** GitHub Copilot custom instructions (VS Code / github.com). Same grounding. */
 export function writeCopilotInstructions(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
-  return upsertSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store, root), "# Copilot instructions", opts);
+  return upsertSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store, root, readIfExists(join(root, ".github", "copilot-instructions.md"))), "# Copilot instructions", opts);
 }
 
 /** `force` re-renders even a block written by a newer Hunch template. */
@@ -282,9 +286,9 @@ export interface GroundingWriteOptions {
 
 /** The block for a wholly-owned rule file, never downgrading newer prose (unless forced). */
 function ownedSection(file: string, store: HunchStore, root: string, opts?: GroundingWriteOptions): string {
-  const section = renderHunchSection(store, root);
-  if (opts?.force) return section;
   const existing = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const section = renderHunchSection(store, root, existing);
+  if (opts?.force) return section;
   return preserveNewerTemplate(existing, section);
 }
 
