@@ -16,7 +16,7 @@ import { createRepoFileReader } from "../core/safeRepoFile.js";
 const EXTS = [
   ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
   ".py", ".go", ".rb", ".java", ".rs", ".php", ".cs", ".kt", ".swift", ".scala",
-  ".c", ".h", ".cc", ".cpp", ".hpp", ".sql", ".sh",
+  ".c", ".h", ".cc", ".cpp", ".hpp", ".sql", ".sh", ".ex", ".exs",
 ];
 const SKIP = new Set(["node_modules", ".git", ".hunch", ".hunch-private", "dist", "build", "out", "vendor", ".next"]);
 const TAG = /(?:\/\/|#|\*|--|<!--|;)\s*hunch-(why|rule)\s*:\s*(.+?)\s*(?:\*\/|-->|$)/i;

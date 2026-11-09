@@ -11,10 +11,10 @@ test("LANGUAGES has a plain-TS entry and a TSX entry that share the typescript i
   assert.ok(LANGUAGES.filter((l) => l.id === "typescript").length >= 2);
 });
 
-test("CODE_EXTENSIONS matches the supported TS/JS/Python/Go/PHP/YAML extension list", () => {
+test("CODE_EXTENSIONS matches the supported TS/JS/Python/Go/PHP/YAML/Elixir extension list", () => {
   assert.deepEqual(
     [...CODE_EXTENSIONS].sort(),
-    [".cjs", ".cts", ".go", ".js", ".jsx", ".mjs", ".mts", ".php", ".py", ".pyi", ".tpl", ".ts", ".tsx", ".yaml", ".yml"].sort(),
+    [".cjs", ".cts", ".ex", ".exs", ".go", ".js", ".jsx", ".mjs", ".mts", ".php", ".py", ".pyi", ".tpl", ".ts", ".tsx", ".yaml", ".yml"].sort(),
   );
 });
 
@@ -78,4 +78,6 @@ test("native grammar versions stay on the tree-sitter 0.21 peer family", () => {
     "YAML 0.7+ requires tree-sitter 0.22 and must move only with the whole native parser matrix");
   assert.equal(packageJson.dependencies["tree-sitter-php"], "0.23.12",
     "PHP 0.24+ requires tree-sitter 0.22; 0.23.12 is the latest compatible 0.21 peer");
+  assert.equal(packageJson.dependencies["tree-sitter-elixir"], "0.3.5",
+    "tree-sitter-elixir 0.3.5 declares the tree-sitter ^0.21 peer and ships prebuilds");
 });

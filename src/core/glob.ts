@@ -84,6 +84,9 @@ export function isIndexedPath(target: string, symbolFiles: Iterable<string>, com
   return false;
 }
 
+const QUALIFIER_KINDS = new Set(["class", "interface"]);
+const MEMBER_KINDS = new Set(["function", "method"]);
+
 /** Resolve the symbols a `target` names, strictly tiered, first non-empty tier
  *  wins: exact id, then exact name, then exact file, then — conditionally —
  *  (only when `target` is NOT a path already known to be real) segment-anchored
@@ -94,7 +97,7 @@ export function isIndexedPath(target: string, symbolFiles: Iterable<string>, com
  *  wider graph-or-working-tree answer that also covers a file about to be created;
  *  one that NAMES the file it resolved to (resolveNodeIds, structure()) passes the
  *  narrower `isRepoFile`, since glob coverage alone is not existence. */
-export function matchSymbolsTiered<S extends { id: string; file: string; name: string }>(target: string, symbols: readonly S[], indexed: boolean): S[] {
+export function matchSymbolsTiered<S extends { id: string; file: string; name: string; kind?: string }>(target: string, symbols: readonly S[], indexed: boolean): S[] {
   const byId = symbols.find((s) => s.id === target);
   if (byId) return [byId];
   const byName = symbols.filter((s) => s.name === target);
@@ -102,5 +105,23 @@ export function matchSymbolsTiered<S extends { id: string; file: string; name: s
   const byFile = symbols.filter((s) => s.file === target);
   if (byFile.length) return byFile;
   if (indexed) return [];
+  // A qualified name `Mod.fun` / `Class.method` (Elixir `App.Orders.apply`): the
+  // function or method named after the LAST dot, in a file that defines the
+  // qualifier as a class/module (or interface/protocol). Only those kinds, so a
+  // file name (`tsconfig.json`) or a variable's field (`config.schema`) never
+  // lands here. Never for a path-shaped target, which the suffix tier below owns.
+  // Lookup only, no edge: the member may sit in a module nested in the file.
+  const dot = target.lastIndexOf(".");
+  if (dot > 0 && dot < target.length - 1 && !/[\\/]/.test(target)) {
+    const qualifier = target.slice(0, dot);
+    const member = target.slice(dot + 1);
+    const files = new Set(symbols
+      .filter((s) => s.name === qualifier && QUALIFIER_KINDS.has(s.kind ?? ""))
+      .map((s) => s.file));
+    const qualified = files.size
+      ? symbols.filter((s) => s.name === member && MEMBER_KINDS.has(s.kind ?? "") && files.has(s.file))
+      : [];
+    if (qualified.length) return qualified;
+  }
   return symbols.filter((s) => pathsRelated(s.file, target));
 }
