@@ -22,6 +22,7 @@ import { compareCodeUnits } from "../core/canonicalOrder.js";
 import { extracted, inferred, type Symbol, type Edge, type Component } from "../core/types.js";
 import { isGitRepo, fileGitMetrics, revExists } from "./git.js";
 import { languageFor } from "./languages.js";
+import { analyzeElixirFile, elixirExpandAt, elixirImportsIn, parseElixirDirective, type ElixirFileAnalysis } from "./elixir.js";
 import {
   composerPsr4Mappings,
   phpExternalSpecifier,
@@ -188,6 +189,11 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
   const k8sWorkloadLabels: Array<{ symbolId: string; scope: string; namespace: string | null; labels: Record<string, string> }> = [];
   const phpNamespaces = new Map<string, string | null>();
   const phpUseDeclarations = new Map<string, string[]>();
+  // Elixir: per-file module scopes/aliases, every module symbol by full name, and
+  // every function symbol by `<owning module symbol id>\0<name>` (source order).
+  const elixirFiles = new Map<string, ElixirFileAnalysis>();
+  const elixirModules = new Map<string, string[]>();
+  const elixirFunctions = new Map<string, string[]>();
   // Batched per-file git metrics (churn + last commit) in TWO `git log` spawns
   // total, instead of two per file — the dominant cost of indexing a large repo.
   const rels = files.map((file) => file.path);
@@ -374,9 +380,28 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     }
     fileSymbols.set(rel, idsInFile);
     fileSymbolIndexId.set(rel, indexToId);
-    perFileCalls.push({ file: rel, bySym: attributeCalls(parsed), qualified: attributeQualifiedCalls(parsed) });
-    perFileImports.push({ file: rel, imports: parsed.imports });
+    const elixirAnalysis = languageFor(rel)?.id === "elixir" ? analyzeElixirFile(parsed) : null;
+    perFileCalls.push({
+      file: rel,
+      bySym: attributeCalls(parsed),
+      // Elixir remote calls arrive with their module already expanded where the
+      // call is written (aliases are positional, which a binding map cannot be).
+      qualified: elixirAnalysis ? elixirAnalysis.remoteCalls : attributeQualifiedCalls(parsed),
+    });
     perFileRelations.push({ file: rel, bySym: attributeRelations(parsed) });
+    if (elixirAnalysis) {
+      const analysis = elixirAnalysis;
+      elixirFiles.set(rel, analysis);
+      for (const [index, fqn] of analysis.moduleFqn) if (fqn) pushInto(elixirModules, fqn, indexToId.get(index)!);
+      for (const [index, ps] of parsed.symbols.entries()) {
+        const owner = analysis.owner[index] ?? -1;
+        if (ps.kind !== "function" || owner < 0) continue;
+        pushInto(elixirFunctions, `${indexToId.get(owner)!}\0${ps.name}`, indexToId.get(index)!);
+      }
+      // Directives carry no file specifier; record the modules they name, which
+      // resolveImportTargets maps to the defining file.
+      perFileImports.push({ file: rel, imports: analysis.referencedModules });
+    } else perFileImports.push({ file: rel, imports: parsed.imports });
     if (languageFor(rel)?.id === "php") {
       phpNamespaces.set(rel, parsed.namespace);
       phpUseDeclarations.set(rel, parsed.imports.filter((capture) => /^\s*use\b/i.test(capture)));
@@ -396,8 +421,22 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
     if (!files) goPackages.set(spec, files = goPackageFiles(spec, fileSymbols, goModule));
     return files;
   };
+  // A module defined more than once (duplicated across apps or test support) is
+  // ambiguous: no edge rather than a guess.
+  const elixirModuleId = (fqn: string | null): string | null => {
+    const ids = fqn ? elixirModules.get(fqn) : undefined;
+    return ids?.length === 1 ? ids[0]! : null;
+  };
+  // Any clause group of `name` in the module: Elixir dispatches Mod.name to it.
+  const elixirFunction = (moduleSymbolId: string | null, name: string): string | null =>
+    moduleSymbolId ? elixirFunctions.get(`${moduleSymbolId}\0${name}`)?.[0] ?? null : null;
   const resolveImportTargets =(file: string, spec: string): string[] => {
     const langId = languageFor(file)?.id;
+    if (langId === "elixir") {
+      const id = elixirModuleId(spec);
+      const target = id ? byId.get(id)?.file : undefined;
+      return target ? [target] : [];
+    }
     if (langId === "python") return [resolvePythonImport(file, spec, fileSymbols, pyRoots)].filter((target): target is string => !!target);
     if (langId === "go") return goFilesOf(spec).slice(0, 1);
     if (langId === "php") {
@@ -440,6 +479,21 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
       for (const [calleeName, memberOnly] of callees) {
         let resolvedName = calleeName;
         const candidates = new Set(importedFiles.get(file) ?? []);
+        const elixir = elixirFiles.get(file);
+        if (elixir) {
+          const calleeId = resolveElixirLocalCall(elixir, indexToId, callerIndex, calleeName, elixirModuleId, elixirFunction);
+          if (!calleeId || calleeId === callerId) continue;
+          addEdge({
+            schema: "hunch.edge/1",
+            id: edgeId(callerId, calleeId, edgeType),
+            from: callerId, to: calleeId, type: edgeType,
+            reason: `${callerName} ${edgeType} ${calleeName}`, strength: 0.8,
+            provenance: extracted(0.8, [file]),
+            environment: null,
+            metadata: {},
+          });
+          continue;
+        }
         if (languageFor(file)?.id === "php") {
           const reference = resolvePhpReference(
             calleeName,
@@ -482,6 +536,23 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
       if (!callerId) continue;
       const callerName = byId.get(callerId)?.name ?? "?";
       for (const { callee, module } of targets) {
+        const elixir = elixirFiles.get(file);
+        if (elixir) {
+          // Remote call `Mod.fun()`, `module` already expanded at the call site:
+          // bind to that one module's function, never a same-named one elsewhere.
+          const calleeId = elixirFunction(elixirModuleId(module), callee);
+          if (!calleeId || calleeId === callerId) continue;
+          addEdge({
+            schema: "hunch.edge/1",
+            id: edgeId(callerId, calleeId, edgeType),
+            from: callerId, to: calleeId, type: edgeType,
+            reason: `${callerName} ${edgeType} ${module}.${callee}`, strength: 0.8,
+            provenance: extracted(0.8, [file]),
+            environment: null,
+            metadata: {},
+          });
+          continue;
+        }
         let files = moduleFiles.get(module);
         if (!files) {
           const targets = languageFor(file)?.id === "go" ? goFilesOf(module) : resolveImportTargets(file, module);
@@ -580,6 +651,34 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
       const sourceId = indexToId.get(sourceIndex);
       if (!sourceId) continue;
       const sourceName = byId.get(sourceId)?.name ?? "?";
+      const elixir = elixirFiles.get(file);
+      if (elixir) {
+        // alias/import/require/use, `%Mod{}` and `@behaviour Mod` reference the
+        // named module's symbol. A module referencing itself adds nothing.
+        const ownModule = indexToId.get(elixir.owner[sourceIndex] ?? -1);
+        for (const relation of relations) {
+          const fqns = parseElixirDirective(relation.target)
+            ? elixir.directiveTargets.get(relation.atByte) ?? []
+            : [elixirExpandAt(elixir, relation.atByte, relation.target)].filter((fqn): fqn is string => !!fqn);
+          for (const fqn of fqns) {
+            const targetId = elixirModuleId(fqn);
+            if (!targetId || targetId === sourceId || targetId === ownModule) continue;
+            addEdge({
+              schema: "hunch.edge/1",
+              id: edgeId(sourceId, targetId, relation.edgeType),
+              from: sourceId,
+              to: targetId,
+              type: relation.edgeType,
+              reason: `${sourceName} ${relation.label} ${fqn}`,
+              strength: 1,
+              provenance: extracted(1, [file]),
+              environment: null,
+              metadata: { elixir_relation: relation.label },
+            });
+          }
+        }
+        continue;
+      }
       for (const relation of relations) {
         const resolved = resolvePhpReference(
           relation.target,
@@ -650,7 +749,10 @@ export function scanRepo(store: HunchStore, root: string, opts: ScanRepoOptions 
         }
         continue;
       }
-      const externalSpecifier = languageFor(file)?.id === "php" ? phpExternalSpecifier(spec) : spec;
+      // An unresolved Elixir module (GenServer, Ecto.Schema, a dependency) has no
+      // package specifier to name: the module-to-package map lives in mix deps.
+      const langId = languageFor(file)?.id;
+      const externalSpecifier = langId === "php" ? phpExternalSpecifier(spec) : langId === "elixir" ? null : spec;
       const dependency = externalSpecifier ? externalPackage(externalSpecifier) : null;
       const external = externalSpecifier ? externalImportNodeId(externalSpecifier) : null;
       const anchors = [...(fileSymbols.get(file) ?? [])].sort();
@@ -812,6 +914,29 @@ function resolveName(
   if (sameFile.length > 1) return null; // ambiguous within the file — don't guess
   const imported = candidates.filter((id) => importedFiles.has(byId.get(id)?.file ?? ""));
   return imported.length === 1 ? imported[0]! : null;
+}
+
+/** Resolve an unqualified Elixir call `name(...)` made inside symbol
+ *  `callerIndex`: the caller's own module first (any clause group of `name`), then
+ *  modules imported in the caller's scope whose `only:`/`except:` admit `name`;
+ *  exactly one of those may define it, else no edge. `use` is deliberately not
+ *  followed: what `__using__` injects is not static. */
+function resolveElixirLocalCall(
+  analysis: ElixirFileAnalysis,
+  indexToId: Map<number, string>,
+  callerIndex: number,
+  name: string,
+  moduleId: (fqn: string | null) => string | null,
+  functionIn: (moduleSymbolId: string | null, name: string) => string | null,
+): string | null {
+  const owner = analysis.owner[callerIndex] ?? -1;
+  const own = owner >= 0 ? functionIn(indexToId.get(owner) ?? null, name) : null;
+  if (own) return own;
+  const imported = new Set(elixirImportsIn(analysis, callerIndex)
+    .filter(({ only, except }) => (!only || only.has(name)) && !except.has(name))
+    .map(({ module }) => functionIn(moduleId(module), name))
+    .filter((id): id is string => !!id));
+  return imported.size === 1 ? [...imported][0]! : null;
 }
 
 /** Resolve a relative import specifier to a concrete tracked file path. */

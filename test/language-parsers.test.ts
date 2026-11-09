@@ -27,6 +27,7 @@ const EXPECTED_GRAMMARS: Record<string, { id: string; extensions: string[] }> = 
   go: { id: "go", extensions: [".go"] },
   php: { id: "php", extensions: [".php"] },
   yaml: { id: "yaml", extensions: [".yml", ".yaml", ".tpl"] },
+  elixir: { id: "elixir", extensions: [".ex", ".exs"] },
 };
 
 /** grammarKeys with an end-to-end fixture in this file. */
@@ -607,6 +608,95 @@ worker:
   assert.ok(refs(["deployment.yaml", "chart/templates/deployment.yaml"], ["demo.fullname", "chart/templates/_helpers.tpl"]), "helm include -> define");
   assert.ok(!g.edges.some((e) => e.type === "calls"), "YAML never emits call edges");
   malformedSkipped(g, "config/broken.yaml");
+});
+
+// ---------------------------------------------------------------- Elixir (.ex/.exs)
+test("elixir: modules, clauses, protocols, aliases, imports, structs, behaviours, tests, malformed file", (t) => {
+  TESTED_GRAMMARS.add("elixir");
+  const g = indexFixture(t, "elixir", {
+    "mix.exs": "defmodule App.MixProject do\n  use Mix.Project\n  def project, do: [app: :app, version: \"0.1.0\"]\nend\n",
+    "lib/app/reason.ex": `defmodule App.Reason do
+  @moduledoc "Redaction."
+  @spec redact(String.t() | nil) :: String.t() | nil
+  def redact(nil), do: nil
+  def redact(text) when is_binary(text), do: scrub(text)
+  defp scrub(text), do: String.replace(text, "secret", "***")
+  defmacro guarded(expr), do: expr
+end
+`,
+    "lib/app/gate.ex": `defmodule App.Gate do
+  defstruct open: false
+  @callback allow?(term()) :: boolean()
+  def check(%__MODULE__{open: open}), do: open
+  defmodule Rules do
+    def default, do: %App.Gate{open: true}
+  end
+end
+`,
+    "lib/app/shape.ex": `defprotocol App.Shape do
+  def area(shape)
+end
+
+defimpl App.Shape, for: App.Gate do
+  def area(_gate), do: 0
+end
+`,
+    "lib/app/worker.ex": `defmodule App.Worker do
+  @behaviour App.Gate
+  alias App.{Reason, Gate}
+  alias App.Gate.Rules, as: R
+  import App.Helpers, only: [tidy: 1]
+  require Logger
+
+  @impl true
+  def allow?(_), do: true
+
+  def run(text) do
+    gate = R.default()
+    if Gate.check(gate), do: text |> Reason.redact() |> tidy(), else: __MODULE__.skip()
+  end
+
+  def skip, do: Logger.info("skipped")
+end
+`,
+    "lib/app/helpers.ex": "defmodule App.Helpers do\n  def tidy(x), do: String.trim(x)\n  def map(list), do: Enum.map(list, & &1)\nend\n",
+    "test/app/reason_test.exs": `defmodule App.ReasonTest do
+  use ExUnit.Case, async: true
+  alias App.Reason
+  test "redacts" do
+    assert Reason.redact(nil) == nil
+  end
+end
+`,
+    "lib/app/broken.ex": "defmodule Broken do\n  def oops(\n",
+  });
+  assert.equal(g.status, 0, g.output);
+  kinds(g, "lib/app/reason.ex", { "App.Reason": "class", redact: "function", scrub: "function", guarded: "function" });
+  kinds(g, "lib/app/gate.ex", { "App.Gate": "class", check: "function", Rules: "class", default: "function" });
+  kinds(g, "lib/app/shape.ex", { "App.Shape": "interface", area: "function" });
+  assert.equal(g.symbols.filter((s) => s.file === "lib/app/shape.ex" && s.name === "area").length, 2, "protocol and impl `area` stay apart");
+  kinds(g, "lib/app/worker.ex", { "App.Worker": "class", run: "function", skip: "function", "allow?": "function" });
+  assert.equal(g.symbols.filter((s) => s.file === "lib/app/reason.ex" && s.name === "redact").length, 1, "clauses fold into one symbol");
+  const W = "lib/app/worker.ex";
+  assert.ok(g.calls(["run", W], ["redact", "lib/app/reason.ex"]), "multi-alias remote call through a pipe");
+  assert.ok(g.calls(["run", W], ["check", "lib/app/gate.ex"]), "multi-alias remote call");
+  assert.ok(g.calls(["run", W], ["default", "lib/app/gate.ex"]), "alias ... as: remote call into a nested module");
+  assert.ok(g.calls(["run", W], ["tidy", "lib/app/helpers.ex"]), "import only: local call");
+  assert.ok(g.calls(["run", W], ["skip", W]), "__MODULE__ remote call");
+  assert.ok(g.calls(["redact", "lib/app/reason.ex"], ["scrub", "lib/app/reason.ex"]), "same-module local call");
+  assert.ok(g.calls(["App.ReasonTest", "test/app/reason_test.exs"], ["redact", "lib/app/reason.ex"]), "ExUnit test -> code");
+  const rel = (type: string, from: [string, string], to: [string, string]) =>
+    g.edges.some((e) => e.type === type && e.from === g.sym(...from).id && e.to === g.sym(...to).id);
+  assert.ok(rel("implements", ["App.Worker", W], ["App.Gate", "lib/app/gate.ex"]), "@behaviour");
+  assert.ok(rel("references", ["App.Worker", W], ["App.Reason", "lib/app/reason.ex"]), "alias directive");
+  assert.ok(rel("references", ["default", "lib/app/gate.ex"], ["App.Gate", "lib/app/gate.ex"]), "struct literal");
+  // Typespecs and Enum/String/Logger calls never become edges.
+  assert.ok(!g.edges.some((e) => e.type === "calls" && e.from === g.sym("App.Reason", "lib/app/reason.ex").id), "@spec is not a call");
+  assert.ok(!g.edges.some((e) => e.type === "calls" && e.from === g.sym("map", "lib/app/helpers.ex").id), "Enum.map is not a repo call");
+  assert.ok(!g.edges.some((e) => e.type === "imports"), "unknown Elixir modules are not invented as packages");
+  const deps = fileDependents(g, "redact", "lib/app/reason.ex");
+  for (const f of [W, "test/app/reason_test.exs"]) assert.ok(deps.has(f), `redact dependents include ${f}: ${[...deps]}`);
+  malformedSkipped(g, "lib/app/broken.ex");
 });
 
 test("every registered grammar has a CLI fixture in this file", () => {

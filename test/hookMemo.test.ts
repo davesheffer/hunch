@@ -93,3 +93,30 @@ test("runHookCommand opens a memo scope itself, so the hook-only bundle and the 
   assert.equal(hookActive(), true);
   endHookInvocation();
 });
+
+test("a stray .git dir in a subdirectory is not taken for a toplevel: shell writes keep the subdir prefix", (t) => {
+  const root = repo(t);
+  const sub = join(root, "src");
+  mkdirSync(join(sub, ".git")); // no HEAD: git ignores it, so the shortcut must too
+  const s = `hookmemo-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  refreshShellBaseline(sub, s);
+  const at = new Date(Date.now() + 1000);
+  writeFileSync(join(sub, "a.ts"), "export const a = 2;\n");
+  utimesSync(join(sub, "a.ts"), at, at);
+  assert.deepEqual(shellWrittenFiles(sub, s), ["a.ts"]);
+});
+
+test("under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree", (t) => {
+  const root = repo(t);
+  const saved = { GIT_DIR: process.env.GIT_DIR, GIT_WORK_TREE: process.env.GIT_WORK_TREE, GIT_PREFIX: process.env.GIT_PREFIX };
+  t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  process.env.GIT_DIR = join(root, ".git");
+  process.env.GIT_WORK_TREE = root;
+  process.env.GIT_PREFIX = "";
+  const s = `hookmemo-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  refreshShellBaseline(root, s);
+  const at = new Date(Date.now() + 1000);
+  writeFileSync(join(root, "src", "a.ts"), "export const a = 2;\n");
+  utimesSync(join(root, "src", "a.ts"), at, at);
+  assert.deepEqual(shellWrittenFiles(root, s), ["src/a.ts"]);
+});

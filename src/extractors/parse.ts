@@ -165,6 +165,9 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
   // group captures by their enclosing @*.def via a quick pass: we record names
   // keyed by the def node, then emit a symbol per def.
   const pendingDefs = new Map<number, { kind: ParsedSymbolKind; def: SyntaxNode; name?: string }>();
+  // Enclosing def node id per emitted symbol (-1 at top level); internal to the
+  // clause merge, which must never fold clauses of two different parents.
+  const enclosingDef = new WeakMap<ParsedSymbol, number>();
 
   for (const cap of query.captures(tree.rootNode)) {
     const cname = cap.name;
@@ -175,7 +178,7 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
       if (!pendingDefs.has(node.id)) pendingDefs.set(node.id, { kind: spec.defKindOf[cname]!, def: node });
     } else if (Object.hasOwn(spec.nameToDef, cname)) {
       // name capture: find its parent def node id by walking up to the def type
-      const defNode = ascendToDef(node, spec.defNodeTypes);
+      const defNode = ascendToDef(node, spec);
       if (defNode) {
         const existing = pendingDefs.get(defNode.id);
         if (existing) existing.name = originalText(node);
@@ -184,6 +187,8 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
       if (cname === "namespace.name") namespace = originalText(node);
     } else if (cname === "import.src") {
       imports.push(originalText(node).replace(STR_QUOTES, ""));
+    } else if ((cname === "call.id" || cname === "call.member") && spec.isInertCall?.(node)) {
+      continue;
     } else if (cname === "call.id") {
       const text = originalText(node);
       if (!spec.builtinFunctions?.has(text)) {
@@ -192,10 +197,16 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     } else if (cname === "call.member") {
       // skip builtin method names to avoid false edges to similarly-named symbols
       const text = originalText(node);
-      const object = node.parent?.childForFieldName("object") ?? node.parent?.childForFieldName("operand");
-      const qualifier = object?.type === "identifier" || object?.type === "package_identifier" ? originalText(object) : undefined;
+      const object = node.parent?.childForFieldName("object")
+        ?? node.parent?.childForFieldName("operand")
+        ?? (spec.memberCallsViaBindingsOnly ? node.parent?.childForFieldName("left") : null);
+      const qualifier = object?.type === "identifier" || object?.type === "package_identifier" || object?.type === "alias"
+        ? originalText(object)
+        : undefined;
       const call = { callee: text, atByte: node.startIndex, endByte: node.endIndex, member: true, qualifier };
-      if (!spec.builtinMethods.has(text)) calls.push(call);
+      if (spec.memberCallsViaBindingsOnly) {
+        if (qualifier) builtinMemberCalls.push(call);
+      } else if (!spec.builtinMethods.has(text)) calls.push(call);
       else if (qualifier) builtinMemberCalls.push(call);
     } else if (spec.relationKindOf?.[cname]) {
       const relation = spec.relationKindOf[cname]!;
@@ -233,11 +244,13 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     const symbolName = name ?? spec.fallbackDefName?.(file);
     if (!symbolName) continue;
     const loc = def.endPosition.row - def.startPosition.row + 1;
-    symbols.push({
+    const symbol: ParsedSymbol = {
       name: symbolName, kind,
       startByte: def.startIndex, endByte: def.endIndex, loc,
       bodyText: originalText(def).slice(0, MAX_BODY_TEXT_CHARS),
-    });
+    };
+    if (spec.mergeAdjacentClauses) enclosingDef.set(symbol, ascendToDef(def, spec)?.id ?? -1);
+    symbols.push(symbol);
   }
   // Severe templating can stop the root node from forming; synthesize the whole-file symbol.
   if (templated && spec.fallbackDefName && !symbols.some((s) => s.kind === "file")) {
@@ -248,6 +261,7 @@ export function parseSource(file: string, source: string, opts: { throwOnParseEr
     });
   }
   symbols.sort((a, b) => a.startByte - b.startByte);
+  if (spec.mergeAdjacentClauses) mergeAdjacentClauses(symbols, source, (symbol) => enclosingDef.get(symbol) ?? -1);
   return { symbols, imports, calls, builtinMemberCalls, relations, bindings, namespace, parseable: templated || parseable };
 }
 
@@ -291,14 +305,46 @@ function inToleratedScope(node: SyntaxNode, scopes: NonNullable<LanguageSpec["to
   return false;
 }
 
-/** Nearest ancestor of `node` whose type is a definition type, or null. */
-function ascendToDef(node: SyntaxNode, defNodeTypes: Set<string>): SyntaxNode | null {
+/** Nearest ancestor of `node` whose type is a definition type (and that passes
+ *  the spec's isDefNode test, when it has one), or null. */
+function ascendToDef(node: SyntaxNode, spec: LanguageSpec): SyntaxNode | null {
   let cur: SyntaxNode | null = node.parent;
   while (cur) {
-    if (defNodeTypes.has(cur.type)) return cur;
+    if (spec.defNodeTypes.has(cur.type) && (!spec.isDefNode || spec.isDefNode(cur))) return cur;
     cur = cur.parent;
   }
   return null;
+}
+
+/** Collapse runs of consecutive, non-overlapping symbols sharing name, kind and
+ *  enclosing definition (Elixir function clauses) into one symbol spanning the
+ *  whole run. `symbols` must already be sorted by start byte; it is rewritten in
+ *  place. A symbol nested inside the previous one (overlapping range) is never
+ *  merged into it, nor is a same-named function of another module that merely
+ *  follows it in source order (a nested module's last `new` and its parent's). */
+function mergeAdjacentClauses(symbols: ParsedSymbol[], source: string, parentOf: (symbol: ParsedSymbol) => number): void {
+  const out: ParsedSymbol[] = [];
+  // Parent of each `out` entry, kept beside it: a merged entry is a new object.
+  const outParents: number[] = [];
+  for (const sym of symbols) {
+    const prev = out[out.length - 1];
+    const parent = parentOf(sym);
+    if (prev && prev.name === sym.name && prev.kind === sym.kind && sym.startByte >= prev.endByte
+      && outParents[out.length - 1] === parent) {
+      const endByte = Math.max(prev.endByte, sym.endByte);
+      const text = source.slice(prev.startByte, endByte);
+      out[out.length - 1] = {
+        ...prev,
+        endByte,
+        loc: text.split("\n").length,
+        bodyText: text.slice(0, MAX_BODY_TEXT_CHARS),
+      };
+    } else {
+      out.push(sym);
+      outParents.push(parent);
+    }
+  }
+  symbols.splice(0, symbols.length, ...out);
 }
 
 /** Index in `symbols` of the narrowest symbol whose [startByte, endByte) range

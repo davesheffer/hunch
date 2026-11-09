@@ -48,6 +48,7 @@ export const uiHtml = `<!doctype html>
 <div class="bar"><h1 id="deliberate-title">Deliberate</h1>
 <div role="group" aria-label="Kind" class="segmented" id="dlb-tabs"></div>
 <span id="dlb-status" class="muted small" role="status" aria-live="polite"></span><button type="button" id="dlb-think" class="secondary grow-end">Think through a decision</button></div>
+<div id="dlb-queue" class="dlb-queue" role="status" aria-live="polite" hidden></div>
 <div class="split" id="deliberate-split">
 <div class="pane"><ul id="dlb-list" class="list"></ul></div>
 <article id="dlb-card" class="panel dlb" aria-live="polite"></article>
@@ -227,6 +228,12 @@ details{margin-top:18px}summary{cursor:pointer;font:600 11px var(--mono);letter-
 .reach{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:12px 0 0;font-size:12.5px;color:var(--muted)}
 .dlb-acts{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 20px;border-top:1px solid var(--line);background:var(--surface)}
 .dlb-acts .end{margin-left:auto}
+.dlb-queue{flex:none;margin:0 0 10px;padding:6px 12px;background:var(--chip);border-radius:6px;font-size:12.5px;max-height:132px;overflow:auto}
+.q-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:0 0 4px}
+.q-list{list-style:none;margin:0;padding:0}
+.q-list li{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;padding:2px 0;border-top:1px solid var(--line)}
+.q-mark{flex:none;width:52px;font-size:11px;color:var(--muted)}.q-running .q-mark{color:var(--accent)}.q-failed .q-mark,.q-failed .q-text{color:var(--warn)}
+.q-text{min-width:0;flex:1;overflow-wrap:anywhere}.q-list button{min-height:24px;padding:0 10px}.q-note{flex-basis:100%}
 ${grillCss}
 ${boardCss}
 @media(max-width:1100px){.recs.two{grid-template-columns:minmax(0,1fr)}.rec+.rec{border-left:0;border-top:1px solid var(--line)}}
@@ -1190,8 +1197,6 @@ export const uiJs = String.raw`
       // a bare #/deliberate is the list, so the nav still opens the list there.
       let key = id;
       if (entering && !key && D.key && !onPhone()) { key = D.key; history.replaceState(null, '', D_PREFIX + enc(key)); }
-      // Moving on by itself keeps the last change and its Undo; the person moving on doesn't.
-      if (entering || key !== D.key) D.done = null;
       // Arriving is not a click on a tab: an empty tab may move on again.
       if (entering) D.picked = '';
       D.key = key;

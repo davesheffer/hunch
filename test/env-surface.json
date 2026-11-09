@@ -127,16 +127,6 @@
       }
     ]
   },
-  "GIT_DIR": {
-    "class": "git",
-    "purpose": "Ambient git redirection: shell-write attribution stops assuming the Hunch root is the git toplevel",
-    "tests": [
-      {
-        "file": "test/shellwrites.test.ts",
-        "title": "a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still reports a shell write at the root"
-      }
-    ]
-  },
   "GIT_INDEX_FILE": {
     "class": "git",
     "purpose": "Detects a git-hook alternate index so checks never mutate the user's index",
@@ -148,26 +138,6 @@
       {
         "file": "test/dependency-snapshot-isolation.test.ts",
         "title": "behavior execution cannot mutate its shared dependency snapshot and ordinary-file tampering invalidates reuse"
-      }
-    ]
-  },
-  "GIT_PREFIX": {
-    "class": "git",
-    "purpose": "Set by git inside aliases/hooks; shell-write attribution asks git for the prefix instead of assuming a toplevel",
-    "tests": [
-      {
-        "file": "test/shellwrites.test.ts",
-        "title": "a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still reports a shell write at the root"
-      }
-    ]
-  },
-  "GIT_WORK_TREE": {
-    "class": "git",
-    "purpose": "Ambient git redirection: shell-write attribution stops assuming the Hunch root is the git toplevel",
-    "tests": [
-      {
-        "file": "test/shellwrites.test.ts",
-        "title": "a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still reports a shell write at the root"
       }
     ]
   },
@@ -870,5 +840,35 @@
     "class": "network-passthrough",
     "purpose": "npm registry forwarded to isolated dependency snapshots",
     "todo": "no test exercises this read yet (pre-existing gap when the gate landed)"
+  },
+  "GIT_DIR": {
+    "class": "git",
+    "purpose": "Git repository redirect: when set, the shell-write fingerprint asks git for the prefix instead of assuming a toplevel",
+    "tests": [
+      {
+        "file": "test/hookMemo.test.ts",
+        "title": "under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree"
+      }
+    ]
+  },
+  "GIT_PREFIX": {
+    "class": "git",
+    "purpose": "Set by git for aliases and hooks: when set, the shell-write fingerprint asks git for the prefix instead of assuming a toplevel",
+    "tests": [
+      {
+        "file": "test/hookMemo.test.ts",
+        "title": "under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree"
+      }
+    ]
+  },
+  "GIT_WORK_TREE": {
+    "class": "git",
+    "purpose": "Work-tree redirect: when set, the shell-write fingerprint asks git for the prefix instead of assuming a toplevel",
+    "tests": [
+      {
+        "file": "test/hookMemo.test.ts",
+        "title": "under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree"
+      }
+    ]
   }
 }
