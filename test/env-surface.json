@@ -796,5 +796,35 @@
     "class": "network-passthrough",
     "purpose": "npm registry forwarded to isolated dependency snapshots",
     "todo": "no test exercises this read yet (pre-existing gap when the gate landed)"
+  },
+  "GIT_DIR": {
+    "class": "git",
+    "purpose": "Git repository redirect: when set, the shell-write fingerprint asks git for the prefix instead of assuming a toplevel",
+    "tests": [
+      {
+        "file": "test/hookMemo.test.ts",
+        "title": "under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree"
+      }
+    ]
+  },
+  "GIT_PREFIX": {
+    "class": "git",
+    "purpose": "Set by git for aliases and hooks: when set, the shell-write fingerprint asks git for the prefix instead of assuming a toplevel",
+    "tests": [
+      {
+        "file": "test/hookMemo.test.ts",
+        "title": "under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree"
+      }
+    ]
+  },
+  "GIT_WORK_TREE": {
+    "class": "git",
+    "purpose": "Work-tree redirect: when set, the shell-write fingerprint asks git for the prefix instead of assuming a toplevel",
+    "tests": [
+      {
+        "file": "test/hookMemo.test.ts",
+        "title": "under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree"
+      }
+    ]
   }
 }

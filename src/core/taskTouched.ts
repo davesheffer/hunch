@@ -20,8 +20,8 @@
  * second of slack (git keeps seconds); working-tree mtimes get none before
  * the start. */
 import { execFileSync } from "node:child_process";
-import { statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 const EXCLUDED_SEGMENTS = new Set([".hunch", ".hunch-cache", ".git"]);
 /** Files Hunch regenerates on every capture (src/integrations/providers.ts,
@@ -34,6 +34,46 @@ export const HUNCH_COMMIT_SUBJECT = /^(?:(?:revert|reapply) ")*hunch:/i;
 function gitDate(ms: number): string {
   // Second resolution, a format every git accepts.
   return `${new Date(ms).toISOString().slice(0, 19).replace("T", " ")} +0000`;
+}
+
+/** True only when HEAD provably has not moved since `sinceMs`: the checkout's
+ *  HEAD reflog (written by every commit, checkout, reset, pull, merge that moves
+ *  it) and, on a branch, that branch's reflog in the common git dir (a commit
+ *  from another worktree with the same branch checked out moves the branch
+ *  without touching this HEAD's log) were last modified before then. Reads
+ *  files only; anything unusual (no reflog, unreadable git dir) answers false
+ *  and the caller asks git. A filesystem whose clock lags this process by more
+ *  than the margin can still hide a commit made in the window's first seconds. */
+export function headUnmovedSince(root: string, sinceMs: number): boolean {
+  try {
+    let dir = resolve(root);
+    for (let up = 0; up < 8; up++) {
+      const dotGit = join(dir, ".git");
+      if (existsSync(dotGit)) {
+        let gitDir = dotGit;
+        if (!statSync(dotGit).isDirectory()) {
+          const m = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(dotGit, "utf8"));
+          if (!m) return false;
+          gitDir = isAbsolute(m[1]!) ? m[1]! : resolve(dir, m[1]!);
+        }
+        // Margin for filesystem timestamp granularity.
+        const before = (file: string): boolean => statSync(file).mtimeMs < sinceMs - 2_000;
+        if (!before(join(gitDir, "logs", "HEAD"))) return false;
+        const ref = /^ref:\s*(refs\/\S+)\s*$/m.exec(readFileSync(join(gitDir, "HEAD"), "utf8"))?.[1];
+        if (!ref) return true; // detached: only this HEAD's log moves it
+        let common = gitDir;
+        try {
+          const c = readFileSync(join(gitDir, "commondir"), "utf8").trim();
+          if (c) common = isAbsolute(c) ? c : resolve(gitDir, c);
+        } catch { /* not a linked worktree */ }
+        return before(join(common, "logs", ...ref.split("/")));
+      }
+      const parent = dirname(dir);
+      if (parent === dir) return false;
+      dir = parent;
+    }
+  } catch { /* no reflog: ask git */ }
+  return false;
 }
 
 export function gitTouchedFiles(root: string, startedAt: string, finishedAt: string | null, options: { limit?: number; timeoutMs?: number; now?: number; workingTree?: boolean } = {}): string[] {
@@ -56,7 +96,8 @@ export function gitTouchedFiles(root: string, startedAt: string, finishedAt: str
     out.add(path);
   };
   try {
-    const email = run(["config", "--get", "user.email"]).trim();
+    // No HEAD movement since the window opened means no commit in it: skip the log.
+    const email = headUnmovedSince(root, from) ? "" : run(["config", "--get", "user.email"]).trim();
     if (email) {
       // One record per commit: a separator, the subject, then the paths.
       const log = run(["log", "--no-merges", "-n", "50", `--since=${gitDate(from)}`, `--until=${gitDate(to)}`, `--author=${email}`, "--format=%x1e%s", "--name-only"]);

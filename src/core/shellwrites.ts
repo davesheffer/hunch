@@ -14,9 +14,10 @@
  * dirty set (never a tree walk). Any failure yields no files — never an error. */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { memoized } from "./hookMemo.js";
 
 /** Dirty paths fingerprinted; beyond it the rest are ignored (a vendored
  *  untracked tree must not make every command slow). */
@@ -52,7 +53,10 @@ function dirtyPaths(root: string): string[] | null {
   // Porcelain paths are relative to the git toplevel, which can sit above the
   // Hunch root (a package inside a monorepo): re-relativize, drop the outside.
   let prefix = "";
-  try {
+  // A `.git` entry at the root makes it the toplevel (no prefix to ask git for),
+  // unless the environment redirects git elsewhere.
+  const redirected = !!(process.env.GIT_DIR || process.env.GIT_WORK_TREE || process.env.GIT_PREFIX);
+  if (!redirected && isGitToplevel(root)) { /* toplevel: prefix stays empty */ } else try {
     prefix = execFileSync("git", ["-C", root, "rev-parse", "--show-prefix"], { encoding: "utf8", timeout: 2_000, stdio: ["ignore", "pipe", "ignore"] }).trim();
   } catch {
     return null;
@@ -71,7 +75,14 @@ function dirtyPaths(root: string): string[] | null {
   return out;
 }
 
+/** One working-tree fingerprint per hook invocation and root: the prompt hook
+ *  refreshes a session baseline and then an agent's, from the same tree. */
 function fingerprint(root: string): Fingerprints | null {
+  const fp = memoized("shell-fingerprint", root, "", () => takeFingerprint(root));
+  return fp ? { ...fp } : null;
+}
+
+function takeFingerprint(root: string): Fingerprints | null {
   const paths = dirtyPaths(root);
   if (!paths) return null;
   const fp: Fingerprints = {};
@@ -103,6 +114,19 @@ function save(file: string, fp: Fingerprints): void {
 
 /** Record the working tree as it stands, so later shell writes are measured
  *  from here (a prompt, or any tool call that is not a shell command). */
+/** A `.git` entry git itself would accept at `root`: a directory holding HEAD, or
+ *  a `gitdir:` file. A stray or empty `.git` dir is skipped by git's discovery,
+ *  which then walks up, so it must not be taken as the toplevel. */
+function isGitToplevel(root: string): boolean {
+  const dotGit = join(root, ".git");
+  try {
+    if (statSync(dotGit).isDirectory()) return existsSync(join(dotGit, "HEAD"));
+    return readFileSync(dotGit, "utf8").startsWith("gitdir:");
+  } catch {
+    return false;
+  }
+}
+
 export function refreshShellBaseline(root: string, sessionId: string | undefined, agentId?: string): void {
   if (!sessionId) return;
   const fp = fingerprint(root);
@@ -121,4 +145,22 @@ export function shellWrittenFiles(root: string, sessionId: string | undefined, a
   save(file, now);
   if (!before) return [];
   return Object.keys(now).filter((p) => before[p] !== now[p]).sort();
+}
+
+/** After an edit tool wrote `files` (repo-relative), move just those entries of
+ *  the baseline instead of re-reading the whole tree. With no baseline yet the
+ *  full refresh runs, so the first observation is the same as before. */
+export function noteEditedFiles(root: string, sessionId: string | undefined, agentId: string | undefined, files: readonly string[]): void {
+  if (!sessionId) return;
+  const file = snapshotFile(root, sessionId, agentId);
+  const baseline = load(file);
+  if (!baseline || !files.length) { refreshShellBaseline(root, sessionId, agentId); return; }
+  for (const p of files) {
+    if (OWN_STATE.test(p)) continue;
+    try {
+      const st = statSync(join(root, p));
+      if (st.isFile()) baseline[p] = `${st.mtimeMs}:${st.size}`; else delete baseline[p];
+    } catch { delete baseline[p]; }
+  }
+  save(file, baseline);
 }

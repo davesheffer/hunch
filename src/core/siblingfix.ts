@@ -21,6 +21,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { writeFileAtomic } from "./io.js";
+import { recall, remember, type HeadBlob } from "./hookMemo.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseSource } from "../extractors/parse.js";
@@ -614,7 +615,13 @@ interface Pair { target: FnRange; sibling: FnRange; siblingFile: string; similar
  *  A target HEAD does not hold (new untracked file, unborn HEAD) has no history
  *  to learn from and no entry the worker could write, so it never schedules one. */
 function cachedOnly(root: string, target: string, cacheFile: string, env: NodeJS.ProcessEnv, budget: Budget, now: number, miss: () => SiblingLesson[]): SiblingLesson[] {
-  const [head, targetBlob] = (git(root, ["rev-parse", "HEAD", `HEAD:${target}`], env, budget) ?? "").trim().split(/\r?\n/);
+  // Inside a hook invocation the HEAD lookup may already have happened (co-change
+  // ranking asks the same question for the same file).
+  // A failed lookup (timeout) is not an answer: take its own budgeted try.
+  const recalled = recall<HeadBlob>("headblob", root, target);
+  const known = recalled?.head ? recalled : undefined;
+  const [head, targetBlob] = known ? [known.head, known.blob] : (git(root, ["rev-parse", "HEAD", `HEAD:${target}`], env, budget) ?? "").trim().split(/\r?\n/);
+  if (!known && head && targetBlob) { remember<HeadBlob>("headblob", root, target, { head, blob: targetBlob }); remember("head", root, "", head); }
   if (!head || !targetBlob) return [];
   let cached: LessonCache;
   try { cached = JSON.parse(readFileSync(cacheFile, "utf8")) as LessonCache; } catch { return miss(); }
