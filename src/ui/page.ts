@@ -11,7 +11,7 @@ export const uiHtml = `<!doctype html>
 <title>Hunch</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/ui.css"><script src="/ui.js" defer></script></head>
 <body>
 <header class="top"><div class="brand"><span class="mark" aria-hidden="true"></span><strong>Hunch</strong><span id="repo-name" class="muted mono"></span></div>
-<nav aria-label="Sections"><a href="#/brain" data-nav="brain">Brain</a><a href="#/memory" data-nav="memory">Memory</a><a href="#/deliberate" data-nav="deliberate">Deliberate</a><a href="#/attention" data-nav="attention">Needs you <span id="attention-count" class="count"></span></a><a href="#/history" data-nav="history">History</a><a href="#/setup" data-nav="setup" class="apart">Setup</a></nav></header>
+<nav aria-label="Sections"><a href="#/brain" data-nav="brain">Brain</a><a href="#/memory" data-nav="memory">Memory</a><a href="#/deliberate" data-nav="deliberate">Deliberate <span id="attention-count" class="count"></span></a><a href="#/history" data-nav="history">History</a><a href="#/setup" data-nav="setup" class="apart">Setup</a></nav></header>
 <p id="error" role="alert" hidden></p>
 <main>
 <section id="brain-page" hidden aria-labelledby="brain-title">
@@ -61,15 +61,6 @@ export const uiHtml = `<!doctype html>
 <div class="bar"><h1 id="board-title">Think it through</h1><a class="grow-end small" href="#/deliberate">Back to Deliberate</a></div>
 <div class="bd"><article id="bd-stage" class="panel dlb bd-stage" aria-live="polite"></article>
 <aside class="bd-side" aria-label="What the options change"><div class="bd-cvwrap"><canvas id="bd-cv" tabindex="0" role="img" aria-label="Map of components. The option you point at lights up the components it changes, then what uses them."></canvas></div><p id="bd-touch" class="bd-touch" role="status" aria-live="polite"></p></aside></div>
-</section>
-<section id="attention-page" hidden aria-labelledby="attention-title">
-<div class="bar"><h1 id="attention-title">Needs you</h1>
-<div role="group" aria-label="Group" class="segmented" id="attn-tabs"></div>
-<span id="attention-status" class="muted small" role="status" aria-live="polite"></span></div>
-<div class="split" id="attention-split">
-<div class="pane"><ul id="attention" class="list"></ul></div>
-<article id="attn-detail" class="panel" aria-live="polite"><p class="muted">Select a memory.</p></article>
-</div>
 </section>
 <section id="history-page" hidden aria-labelledby="history-title">
 <div class="bar"><h1 id="history-title">History</h1><span id="history-status" class="muted small" role="status" aria-live="polite"></span></div>
@@ -137,7 +128,7 @@ kbd{position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:11p
 .segmented button:hover{background:var(--surface2);color:var(--ink);filter:none}
 .segmented button[aria-pressed="true"]{background:var(--chip);color:var(--accent)}
 .editor{display:grid;gap:10px;margin:12px 0;padding:14px;border:1px solid var(--line2);border-radius:8px}
-#detail>.editor.new,#attn-detail>.editor.new{margin:0;padding:0;border:0}
+#detail>.editor.new{margin:0;padding:0;border:0}
 fieldset{border:0;padding:0;margin:0;display:grid;gap:8px;min-width:0}legend{font-size:12.5px;font-weight:600;padding:0;margin-bottom:4px}
 .rows{list-style:none;margin:0;padding:0;display:grid;gap:6px}.rows li{display:flex;justify-content:space-between;align-items:center;gap:12px;min-width:0}
 .add{display:flex;gap:8px}.add input,.add select{flex:1;min-width:0}
@@ -178,8 +169,8 @@ details{margin-top:18px}summary{cursor:pointer;font:600 11px var(--mono);letter-
 .history .h{display:flex;align-items:center;gap:10px;min-height:36px;padding:4px 16px;border-bottom:1px solid var(--line)}
 .history .what{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history .v{flex:none;min-width:116px}.history .t{flex:none;color:var(--muted);font:12px var(--mono)}
-#detail .history .h,#attn-detail .history .h{padding:4px 0}
-#detail .history .v,#attn-detail .history .v{min-width:0}
+#detail .history .h{padding:4px 0}
+#detail .history .v{min-width:0}
 .ok{color:var(--accent);font-weight:600}.no{color:var(--muted)}
 #error{margin:0;flex:none;color:var(--error);border-bottom:1px solid var(--error);padding:8px 16px;background:var(--surface)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -286,8 +277,7 @@ export const uiJs = String.raw`
   // draft: what the next New memory form starts with.
   // shownAll: the long lists opened past their first rows.
   // openForm: a form to open as soon as the next memory shows (links, confirm, text).
-  const state = { page: '', kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, attentionGen: 0, mapGen: 0, component: '', shownAll: new Set(), flash: null, draft: null, openForm: '',
-    attn: null, attnTab: '' };
+  const state = { page: '', kind: '', view: 'active', q: '', selected: '', webUrl: null, listGen: 0, historyGen: 0, mapGen: 0, component: '', shownAll: new Set(), flash: null, draft: null, openForm: '' };
 
   function showError(text) { $('error').textContent = text; $('error').hidden = !text; }
   async function request(path, init) {
@@ -302,9 +292,10 @@ export const uiJs = String.raw`
   function failed(e) {
     showError(e.status === 401 ? 'This page needs a fresh link. Run hunch ui again and open the link it prints.' : 'Could not load: ' + e.message);
   }
-  const setCount = (n) => { $('attention-count').textContent = n ? String(n) : ''; };
-  const detailBox = () => (state.page === 'attention' ? $('attn-detail') : $('detail'));
-  const base = () => (state.page === 'attention' ? '#/attention/' : '#/memory/');
+  // The badge counts what waits on a person (findings, unlinked, unconfirmed), not every Deliberate card.
+  const setCount = (n) => { const b = $('attention-count'); b.textContent = n ? String(n) : ''; b.title = n ? n + (n === 1 ? ' memory needs you' : ' memories need you') : ''; };
+  const detailBox = () => $('detail');
+  const base = () => '#/memory/';
 
   /*BRAIN*/
   /*DELIBERATE*/
@@ -447,8 +438,7 @@ export const uiJs = String.raw`
   // After any write: every list that could show the memory reloads.
   function refreshViews() {
     loadList();
-    if (state.page === 'attention') loadAttention(true);
-    else refreshAttentionCount();
+    refreshAttentionCount();
     if (state.page === 'deliberate') loadReview(true);
     if (B.map) loadBrain(true);
   }
@@ -771,7 +761,7 @@ export const uiJs = String.raw`
       const d = await api('/api/memory/' + enc(id));
       if (state.selected !== id) return;
       showError('');
-      const back = el('a', state.page === 'attention' ? '← Needs you' : '← Memory', 'back'); back.href = state.page === 'attention' ? '#/attention' : '#/memory';
+      const back = el('a', '← Memory', 'back'); back.href = '#/memory';
       const meta = [KIND[d.kind], d.status, d.id, recordedBy(d.source), Math.round(d.confidence * 100) + '%', DELIVERY[d.delivery]].join(' · ');
       const parts = [back, el('h2', d.title), el('p', meta, 'meta')];
       if (!d.active) parts.push(el('p', 'Inactive: agents no longer get this memory.', 'callout'));
@@ -812,9 +802,6 @@ export const uiJs = String.raw`
     }
   }
 
-  // ---- needs you: what waits on a person, one group at a time, the record opening beside it.
-  const ATTENTION = { 'open-findings': 'Open findings', 'not-connected': 'Not linked', 'not-confirmed': 'Not confirmed' };
-  const ATTN_HINT = { 'open-findings': 'Problems someone saw that nobody has settled.', 'not-connected': 'No feature, component or file routes these to an agent.', 'not-confirmed': 'Agents treat these as notes, not your word, until you confirm them.' };
   const FIRST_ROWS = 10;
   // A long list starts with its first rows; key keeps it open when the person comes back.
   function rowList(ul, items, render, key) {
@@ -824,34 +811,6 @@ export const uiJs = String.raw`
     const more = button('Show all ' + items.length, 'secondary more');
     more.addEventListener('click', () => { state.shownAll.add(key); draw(); more.remove(); });
     return [ul, more];
-  }
-  function drawAttention() {
-    const body = state.attn; if (!body) return;
-    const tabs = $('attn-tabs');
-    if (!body.groups.some((g) => g.key === state.attnTab)) state.attnTab = (body.groups[0] || { key: 'open-findings' }).key;
-    tabs.replaceChildren(...['open-findings', 'not-connected', 'not-confirmed'].map((k) => {
-      const g = body.groups.find((x) => x.key === k);
-      const b = button(ATTENTION[k] + ' ', ''); b.dataset.tab = k; b.setAttribute('aria-pressed', String(k === state.attnTab));
-      b.append(el('span', g ? g.total : 0, 'mono')); return b;
-    }));
-    const g = body.groups.find((x) => x.key === state.attnTab);
-    const list = $('attention'); list.replaceChildren();
-    if (g) for (const m of g.items) { const row = memoryRow(m, '#/attention/'); if (m.id === state.selected) row.firstChild.setAttribute('aria-current', 'true'); list.append(row); }
-    $('attention-status').textContent = !body.total ? 'Nothing needs you.'
-      : !g ? 'Nothing here.' : g.total > g.items.length ? 'Showing the first ' + g.items.length + ' of ' + g.total + '.' : ATTN_HINT[g.key];
-  }
-  $('attn-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; state.attnTab = b.dataset.tab; drawAttention(); });
-  async function loadAttention(soft) {
-    const gen = ++state.attentionGen;
-    if (!soft) $('attention-status').textContent = 'Loading…';
-    try {
-      const body = await api('/api/attention');
-      if (gen !== state.attentionGen) return;
-      showError('');
-      setCount(body.total);
-      state.attn = body;
-      drawAttention();
-    } catch (e) { if (gen === state.attentionGen) { $('attention-status').textContent = ''; failed(e); } }
   }
 
   // ---- brain: the components, what memory is on each, what each one uses, and what waits.
@@ -1118,7 +1077,6 @@ export const uiJs = String.raw`
     drainFeed();
     if (B.map) loadBrain(true);
     if (state.page === 'memory') loadList();
-    if (state.page === 'attention') loadAttention(true);
     if (state.page === 'deliberate') loadReview(true);
     const box = detailBox();
     if (ids.has(state.selected) && !box.querySelector('form') && state.selected !== 'new') loadDetail(state.selected);
@@ -1202,8 +1160,8 @@ export const uiJs = String.raw`
     finally { $('recheck').disabled = false; }
   }
 
-  const PAGES = ['brain', 'memory', 'deliberate', 'grill', 'board', 'attention', 'history', 'setup'];
-  const TITLES = { brain: 'Brain', memory: 'Memory', deliberate: 'Deliberate', grill: 'Grill', board: 'Decision board', attention: 'Needs you', history: 'History', setup: 'Setup' };
+  const PAGES = ['brain', 'memory', 'deliberate', 'grill', 'board', 'history', 'setup'];
+  const TITLES = { brain: 'Brain', memory: 'Memory', deliberate: 'Deliberate', grill: 'Grill', board: 'Decision board', history: 'History', setup: 'Setup' };
   function route() {
     const m = /^#\/(brain|memory|deliberate|grill|board|attention|map|ask|history|setup|connections)(?:\/(.+))?$/.exec(location.hash);
     let page = m ? m[1] : 'brain';
@@ -1211,6 +1169,8 @@ export const uiJs = String.raw`
     // Ask is part of the board now: a link to it opens the memory it was about, or the board.
     if (page === 'ask') { location.replace(m[2] ? '#/memory/' + m[2] : '#/board'); return; }
     if (page === 'connections') page = 'setup';
+    // The Needs-you page is Deliberate cards now; an old link opens the page, or the memory it named.
+    if (page === 'attention') { if (!m[2]) { D.tab = 'finding'; D.key = ''; D.picked = ''; } location.replace(m[2] ? '#/memory/' + m[2] : '#/deliberate'); return; }
     if (page === 'grill' && !m[2]) { location.replace('#/deliberate'); return; }
     const entering = page !== state.page;
     state.page = page;
@@ -1225,19 +1185,20 @@ export const uiJs = String.raw`
       $('brain').classList.toggle('reading', !!id);
       if (entering || !B.map) loadBrain(); else applySelection(true);
     } else if (page === 'deliberate') {
+      // Coming back from another page (Open it, Grill, the nav) keeps your place; a card
+      // settled meanwhile drops out and drawDeliberate moves on to the next one. On a phone
+      // a bare #/deliberate is the list, so the nav still opens the list there.
+      let key = id;
+      if (entering && !key && D.key && !onPhone()) { key = D.key; history.replaceState(null, '', D_PREFIX + enc(key)); }
       // Moving on by itself keeps the last change and its Undo; the person moving on doesn't.
-      if (entering || id !== D.key) D.done = null;
-      D.key = id;
-      if (id) D.tab = id.split(':')[0];
-      $('deliberate-split').classList.toggle('reading', !!id);
+      if (entering || key !== D.key) D.done = null;
+      // Arriving is not a click on a tab: an empty tab may move on again.
+      if (entering) D.picked = '';
+      D.key = key;
+      if (key) D.tab = key.split(':')[0];
+      $('deliberate-split').classList.toggle('reading', !!key);
       if (D.review) drawDeliberate();
       if (entering || !D.review) loadReview(!!D.review);
-    } else if (page === 'attention') {
-      state.selected = id;
-      if (state.flash && state.flash.id !== id) state.flash = null;
-      $('attention-split').classList.toggle('reading', !!id);
-      if (entering || !state.attn) loadAttention(); else markCurrent($('attention'), id, '#/attention/');
-      loadDetail(id);
     } else if (page === 'memory') {
       state.selected = id;
       if (state.flash && state.flash.id !== id) state.flash = null;
@@ -1271,10 +1232,10 @@ export const uiJs = String.raw`
       return;
     }
     if (e.key === 'Escape' && state.page === 'brain') { if (!clearBrainSearch() && state.component) location.hash = '#/brain'; return; }
-    if (state.page !== 'memory' && state.page !== 'attention' && state.page !== 'deliberate') return;
+    if (state.page !== 'memory' && state.page !== 'deliberate') return;
     const k = e.key, dir = k === 'j' ? 1 : k === 'k' ? -1 : (k === 'ArrowDown' || k === 'ArrowUp') && (t === document.body || t.closest('.list')) ? (k === 'ArrowDown' ? 1 : -1) : 0;
     if (!dir) return;
-    const rows = [...(state.page === 'memory' ? $('list') : state.page === 'deliberate' ? $('dlb-list') : $('attention')).querySelectorAll('a')];
+    const rows = [...(state.page === 'memory' ? $('list') : $('dlb-list')).querySelectorAll('a')];
     if (!rows.length) return;
     e.preventDefault();
     const at = rows.findIndex((a) => a.getAttribute('aria-current') === 'true');

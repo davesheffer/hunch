@@ -174,12 +174,20 @@ test("memory detail: actions offer only the moves the CLI takes for that record"
 
 test("page script parses; the shell uses one vocabulary and redirects the old map route", () => {
   assert.doesNotThrow(() => new Script(uiJs));
-  for (const word of ["Brain", "Memory", "Deliberate", "Needs you", "History", "Setup"]) assert.ok(uiHtml.includes(word), word);
+  for (const word of ["Brain", "Memory", "Deliberate", "History", "Setup"]) assert.ok(uiHtml.includes(word), word);
   assert.ok(!uiHtml.includes("#/ask") && !uiJs.includes("#/ask"), "Ask is folded into the board: no page of its own");
   assert.match(uiJs, /Think this through/, "a memory opens the board about itself");
   for (const old of ["Needs attention", "Connections", "Not connected", "Edit connections", "Save connections", "Connections saved."]) assert.ok(!uiHtml.includes(old) && !uiJs.includes(old), `${old} is renamed`);
   assert.match(uiJs, /location\.replace\('#\/brain'/, "#/map and #/map/:id go to the Brain");
   assert.match(uiJs, /Edit links/);
+  assert.ok(!uiHtml.includes('href="#/attention"') && !uiHtml.includes("Needs you <span"), "Needs you is no page of its own");
+  assert.match(uiHtml, /data-nav="deliberate">Deliberate <span id="attention-count"/, "Deliberate carries the waiting count");
+  assert.ok(uiJs.includes("if (page === 'attention') { if (!m[2]) { D.tab = 'finding'; D.key = ''; D.picked = ''; } location.replace(m[2] ? '#/memory/' + m[2] : '#/deliberate'); return; }"), "#/attention goes to Deliberate, or to the memory it named");
+  // A clicked tab stays even when empty; only arriving moves on from an empty tab.
+  assert.ok(uiJs.includes("D.tab = D.picked = b.dataset.tab;"), "a tab click is remembered as the person's pick");
+  assert.ok(uiJs.includes("(!count(D.tab) && !D.key && D.picked !== D.tab)"), "an empty tab the person picked is not left for another");
+  assert.ok(uiJs.includes("if (entering) D.picked = '';"), "arriving on Deliberate forgets the last pick");
+  assert.ok(uiJs.includes("if (!after) D.picked = '';"), "settling the last card on a picked tab still moves on");
   assert.match(uiJs, /Links saved\./);
 });
 
@@ -553,7 +561,7 @@ test("ui server: /api/review needs the key, writes nothing, and reflects a chang
       const r = await get("/api/review");
       assert.equal(r.status, 200);
       const review = JSON.parse(r.body) as { total: number; groups: { kind: string; total: number; cards: { key: string }[] }[] };
-      assert.deepEqual(review.groups.map((g) => g.kind), ["conflict", "stale", "duplicate", "weak"]);
+      assert.deepEqual(review.groups.map((g) => g.kind), ["conflict", "stale", "duplicate", "weak", "finding", "unlinked", "unconfirmed"]);
       return review.groups.find((g) => g.kind === "weak")!.cards.map((c) => c.key);
     };
     const before = execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" });
