@@ -105,7 +105,7 @@ export function hookReportTaskId(root: string, provider: HookProvider, event: Hu
 /** Every prompt receives its exact ID, even when ambient reminders were deduped.
  * No raw prompt, host session identifier, or transcript is retained; a repository
  * that opts in (`taskTitles: "prompt"`) keeps only a bounded first-line title. */
-export function startHookReport(root: string, provider: HookProvider, event: HunchHookInput): string | null {
+export function startHookReport(root: string, provider: HookProvider, event: HunchHookInput, opts?: { minimal?: boolean }): string | null {
   const id = identity(root, provider, event);
   if (!id || id === "legacy") return null;
   // Re-resolve after identity validation and fail closed if the filesystem
@@ -130,7 +130,7 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
       // this prompt's Stop and hook observations report to that task.
       if (previous && previous.task_id !== id && isNotificationPrompt(event.prompt) && previous.closed_by !== "agent") {
         aliasReportTask(root, id, previous.task_id);
-        return sessionTaskInstruction(previous, cwdLiteral, provider, event.session_id);
+        return sessionTaskInstruction(previous, cwdLiteral, provider, event.session_id, opts);
       }
       const continued = previous && previous.task_id !== id ? continuationLinks(previous) : null;
       if (continued) links = { ...links, ...continued };
@@ -146,7 +146,7 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
     if (existing.title !== title && !GENERIC_TASK_TITLES.has(existing.title) && !GENERIC_TASK_TITLES.has(title)) throw error;
     task = existing;
   }
-  return sessionTaskInstruction(task, cwdLiteral, provider, event.session_id);
+  return sessionTaskInstruction(task, cwdLiteral, provider, event.session_id, opts);
 }
 /** The generic rules are the same on every prompt of a session; only the ID and
  * the launcher line change. Print them in full once per session (and again after
@@ -155,7 +155,10 @@ export function startHookReport(root: string, provider: HookProvider, event: Hun
  * rule. The dedup key hashes the full wording for a placeholder task, so a new
  * launcher or rule text is delivered in full again. Fail-open: any cache error
  * yields the full form (injectionMode never throws and defaults to "full"). */
-function sessionTaskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, sessionId: string | undefined): string {
+function sessionTaskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, sessionId: string | undefined, opts?: { minimal?: boolean }): string {
+  // Minimal (quiet mode, nothing retrieved): the ID and checks only. The full rules
+  // were not delivered, so the dedup key is not stamped.
+  if (opts?.minimal) return taskInstruction(task, cwdLiteral, provider, verificationLauncher, "minimal");
   const rules = taskInstruction({ task_id: "htask_" + "0".repeat(24), title: NATIVE_TASK_TITLE }, "\"<cwd>\"", provider);
   return taskInstruction(task, cwdLiteral, provider, verificationLauncher, injectionMode(sessionId, "prompt-task-rules", rules) === "delta" ? "compact" : "full");
 }
@@ -171,14 +174,16 @@ function sessionTaskInstruction(task: { task_id: string; title: string }, cwdLit
  * cannot be computed, fall back to asking for the start call — that path is then
  * the only source of both the launcher and the finish instruction, so it carries
  * its own finish sentence. */
-export function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, launcher: () => { shell: string; note?: string } = verificationLauncher, form: "full" | "compact" = "full"): string {
+export function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, launcher: () => { shell: string; note?: string } = verificationLauncher, form: "full" | "compact" | "minimal" = "full"): string {
   const head = `Hunch has already opened this prompt's report: ${task.task_id}. Reuse this exact ID; never open another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures.`;
   let verify: string;
   try {
     const l = launcher();
-    if (form === "compact") {
+    if (form === "compact" || form === "minimal") {
       const finishRule = HOST_CLOSES_TASK.has(provider) ? "finish only if this task used Hunch" : `finish it yourself with hunch_task(action: "finish", task_id, cwd)`;
-      return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}). Use it instead of any earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Same rules as this session's first report; ${finishRule}.`;
+      const rules = form === "compact" ? "Same rules as this session's first report; " : "";
+      const finish = form === "compact" ? finishRule : finishRule.charAt(0).toUpperCase() + finishRule.slice(1);
+      return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}). Use it instead of any earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. ${rules}${finish}.`;
     }
     verify = ` Never call hunch_task start for it. For checks, run: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is ${DEFAULT_CHECK_TIMEOUT_MS / 60_000} min; add --timeout <seconds> before -- only if the whole suite is really needed.`;
   }

@@ -396,6 +396,20 @@
       }
     ]
   },
+  "HUNCH_QUIET_EMPTY": {
+    "class": "hunch-config",
+    "purpose": "Experimental: hooks stay silent when retrieval finds nothing relevant",
+    "tests": [
+      {
+        "file": "test/quiet-empty.test.ts",
+        "title": "quiet-empty: the flag is read at call time"
+      },
+      {
+        "file": "test/quiet-empty.test.ts",
+        "title": "quiet-empty: SessionStart on decisions only is silent under HUNCH_QUIET_EMPTY and unchanged without it"
+      }
+    ]
+  },
   "HUNCH_REVIEW_CLI_CONFIG": {
     "class": "hunch-config",
     "purpose": "Agent-CLI adapter config for automatic review memory; fallback for HUNCH_CLI_CONFIG",
@@ -436,16 +450,6 @@
     "purpose": "RRF weight for semantic results",
     "todo": "no test exercises this read yet (pre-existing gap when the gate landed)"
   },
-  "HUNCH_SIBLING_WARM_FAIL": {
-    "class": "test-hook",
-    "purpose": "Set to 1 to make the sibling-fix warm worker's compute throw, so a test can prove the spent entry is still written",
-    "tests": [
-      {
-        "file": "test/siblingfix.test.ts",
-        "title": "a worker whose compute throws leaves a spent entry, so the hook stops respawning it"
-      }
-    ]
-  },
   "HUNCH_SIBLING_WARM": {
     "class": "hunch-config",
     "purpose": "Set to 0 to stop the pre-edit hook spawning the detached sibling-fix cache warm worker (the test runner sets it)",
@@ -457,6 +461,16 @@
       {
         "file": "test/siblingfix.test.ts",
         "title": "the real pre-edit hook on a cold cache answers without computing lessons"
+      }
+    ]
+  },
+  "HUNCH_SIBLING_WARM_FAIL": {
+    "class": "test-hook",
+    "purpose": "Set to 1 to make the sibling-fix warm worker's compute throw, so a test can prove the spent entry is still written",
+    "tests": [
+      {
+        "file": "test/siblingfix.test.ts",
+        "title": "a worker whose compute throws leaves a spent entry, so the hook stops respawning it"
       }
     ]
   },

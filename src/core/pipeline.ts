@@ -1348,6 +1348,12 @@ export function pipelineEnabled(): boolean {
   return process.env.HUNCH_PIPELINE !== "0";
 }
 
+/** Experimental: hooks stay silent when retrieval finds nothing relevant. Read at
+ * call time, never at module load (a hook may run in a daemon). */
+export function quietEmptyEnabled(): boolean {
+  return process.env.HUNCH_QUIET_EMPTY === "1";
+}
+
 /** Load session state; on ANY problem return a fresh state (never throw). */
 export function loadPipelineState(sessionId: string): PipelineState {
   try {
