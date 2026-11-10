@@ -21,7 +21,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, chmodSync, linkSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir, tmpdir, userInfo } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findRoot } from "../core/paths.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -129,8 +129,18 @@ function endpointFor(root: string, build: string, createSecret = false): { path:
     const pipe = secret ? createHash("sha256").update(`${secret}\0${h}`).digest("hex").slice(0, 32) : "";
     return { path: pipe ? `\\\\.\\pipe\\hunch-${pipe}` : "", dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
   }
-  const dir = join(tmpdir(), `hunch-${uid}`);
+  const dir = posixEndpointDir(tmpdir(), uid, h);
   return { path: join(dir, `${h}.sock`), dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
+}
+
+/** POSIX endpoint dir for socket `<h>.sock`. sun_path holds 104 bytes on macOS/BSD and
+ *  108 on Linux, NUL included: a long TMPDIR (macOS /var/folders/…, a nested temp dir)
+ *  makes bind fail and the daemon never start, so such a path falls back to /tmp — what
+ *  tmpdir() already is on Linux. dirState still demands an owned, 0700, non-symlink dir. */
+export function posixEndpointDir(tmp: string, uid: string | number, h: string, platform: NodeJS.Platform = process.platform): string {
+  const dir = posix.join(tmp, `hunch-${uid}`);
+  const max = platform === "linux" ? 107 : 103;
+  return Buffer.byteLength(posix.join(dir, `${h}.sock`)) > max ? posix.join("/tmp", `hunch-${uid}`) : dir;
 }
 
 function ensurePrivateDir(dir: string): void {
@@ -355,7 +365,7 @@ function sameToken(a: string, b: string): boolean {
 function listen(server: Server, path: string): Promise<boolean> {
   return new Promise((resolve) => {
     // EADDRINUSE is the single-instance bind lost; any other error is no daemon either.
-    server.once("error", () => resolve(false));
+    server.once("error", (e: NodeJS.ErrnoException) => { debugLog(`listen ${e.code ?? "error"}`); resolve(false); });
     server.listen(path, () => resolve(true));
   });
 }

@@ -7,17 +7,33 @@ import { join, resolve } from "node:path";
 import { connect } from "node:net";
 import { cleanupDir } from "./fixtures.js";
 import { createHash } from "node:crypto";
-import { lineReader, proofFor } from "../src/cli/hookDaemon.js";
+import { lineReader, posixEndpointDir, proofFor } from "../src/cli/hookDaemon.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { mkConstraint } from "./helpers.js";
+
+test("a socket path past sun_path falls back to /tmp; one that fits stays in TMPDIR", () => {
+  const h = "0123456789abcdef0123456789abcdef";
+  const macTmp = "/var/folders/y6/abcdefghijklmnopqrstuvwxyz0000gn/T";
+  // macOS default TMPDIR fits (98 bytes); a temp dir nested under it does not (114).
+  assert.equal(posixEndpointDir(macTmp, 501, h, "darwin"), `${macTmp}/hunch-501`);
+  assert.equal(posixEndpointDir(`${macTmp}/hunch-hd-abcdef`, 501, h, "darwin"), "/tmp/hunch-501");
+  // Linux allows 107 bytes, macOS/BSD 103: the boundary is exact on each.
+  const tmpFor = (bytes: number) => `/${"x".repeat(bytes - `/hunch-1/${h}.sock`.length - 1)}`;
+  assert.equal(posixEndpointDir(tmpFor(103), 1, h, "darwin"), `${tmpFor(103)}/hunch-1`);
+  assert.equal(posixEndpointDir(tmpFor(104), 1, h, "darwin"), "/tmp/hunch-1");
+  assert.equal(posixEndpointDir(tmpFor(107), 1, h, "linux"), `${tmpFor(107)}/hunch-1`);
+  assert.equal(posixEndpointDir(tmpFor(108), 1, h, "linux"), "/tmp/hunch-1");
+});
 
 // End-to-end through the built CLI (npm run build); skipped when dist/ is absent.
 const cli = resolve("dist/cli/index.js");
 const built = existsSync(cli) && existsSync(resolve("dist/cli/hook-client.bundle.js"));
 
 function fixture(t: { after: (f: () => void) => void }) {
-  const base = mkdtempSync(join(tmpdir(), "hunch-hd-"));
+  // macOS: a short base keeps the endpoint dir inside it (the /var/folders TMPDIR would push
+  // the socket path past sun_path and onto the shared /tmp fallback).
+  const base = mkdtempSync(join(process.platform === "darwin" ? "/tmp" : tmpdir(), "hunch-hd-"));
   const root = join(base, "repo");
   mkdirSync(join(root, ".hunch"), { recursive: true });
   spawnSync("git", ["init", "-q"], { cwd: root });
