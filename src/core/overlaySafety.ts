@@ -27,12 +27,17 @@ export function safeOverlayTree(root: string): boolean {
         const entry = join(dir, name);
         const stat = lstatSync(entry);
         if (stat.isSymbolicLink()) return false;
-        if (!pathIsWithin(realpathSync(entry), canonicalRoot)) return false;
+        // No per-entry realpath: Node's realpathSync only resolves components
+        // lstat reports as links (junctions included on Windows), so a non-link
+        // entry of a directory already proven canonical-within-root resolves to
+        // that directory plus its name. Re-resolving it only re-lstats every
+        // ancestor, which dominated overlay flushes. Directories are still
+        // canonicalized when walked; `.git` is checked here because it is not.
         if (topLevel && (name === ".gitignore" || name === ".gitattributes")
           && (!stat.isFile() || stat.nlink !== 1)) return false;
         if (topLevel && name === ".hunch" && !stat.isDirectory()) return false;
         if (topLevel && name === ".git") {
-          if (!stat.isDirectory()) return false;
+          if (!stat.isDirectory() || !pathIsWithin(realpathSync(entry), canonicalRoot)) return false;
           continue;
         }
         if (stat.isDirectory()) {
