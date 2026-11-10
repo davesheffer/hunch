@@ -1199,11 +1199,18 @@ function overlayGitMetadataDir(hunchDir: string, env: NodeJS.ProcessEnv): string
  * clean/smudge pipeline. Validate the live root and nested Hunch attributes and
  * the otherwise-unavoidable $GIT_DIR/info/attributes before any add/merge/reset.
  * Global and system sources are separately disabled on the command itself. */
-function overlayAttributeSourcesAreSafe(hunchDir: string, env: NodeJS.ProcessEnv): boolean {
+function overlayAttributeSourcesAreSafe(
+  hunchDir: string,
+  env: NodeJS.ProcessEnv,
+  /** Overlay root the caller ran safeOverlayTree on as the step just before.
+   * The identical second walk is skipped only when hunchDir still resolves to
+   * that same root. */
+  treeProvenRoot?: string,
+): boolean {
   try {
     const canonicalHunch = realpathSync(hunchDir);
     const overlayRoot = dirname(canonicalHunch);
-    if (canonicalHunch !== join(overlayRoot, ".hunch") || !safeOverlayTree(overlayRoot)) return false;
+    if (canonicalHunch !== join(overlayRoot, ".hunch") || (treeProvenRoot !== overlayRoot && !safeOverlayTree(overlayRoot))) return false;
     const gitDir = overlayGitMetadataDir(hunchDir, env);
     if (!gitDir) return false;
     if (!boundedAttributesFileIsSafe(join(overlayRoot, ".gitattributes"), join(overlayRoot, ".gitattributes"))
@@ -1465,7 +1472,7 @@ function mergeRemote(
   let bad = firstFailure([
     ["overlay-repo-root", () => isGitRepoRoot(overlayRoot)],
     ["overlay-tree-safe", () => safeOverlayTree(overlayRoot)],
-    ["overlay-attributes-safe", () => overlayAttributeSourcesAreSafe(hunchDir, env)],
+    ["overlay-attributes-safe", () => overlayAttributeSourcesAreSafe(hunchDir, env, overlayRoot)],
     ["remote-contract", () => contractReady(contract)],
   ]);
   if (bad) return failed(bad);
@@ -1528,7 +1535,7 @@ function mergeRemote(
   bad = firstFailure([
     ["local-head-unchanged", () => headShaWithEnv(hunchDir, env) === localHead],
     ["overlay-tree-safe-after-fetch", () => safeOverlayTree(overlayRoot)],
-    ["overlay-attributes-safe-after-fetch", () => overlayAttributeSourcesAreSafe(hunchDir, env)],
+    ["overlay-attributes-safe-after-fetch", () => overlayAttributeSourcesAreSafe(hunchDir, env, overlayRoot)],
     [localHead ? "worktree-clean-after-fetch" : "unborn-bootstrap-after-fetch",
       () => (localHead ? hunchWorktreeClean(hunchDir, env) : unbornBootstrapFingerprint(hunchDir, env) === unbornFingerprint)],
     ["local-tree-safe", () => !localHead || overlayGitTreeIsSafe(hunchDir, localHead, env)],
@@ -1546,7 +1553,7 @@ function mergeRemote(
   if (tryGit(["merge", "--no-edit", ...(allowUnrelatedHistories ? ["--allow-unrelated-histories"] : []), fetchedHead])) {
     bad = firstFailure([
       ["overlay-tree-safe-after-merge", () => safeOverlayTree(overlayRoot)],
-      ["overlay-attributes-safe-after-merge", () => overlayAttributeSourcesAreSafe(hunchDir, env)],
+      ["overlay-attributes-safe-after-merge", () => overlayAttributeSourcesAreSafe(hunchDir, env, overlayRoot)],
       ["remote-contract-after-merge", () => contractReady(contract)],
       ["merged-tree-safe", () => overlayGitTreeIsSafe(hunchDir, headShaWithEnv(hunchDir, env), env)],
     ]);
