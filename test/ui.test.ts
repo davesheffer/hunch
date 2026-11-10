@@ -188,6 +188,16 @@ test("page script parses; the shell uses one vocabulary and redirects the old ma
   assert.ok(uiJs.includes("(!count(D.tab) && !D.key && D.picked !== D.tab)"), "an empty tab the person picked is not left for another");
   assert.ok(uiJs.includes("if (entering) D.picked = '';"), "arriving on Deliberate forgets the last pick");
   assert.ok(uiJs.includes("if (!after) D.picked = '';"), "settling the last card on a picked tab still moves on");
+  // A Deliberate write can take a minute (commit + overlay sync): decisions queue and run in the
+  // background, so the person keeps deciding instead of waiting on locked buttons.
+  assert.ok(!/D\.busy|b\.disabled = D\./.test(uiJs), "no Deliberate button waits on a write");
+  assert.match(uiHtml, /<div id="dlb-queue"[^>]*role="status"/, "the queue strip is announced");
+  assert.match(uiJs, /D\.queue\.push\(\{ n: \+\+D\.seq, key: c\.key/, "a decision joins the queue");
+  assert.match(uiJs, /dNext\(c, true\);\s*drawQueue\(\);\s*dPump\(\);/, "a decision settles its card at once");
+  assert.match(uiJs, /if \(D\.running\) return;/, "one worker: writes run one at a time, in order");
+  assert.match(uiJs, /!c\.records\.some\(\(r\) => held\.has\(r\.id\)\)/, "a card on a record with a queued move stays hidden until it lands");
+  assert.match(uiJs, /beforeunload[\s\S]{0,80}dPending\(\)\.length/, "leaving with moves waiting asks first");
+  assert.match(uiJs, /item\.of\.undone = false/, "a failed Undo can be tried again");
   assert.match(uiJs, /Links saved\./);
 });
 

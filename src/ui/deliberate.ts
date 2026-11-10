@@ -8,12 +8,20 @@
 export const deliberateJs = String.raw`
   // ---- deliberate: what in memory deserves a person's judgment, and the move it suggests.
   // picked: the tab the person clicked; it stays put even once it is empty.
-  const D = { review: null, tab: '', picked: '', key: '', skipped: new Set(), done: null, busy: false, gen: 0 };
+  // queue: the moves a person decided, run one at a time in the background (each is a CLI write that
+  // commits and may sync a private store, so it can take a minute). A click settles its card at once.
+  const D = { review: null, tab: '', picked: '', key: '', skipped: new Set(), queue: [], running: false, seq: 0, gen: 0 };
+  const D_STEP = { remove: 'Removing', link: 'Linking', confirm: 'Confirming', unconfirm: 'Unconfirming', restore: 'Restoring', edit: 'Saving' };
+  let dTick = 0;
+  const dPending = () => D.queue.filter((q) => q.status === 'waiting' || q.status === 'running');
+  // A card stays hidden while any record it shows still waits on a queued move: no second call on
+  // the same memory before the first lands. A failed or cancelled move lets it come back.
+  const dHeld = () => new Set(dPending().flatMap((q) => q.ids));
   const D_TABS = { conflict: 'Conflict', stale: 'Stale', duplicate: 'Duplicate', weak: 'Weak', finding: 'Findings', unlinked: 'Unlinked', unconfirmed: 'Unconfirmed' };
   const D_PREFIX = '#/deliberate/';
   // The kinds that came from the Needs-you page keep its order and its one-line reason.
   const D_HINT = { finding: 'Problems someone saw that nobody has settled.', unlinked: 'No feature, component or file routes these to an agent.', unconfirmed: 'Agents treat these as notes, not your word, until you confirm them.' };
-  const dShown = (g) => g.cards.filter((c) => !D.skipped.has(c.key));
+  const dShown = (g) => { const held = dHeld(); return g.cards.filter((c) => !D.skipped.has(c.key) && !c.records.some((r) => held.has(r.id))); };
   const dCount = (g) => g.total - (g.cards.length - dShown(g).length);
   const dGroup = () => (D.review ? D.review.groups.find((g) => g.kind === D.tab) : null);
   const onPhone = () => window.matchMedia('(max-width:800px)').matches;
@@ -64,23 +72,60 @@ export const deliberateJs = String.raw`
     const li = el('li'); li.append(a);
     return li;
   }
-  function doneLine() {
-    const d = D.done, box = el('div', undefined, 'flash'); box.setAttribute('role', 'status');
-    box.append(el('p', d.text));
-    if (d.undo.length) {
-      const undo = button('Undo', 'secondary'); undo.disabled = D.busy;
-      undo.addEventListener('click', () => dUndo());
-      box.append(undo);
-      const note = d.undo.map((u) => u.note).filter(Boolean).join(' ');
-      if (note) box.append(el('p', note, 'muted small'));
+  // ---- the queue strip: what runs now, what waits, what landed (with Undo) and what failed.
+  const dSince = (t) => { const s = Math.floor((Date.now() - t) / 1000); return s ? s + 's' : ''; };
+  const D_SHOW_DONE = 6;
+  function drawQueue() {
+    const box = $('dlb-queue'), q = D.queue;
+    box.hidden = !q.length;
+    if (!q.length) return box.replaceChildren();
+    const running = q.find((x) => x.status === 'running'), waiting = q.filter((x) => x.status === 'waiting').length;
+    const failedN = q.filter((x) => x.status === 'failed').length;
+    const head = el('p', undefined, 'q-head');
+    head.append(el('span', running ? 'Saving in the background' + (waiting ? ', ' + waiting + ' more waiting' : '') + '. Keep deciding.' : waiting ? waiting + ' waiting.' : 'All saved.' + (failedN ? ' ' + failedN + ' failed.' : '')));
+    if (q.some((x) => x.status === 'done' || x.status === 'failed')) {
+      const clear = button('Clear finished', 'secondary');
+      clear.addEventListener('click', () => { D.queue = dPending(); drawQueue(); });
+      head.append(clear);
     }
-    return box;
+    if (running) head.append(el('span', 'Each move commits memory and syncs a private store, so one can take a minute.', 'muted small'));
+    const ul = el('ul', undefined, 'q-list');
+    // Newest first; finished moves beyond the last few drop off the strip (Clear finished drops all).
+    let doneShown = 0;
+    for (const item of [...q].reverse()) {
+      const finished = item.status === 'done' || item.status === 'failed';
+      if (finished && ++doneShown > D_SHOW_DONE) continue;
+      ul.append(dQueueRow(item));
+    }
+    box.replaceChildren(head, ul);
+  }
+  const D_MARK = { waiting: 'Waiting', running: 'Saving', done: 'Saved', failed: 'Failed' };
+  function dQueueRow(item) {
+    const li = el('li', undefined, 'q-' + item.status);
+    li.append(el('span', D_MARK[item.status], 'q-mark mono'), el('span', item.status === 'failed' || item.status === 'done' ? item.text : item.label, 'q-text'));
+    if (item.status === 'running') { const s = el('span', dSince(item.started), 'mono muted'); s.dataset.since = String(item.started); li.append(s); }
+    if (item.status === 'waiting') {
+      const cancel = button('Cancel', 'secondary');
+      cancel.addEventListener('click', () => { D.queue = D.queue.filter((x) => x !== item); drawQueue(); loadReview(true); });
+      li.append(cancel);
+    }
+    if (item.status === 'done' && item.undo.length && !item.undone) {
+      const undo = button('Undo', 'secondary');
+      undo.addEventListener('click', () => dUndo(item));
+      li.append(undo);
+      const note = item.undo.map((u) => u.note).filter(Boolean).join(' ');
+      if (note) li.append(el('span', note, 'muted small q-note'));
+    }
+    return li;
+  }
+  function dTicking(on) {
+    if (on && !dTick) dTick = setInterval(() => { for (const s of document.querySelectorAll('#dlb-queue [data-since]')) s.textContent = dSince(Number(s.dataset.since)); }, 1000);
+    if (!on && dTick) { clearInterval(dTick); dTick = 0; }
   }
   function drawCard() {
-    const g = dGroup(), c = g && g.cards.find((x) => x.key === D.key && !D.skipped.has(x.key));
+    const g = dGroup(), c = g && dShown(g).find((x) => x.key === D.key);
     const box = $('dlb-card'), body = el('div', undefined, 'dlb-body');
     const back = el('a', '← Deliberate', 'back'); back.href = '#/deliberate'; body.append(back);
-    if (D.done) body.append(doneLine());
     if (!c) {
       const rest = D.review.groups.filter((x) => dCount(x) > 0);
       body.append(el('h2', rest.length ? 'Nothing left under ' + D_TABS[D.tab] + '.' : 'Nothing to review.'));
@@ -130,7 +175,7 @@ export const deliberateJs = String.raw`
   }
   function dActions(c) {
     const a = c.actions, bar = el('div', undefined, 'dlb-acts');
-    const add = (label, leads, onClick, cls) => { const b = button(label, leads ? '' : cls || 'secondary'); b.disabled = D.busy; b.addEventListener('click', onClick); bar[leads ? 'prepend' : 'append'](b); return b; };
+    const add = (label, leads, onClick, cls) => { const b = button(label, leads ? '' : cls || 'secondary'); b.addEventListener('click', onClick); bar[leads ? 'prepend' : 'append'](b); return b; };
     if (a.merge) {
       const name = (m) => (c.kind === 'duplicate' ? 'Merge into ' + m.survivor : 'Keep ' + m.survivor + ', remove ' + m.duplicate);
       add(name(a.merge), c.recommend === 'merge' || c.recommend === 'remove', () => dMerge(c, a.merge));
@@ -167,55 +212,71 @@ export const deliberateJs = String.raw`
     const noUndo = m.oneWay ? ' This has no Undo; hunch restore says what it needs first.' : '';
     return dRun(c, steps, (c.kind === 'duplicate' ? 'Merged into ' + m.survivor + '.' : 'Kept ' + m.survivor + ', removed ' + m.duplicate + '.') + left + noUndo);
   }
-  // One write at a time. A later step failing still leaves Undo for the steps that ran.
-  async function dRun(c, steps, text) {
-    if (D.busy) return;
-    D.busy = true; D.done = null; drawCard();
-    const undo = []; let problem = '', saved = '', ran = 0;
-    try {
-      for (const s of steps) {
-        const r = await post('/api/memory/' + enc(s.id) + '/' + s.action, s.body);
-        ran++;
-        if (r.undo && !s.noUndo) undo.push({ id: s.id, action: r.undo.action, body: r.undo.body, note: r.undo.note });
-        if (r.uncommitted) saved = notCommitted(r);
-      }
-    } catch (e) {
-      // A later step's 401 still has to say the earlier ones ran.
-      if (e.status === 401 && !ran) { D.busy = false; drawCard(); return failed(e); }
-      problem = e.message;
-    }
-    D.busy = false;
-    if (problem && !ran) { D.done = { key: c.key, text: problem, undo }; drawCard(); return; }
-    const did = steps.slice(0, ran).map((s) => s.action + ' ' + s.id).join(', ');
-    D.done = { key: c.key, text: (problem ? 'Only part of this ran. Done: ' + did + '. Then: ' + problem : text) + saved, undo };
+  // A decision settles its card now; its writes join the queue and run in order in the background.
+  // ids: every record the card showed or a step touches, held from other cards until this lands.
+  function dRun(c, steps, text) {
+    const label = steps.map((s) => (D_STEP[s.action] || 'Saving') + ' ' + s.id).join(', then ') + '.';
+    D.queue.push({ n: ++D.seq, key: c.key, label, text, steps, ids: [...new Set([...c.records.map((r) => r.id), ...steps.map((s) => s.id)])], status: 'waiting', undo: [] });
     dNext(c, true);
-    refreshViews();
+    drawQueue();
+    dPump();
   }
-  async function dUndo() {
-    const d = D.done; if (!d || D.busy) return;
-    D.busy = true; drawCard();
-    const left = [...d.undo];
-    try {
-      while (left.length) { const u = left[left.length - 1]; await post('/api/memory/' + enc(u.id) + '/' + u.action, u.body); left.pop(); }
-      D.busy = false; D.done = null;
-      D.key = d.key; D.tab = d.key.split(':')[0];
-      history.replaceState(null, '', D_PREFIX + enc(d.key));
+  // Undo is a move like any other: it queues behind what is already waiting.
+  function dUndo(item) {
+    item.undone = true;
+    const steps = [...item.undo].reverse().map((u) => ({ id: u.id, action: u.action, body: u.body, noUndo: true }));
+    D.queue.push({ n: ++D.seq, key: item.key, label: 'Undo: ' + steps.map((s) => (D_STEP[s.action] || 'Saving').toLowerCase() + ' ' + s.id).join(', then ') + '.', text: 'Undone: ' + item.text, steps, ids: item.ids, status: 'waiting', undo: [], isUndo: true, of: item });
+    drawQueue();
+    dPump();
+  }
+  // One write at a time, oldest first (the server serializes writes too). A later step failing
+  // still leaves Undo for the steps that ran; a failed move releases its card, which comes back.
+  async function dPump() {
+    if (D.running) return;
+    D.running = true; dTicking(true);
+    let item;
+    while ((item = D.queue.find((x) => x.status === 'waiting'))) {
+      item.status = 'running'; item.started = Date.now(); drawQueue();
+      let problem = '', saved = '', ran = 0;
+      try {
+        for (const s of item.steps) {
+          const r = await post('/api/memory/' + enc(s.id) + '/' + s.action, s.body);
+          ran++;
+          if (r.undo && !s.noUndo) item.undo.push({ id: s.id, action: r.undo.action, body: r.undo.body, note: r.undo.note });
+          if (r.uncommitted) saved = notCommitted(r);
+        }
+      } catch (e) {
+        if (e.status === 401) {
+          // A stale key fails every move after it too: stop, keep them listed, say so once.
+          for (const x of D.queue) if (x.status === 'waiting' || x === item) { x.status = 'failed'; x.text = x.label + ' Not saved: this page needs a fresh link.'; }
+          failed(e);
+          break;
+        }
+        problem = e.message;
+      }
+      if (item.status === 'running') {
+        const did = item.steps.slice(0, ran).map((s) => s.action + ' ' + s.id).join(', ');
+        item.status = problem && !ran ? 'failed' : 'done';
+        item.text = (problem ? (ran ? 'Only part of this ran. Done: ' + did + '. Then: ' + problem : item.label + ' Not saved: ' + problem) : item.text) + saved;
+        if (item.isUndo && !problem) { D.key = item.key; D.tab = item.key.split(':')[0]; }
+        // Keep only the undo steps that did not run, so a retry doesn't repeat what already went back.
+        if (item.isUndo && problem) { item.of.undo = item.of.undo.slice(0, item.of.undo.length - ran); item.of.undone = false; }
+      }
+      drawQueue();
       refreshViews();
-    } catch (e) {
-      D.busy = false;
-      const undone = d.undo.length - left.length;
-      if (e.status === 401 && !undone) { drawCard(); return failed(e); }
-      // Keep only what is left, so a retry doesn't repeat what already went back.
-      D.done = { ...d, undo: left, text: (undone ? 'Undid ' + undone + ' of ' + d.undo.length + ' steps, then could not finish: ' : 'Could not undo: ') + e.message }; drawCard();
     }
+    D.running = false; dTicking(false); drawQueue();
   }
+  // Moves still waiting live only in this page: leaving it would drop them.
+  window.addEventListener('beforeunload', (e) => { if (dPending().length) { e.preventDefault(); e.returnValue = ''; } });
   // Move on from a card; the one after it takes its place in the list.
   function dNext(c, drop) {
     const g = dGroup(); if (!g) return;
     // By key: a reload during the write replaced the card objects this click was made on.
-    const shown = dShown(g), at = g.cards.findIndex((x) => x.key === c.key);
+    const at = g.cards.findIndex((x) => x.key === c.key);
     if (drop && at >= 0) { g.cards.splice(at, 1); g.total = Math.max(0, g.total - 1); }
-    const after = g.cards.slice(Math.max(at, 0)).find((x) => !D.skipped.has(x.key)) || shown.filter((x) => x.key !== c.key && !D.skipped.has(x.key)).pop();
+    const shown = dShown(g).filter((x) => x.key !== c.key), visible = new Set(shown.map((x) => x.key));
+    const after = g.cards.slice(Math.max(at, 0)).find((x) => visible.has(x.key)) || shown.pop();
     D.key = after ? after.key : '';
     // Settling or skipping the last card moves on, even on a tab the person picked.
     if (!after) D.picked = '';
@@ -224,5 +285,5 @@ export const deliberateJs = String.raw`
     $('deliberate-split').classList.toggle('reading', !!after);
     drawDeliberate();
   }
-  $('dlb-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b || D.busy) return; D.tab = D.picked = b.dataset.tab; D.key = ''; D.done = null; history.replaceState(null, '', '#/deliberate'); drawDeliberate(); });
+  $('dlb-tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; D.tab = D.picked = b.dataset.tab; D.key = ''; history.replaceState(null, '', '#/deliberate'); drawDeliberate(); });
 `;
