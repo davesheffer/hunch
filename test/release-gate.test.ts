@@ -1,8 +1,8 @@
 import { cleanupDir } from "./fixtures.js";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -36,6 +36,7 @@ import {
   validateReleaseContext,
   verifyReleaseReceipt,
 } from "../tooling/release-gate.mjs";
+import { selectShard, verifyDelegatedGateReceipt } from "../tooling/test-shard.mjs";
 
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
@@ -158,8 +159,10 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     "every publication names its dist-tag and provenance explicitly");
   assert.match(releaseWorkflow, /npm publication verification failed closed/,
     "the release stays red until npm serves exact registry integrity and provenance evidence");
-  assert.match(ciWorkflow, /node-version: \[22, 24\]/,
-    "the exact release gate runs on both supported release runtimes before tagging");
+  assert.match(ciWorkflow, /\n  ci-node22:\n(?:(?!\n  [a-z][\w-]*:\n)[\s\S])*?\n        node: \[22\]\n(?:(?!\n  [a-z][\w-]*:\n)[\s\S])*?node-version: \$\{\{ matrix\.node \}\}\n/,
+    "the exact release gate runs on the Node 22 release runtime before tagging");
+  assert.match(ciWorkflow, /\n  gate-node24:\n[\s\S]*?node-version: 24\n/,
+    "the release gate also runs on the Node 24 release runtime before tagging");
   assert.match(ciWorkflow, /os: \[windows-latest, macos-latest\]/,
     "the real Matrix safety path runs on both non-Linux platforms");
 
@@ -262,6 +265,15 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
     () => validateReleaseContext({ packageVersion: "1.8.0", tag: "v1.8.0", tagCommitMatches: false, clean: true, allowDirty: false }),
     /does not point to HEAD/,
   );
+  assert.throws(
+    () => validateReleaseContext({ packageVersion: "1.8.0", tag: "v1.8.0", tagCommitMatches: true, clean: true, allowDirty: false, delegateTest: true }),
+    /a tagged release gate cannot delegate its test stage/,
+  );
+  assert.deepEqual(
+    validateReleaseContext({ packageVersion: "1.8.0", tag: null, clean: true, allowDirty: false, delegateTest: true }),
+    { tag_matches_version: null },
+    "an untagged CI gate may delegate its test stage to shards",
+  );
   assert.equal(selectPreviousVersion("1.9.0", ["1.8.3", "1.9.0-rc.1", "1.9.0"]), "1.8.3",
     "an unpublished Git tag cannot become the rollback target");
   assert.equal(selectPreviousVersion("1.9.0-rc.0", ["1.8.3", "1.9.0-beta.2"]), "1.8.3",
@@ -296,6 +308,19 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   });
   assert.deepEqual(calls, ["typecheck", "test", "core-build"], "a failed prerequisite prevents every later gate and publish");
   assert.deepEqual(results.map((result) => result.status), ["passed", "passed", "failed"]);
+
+  const delegatedCalls: string[] = [];
+  const delegatedResults = executeReleasePlan(RELEASE_GATES, (gate) => {
+    delegatedCalls.push(gate.id);
+    return gate.id === "test" ? { delegated: true } : { exitCode: 0 };
+  });
+  assert.deepEqual(delegatedCalls, RELEASE_GATES.map((gate) => gate.id), "a delegated test stage does not stop later gates");
+  assert.deepEqual(delegatedResults[1], { id: "test", command: ["npm", "test"], status: "delegated", exit_code: null });
+  assert.ok(delegatedResults.filter((result) => result.id !== "test").every((result) => result.status === "passed" && result.exit_code === 0));
+  const forgedDelegation = executeReleasePlan(RELEASE_GATES, (gate) => gate.id === "core-build" ? { delegated: true } : { exitCode: 0 });
+  assert.deepEqual(forgedDelegation.map((result) => result.status), ["passed", "passed", "failed"],
+    "only the test stage can be delegated; any other delegated stage fails and stops the plan");
+  assert.equal(forgedDelegation[2]?.exit_code, 1);
 
   const expectedSource = {
     commit: "a".repeat(40),
@@ -533,4 +558,68 @@ test("guarded receipt write and gate environment isolation", () => {
   assert.equal(dirty.result, "passed");
   assert.equal(dirty.candidate_ready, false);
   assert.equal(dirty.publish_ready, false);
+
+  // --delegate-test (CI only): the test stage ran on shards, everything else here.
+  const untagged = { ...input.source, tag: null, tag_matches_version: null, tag_commit_matches: null };
+  const delegatedGates = input.gates.map((gate) => gate.id === "test" ? { ...gate, status: "delegated", exit_code: null } : gate);
+  const partial = buildReleaseReceipt({ ...input, source: untagged, gates: delegatedGates });
+  assert.equal(partial.result, "partial");
+  assert.equal(partial.candidate_ready, false, "a gate that did not run the tests itself is never candidate-ready");
+  assert.equal(partial.publish_ready, false);
+  assert.equal(verifyReleaseReceipt(partial), true, "an authentic partial receipt self-verifies");
+  assert.deepEqual(verifyDelegatedGateReceipt(partial, "a".repeat(40)), []);
+  assert.ok(verifyDelegatedGateReceipt(partial, "b".repeat(40)).some((error: string) => /ran on commit/.test(error)));
+  assert.equal(verifyReleaseReceipt({ ...partial, result: "passed" }), false, "a partial receipt cannot be relabelled passed");
+  assert.ok(verifyDelegatedGateReceipt(untaggedCandidate, "a".repeat(40)).some((error: string) => /result is "passed", expected "partial"/.test(error)),
+    "the shard verdict requires the delegated gate, not a full one");
+  assert.ok(verifyDelegatedGateReceipt(unverifiedRollback, "a".repeat(40)).some((error: string) => /result is "failed"/.test(error)));
+  const delegatedBuild = buildReleaseReceipt({
+    ...input,
+    source: untagged,
+    gates: input.gates.map((gate) => gate.id === "core-build" ? { ...gate, status: "delegated", exit_code: null } : gate),
+  });
+  assert.equal(delegatedBuild.result, "failed", "only the test stage may be delegated");
+  const delegatedBuildErrors: string[] = verifyDelegatedGateReceipt(delegatedBuild, "a".repeat(40));
+  assert.ok(delegatedBuildErrors.some((error) => /stage core-build is "delegated"/.test(error)), delegatedBuildErrors.join("\n"));
+  assert.ok(delegatedBuildErrors.some((error) => /test stage is "passed", expected "delegated"/.test(error)));
+  const partialWithContextError = buildReleaseReceipt({ ...input, source: untagged, gates: delegatedGates, context_errors: ["test: HEAD moved"] });
+  assert.equal(partialWithContextError.result, "failed", "a partial gate still fails closed on any context error");
+  // The ci (24) verdict also pins the gate's Node line.
+  const partialNode24 = buildReleaseReceipt({ ...input, environment: { ...input.environment, node: "v24.0.0" }, source: untagged, gates: delegatedGates });
+  assert.deepEqual(verifyDelegatedGateReceipt(partialNode24, "a".repeat(40), { node: 24 }), []);
+  assert.ok(verifyDelegatedGateReceipt(partial, "a".repeat(40), { node: 24 }).some((error: string) => /release gate ran on Node "v22\.0\.0", expected Node 24/.test(error)));
+
+  // The ci (24) verdict over a synthetic evidence tree, end to end.
+  const evidence = mkdtempSync(join(tmpdir(), "hunch-release-gate-evidence-"));
+  try {
+    const commit = "a".repeat(40);
+    const suite = readdirSync("test").filter((name) => name.endsWith(".test.ts")).map((name) => `test/${name}`);
+    const write = (relativePath: string, value: unknown) => {
+      mkdirSync(join(evidence, relativePath, ".."), { recursive: true });
+      writeFileSync(join(evidence, relativePath), JSON.stringify(value, null, 2) + "\n");
+    };
+    const manifests = [1, 2, 3, 4].map((index) => ({
+      schema: "hunch.test-shard.v1", shard: `${index}/4`, index, total: 4, commit,
+      input: [...suite].sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
+      selected: selectShard(suite, { index, total: 4 }),
+      exit_code: 0, source_unchanged: true, node: "v24.0.0", platform: "linux",
+    }));
+    manifests.forEach((manifest, offset) => write(`test-shard-node-24-${offset + 1}-${commit}/test-shard-manifest.json`, manifest));
+    write(`constitution-release-gate-node-24-${commit}/release-gate.json`, partialNode24);
+    const candidateBody = { schema: "hunch.npm-package-candidate.v1", commit, node: "v24.0.0", outcome: "success", manifest_sha256: `sha256:${"e".repeat(64)}` };
+    write(`npm-package-candidate-node-24-${commit}/npm-package-candidate-receipt.json`,
+      { ...candidateBody, content_hash: `sha256:${createHash("sha256").update(JSON.stringify(candidateBody)).digest("hex")}` });
+    const verify = () => spawnSync(process.execPath, ["tooling/test-shard.mjs", "verify-node24", "--dir", evidence, "--commit", commit, "--total", "4"], { encoding: "utf8" });
+    const accepted = verify();
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.match(accepted.stdout, new RegExp(`4 shards covered ${suite.length} test files`));
+    write(`test-shard-node-24-2-${commit}/test-shard-manifest.json`, { ...manifests[1], selected: manifests[1].selected.slice(1) });
+    const tampered = verify();
+    assert.equal(tampered.status, 1, "a shard that skipped a file fails the verdict");
+    assert.match(tampered.stderr, /ran a different file set|ran in no shard/);
+    const usage = spawnSync(process.execPath, ["tooling/test-shard.mjs", "verify-node24", "--dir", evidence], { encoding: "utf8" });
+    assert.equal(usage.status, 2);
+  } finally {
+    cleanupDir(evidence);
+  }
 });

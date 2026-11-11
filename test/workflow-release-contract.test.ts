@@ -57,21 +57,69 @@ function assertPublishDependencies(workflow: string): void {
 
 test("PR CI proves the full gate, Node 24 package candidate, and Windows team Matrix", () => {
   assert.match(ci, /pull_request:/);
-  assert.match(ci, /concurrency:\n  group: ci-\$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}\n  cancel-in-progress: true/,
-    "a newer commit cancels only its superseded same-ref CI run");
-  assert.match(ci, /node-version: \[22, 24\]/,
-    "Ubuntu runs the complete content-addressed release gate on Node 22 and Node 24");
-  assert.match(jobBlock(ci, "ci"), /npm run build[\s\S]*HUNCH_TEST_COMPILED_CLI: "1"[\s\S]*npm run gate:release/,
-    "the full gate keeps every check while black-box journeys execute the compiled product CLI");
-  assert.match(ci, /npm run gate:release -- --output release-gate\.json/);
-  assert.match(ci, /if: matrix\.node-version == 24[\s\S]*npm run prepublishOnly[\s\S]*npm pack --dry-run --json/,
+  assert.match(ci, /concurrency:\n  group: ci-\$\{\{ github\.workflow \}\}-\$\{\{ github\.event_name == 'pull_request' && github\.ref \|\| github\.run_id \}\}\n  cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}\n/,
+    "a newer commit cancels only a superseded PR run; a merge never cancels main's full Node 22 gate");
+  // A skipped static-named job reports success; a skipped matrix job reports its
+  // unexpanded name, so the required check stays pending instead.
+  const node22 = jobBlock(ci, "ci-node22");
+  assert.match(node22, /^    name: ci \(\$\{\{ matrix\.node \}\}\)$/m, "the required Node 22 check is a matrix job");
+  assert.match(node22, /^        node: \[22\]$/m, "its one-element matrix renders the name ci (22)");
+  assert.match(node22, /node-version: \$\{\{ matrix\.node \}\}\n/);
+  assert.match(node22, /npm run build[\s\S]*HUNCH_TEST_COMPILED_CLI: "1"[\s\S]*npm run gate:release -- --output release-gate\.json/,
+    "the full Node 22 gate keeps every check while black-box journeys execute the compiled product CLI");
+  assert.match(node22, /if: github\.event_name != 'pull_request'[^\n]*\n[\s\S]*?run: npm run gate:release -- --output release-gate\.json/,
+    "Node 22 runs the complete, undelegated gate on every push to main");
+  assert.match(node22, /if: github\.event_name == 'pull_request'[^\n]*\n[\s\S]*?npm run typecheck/,
+    "a Node 22 PR leg still proves strict types on the runtime floor");
+  const gate24 = jobBlock(ci, "gate-node24");
+  assert.match(gate24, /node-version: 24\n/);
+  assert.match(gate24, /npm run build[\s\S]*HUNCH_TEST_COMPILED_CLI: "1"[\s\S]*npm run gate:release -- --delegate-test --output release-gate\.json/,
+    "Node 24 runs every gate stage except the sharded test stage, against the compiled CLI");
+  assert.match(gate24, /npm run prepublishOnly[\s\S]*npm pack --dry-run --json/,
     "Node 24 exercises the publish lifecycle and exact package manifest before tagging");
+  const shards24 = jobBlock(ci, "test-shards");
+  assert.match(shards24, /node-version: 24\n/);
+  assert.match(shards24, /^        shard: \[1, 2, 3, 4\]$/m);
+  assert.match(shards24, /HUNCH_TEST_SHARD: \$\{\{ matrix\.shard \}\}\/4\n[\s\S]*?run: npm test$/m,
+    "the shards run the gate's exact test stage, npm test");
+  const verdict24 = jobBlock(ci, "ci-node24");
+  assert.match(verdict24, /^    name: ci \(\$\{\{ matrix\.node \}\}\)$/m, "the required Node 24 check is the shard verdict, a matrix job");
+  assert.match(verdict24, /^        node: \[24\]$/m, "its one-element matrix renders the name ci (24)");
+  assert.match(verdict24, /node-version: \$\{\{ matrix\.node \}\}\n/);
+  assert.match(verdict24, /^    needs: \[[^\]]*\bgate-node24\b[^\]]*\]$/m);
+  assert.match(verdict24, /^    needs: \[[^\]]*\btest-shards\b[^\]]*\]$/m);
+  assert.match(verdict24, /node tooling\/test-shard\.mjs verify-node24 [^\n]*--total 4\b/,
+    "ci (24) proves the shards covered the suite and the delegated gate passed the rest");
+  const platformShards = jobBlock(ci, "platform-matrix-safety");
+  assert.match(platformShards, /^        shard: \[1, 2, 3\]$/m);
+  assert.match(platformShards, /HUNCH_TEST_SHARD: \$\{\{ matrix\.shard \}\}\/3\n/);
+  const platformVerdict = jobBlock(ci, "platform-matrix-safety-verdict");
+  assert.match(platformVerdict, /^    name: platform-matrix-safety \(\$\{\{ matrix\.os \}\}\)$/m,
+    "the required per-OS platform check is the shard verdict");
+  assert.match(platformVerdict, /node tooling\/test-shard\.mjs verify-platform [^\n]*--total 3\b/);
+  assert.match(platformVerdict, /- name: Every platform shard job finished green\n        run: test "\$SHARDS_RESULT" = success\n/,
+    "every path, not just memory-only, requires this attempt's shard jobs green: stale same-SHA receipts never pass alone");
+  // A shard count changed in one place but not the other would leave a shard unrun
+  // or unverified: every `--total N` and `/N` must equal its matrix length.
+  for (const [shardJob, verdictJob] of [["test-shards", "ci-node24"], ["platform-matrix-safety", "platform-matrix-safety-verdict"]]) {
+    const shardBlock = jobBlock(ci, shardJob);
+    const matrix = /^        shard: \[([^\]]*)\]$/m.exec(shardBlock);
+    assert.ok(matrix, `${shardJob} declares a shard matrix`);
+    const shards = matrix[1].split(",").map((entry) => Number(entry.trim()));
+    assert.deepEqual(shards, shards.map((_, offset) => offset + 1), `${shardJob} shards are 1..n`);
+    const totals = [...jobBlock(ci, verdictJob).matchAll(/--total (\d+)/g)].map((match) => Number(match[1]));
+    assert.ok(totals.length > 0, `${verdictJob} passes --total`);
+    for (const total of totals) assert.equal(total, shards.length, `${verdictJob} --total matches the ${shardJob} matrix`);
+    const denominators = [...shardBlock.matchAll(/\$\{\{ matrix\.shard \}\}\/(\d+)/g)].map((match) => Number(match[1]));
+    assert.ok(denominators.length > 0, `${shardJob} passes its shard as i/n`);
+    for (const denominator of denominators) assert.equal(denominator, shards.length, `${shardJob} shard denominator matches its matrix`);
+  }
   assert.match(ci, /npm-package-candidate-receipt\.json[\s\S]*uses: actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
   assert.match(ci, /os: \[windows-latest, macos-latest\]/);
   assert.match(ci, /test\/team-matrix-e2e\.test\.ts/,
     "Windows exercises the real multi-clone team Matrix");
   assert.match(ci, /platform-matrix-safety\.json[\s\S]*uses: actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
-  for (const job of ['ci', 'platform-matrix-safety', 'python-state']) {
+  for (const job of ['ci-node22', 'gate-node24', 'test-shards', 'platform-matrix-safety', 'python-state']) {
     const block = jobBlock(ci, job);
     assert.match(block, /actions\/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10/,
       `${job} uses the reviewed checkout action`);

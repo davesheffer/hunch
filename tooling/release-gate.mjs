@@ -83,6 +83,8 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     "test/vscode-open-vsx-workflow.test.ts",
     "test/workflow-release-contract.test.ts",
     "tooling/release-gate.mjs",
+    "tooling/test-shard.mjs",
+    "test/test-shard.test.ts",
     "tooling/production-dependency-audit.mjs",
     "test/production-dependency-audit.test.ts",
     "tooling/vscode-publish-tools/package.json",
@@ -160,7 +162,8 @@ function receiptHash(body) {
   return `sha256:${sha256(JSON.stringify(stable(body)))}`;
 }
 
-export function validateReleaseContext({ packageVersion, tag, tagCommitMatches, clean, allowDirty }) {
+export function validateReleaseContext({ packageVersion, tag, tagCommitMatches, clean, allowDirty, delegateTest }) {
+  if (tag && delegateTest) throw new Error("a tagged release gate cannot delegate its test stage");
   if (tag && tag !== `v${packageVersion}`) {
     throw new Error(`release tag ${tag} does not match package version ${packageVersion}`);
   }
@@ -173,6 +176,19 @@ export function executeReleasePlan(plan, runner) {
   const results = [];
   for (const gate of plan) {
     const outcome = runner(gate);
+    // Only the test stage can be delegated (to CI shards, --delegate-test); a
+    // delegated claim for any other stage is a failure.
+    if (outcome?.delegated === true) {
+      const delegated = gate.id === "test";
+      results.push({
+        id: gate.id,
+        command: [...gate.command],
+        status: delegated ? "delegated" : "failed",
+        exit_code: delegated ? null : 1,
+      });
+      if (delegated) continue;
+      break;
+    }
     const exitCode = Number.isInteger(outcome?.exitCode) ? outcome.exitCode : 1;
     const result = {
       id: gate.id,
@@ -306,7 +322,23 @@ export function buildReleaseReceipt(input) {
     && rehearsalPasses(input.package, input.rehearsal)
     && rollbackPasses(input.package, input.rollback)
     && matrixVerified;
-  const result = allPassed ? "passed" : "failed";
+  // --delegate-test: every stage but `test` passed and the test stage is
+  // recorded as delegated to CI shards. It is proven only together with the
+  // shard manifests, so a partial receipt is never candidate-ready.
+  const delegatedOk = !allPassed
+    && releaseSourcePasses(input.package, input.source)
+    && input.gates.length === RELEASE_GATES.length
+    && input.gates.every((gate, index) => gate.id === RELEASE_GATES[index].id
+      && sameJson(gate.command, RELEASE_GATES[index].command)
+      && ((gate.status === "passed" && gate.exit_code === 0)
+        || (gate.id === "test" && gate.status === "delegated" && gate.exit_code === null)))
+    && input.gates.some((gate) => gate.status === "delegated")
+    && (input.context_errors?.length ?? 0) === 0
+    && sameJson(input.test_manifest, releaseTestManifest())
+    && rehearsalPasses(input.package, input.rehearsal)
+    && rollbackPasses(input.package, input.rollback)
+    && matrixVerified;
+  const result = allPassed ? "passed" : delegatedOk ? "partial" : "failed";
   const candidateReady = result === "passed" && input.source.clean && input.matrix.release_ready === true;
   const publishReady = candidateReady && input.source.tag !== null && input.source.tag_matches_version === true;
   const body = {
@@ -404,10 +436,11 @@ function sourceStatusIgnoringOutput(output) {
 }
 
 function parseArgs(argv) {
-  const parsed = { output: ".hunch-cache/release/release-gate.json", tag: null, allowDirty: false };
+  const parsed = { output: ".hunch-cache/release/release-gate.json", tag: null, allowDirty: false, delegateTest: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--allow-dirty") parsed.allowDirty = true;
+    else if (arg === "--delegate-test") parsed.delegateTest = true;
     else if (arg === "--output" || arg === "--tag") {
       const value = argv[index + 1];
       if (!value) throw new Error(`${arg} requires a value`);
@@ -568,7 +601,7 @@ async function main() {
   const sourceBefore = { commit, status: statusBefore, tag_commit_matches: tagCommitMatches };
   let context;
   try {
-    context = validateReleaseContext({ packageVersion: packageJson.version, tag: options.tag, tagCommitMatches, clean, allowDirty: options.allowDirty });
+    context = validateReleaseContext({ packageVersion: packageJson.version, tag: options.tag, tagCommitMatches, clean, allowDirty: options.allowDirty, delegateTest: options.delegateTest });
   } catch (error) {
     const rollback = {
       previous_version: null,
@@ -674,6 +707,10 @@ async function main() {
       };
     };
     const gates = executeGuardedReleasePlan(RELEASE_GATES, (gate) => {
+      if (options.delegateTest && gate.id === "test") {
+        process.stdout.write(`\n== release gate: ${gate.id} (delegated to CI shards) ==\n`);
+        return { delegated: true };
+      }
       process.stdout.write(`\n== release gate: ${gate.id} ==\n`);
       const [command, ...baseArgs] = gate.command.map((part) => {
         if (part === "$REHEARSAL_OUTPUT") return rehearsalOutput;
@@ -749,9 +786,11 @@ async function main() {
       writeReceipt: () => atomicWrite(options.output, receipt),
       removeReceipt: (staleOutput) => rmSync(staleOutput, { force: true }),
     });
-    process.stdout.write(`\nRelease gate ${receipt.result}: ${receipt.id}\nReceipt: ${output}\n`);
+    const resultLabel = receipt.result === "partial" ? "partial (test stage delegated to CI shards)" : receipt.result;
+    process.stdout.write(`\nRelease gate ${resultLabel}: ${receipt.id}\nReceipt: ${output}\n`);
     process.stdout.write(`Candidate ready: ${receipt.candidate_ready ? "yes" : "no"}; publish ready: ${receipt.publish_ready ? "yes" : "no"}\n`);
-    if (receipt.result !== "passed" || (options.tag && !receipt.publish_ready)) process.exitCode = 1;
+    const resultAccepted = receipt.result === "passed" || (options.delegateTest && receipt.result === "partial");
+    if (!resultAccepted || (options.tag && !receipt.publish_ready)) process.exitCode = 1;
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }
