@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hunch — Shared memory for AI agents</title>
-  <meta name="description" content="Every AI session starts from zero. Hunch keeps your team’s decisions, finished work and open commitments — with sources, in Git — so the next agent picks up where the last one left off." />
+  <meta name="description" content="Hunch keeps the why behind your code in Git: decisions, past bugs and the rules that must hold. Every AI coding assistant gets it before it edits, and deterministic checks catch the change that breaks a rule." />
   <meta property="og:title" content="Hunch — Shared memory for AI agents" />
-  <meta property="og:description" content="Your agents forget. Hunch remembers: what was decided, what got done and what’s still owed — with sources, in Git." />
+  <meta property="og:description" content="Your agents forget. Hunch remembers: what you decided, what broke before and which rules must hold. In your Git repo, checked by code." />
 <meta property="og:image" content="https://www.hunchmemory.com/hunch-og.png" />
 <meta property="og:url" content="https://www.hunchmemory.com/" />
 <meta property="og:locale" content="en_US" />
@@ -25,7 +25,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&display=swap" rel="stylesheet" />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/brand.css" />
-<link rel="stylesheet" href="/upgrade.css?v=native-cursor-1" />
+<link rel="stylesheet" href="/upgrade.css?v=refresh-152" />
 <style>
   /* ──────────────────────────── tokens ──────────────────────────── */
   :root{
@@ -266,7 +266,7 @@
   .tech-item code{display:inline-block;margin-bottom:12px;color:var(--moss-ink)}
   .tech-item h3{margin:0 0 7px;font-size:16px}
   .tech-item p{margin:0;color:var(--mut);font-size:14px}
-  .tech-link{margin:26px 0 0;color:var(--mut);font-size:14px}
+  .tech-link{margin:26px 0 0;color:var(--mut);font-size:14px;max-width:88ch}
 
   @media (max-width:860px){
     .story-grid,.tech-intro{grid-template-columns:1fr;gap:40px}
@@ -308,6 +308,82 @@
   .foot a:hover{color:var(--moss-ink)}
   .foot .about{font-size:14px;color:var(--mut);max-width:34ch;margin-top:12px}
 
+  /* ───────────────────── 1.52 refresh: page-level additions ─────────────────────
+     Behaviour states (copy confirmation, typed terminal, reveal) live in
+     /upgrade.css; this block is layout for the sections that are new here. */
+  .skip{position:absolute;inset-inline-start:16px;top:-64px;z-index:100;padding:10px 14px;border-radius:9px;background:var(--ink);color:var(--bg);font-size:14px;font-weight:500;transition:top .2s var(--ease)}
+  .skip:focus{top:10px}
+  main:focus{outline:none}
+  section[id]{scroll-margin-top:60px}
+
+  /* sections melt into each other instead of meeting at a hard edge */
+  .panel{background:linear-gradient(to bottom,var(--bg) 0,var(--bg-2) 96px,var(--bg-2) calc(100% - 96px),var(--bg) 100%)}
+
+  /* the turn in the story */
+  .story-beat.is-fix .story-when,.story-beat.is-fix h3{color:var(--moss-ink)}
+  .receipt-head b::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:#8fd0b1;margin-inline-end:7px;vertical-align:1px;animation:found 2.8s ease-in-out infinite}
+  @keyframes found{0%,100%{opacity:.45}50%{opacity:1}}
+
+  /* quiet hover: a moss rule draws down the card's leading edge */
+  .tech-item{position:relative;transition:background-color .3s ease}
+  .tech-item::before{content:"";position:absolute;inset-block:24px;inset-inline-start:0;width:2px;background:var(--moss);transform:scaleY(0);transform-origin:top;transition:transform .5s cubic-bezier(.16,1,.3,1)}
+  @media (hover:hover){.tech-item:hover{background:#fff}.tech-item:hover::before{transform:scaleY(1)}}
+  .tech-intro>p a{white-space:nowrap}
+
+  /* how: the check, played back */
+  .demo{display:grid;grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);gap:54px;margin-top:68px;align-items:center}
+  .demo-copy h3{margin:0 0 10px;font-size:23px;line-height:1.25;letter-spacing:-.02em}
+  .demo-copy>p{margin:0;color:var(--mut);font-size:15.5px;max-width:40ch}
+  .facts{list-style:none;margin:22px 0 0;padding:0;display:grid;gap:11px}
+  .facts li{position:relative;padding-inline-start:27px;font-size:15px;color:var(--ink-2)}
+  .facts li::before{content:"";position:absolute;inset-inline-start:3px;top:.52em;width:11px;height:6px;border-left:1.8px solid var(--moss);border-bottom:1.8px solid var(--moss);transform:rotate(-45deg)}
+  .demo .term{margin-top:0;max-width:none;box-shadow:0 26px 60px -46px rgba(20,31,25,.5)}
+  .demo .term pre{min-height:0;font-size:13px}
+  .term-bar .replay{margin-left:auto;font:500 11.5px/1 var(--mono);color:var(--mut);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;transition:color .2s ease,border-color .2s ease}
+  .term-bar .replay:hover{color:var(--ink);border-color:var(--ink)}
+  .demo-note{margin:12px 2px 0;font-size:13px;color:var(--mut)}
+  .how-receipt{margin-top:76px}
+  @media (max-width:900px){.demo{grid-template-columns:1fr;gap:30px;margin-top:52px}}
+
+  /* what's new: a compact band, the long tail behind one click */
+  .new-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:50px}
+  .new-item{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px 22px 24px;transition:border-color .3s ease,box-shadow .5s cubic-bezier(.16,1,.3,1)}
+  .new-item.wide{grid-column:span 2}
+  @media (hover:hover){.new-item:hover{border-color:rgba(58,107,88,.34);box-shadow:0 20px 44px -38px rgba(20,31,25,.5)}}
+  .new-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .new-tag{font:500 12px/1 var(--mono);color:var(--moss-ink);background:var(--moss-wash);border:1px solid rgba(58,107,88,.18);border-radius:999px;padding:6px 10px;direction:ltr;unicode-bidi:isolate}
+  .new-ver{font:12px/1 var(--mono);color:var(--mut-2);direction:ltr;unicode-bidi:isolate}
+  .new-item h3{margin:15px 0 6px;font-size:17.5px;line-height:1.3;letter-spacing:-.01em}
+  .new-item p{margin:0;color:var(--mut);font-size:14.5px}
+  .hook-table{width:100%;max-width:440px;margin:12px 0 0;border-collapse:collapse;font-size:13.5px}
+  .hook-table th,.hook-table td{padding:7px 0;border-top:1px solid var(--line-2);text-align:start;font-weight:400}
+  .hook-table th{color:var(--ink-2)}
+  .hook-table td{font-family:var(--mono);font-size:12.5px;color:var(--mut);text-align:end;direction:ltr;white-space:nowrap}
+  .hook-table td b{font-weight:500;color:var(--moss-ink)}
+  .new-item p.new-cap{margin-top:10px;font-size:12.5px;color:var(--mut-2)}
+  .more-new{margin-top:22px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .more-new summary{display:flex;align-items:center;gap:10px;padding:16px 2px;cursor:pointer;font-size:15px;font-weight:500;color:var(--ink);list-style:none;border-radius:6px}
+  .more-new summary::-webkit-details-marker{display:none}
+  .more-new summary::before{content:"";flex:none;width:7px;height:7px;border-right:1.6px solid var(--moss);border-bottom:1.6px solid var(--moss);transform:translateY(-2px) rotate(45deg);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+  .more-new[open] summary::before{transform:translateY(2px) rotate(225deg)}
+  .more-new summary:hover{color:var(--moss-ink)}
+  .more-new ul{list-style:none;margin:0;padding:2px 0 18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 34px}
+  .more-new li{display:grid;grid-template-columns:42px 1fr;gap:10px;padding:8px 0;font-size:14.5px;color:var(--ink-2);line-height:1.5}
+  .more-new li span{font:12px/1.9 var(--mono);color:var(--mut-2);direction:ltr}
+  @media (max-width:900px){.new-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.new-item.wide{grid-column:span 2}}
+  @media (max-width:620px){.new-grid{grid-template-columns:1fr}.new-item.wide{grid-column:auto}.more-new ul{grid-template-columns:1fr}}
+
+  /* quickstart: numbered, with the fine print as a short list */
+  .qs-steps .step{grid-template-columns:40px 1fr}
+  .qs-notes{list-style:none;margin:16px 2px 0;padding:0;display:grid;gap:8px;font-size:13.5px;color:var(--mut);line-height:1.6}
+  .qs-notes code{font-size:.9em}
+  .foot .about+.about{margin-top:10px;font-size:13px;color:var(--mut-2)}
+
+  @media (prefers-reduced-motion:reduce){
+    .skip,.tech-item,.tech-item::before,.new-item,.more-new summary::before,.term-bar .replay{transition:none}
+    .receipt-head b::before{animation:none;opacity:1}
+  }
+
   /* Localized pages retain the same quiet identity while respecting script. */
   html[lang="he"]{--sans-local:"IBM Plex Sans Hebrew",var(--sans)}
   html[lang="ar"]{--sans-local:"IBM Plex Sans Arabic",var(--sans)}
@@ -324,6 +400,7 @@
   html[dir="rtl"] .tech-item code{direction:rtl}
   html[dir="rtl"] .tech-item code.literal{direction:ltr}
   html[lang="he"] .tech-item code:not(.literal),html[lang="ar"] .tech-item code:not(.literal){font-family:var(--sans-local);letter-spacing:0}
+  html[lang="he"] .term-bar .replay,html[lang="ar"] .term-bar .replay,html[lang="he"] .new-tag:not(.literal),html[lang="ar"] .new-tag:not(.literal){font-family:var(--sans-local);letter-spacing:0}
 
   /* ──────────────────────────── watch ──────────────────────────── */
   .watch{margin:56px auto 0;max-width:820px}
@@ -342,6 +419,7 @@
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to content</a>
 <a class="thesis-band" href="/blog/post?slug=the-state-layer"><span class="thesis-tag">Deterministic State</span><span class="thesis-text">What deterministic state means, in plain words.</span><b class="thesis-cta">Read the thesis →</b></a>
 <nav class="nav" aria-label="Main">
   <div class="wrap nav-in">
@@ -368,6 +446,7 @@
   </div>
 </nav>
 
+<main id="main" tabindex="-1">
 <!-- ─────────────────────────── hero ─────────────────────────── -->
 <header class="hero wrap">
   <!-- Repository evidence forms a continuous particle sculpture. Scroll carries
@@ -376,7 +455,7 @@
   <div class="hero-art" aria-hidden="true"><canvas id="holdline"></canvas></div>
   <div class="hero-copy">
     <h1 class="rise d1">Your agents forget.<br /><b>Hunch remembers.</b></h1>
-    <p class="lede rise d2">Every AI session starts from zero. Hunch keeps what your team decided, what got done and what’s still owed — with sources, in Git — so the next agent picks up where the last one left off.</p>
+    <p class="lede rise d2">Hunch keeps the why behind your code in your Git repo: what you decided, what broke before, which rules must hold. Your assistant gets it before it edits. Then Hunch checks the change — with code, not another model.</p>
     <div class="hero-cta rise d3">
       <a class="btn" href="#start">Get started</a>
       <a class="btn ghost" href="#story">See how it works</a>
@@ -390,7 +469,7 @@
     <div class="sec-head">
       <span class="eyebrow">the missing context</span>
       <h2>AI reads your code. It wasn’t there when you decided.</h2>
-      <p>It sees what the code does — not why, what broke last time, or what a small change will break next.</p>
+      <p>It sees what the code does. Not why, not what broke last time, not what a tidy-up will break next.</p>
     </div>
     <div class="story-grid">
       <div class="story-beats">
@@ -400,15 +479,15 @@
         </article>
         <article class="story-beat">
           <span class="story-when">Months later</span>
-          <div><h3>The code stays. The reason doesn’t.</h3><p>The discussion is buried. The safe code now just looks overcomplicated.</p></div>
+          <div><h3>The code stays. The reason doesn’t.</h3><p>The discussion is buried. The safe code just looks overcomplicated.</p></div>
         </article>
         <article class="story-beat">
           <span class="story-when">Next session</span>
           <div><h3>An AI “cleans it up.”</h3><p>The diff looks great. The logout bug is back.</p></div>
         </article>
-        <article class="story-beat">
+        <article class="story-beat is-fix">
           <span class="story-when">With Hunch</span>
-          <div><h3>The reason shows up first.</h3><p>Once the lesson is recorded, Hunch puts the decision — and the bug it prevents — in front of the agent before it edits the file.</p></div>
+          <div><h3>The reason shows up first.</h3><p>Once the lesson is recorded, Hunch puts the decision, and the bug it prevents, in front of the agent before it edits the file.</p></div>
         </article>
       </div>
       <aside class="receipt" aria-label="Example project memory">
@@ -428,66 +507,163 @@
         <img src="https://i.ytimg.com/vi/m2PM6pV7D9Y/maxresdefault.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async" />
         <span class="watch-play" aria-hidden="true"></span>
       </button>
-      <figcaption><b>Hunch Memory in 2 minutes.</b> Then go deeper in the <a href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">7-episode series</a>: setup, hooks, capture, delivery, rules, drift and teams.</figcaption>
+      <figcaption><b>Hunch Memory in 2 minutes.</b> Then the <a href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">7-episode series</a>: setup, hooks, capture, delivery, rules, drift and teams.</figcaption>
     </figure>
   </div>
 </section>
 
-<!-- ─────────────────────────── moat ─────────────────────────── -->
-<section id="moat" class="panel">
+<!-- ─────────────────────────── why hunch ─────────────────────────── -->
+<section id="why" class="panel">
   <div class="wrap">
     <div class="tech-intro">
       <div class="sec-head">
-        <span class="eyebrow">available today</span>
-        <h2>One record. Every session. Every agent.</h2>
+        <span class="eyebrow">why hunch</span>
+        <h2>Built to be checked, not trusted.</h2>
       </div>
-      <p>Plain files in Git. Browse them in your browser, or plug agents in through MCP, HTTP, the CLI, TypeScript or Python.</p>
+      <p>Six properties you can verify in the public source. <a href="/compare">See how Hunch compares →</a></p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code>memory</code><h3>Keep the reasons</h3><p>Decisions, rejected ideas, bugs and open questions live next to the code they explain.</p></article>
-      <article class="tech-item"><code>decisions</code><h3>No silent contradictions</h3><p>Hunch refuses two current decisions that conflict. Replace one, and the history shows what changed.</p></article>
-      <article class="tech-item"><code>access</code><h3>Each agent sees its share</h3><p>Pick which agents can open each space, down to single records. Add a key per agent to sign what it writes.</p></article>
-      <article class="tech-item"><code>actions</code><h3>Know what’s done and what’s owed</h3><p>See finished work, open commitments and their sources in one place. Work nobody verified stays marked unverified.</p></article>
-      <article class="tech-item"><code>control</code><h3>You decide what’s a rule</h3><p>Record how you, your team or your company does things. It stays advice until you trust a rule and turn on strict mode.</p></article>
-      <article class="tech-item"><code>git</code><h3>Your record, your repo</h3><p>Readable files in Git. Review a change, revert it, rebuild the index any time.</p></article>
+      <article class="tech-item"><code>deterministic</code><h3>Rules are checked by code</h3><p>No model call in the blocking path. Same change, same rules, same verdict.</p></article>
+      <article class="tech-item"><code>git-native</code><h3>Your memory stays in your repo</h3><p>Plain JSON in <code class="literal">.hunch/</code>. Review it in a PR, revert it, rebuild the index any time. No Hunch account.</p></article>
+      <article class="tech-item"><code>receipts</code><h3>Every claim shows its source</h3><p>A block cites the rule it enforces. A task report keeps apart what was delivered, what the agent said and what actually ran.</p></article>
+      <article class="tech-item"><code>any assistant</code><h3>One memory, every assistant</h3><p>Claude Code, Codex, Cursor, VS Code/Copilot, Windsurf, Antigravity and other MCP clients. Hook coverage varies by assistant.</p></article>
+      <article class="tech-item"><code>no meter</code><h3>No per-token bill</h3><p>Drafting runs on the assistant subscription you already have, or a deterministic local fallback. Metered APIs stay off unless you opt in.</p></article>
+      <article class="tech-item"><code>human-gated</code><h3>People decide what’s true</h3><p>Advice by default. Nothing blocks until a person trusts the rule, and an agent can’t change a record a human confirmed.</p></article>
     </div>
   </div>
 </section>
 
 <!-- ─────────────────────────── how ─────────────────────────── -->
-<section id="how" class="panel">
+<section id="how">
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow">how hunch works</span>
       <h2>Remember. Retrieve. Check.</h2>
-      <p>Hunch gives the agent a short brief and a way to check its work. The agent still does the work.</p>
+      <p>Hunch briefs the agent, then checks its work. The agent still writes the code.</p>
     </div>
     <div class="outcome-grid">
-      <article class="outcome"><span class="step-n">01 / remember</span><h3>Save what you learned.</h3><p>Capture decisions, corrections and findings, linked to the code and the source they came from.</p></article>
-      <article class="outcome"><span class="step-n">02 / retrieve</span><h3>Bring it back at the right moment.</h3><p>When a task starts, Hunch picks the memory that matters and delivers it through MCP or your assistant’s hooks. What arrives depends on the assistant.</p></article>
-      <article class="outcome"><span class="step-n">03 / check</span><h3>Check, then show the receipt.</h3><p>Hunch runs the rules you trust and writes a task report: what it delivered, what the agent used, what actually passed.</p></article>
+      <article class="outcome"><span class="step-n">01 / remember</span><h3>Save what you learned.</h3><p>Decisions, corrections and findings, linked to the code and the source they came from.</p></article>
+      <article class="outcome"><span class="step-n">02 / retrieve</span><h3>Bring it back at the right moment.</h3><p>When a task starts, Hunch picks the memory that matters and delivers it through MCP or your assistant’s hooks.</p></article>
+      <article class="outcome"><span class="step-n">03 / check</span><h3>Check, then show the receipt.</h3><p>Hunch runs the rules you trust and writes a task report: what it delivered, what the agent used, what passed.</p></article>
     </div>
-  </div>
-</section>
 
-<section class="release-section" aria-labelledby="release-proof-title">
-  <div class="wrap">
-    <div class="release-card">
+    <div class="demo">
+      <div class="demo-copy">
+        <h3>Watch a rule hold.</h3>
+        <p>An agent reaches for the one thing your team ruled out. The check stops the commit and names the rule.</p>
+        <ul class="facts">
+          <li>No model in the blocking path</li>
+          <li>Cites the rule, the file and the reason</li>
+          <li>Runs before a commit and in CI</li>
+        </ul>
+      </div>
+      <div>
+        <div class="term">
+          <div class="term-bar"><i></i><i></i><i></i>&nbsp; ~/acme-checkout<button class="replay" type="button" hidden>Replay</button></div>
+          <pre data-typed><span class="tl c-key"># your team's rule: never import lodash — use src/utils</span>
+<span class="tl c-key"># an agent just staged:  + import _ from "lodash"</span>
+<span class="tl" data-type><span class="c-cmd">$ hunch check --staged --strict</span></span>
+<span class="tl">Directly touches 1 invariant(s):</span>
+
+<span class="tl c-warn">  ⛔ [blocking] never import lodash — use src/utils</span>
+<span class="tl">      <span class="c-id">con_4f1c2a9be0</span> · in: src/cart.ts</span>
+<span class="tl">      rationale: one shared utility layer, not two</span>
+
+<span class="tl c-warn" data-wait="520">✗ 1 high-confidence blocking invariant(s) directly in scope — review before committing.</span>
+<span class="tl" data-type><span class="c-cmd">$ echo $?</span></span>
+<span class="tl c-id">1</span></pre>
+        </div>
+        <p class="demo-note">Example session; the rule id is illustrative. Run the real one: <a href="https://github.com/davesheffer/hunch/blob/main/demo/hunch-blocks-it.sh">demo/hunch-blocks-it.sh</a></p>
+      </div>
+    </div>
+
+    <div class="release-card how-receipt" role="group" aria-labelledby="release-proof-title">
       <div class="release-head">
         <div>
           <span class="eyebrow">see the evidence</span>
           <h2 id="release-proof-title">Don’t trust the agent. Read the receipt.</h2>
-          <p class="release-copy">Every task report keeps three things apart that most tools blur together.</p>
+          <p class="release-copy">Every task report keeps apart three things most tools blur together.</p>
         </div>
-        <code class="release-install">npm i -g @davesheffer/hunch</code>
       </div>
       <div class="release-metrics" aria-label="What task reports distinguish">
         <div class="release-metric"><strong>delivered</strong><span>what Hunch handed the agent</span></div>
         <div class="release-metric"><strong>reported</strong><span>what the agent says it used</span></div>
         <div class="release-metric"><strong>checked</strong><span>what rules and commands actually ran</span></div>
       </div>
-      <p class="release-caveat">A green test alone doesn’t prove Hunch helped. No evidence, no claim — it stays unverified. <a href="/docs#task-reports">Read a task report →</a></p>
+      <p class="release-caveat">A green test alone doesn’t prove Hunch helped. No evidence, no claim: it stays unverified. <a href="/docs#task-reports">Read a task report →</a></p>
     </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── what's new ─────────────────────────── -->
+<section id="new" class="panel">
+  <div class="wrap">
+    <div class="tech-intro">
+      <div class="sec-head">
+        <span class="eyebrow">new in 1.52</span>
+        <h2>What’s new in Hunch.</h2>
+      </div>
+      <p>The headlines from the last few releases. The rest is in the <a href="/changelog">changelog</a>.</p>
+    </div>
+    <div class="new-grid">
+      <article class="new-item wide">
+        <div class="new-top"><span class="new-tag">hunch ui</span><span class="new-ver">1.52</span></div>
+        <h3>Your repo’s memory, in your browser.</h3>
+        <p>Browse, search, edit, link, remove and restore records in a local web UI. It runs on your machine, and only your click writes memory.</p>
+      </article>
+      <article class="new-item">
+        <div class="new-top"><span class="new-tag">Deliberate · Grill me</span><span class="new-ver">1.52</span></div>
+        <h3>A review queue for what needs a person.</h3>
+        <p>Deliberate ranks conflicts, stale links, duplicates and weak memory. Grill me questions a record, up to five questions, with secret-looking files withheld.</p>
+      </article>
+      <article class="new-item">
+        <div class="new-top"><span class="new-tag">Elixir</span><span class="new-ver">1.52</span></div>
+        <h3>Elixir joins the graph.</h3>
+        <p>Blast radius, dependents and rule checks now work on Elixir, next to TypeScript, JavaScript, Python, Go and PHP. Static analysis, no LLM.</p>
+      </article>
+      <article class="new-item">
+        <div class="new-top"><span class="new-tag">hunch derive-rules</span><span class="new-ver">1.49</span></div>
+        <h3>Write the rule in your docs. Hunch enforces it.</h3>
+        <p>Mark a sentence with <code>&lt;!-- hunch:rule scope=… --&gt;</code> and it becomes a constraint. <code>--check</code> fails CI when doc and graph disagree.</p>
+      </article>
+      <article class="new-item">
+        <div class="new-top"><span class="new-tag">hunch verify</span><span class="new-ver">1.46</span></div>
+        <h3>Run only the tests a change needs.</h3>
+        <p>Hunch picks the tests that import or ran the changed code. Doubt means more tests: a change it can’t trace runs the full suite.</p>
+      </article>
+      <article class="new-item wide">
+        <div class="new-top"><span class="new-tag">hooks</span><span class="new-ver">1.51</span></div>
+        <h3>Hooks that stay out of your way.</h3>
+        <table class="hook-table">
+          <caption class="sr-only">Median hook time before and after 1.51.0, in milliseconds</caption>
+          <tbody>
+            <tr><th scope="row">When a task stops</th><td>2174 → <b>298 ms</b></td></tr>
+            <tr><th scope="row">Before an edit</th><td>500 → <b>334 ms</b></td></tr>
+            <tr><th scope="row">Per prompt</th><td>299 → <b>213 ms</b></td></tr>
+            <tr><th scope="row">Session start</th><td>251 → <b>148 ms</b></td></tr>
+          </tbody>
+        </table>
+        <p class="new-cap">Median hook time on the benchmark VM, before and after 1.51.0. Hook output is identical.</p>
+      </article>
+      <article class="new-item">
+        <div class="new-top"><span class="new-tag">memory home</span><span class="new-ver">1.51</span></div>
+        <h3>One memory per repository.</h3>
+        <p>Worktrees and extra clones of a repo share one memory home, chosen from the repo’s identity, not the folder you’re in.</p>
+      </article>
+    </div>
+    <details class="more-new">
+      <summary>Also new since 1.44</summary>
+      <ul>
+        <li><span>1.51</span><div><code>hunch log --for &lt;commit&gt;</code> shows which memory led to which feature commit.</div></li>
+        <li><span>1.51</span><div><code>hunch mcp</code> answers the handshake in 1.7–3.7 s. With a large overlay on Windows it used to take 28–76 s.</div></li>
+        <li><span>1.50</span><div>A correction can retire the rule it reverses. Nothing is deleted.</div></li>
+        <li><span>1.50</span><div>When a test run fails, the hook names the past bug it matches.</div></li>
+        <li><span>1.48</span><div>Licensed FSL-1.1-ALv2. Each release converts to Apache-2.0 two years after it ships.</div></li>
+        <li><span>1.45</span><div><code>hunch init</code> configures only the assistants it finds.</div></li>
+        <li><span>1.44</span><div><code>hunch uninstall</code> removes what Hunch installed and keeps your memory.</div></li>
+        <li><span>1.44</span><div>Agent writes over MCP can’t change a record a human confirmed.</div></li>
+      </ul>
+    </details>
   </div>
 </section>
 
@@ -496,20 +672,20 @@
   <div class="wrap">
     <div class="tech-intro">
       <div class="sec-head">
-        <span class="eyebrow">inside the coding tools</span>
+        <span class="eyebrow">under the hood</span>
         <h2>Know what a change breaks before you make it.</h2>
       </div>
-      <p>For code, Hunch connects the reasons to the dependencies and to the rules your team chose to protect.</p>
+      <p>Hunch ties each reason to the code’s real dependencies and to the rules your team chose to protect.</p>
     </div>
     <div class="tech-grid">
-      <article class="tech-item"><code class="literal">why</code><h3>Find the reason</h3><p>Decisions, rejected ideas and past failures behind any file or function.</p></article>
-      <article class="tech-item"><code>blast radius</code><h3>See what depends on it</h3><p>Follow the code’s real connections to see what a change can reach.</p></article>
-      <article class="tech-item"><code>project DNA</code><h3>Learn the house style</h3><p>See the terms and habits Hunch observed in this repo. Advice only.</p></article>
-      <article class="tech-item"><code>compare</code><h3>Compare options</h3><p>Line up candidate branches against what you already decided.</p></article>
-      <article class="tech-item"><code>conform</code><h3>Check the code still keeps its promises</h3><p>For example: does the payment path still check authorization?</p></article>
-      <article class="tech-item"><code>change gate</code><h3>Guard the rules you trust</h3><p>Flags changes that break a trusted rule. Strict mode blocks only where that rule and your assistant allow it.</p></article>
+      <article class="tech-item"><code class="literal">hunch why</code><h3>Find the reason</h3><p>The decisions, rejected ideas and past bugs behind any file or symbol.</p></article>
+      <article class="tech-item"><code class="literal">hunch impact</code><h3>See what depends on it</h3><p>Follow the code’s real connections to everything a change can reach.</p></article>
+      <article class="tech-item"><code class="literal">hunch check</code><h3>Guard the rules you trust</h3><p>Flags a change that breaks a trusted rule. Strict mode blocks only where that rule and your assistant allow it.</p></article>
+      <article class="tech-item"><code class="literal">hunch conform</code><h3>Check the code keeps its promises</h3><p>For example: does the payment path still check authorization?</p></article>
+      <article class="tech-item"><code class="literal">hunch drift</code><h3>Catch docs that fell behind</h3><p>A doc still pinned to a replaced decision fails <code class="literal">hunch drift</code>, so CI can catch it.</p></article>
+      <article class="tech-item"><code class="literal">hunch dna inspect</code><h3>Learn the house style</h3><p>The terms and habits Hunch observed in this repo. Advice only.</p></article>
     </div>
-    <p class="tech-link">Want the technical details? <a href="/docs">Read how Hunch works →</a></p>
+    <p class="tech-link">Indexes TypeScript, JavaScript, Python, Go, PHP and Elixir, plus Helm, Kustomize and YAML. Beyond code, <code>hunch serve</code> is a self-hosted service that <a href="/docs#shared-state">shares decisions, finished work and open commitments</a> across agents. <a href="/docs">Read the docs →</a></p>
   </div>
 </section>
 
@@ -519,22 +695,23 @@
     <div class="sec-head">
       <span class="eyebrow">get started</span>
       <h2>Start in one repository.</h2>
+      <p>Needs Node 22.13+ and a Git repository. No Hunch account.</p>
     </div>
     <div class="qs">
       <div class="qs-steps">
         <div class="steps" style="margin-top:0">
-          <div class="step"><div><h3>Install Hunch</h3><p>Install the CLI, then run hunch init in the project you want it to remember.</p></div></div>
-          <div class="step"><div><h3>Teach it your history</h3><p>Optional: backfill the last few months of Git, then review what it captured.</p></div></div>
-          <div class="step"><div><h3>Ask why</h3><p>Reload your assistant and ask why a file is built this way. Using Codex? Trust the hooks in /hooks first.</p></div></div>
+          <div class="step"><span class="step-n">01</span><div><h3>Install and connect</h3><p>Install the CLI, then run <code>hunch init</code> in your project. It sets up only the assistants you have.</p></div></div>
+          <div class="step"><span class="step-n">02</span><div><h3>Teach it your history</h3><p>Optional: draft memory from the last 90 days of Git, then review what it captured.</p></div></div>
+          <div class="step"><span class="step-n">03</span><div><h3>Ask why</h3><p>Reload your assistant and ask why a file is built this way. Using Codex? Trust the hooks in <code>/hooks</code> first.</p></div></div>
         </div>
-        <div class="prov" aria-label="Supported assistants">
-          <span>Claude Code</span><span>Cursor</span><span>VS Code</span><span>Windsurf</span><span>Codex</span><span>Antigravity</span><span>AGENTS.md</span>
+        <div class="prov" role="group" aria-label="Supported assistants">
+          <span>Claude Code</span><span>Codex</span><span>Cursor</span><span>VS Code / Copilot</span><span>Windsurf</span><span>Antigravity</span><span>any MCP client</span>
         </div>
       </div>
       <div class="qs-term">
         <div class="term" style="margin-top:0">
           <div class="term-bar"><i></i><i></i><i></i>&nbsp; ~/your-repo</div>
-          <pre style="min-height:0"><span class="c-key"># install from npm — Node 22.13+</span>
+          <pre style="min-height:0"><span class="c-key"># install from npm</span>
 <span class="c-cmd">$ npm install -g @davesheffer/hunch</span>
 
 <span class="c-key"># connect Hunch to this project</span>
@@ -543,22 +720,22 @@
 <span class="c-key"># learn from the last 90 days</span>
 <span class="c-cmd">$ hunch backfill --since 90d</span>
 
-<span class="c-key"># see your project's DNA</span>
-<span class="c-cmd">$ hunch dna inspect</span>
-
 <span class="c-key"># ask what a file is for</span>
-<span class="c-cmd">$ hunch why src/auth/session.ts</span></pre>
+<span class="c-cmd">$ hunch why src/auth/session.ts</span>
+
+<span class="c-key"># browse your memory in the browser</span>
+<span class="c-cmd">$ hunch ui</span></pre>
         </div>
         <div class="copyline">
           <code id="install-cmd">npm i -g @davesheffer/hunch && hunch init</code>
-          <button class="copybtn" data-copy="#install-cmd">copy</button>
+          <button class="copybtn" type="button" data-clip="#install-cmd" data-clip-done="Copied"><svg class="clip-ico" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><g class="ico-copy"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.5v-.4a1.6 1.6 0 0 0-1.6-1.6H3.1a1.6 1.6 0 0 0-1.6 1.6v5.8a1.6 1.6 0 0 0 1.6 1.6h.4"/></g><path class="ico-check" d="M3 8.6l3.2 3.2L13 4.9"/></svg><span class="clip-label">Copy</span></button>
         </div>
-        <p class="install-note" style="font-family:var(--mono);font-size:12.5px;color:var(--mut);margin:14px 2px 0;line-height:1.7">
-          Hunch advises by default — nothing blocks until you say so. To update, run <code>hunch update</code>, reconnect your assistant, and in Codex review changed commands in <code>/hooks</code>.<br /><br />
-          Claude Code? Install as a plugin instead:<br />
-          <code>/plugin marketplace add davesheffer/hunch</code> → <code>/plugin install hunch@hunch</code>
-          <br /><a href="https://open-vsx.org/extension/davesheffer/hunch-vscode">Open VSX</a>
-        </p>
+        <ul class="qs-notes install-note">
+          <li>Advice by default. Nothing blocks until you say so.</li>
+          <li>Update with <code>hunch update</code>. Leave with <code>hunch uninstall</code>: it removes what Hunch installed and keeps your memory.</li>
+          <li>Claude Code? Install as a plugin: <code>/plugin marketplace add davesheffer/hunch</code> → <code>/plugin install hunch@hunch</code></li>
+          <li>VS Code? <a href="https://open-vsx.org/extension/davesheffer/hunch-vscode">Get the extension on Open VSX</a></li>
+        </ul>
       </div>
     </div>
   </div>
@@ -568,28 +745,29 @@
 <section class="cta">
   <div class="cta-art" aria-hidden="true"><canvas id="cta-dna"></canvas></div>
   <div class="wrap">
-    <h2>One record, from customer issue to verified fix.</h2>
-    <p>That’s the goal: a customer reports a problem, an agent fixes the code, another confirms it’s done. Shared state ships today; the Sofia pilot is testing the full handoff.</p>
+    <h2>Stop re-explaining your codebase.</h2>
+    <p>Give every agent the same memory and every change the same check. It advises by default, and one command removes it.</p>
     <div class="hero-cta">
       <a class="btn" href="#start">Get started</a>
       <a class="btn ghost" href="/docs">Read the docs</a>
     </div>
   </div>
 </section>
-
+</main>
 
 <footer>
   <div class="wrap foot">
     <div>
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
-      <p class="about">Hunch keeps the decisions, finished work and commitments your agents need to share.</p>
+      <p class="about">Hunch keeps the why behind your code, in Git, for every assistant you use.</p>
+      <p class="about">FSL-1.1-ALv2. Use it for your own work, internal or commercial. Each release becomes Apache-2.0 two years after it ships.</p>
     </div>
     <div>
       <h4>product</h4>
       <a href="#how">How it works</a>
+      <a href="#new">What’s new</a>
       <a href="#inside">Under the hood</a>
       <a href="/compare">Compare</a>
-      <a href="/blog/">Benchmark</a>
       <a href="/changelog">Changelog</a>
     </div>
     <div>
@@ -963,17 +1141,11 @@
   const languageSwitch = document.getElementById('language-switch');
   languageSwitch?.addEventListener('change', event => { location.href = event.currentTarget.value; });
 
-  // copy button
-  document.querySelectorAll('.copybtn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const code = document.querySelector(btn.dataset.copy);
-      try { await navigator.clipboard.writeText(code.textContent); btn.textContent = 'copied'; setTimeout(() => btn.textContent = 'copy', 1600); } catch {}
-    });
-  });
+  // Copy-to-clipboard and the typed terminal live in /upgrade.js.
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
-<script src="/upgrade.js?v=native-cursor-1"></script>
+<script src="/upgrade.js?v=refresh-152"></script>
 <script>
   document.querySelectorAll('.watch-frame[data-yt]').forEach(function(b){
     b.addEventListener('click',function(){

@@ -209,6 +209,13 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <h4>Keeping it true</h4>
       <a href="#anchors">Doc anchors</a>
       <a href="#ci">Wire CI</a>
+      <a href="#derive-rules">Rules from your docs</a>
+    </div>
+    <div class="nav-group">
+      <h4>Day to day</h4>
+      <a href="#ui">Memory in the browser</a>
+      <a href="#verify">Only the tests you need</a>
+      <a href="#trace">Trace memory to a commit</a>
     </div>
     <div class="nav-group">
       <h4>Advanced</h4>
@@ -309,7 +316,8 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
     <section id="bench">
       <h2>9 · Benchmark your own setup<a class="anchor" href="#bench">#</a></h2>
-      <p>The repo ships harnesses under <code>bench/</code>:</p>
+      <div class="note warn"><span class="ic">!</span><b>Changed in v1.45:</b> the benchmark harness scripts moved out of the public repository, so the <code>bench/</code> commands below need a checkout that still has them. What ships today is <code>hunch eval</code>: <code>hunch eval --guards --generate</code> scores the guards on a starter golden set, and <code>hunch eval --grounding --file &lt;golden.json&gt;</code> reports the precision and recall of what the prompt hook delivers.</div>
+      <p>The harnesses under <code>bench/</code>:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npx</span> tsx bench/run.ts --arms A,C --model claude-sonnet-5
 <span class="k">npx</span> tsx bench/external/run-zod.ts --arms A,S --no-repro
 <span class="k">npx</span> tsx bench/external/run-zod.ts --arms S --force-skill --only zod-5937</pre></div>
@@ -381,6 +389,58 @@ PARAMETER num_ctx 32768</pre></div>
 <span class="k">npm</span> view "@davesheffer/hunch@$HUNCH_RELEASE" version dist.integrity dist.attestations --json
 <span class="k">git</span> tag --list "v$HUNCH_RELEASE" "vscode-v$HUNCH_VSCODE_RELEASE"</pre></div>
       <p><b>Observe:</b> npm reports version 1.33.0, an integrity digest, and provenance metadata; Open VSX reports 0.18.2. Each tag’s GitHub Actions run validates the exact content-addressed artifact before isolated publishing begins and verifies the same public bytes afterward.</p>
+    </section>
+
+    <section id="ui">
+      <h2>15 · Review memory in the browser (v1.52.0+)<a class="anchor" href="#ui">#</a></h2>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> ui             <span class="c"># serve on 127.0.0.1 with a keyed link and open the browser</span>
+<span class="k">hunch</span> ui --no-open   <span class="c"># print the link without opening a browser</span></pre></div>
+      <p>Then work top-down:</p>
+      <ul>
+        <li><b>Deliberate</b> — review cards for conflicts, stale links, duplicates and weak memory, ranked by how many components a change could reach. Open findings, unlinked memory and unconfirmed memory are tabs on the same page.</li>
+        <li><b>Confirm as yours</b> — sign the memory you stand behind. Undo is one click.</li>
+        <li><b>Grill me on this</b> — one question at a time, up to five, then a suggestion: keep, fix wording, remove or replace.</li>
+      </ul>
+      <p><b>Observe:</b> the terminal prints the link and <code>Press Ctrl+C to stop.</code> Deliberate runs no assistant, and only your click changes memory. Each change you save shows in the UI's history; the UI never edits <code>.hunch/</code> directly, it runs <code>hunch new</code>, <code>hunch edit</code>, <code>hunch link</code>, <code>hunch remove</code> or <code>hunch restore</code>.</p>
+      <p>Grill and the decision board use only a subscription assistant with its tools off. Secret-looking files and credential lines are withheld and named on screen.</p>
+    </section>
+
+    <section id="derive-rules">
+      <h2>16 · Turn your CONTRIBUTING rules into constraints (v1.49.0+)<a class="anchor" href="#derive-rules">#</a></h2>
+      <p>Put a marker above a rule you already wrote. The sentence that follows becomes a constraint:</p>
+      <div class="code" data-lang="markdown"><div class="code-head"><span class="lbl">CONTRIBUTING.md</span><button class="copy">Copy</button></div><pre>&lt;!-- hunch:rule scope=src/api/** severity=warning --&gt;
+Handlers never read the database directly; go through the repository layer.</pre></div>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> derive-rules --dry-run   <span class="c"># what would change; writes nothing</span>
+<span class="k">hunch</span> derive-rules             <span class="c"># import the marked rules</span>
+<span class="k">hunch</span> derive-rules --check     <span class="c"># CI: exit 1 when docs and graph disagree</span></pre></div>
+      <p><b>Observe:</b> edit the rule's sentence and <code>--check</code> exits 1 until you run <code>hunch derive-rules --accept-changes</code>. Delete the marker and its constraint is reported as orphaned, never auto-retired.</p>
+      <p>No markers yet? Let your subscription CLI draft them, then decide each one yourself:</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> derive-rules --propose CONTRIBUTING.md        <span class="c"># drafts go to a local review queue</span>
+<span class="k">hunch</span> derive-rules --proposals                      <span class="c"># list them, each with its hash</span>
+<span class="k">hunch</span> derive-rules --accept &lt;id&gt; --expect &lt;hash&gt;    <span class="c"># accept one</span>
+<span class="k">hunch</span> derive-rules --drop &lt;id&gt;                      <span class="c"># drop one; it is not proposed again</span></pre></div>
+      <p>Drafts are capped at <code>warning</code> and must quote the doc verbatim.</p>
+    </section>
+
+    <section id="verify">
+      <h2>17 · Run only the tests your change needs (v1.46.0+)<a class="anchor" href="#verify">#</a></h2>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> verify --refresh-map        <span class="c"># once: build the impact map (each test under V8 coverage)</span>
+<span class="k">hunch</span> verify --list               <span class="c"># the selection, with a reason per test; runs nothing</span>
+<span class="k">hunch</span> verify                      <span class="c"># run the tests the working-tree change can affect</span>
+<span class="k">hunch</span> verify --staged             <span class="c"># …or only what is staged</span>
+<span class="k">hunch</span> verify --base origin/main   <span class="c"># …or a whole branch</span>
+<span class="k">hunch</span> verify --ci                 <span class="c"># CI keeps the whole suite</span></pre></div>
+      <p><b>Observe:</b> <code>--list</code> names each selected test and why. Doubt always means more tests: a change <code>hunch verify</code> can't trace runs the full suite.</p>
+      <p>In an agent task, record the run as evidence with <code>hunch task verify &lt;task-id&gt; -- hunch verify</code>. Its default budget is 8 minutes; change it with <code>--timeout &lt;seconds&gt;</code>.</p>
+    </section>
+
+    <section id="trace">
+      <h2>18 · Trace which memory led to a feature commit (v1.51.0+)<a class="anchor" href="#trace">#</a></h2>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log --for feature-x   <span class="c"># a branch: memory grouped by the feature commit it led to</span>
+<span class="k">hunch</span> log --for &lt;sha&gt;       <span class="c"># or one commit</span>
+<span class="k">hunch</span> log --json            <span class="c"># every move, with the code branch and head it was captured against</span></pre></div>
+      <p><b>Observe:</b> each feature commit is listed with the memory captured before it. Memory captured before the next code commit on the branch's first-parent line belongs to that commit, which survives a rebase. Anything the attribution cannot cover is listed in <code>notes</code>.</p>
+      <p>Separately, every public <code>.hunch/</code> memory commit carries <code>Hunch-Code-Branch</code> and <code>Hunch-Code-Head</code> trailers naming the code it was captured against.</p>
     </section>
 </main>
 

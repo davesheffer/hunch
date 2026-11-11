@@ -10,7 +10,6 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/brand.css" />
-<link rel="stylesheet" href="docs-upgrade.css" />
 <style>
   :root{
     --bg:#fbfcfb;
@@ -185,18 +184,20 @@
   footer{border-top:1px solid var(--line-soft);padding:30px 56px;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
   @media(max-width:920px){footer{padding:24px}}
 </style>
+<link rel="stylesheet" href="docs-upgrade.css" />
 <script>/* hide sections before first paint only when we'll animate them (no flash);
   the body script removes this if GSAP fails to load, so content is never stuck. */
 if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('gsap-on');</script>
 </head>
 <body>
+<a class="skip-link" href="#content">Skip to content</a>
 
 <header class="top">
   <div class="top-row">
     <div style="display:flex;align-items:center;gap:14px">
       <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation"><span></span></button>
       <a class="brand" href="/">
-        <span class="brand-mark" aria-hidden="true"></span> hunch <span class="tag">docs</span>
+        <span class="brand-mark" aria-hidden="true"></span> hunch <span class="tag">docs · v1.52</span>
       </a>
     </div>
     <nav class="top-links">
@@ -213,22 +214,24 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
 
 <div class="shell">
   <!-- ──────────────── SIDEBAR ──────────────── -->
-  <aside class="side" id="side">
+  <aside class="side" id="side" aria-label="Documentation sections">
     <div class="nav-group">
-      <h4>Getting started</h4>
+      <h4>Get started</h4>
       <a href="#overview">Overview</a>
+      <a href="#quick-start">Quick start</a>
       <a href="#install">Install</a>
       <a href="#initialize">Initialize a repo</a>
-      <a href="#update">Update Hunch</a>
       <a href="#first-query">Your first query</a>
+      <a href="#update">Update Hunch</a>
+      <a href="#uninstall">Remove Hunch</a>
     </div>
     <div class="nav-group">
-      <h4>Setup</h4>
+      <h4>Set up</h4>
       <a href="#synthesis">Synthesis &amp; billing</a>
       <a href="#mcp">MCP &amp; assistants</a>
       <a href="#reload">Reload your assistant</a>
       <a href="#private">Private memory</a>
-      <a href="#team">Shared team memory <span class="pill">v1.9</span></a>
+      <a href="#memory-home">One memory home <span class="pill">v1.51</span></a>
       <a href="#windows">Windows note</a>
     </div>
     <div class="nav-group">
@@ -237,21 +240,25 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <a href="#project-dna">Memory and Project DNA</a>
       <a href="#task-reports">See Hunch's contribution</a>
       <a href="#graph">The reasoning graph</a>
+      <a href="#languages">Supported languages</a>
       <a href="#provenance">Provenance &amp; confidence</a>
       <a href="#time-travel">Time-travel</a>
       <a href="#grounding">Decision-grounding</a>
       <a href="#wiki">The component wiki</a>
     </div>
     <div class="nav-group">
-      <h4>Using Hunch</h4>
-      <a href="#mcp-tools">MCP tools</a>
+      <h4>Everyday use</h4>
+      <a href="#ui">Memory UI <span class="pill">v1.52</span></a>
+      <a href="#memory-verbs">Edit memory from the CLI <span class="pill">v1.52</span></a>
       <a href="#slash">Slash commands</a>
       <a href="#firmness">Firmness levels</a>
-      <a href="#memory-loop">The memory loop <span class="pill">v1.8</span></a>
+      <a href="#memory-loop">The memory loop</a>
+      <a href="#verify">Run only the tests you need</a>
     </div>
     <div class="nav-group">
       <h4>Guards</h4>
       <a href="#never-twice">Never Twice</a>
+      <a href="#derive-rules">Rules from your docs <span class="pill">v1.49</span></a>
       <a href="#merge-verdict">Causal Merge Verdict</a>
       <a href="#veto">Decision Guard</a>
       <a href="#regression">Regression Guard</a>
@@ -260,22 +267,25 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
     </div>
     <div class="nav-group">
       <h4>Reference</h4>
+      <a href="#mcp-tools">MCP tools</a>
       <a href="#cli">CLI reference</a>
+      <a href="#env">Environment variables</a>
       <a href="#recipes">Common workflows</a>
       <a href="/cookbook">Cookbook ↗</a>
       <a href="#storage">Where it's stored</a>
     </div>
     <div class="nav-group">
-      <h4>Operations</h4>
+      <h4>Team &amp; ops</h4>
+      <a href="#team">Shared team memory</a>
       <a href="#doctor">Doctor &amp; troubleshooting</a>
       <a href="#maintenance">Maintenance</a>
       <a href="#release-integrity">Release integrity</a>
-      <a href="#develop">Develop &amp; contribute</a>
+      <a href="#develop">License &amp; contributing</a>
     </div>
   </aside>
 
   <!-- ──────────────── CONTENT ──────────────── -->
-  <main>
+  <main id="content" tabindex="-1">
     <section class="first" id="overview">
       <div class="eyebrow">Documentation</div>
       <h1 class="page">Hunch documentation</h1>
@@ -289,7 +299,39 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
         <a href="#shared-state"><span class="path-label">Several agents</span><strong>Share decisions and work →</strong><small>Serve authorized state across projects and tools.</small></a>
         <a href="#doctor"><span class="path-label">Something broke</span><strong>Diagnose the setup →</strong><small>Check assistants, providers, indexes, and overlays.</small></a>
       </nav>
-      <div class="note tip"><span class="ic">⚡</span><b>Fast path:</b> <code>npm i -g @davesheffer/hunch</code> → <code>cd your-repo &amp;&amp; hunch init</code> → reload your assistant and ask “why is X built this way?”. Use <code>hunch backfill --since 90d</code> when you want to seed an existing repo from history.</div>
+      <details class="whats-new" id="whats-new" data-version="1.52" open>
+        <summary><span class="pill new">New</span>What’s new in 1.52</summary>
+        <div class="wn-body">
+          <ul>
+            <li><a class="link" href="#ui"><code>hunch ui</code></a> — browse, search and edit memory in a local web UI.</li>
+            <li><a class="link" href="#ui-deliberate">Deliberate</a> — review cards for conflicts, stale links, duplicates and weak memory.</li>
+            <li><a class="link" href="#ui-grill">Grill me and the decision board</a> — an assistant challenges a record from checked evidence.</li>
+            <li><a class="link" href="#memory-verbs">Five memory verbs</a> — <code>hunch new</code>, <code>edit</code>, <code>link</code>, <code>remove</code> and <code>restore</code>.</li>
+            <li><a class="link" href="#languages">Elixir</a> — <code>.ex</code> and <code>.exs</code> files are indexed with symbol-level dependency edges.</li>
+          </ul>
+          <p class="wn-more">Also recent: <a class="link" href="#memory-home">one memory home</a> and <a class="link" href="#memory-trace"><code>hunch log --for</code></a> (1.51), <a class="link" href="#derive-rules"><code>hunch derive-rules</code></a> (1.49), <a class="link" href="#verify"><code>hunch verify</code></a> (1.46), <a class="link" href="#uninstall"><code>hunch uninstall</code></a> (1.44). <a class="link" href="/changelog">Full changelog</a></p>
+        </div>
+      </details>
+    </section>
+
+    <section id="quick-start">
+      <h2>Quick start<a class="anchor" href="#quick-start">#</a></h2>
+      <p>Three steps. You need <strong>Node 22.13+</strong> and a Git repository.</p>
+      <ol class="steps">
+        <li><h3 id="quick-install">Install</h3>
+          <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">npm</span> i -g @davesheffer/hunch</pre></div>
+        </li>
+        <li><h3 id="quick-init">Initialize your repo</h3>
+          <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">cd</span> your-repo
+<span class="k">hunch</span> init
+<span class="k">hunch</span> backfill --since 90d   <span class="c"># optional: draft memory from recent history</span></pre></div>
+        </li>
+        <li><h3 id="quick-ask">Ask why</h3>
+          <p>Reload your assistant and ask: <em>“Why is this built this way, and what should I preserve when changing it?”</em> Or ask from the terminal:</p>
+          <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> why src/auth/session.ts</pre></div>
+        </li>
+      </ol>
+      <p><strong>Next:</strong> <a class="link" href="#ui">browse memory in the browser</a>, <a class="link" href="#update">check your integration</a>, or press <kbd>/</kbd> to search these docs.</p>
     </section>
 
     <section id="install">
@@ -309,14 +351,17 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <h2>Initialize a repo<a class="anchor" href="#initialize">#</a></h2>
       <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=3dGR0y9NQdg" target="_blank" rel="noopener">Ep 1 · Memory in one command</a> (2:09) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>Run <code>hunch init</code> in the repo you want a memory for. One command scaffolds everything:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> init               <span class="c"># scaffold .hunch/, index, install hooks, wire up assistants</span>
-<span class="k">hunch</span> backfill --since 90d <span class="c"># cold start: seed decisions from recent git history</span></pre></div>
-      <p><code>hunch init</code> does the following, idempotently (re-running is safe and merges into existing files):</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> init                  <span class="c"># scaffold .hunch/, index, install hooks, wire up assistants</span>
+<span class="k">hunch</span> init --details        <span class="c"># print every setup step and the integration matrix</span>
+<span class="k">hunch</span> init --all-assistants <span class="c"># configure every supported assistant, found or not</span>
+<span class="k">hunch</span> backfill --since 90d  <span class="c"># cold start: seed decisions from recent git history</span></pre></div>
+      <p>Init prints a short summary and one next step. Warnings always print. It is idempotent: re-running is safe and merges into existing files.</p>
       <ul>
         <li>Scaffolds <code>.hunch/</code> and indexes the repo into a symbol/dependency graph.</li>
         <li>Installs a <strong>post-commit hook</strong> (the learning loop) and a <strong>pre-commit Constraint Guard</strong>.</li>
         <li>Writes <code>.mcp.json</code> + slash commands + an auto-maintained <code>CLAUDE.md</code>, and registers a git <strong>merge driver</strong> for the graph.</li>
-        <li>Wires up every detected assistant — Claude Code, Cursor, VS&nbsp;Code (Copilot), Windsurf, Codex, Antigravity — to the same <code>.hunch/</code> graph.</li>
+        <li>Configures the assistants it <strong>finds</strong>: a config already in the repository, a settings folder in your home directory, or the command on <code>PATH</code>. <code>AGENTS.md</code> and Claude Code are always written. If none is found, every assistant is configured.</li>
+        <li>Warns when the repository’s ignore rules exclude <code>.hunch/</code>, and names the rule and the fix. Ignored memory is never committed, shared or kept on a fresh clone.</li>
       </ul>
       <div class="note"><span class="ic">ℹ</span>Installed releases write portable MCP launchers pinned to an exact Hunch npm version. Each teammate still runs <code>init</code> for local hooks and setup. In Matrix mode it also validates <code>.hunch/team.json</code>, clones the dedicated memory repo into ignored local storage, and writes this machine’s ignored pointer. Source-checkout installs may use local executable paths.</div>
     </section>
@@ -330,6 +375,21 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">verify the connection</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> integrations check --harness codex --probe --require mcp
 <span class="k">hunch</span> integrations check --harness codex --require context</pre></div>
       <p>The first command checks a fresh MCP process. Run the second after trusted hooks have run in a new Codex session: it checks recorded host delivery on the expected Hunch version. Configuration, delivery, and the agent's use of memory are different evidence. Requiring <code>edit-blocking</code> additionally needs strict firmness and a delivered pre-edit event.</p>
+    </section>
+
+    <section id="uninstall">
+      <h2>Remove Hunch <span class="pill ok">v1.44</span><a class="anchor" href="#uninstall">#</a></h2>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> uninstall --dry-run   <span class="c"># show what would change</span>
+<span class="k">hunch</span> uninstall             <span class="c"># remove what Hunch installed; keep .hunch/ (your memory)</span>
+<span class="k">hunch</span> uninstall --purge     <span class="c"># also delete .hunch/, the derived cache and Hunch's .gitignore blocks</span></pre></div>
+      <p>It removes the instruction blocks, MCP entries, agent and git hooks, merge driver, slash commands and CI workflow that Hunch installed. Your own content in those files stays.</p>
+      <ul>
+        <li><strong>Fails closed.</strong> If a file it needs to edit can’t be parsed, it changes nothing and says which file.</li>
+        <li><strong>Opts the repo out.</strong> It writes <code>.hunch-removed</code>. While that file exists, no Hunch command sets Hunch up here again. Commit it so every clone stays opted out.</li>
+        <li><strong>To reinstall,</strong> delete <code>.hunch-removed</code> and run <code>hunch init</code>.</li>
+        <li><strong>Linked worktrees.</strong> Git hooks and merge drivers are shared by every worktree of a clone, so uninstall keeps them in a linked worktree and names the main checkout to run it from.</li>
+      </ul>
+      <div class="note"><span class="ic">ℹ</span>Close running <code>hunch mcp</code> and <code>hunch serve</code> processes first, so they can’t recreate files. Global Windsurf and Antigravity MCP entries are reported and left alone.</div>
     </section>
 
     <section id="first-query">
@@ -380,13 +440,14 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
           <tr><td>Claude Code</td><td><code>.mcp.json</code></td><td><code>CLAUDE.md</code> + <code>/hunch-*</code> commands</td></tr>
           <tr><td>Cursor</td><td><code>.cursor/mcp.json</code></td><td><code>.cursor/rules/hunch.mdc</code></td></tr>
           <tr><td>VS Code (Copilot)</td><td><code>.vscode/mcp.json</code></td><td><code>.github/copilot-instructions.md</code></td></tr>
-          <tr><td>Windsurf</td><td><code>.windsurf/mcp_config.json</code></td><td><code>.windsurf/rules/hunch.md</code></td></tr>
+          <tr><td>Windsurf / Devin Desktop</td><td><code>.windsurf/mcp_config.json</code></td><td><code>.windsurf/rules/hunch.md</code> + hooks in <code>.windsurf/hooks.json</code> and <code>.devin/hooks.json</code></td></tr>
           <tr><td>Codex</td><td><code>.codex/config.toml</code></td><td><code>AGENTS.md</code> + <code>.codex/hooks.json</code> (review with <code>/hooks</code>)</td></tr>
           <tr><td>Antigravity</td><td><code>.agents/mcp_config.json</code></td><td><code>AGENTS.md</code> + <code>.agents/hooks.json</code></td></tr>
         </tbody>
       </table>
       <p>The server runs over stdio and exposes memory tools under <code>hunch_*</code>. State tools under <code>nuryel_*</code> are exposed when enabled for the configuration or state root, not by default in every plain repository. Use <code>hunch mcp --root &lt;partition-dir&gt;</code> for a served partition. Other MCP clients can register a launcher manually; starting it is not a connectivity test:</p>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> mcp   <span class="c"># serves Hunch over stdio (this is what .mcp.json launches)</span></pre></div>
+      <p><strong>Fast connect.</strong> <code>hunch mcp</code> answers the handshake before its startup sync. The overlay pull and index rebuild run 5 s after the client connects, or before the first tool call if that comes first, so no call answers from memory the sync would have refreshed.</p>
       <div class="note tip"><span class="ic">★</span><b>Prefer <code>hunch init</code> over a global <code>claude mcp add</code>.</b> <code>.mcp.json</code> is registered by file path, so it’s robust and travels with the repo.</div>
     </section>
 
@@ -407,6 +468,31 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <p>Record sensitive items with <code>private: true</code> on <code>hunch_record_decision</code> / <code>hunch_record_correction</code>; they’re written to the overlay, never the committed repo. Post-commit synthesis routes its auto-captured decisions there too, so a private-memory repo’s auto-decisions never land in the public tree. <code>HUNCH_PRIVATE_DIR</code> overrides <code>local.json</code> per-shell (e.g. for portability); the git hook lives in <code>.git/hooks/</code> and is never committed.</p>
       <p><strong>Auto-commit is on by default.</strong> Captures attempt to commit to their actual memory home. A private/shared Git store can also be pushed; public memory in an application repository rides your next code-branch push. Managed grounding documents can be refreshed alongside memory. Failed or disabled synchronization can leave a record local, so inspect the saved durability result. Opt out with <code>--no-auto-commit</code> on <code>hunch init</code>, <code>private</code> or <code>shared</code>.</p>
       <div class="note"><span class="ic">ℹ</span><strong>Separate public outputs from private inspection.</strong> Generated public guidance and scaffolded CI comments use public-only memory. Local queries and reports can contain private records, so review an artifact before sharing it. Keep <code>HUNCH_PRIVATE_DIR</code> unset in public CI; the scaffolded guard also uses <code>--public-only</code>. Private rules still need the same human authority and enforcement conditions as public ones.</div>
+    </section>
+
+    <section id="memory-home">
+      <h2>One memory home per repository <span class="pill ok">v1.51</span><a class="anchor" href="#memory-home">#</a></h2>
+      <p>Hunch picks where memory lives from the <strong>repository’s identity</strong>, not from the checkout you are in. Worktrees, second clones and local-path clones of one repository all write overlay-homed records to the same private overlay.</p>
+      <ul>
+        <li><strong><code>repo_id</code>.</strong> A <code>repo_id</code> committed in <code>.hunch/config.json</code> gives clones with no network origin a stable identity.</li>
+        <li><strong>No silent fallback.</strong> When the home can’t be resolved, captures are refused with a message instead of landing in a local <code>.hunch/</code>.</li>
+        <li><strong>Doctor checks it.</strong> <code>hunch doctor</code> warns when the policy itself is not committed.</li>
+      </ul>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> memory-policy status                     <span class="c"># the effective policy and the overlay this checkout resolves</span>
+<span class="k">hunch</span> memory-policy check --base origin/main   <span class="c"># CI: fail when a branch adds a public record the policy homes in the overlay</span>
+<span class="k">hunch</span> memory-policy migrate --dry-run          <span class="c"># list public records that would move to the overlay</span></pre></div>
+      <h3 id="memory-trailers">Memory commits name the code they were captured against</h3>
+      <p>Every public <code>.hunch/</code> memory commit carries <code>Hunch-Code-Branch</code> and <code>Hunch-Code-Head</code> trailers. <code>hunch log --json</code> reports them per move. A revert of a Hunch commit counts as a memory commit, so it is never named as the code head.</p>
+      <h3 id="memory-trace">Trace memory to a feature commit</h3>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log --for feature-x          <span class="c"># memory grouped by the feature commit it led to, for a branch</span>
+<span class="k">hunch</span> log --for &lt;sha&gt;              <span class="c"># or for one commit</span>
+<span class="k">hunch</span> log --for feature-x --json   <span class="c"># the same, for tooling</span></pre></div>
+      <p>Memory captured before the next code commit on the branch’s first-parent line belongs to that commit, which survives a rebase. Merges are expanded where they brought new commits to the line. Every case the attribution cannot cover is listed in <code>notes</code>.</p>
+      <h3 id="default-branch">No automatic memory commits on the default branch</h3>
+      <p>On <code>main</code>/<code>master</code> (or the branch <code>origin/HEAD</code> names), captures and the post-commit <code>hunch sync</code> write to <code>.hunch/</code> but leave it uncommitted, with a one-line notice. A typed <code>--commit</code>, feature branches and state-contract writes are unchanged.</p>
+      <p>To opt back in, set <code>"autoCommitDefaultBranch": true</code> in <code>.hunch/local.json</code>, or <code>HUNCH_AUTO_COMMIT_DEFAULT_BRANCH=1</code>.</p>
+      <h3 id="linked-worktrees">Linked worktrees are grounded</h3>
+      <p>When a session runs in the main checkout and edits a file in a linked worktree, the edit hooks use that worktree’s memory. A worktree without <code>.hunch/</code> gets one “edit proceeds ungrounded” line. <code>hunch task verify</code> finds a task opened in the main checkout (or the reverse) and runs the check where you stand.</p>
     </section>
 
     <section id="windows">
@@ -462,6 +548,23 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <p>Durable memory is kept in readable files. Code and search indexes are derived data that Hunch can rebuild from the repository and its records.</p>
     </section>
 
+    <section id="languages">
+      <h2>Supported languages<a class="anchor" href="#languages">#</a></h2>
+      <p>The <strong>code map</strong> is parsed with tree-sitter, statically, with no LLM. <strong>Memory</strong> — decisions, bugs, rules — works for any language, because it reads commits and diffs.</p>
+      <table class="tbl">
+        <thead><tr><th>Language</th><th>Files</th><th>What resolves</th></tr></thead>
+        <tbody>
+          <tr><td><strong>TypeScript / JavaScript</strong></td><td><code>.ts</code> <code>.tsx</code> <code>.js</code> <code>.jsx</code> <code>.mts</code> <code>.cts</code> <code>.mjs</code> <code>.cjs</code></td><td>Imports and calls, including namespace imports (<code>ns.fn()</code>, <code>&lt;ns.Comp/&gt;</code>), CommonJS <code>require</code> and literal dynamic <code>import()</code>. A call is linked only when exactly one symbol in the bound module matches.</td></tr>
+          <tr><td><strong>Python</strong></td><td><code>.py</code> <code>.pyi</code></td><td>Module-attribute and aliased-import calls resolve through import bindings.</td></tr>
+          <tr><td><strong>Go</strong></td><td><code>.go</code></td><td>Package-qualified calls resolve through import bindings.</td></tr>
+          <tr><td><strong>PHP</strong></td><td><code>.php</code></td><td>Symbols and dependencies.</td></tr>
+          <tr><td><strong>Elixir</strong> <span class="pill new">v1.52</span></td><td><code>.ex</code> <code>.exs</code></td><td>Real <code>calls</code> and <code>references</code> edges between symbols, so blast radius, dependents and constraint checks work on Elixir repos.</td></tr>
+          <tr><td><strong>Helm, Kustomize, YAML</strong></td><td><code>.yml</code> <code>.yaml</code> <code>.tpl</code></td><td><code>references</code> edges: a Helm helper lists the templates that include it.</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><span class="ic">ℹ</span><b>Elixir limits.</b> The analysis uses no <code>mix xref</code>, and an ambiguous reference produces no edge. Rare layouts can still mis-resolve or resolve nothing: an <code>alias</code> written between two clauses of one function, <code>__MODULE__.Sub.fun()</code> calls, and <code>Mod.fun/1</code> arity globs.</div>
+    </section>
+
     <section id="provenance">
       <h2>Provenance &amp; confidence<a class="anchor" href="#provenance">#</a></h2>
       <p>Records carry provenance and confidence so you can distinguish an agent's observation from human-confirmed intent. A source label does not independently prove the statement. Captured memory starts as advisory context; blocking needs human authority and a supported enforcement path. <code>hunch escalations</code> surfaces conflicts and decisions that still need human review.</p>
@@ -506,36 +609,112 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <p>With a <a class="link" href="#private">private overlay</a>, the public wiki is built from the committed store only — a private record can never reach a committed page, by construction. <code>--private</code> writes the full-graph wiki into the overlay repo instead; nothing lands here.</p>
     </section>
 
+    <section id="ui">
+      <h2>Memory UI — <code>hunch ui</code> <span class="pill new">v1.52</span><a class="anchor" href="#ui">#</a></h2>
+      <p>A local web UI for your repository’s memory. It serves on loopback with a keyed link and opens your browser.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> ui              <span class="c"># serve on 127.0.0.1 and open the browser</span>
+<span class="k">hunch</span> ui --no-open    <span class="c"># print the link without opening a browser</span>
+<span class="k">hunch</span> ui --port &lt;n&gt;   <span class="c"># choose the port (default: any free port)</span></pre></div>
+      <p>In the UI you can:</p>
+      <ul>
+        <li><strong>Browse and search</strong> records.</li>
+        <li><strong>Edit, link, remove and restore</strong> them, and <strong>add</strong> new memory.</li>
+        <li><strong>Confirm memory as yours</strong>, with Undo.</li>
+        <li>See the <strong>history</strong> of changes.</li>
+      </ul>
+      <div class="note"><span class="ic">ℹ</span><b>How it stays safe.</b> The server binds <code>127.0.0.1</code> and makes a new access key on every launch. The key rides in the link’s <code>#fragment</code>, which browsers never send to a server. The UI never edits <code>.hunch/</code> directly: every write goes through a <a class="link" href="#memory-verbs">CLI verb</a>. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop it.</div>
+      <h3 id="ui-deliberate">Deliberate — what deserves a person’s judgment</h3>
+      <p>Deliberate proposes review cards for <strong>conflicts</strong>, <strong>stale links</strong>, <strong>duplicates</strong> and <strong>weak memory</strong>, ranked by how many components a change could reach. Open findings, unlinked memory and unconfirmed memory sit on the same page as tabs.</p>
+      <p>It runs no assistant. Only a person’s click changes memory. Deliberate reopens the card you left.</p>
+      <h3 id="ui-grill">Grill me, the decision board, and Think this through</h3>
+      <ul>
+        <li><strong>Grill me on this</strong> asks one question at a time, up to five, then suggests keep, fix wording, remove or replace.</li>
+        <li><strong>The decision board</strong> explains a decision with what it rejected.</li>
+        <li><strong>Think this through</strong>, the button on a memory, asks a thought-through question and shows exactly what would be sent before anything is spent.</li>
+      </ul>
+      <p>These use an assistant, under fixed limits:</p>
+      <ul>
+        <li>Only a <strong>subscription assistant</strong>, with its <strong>tools off</strong>.</li>
+        <li>Code is read from git blobs at HEAD.</li>
+        <li><strong>Secret-looking files and credential lines are withheld</strong> and named on screen.</li>
+        <li>A reply is dropped if it cites evidence that was not sent.</li>
+        <li><strong>Only a person’s click writes memory.</strong></li>
+      </ul>
+    </section>
+
+    <section id="memory-verbs">
+      <h2>Edit memory from the CLI <span class="pill new">v1.52</span><a class="anchor" href="#memory-verbs">#</a></h2>
+      <p>Five verbs change one record by id. They are what <a class="link" href="#ui"><code>hunch ui</code></a> runs. Each change is auto-committed as one memory move, and <code>--json</code> prints the result.</p>
+      <table class="tbl">
+        <thead><tr><th>Verb</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>new &lt;kind&gt;</code></td><td>Add a <code>decision</code>, <code>constraint</code> or <code>finding</code> by hand. Never overwrites an existing or unreadable record. It lands unconfirmed.</td></tr>
+          <tr><td><code>edit &lt;id&gt;</code></td><td>Change a record’s text: <code>--title</code>, <code>--text</code>, <code>--context</code> (decisions), <code>--rationale</code> (constraints).</td></tr>
+          <tr><td><code>link &lt;id&gt;</code></td><td>Link a record to files, components or a feature (topic): <code>--add-file</code>, <code>--remove-file</code>, <code>--add-component</code>, <code>--feature</code>.</td></tr>
+          <tr><td><code>remove &lt;id&gt;</code></td><td>Retire a record without deleting it. A bug can’t be removed. <code>--superseded-by &lt;dec_id&gt;</code> closes a replacement the newer decision already claims.</td></tr>
+          <tr><td><code>restore &lt;id&gt;</code></td><td>Undo <code>remove</code>. <code>--clear-superseded-by</code> also forgets who replaced a decision.</td></tr>
+        </tbody>
+      </table>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> new decision --title "Sessions stay server-side" --text "Keep sessions on the server" --feature auth.session
+<span class="k">hunch</span> edit &lt;id&gt; --text "Keep sessions on the server; no client tokens"
+<span class="k">hunch</span> link &lt;id&gt; --add-file src/auth/session.ts
+<span class="k">hunch</span> remove &lt;id&gt; --reason "replaced"        <span class="c"># retire, never delete</span>
+<span class="k">hunch</span> remove &lt;id&gt; --superseded-by &lt;dec_id&gt;   <span class="c"># the newer decision already claims it</span>
+<span class="k">hunch</span> restore &lt;id&gt; --clear-superseded-by     <span class="c"># undo that</span>
+<span class="k">hunch</span> review --confirm &lt;id&gt;                  <span class="c"># sign a record as yours</span></pre></div>
+      <p>A record added with <code>hunch new</code> is unconfirmed until you sign it with <code>hunch review --confirm &lt;id&gt;</code>. A new constraint is <code>advisory</code> or <code>warning</code>; blocking is granted on confirm.</p>
+    </section>
+
     <section id="mcp-tools">
       <h2>MCP tools<a class="anchor" href="#mcp-tools">#</a></h2>
       <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=8n71JIqmnwk" target="_blank" rel="noopener">Ep 4 · Stop re-explaining your code</a> (2:21) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
-      <p>The tools your assistant calls under the hood. Read tools answer “why / what-must-not-break / blast radius”; write tools persist new memory.</p>
+      <p>The tools your assistant calls. Read tools answer “why”, “what must not break” and “what does this reach”. Write tools persist new memory.</p>
+      <h3 id="mcp-core">Everyday tools</h3>
+      <p>Every Hunch MCP server registers these 27.</p>
       <table class="tbl">
         <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td><code>hunch_query</code></td><td>Full-text + graph search across all records, ranked with provenance.</td></tr>
-          <tr><td><code>hunch_why</code></td><td>Decisions, bugs &amp; constraints behind a file/symbol (accepts <code>as_of</code>).</td></tr>
-          <tr><td><code>hunch_check_constraints</code></td><td>Invariants whose scope matches a path/glob — call before editing.</td></tr>
-          <tr><td><code>hunch_get_dependents</code></td><td>Transitive dependents of a symbol — the blast radius.</td></tr>
-          <tr><td><code>hunch_blast_radius</code></td><td>Dependent files + near-violations a change could break indirectly.</td></tr>
-          <tr><td><code>hunch_structure</code></td><td>The indexed shape of the repo / a dir / a file / a symbol — orient from the graph instead of grep rounds; tells the agent exactly which file to read.</td></tr>
-          <tr><td><code>hunch_pr_impact</code></td><td>The impact surface of a change (working tree / staged / branch / commit): dependent files reached, invariants direct &amp; near, decisions concerned. Advisory — the gate stays <code>hunch_merge_verdict</code>.</td></tr>
-          <tr><td><code>hunch_path</code></td><td>Shortest dependency chain between two symbols/files/components, either direction — "how does A reach B?".</td></tr>
-          <tr><td><code>hunch_bug_lineage</code></td><td>Bugs matching a symptom/symbol with their introduced→fixed→recurred lineage.</td></tr>
-          <tr><td><code>hunch_context</code></td><td>The minimal relevant slice for a task — invariants, why, bug history, blast radius.</td></tr>
+          <tr><td><code>hunch_task</code></td><td>Start or finish a task’s contribution report. Pass the returned <code>task_id</code> to <code>hunch_context</code>.</td></tr>
+          <tr><td><code>hunch_context</code></td><td>The minimal relevant slice for a task — invariants, why, bug history, blast radius. Call it first (accepts <code>as_of</code>).</td></tr>
+          <tr><td><code>hunch_structure</code></td><td>The indexed shape of the repo, a directory, a file or a symbol — orient from the graph instead of grep rounds.</td></tr>
+          <tr><td><code>hunch_workspaces</code></td><td>Worktrees and branches across machines.</td></tr>
+          <tr><td><code>hunch_runbook</code></td><td>The proven steps for a recurring task.</td></tr>
+          <tr><td><code>hunch_now</code></td><td>Recent activity and the roadmap.</td></tr>
+          <tr><td><code>hunch_escalations</code></td><td>The decisions a human must make now — asked inline, not queued.</td></tr>
+          <tr><td><code>hunch_why</code></td><td>Decisions, bugs and constraints behind a file, symbol or record id, including what was rejected (accepts <code>as_of</code>).</td></tr>
+          <tr><td><code>hunch_current_decision</code></td><td>The single in-force decision for a <b>topic</b>, with what it rejected.</td></tr>
           <tr><td><code>hunch_timeline</code></td><td>A target’s decision history over time, with valid-time windows.</td></tr>
-          <tr><td><code>hunch_merge_verdict</code></td><td>A cited <b>BLOCK / WARN / PASS</b> over a working-tree, staged, branch, or commit diff (see <a class="link" href="#merge-verdict">below</a>).</td></tr>
-          <tr><td><code>hunch_record_decision</code></td><td>Write-back: persist a new Decision (ADR) with provenance. Gated by <b>topic</b> — refuses a second live decision for a topic that already has one (never silently two); accepts an optional <code>capture_token</code>.</td></tr>
-          <tr><td><code>hunch_capture_decision</code></td><td>Start a capture session — returns a one-question-at-a-time grilling protocol plus a <code>capture_token</code> to hand back to <code>hunch_record_decision</code>.</td></tr>
-          <tr><td><code>hunch_current_decision</code></td><td>The single in-force decision for a <b>topic</b> — the drift-detection anchor (with what it rejected).</td></tr>
-          <tr><td><code>hunch_record_correction</code></td><td>Save a scoped correction. Unconfirmed agent captures remain advisory; blocking needs human confirmation and strict enforcement (see <a class="link" href="#never-twice">Never Twice</a>).</td></tr>
-          <tr><td><code>hunch_record_finding</code></td><td>Write-back: persist an <b>observation with no code change</b> (an audit that found a gap, a measurement, an incident) — anchored to a date + evidence, it grounds future edits to the affected files.</td></tr>
-          <tr><td><code>hunch_findings</code></td><td>The open-observations ledger: live findings (open / accepted-risk / scheduled) for a file, glob, or symbol — inherit past audits instead of re-discovering them.</td></tr>
-          <tr><td><code>hunch_runbook</code></td><td>The proven steps for a recurring task (e.g. “add an MCP tool”) — kind-scoped retrieval over runbooks.</td></tr>
-          <tr><td><code>hunch_compare</code></td><td>Rank N candidate branches/commits by architectural fit (fewest invariant hits) — the “evaluate 5 solutions” check.</td></tr>
-          <tr><td><code>hunch_conformance</code></td><td>Does the code still <b>satisfy</b> recorded intent? (e.g. <code>pay</code> still reaches <code>verifySession</code>) — deterministic, over the graph.</td></tr>
+          <tr><td><code>hunch_bug_lineage</code></td><td>Bugs matching a symptom or symbol, with their introduced → fixed → recurred lineage.</td></tr>
+          <tr><td><code>hunch_compare</code></td><td>Rank candidate branches or commits by architectural fit.</td></tr>
+          <tr><td><code>hunch_query</code></td><td>Full-text + graph search across all records, ranked with provenance.</td></tr>
+          <tr><td><code>hunch_path</code></td><td>Shortest dependency chain between two symbols, files or components.</td></tr>
+          <tr><td><code>hunch_check_constraints</code></td><td>Invariants whose scope matches a path or glob — call before editing.</td></tr>
+          <tr><td><code>hunch_get_dependents</code></td><td>Transitive dependents of a symbol — the blast radius.</td></tr>
+          <tr><td><code>hunch_blast_radius</code></td><td>Dependent files plus near-violations a change could break indirectly.</td></tr>
+          <tr><td><code>hunch_findings</code></td><td>Open findings for a file, glob or symbol.</td></tr>
+          <tr><td><code>hunch_conformance</code></td><td>Does the code still <b>satisfy</b> recorded intent? Deterministic, over the graph.</td></tr>
+          <tr><td><code>hunch_pr_impact</code></td><td>The dependency and memory surface of a change. Advisory — the gate is <code>hunch_merge_verdict</code>.</td></tr>
+          <tr><td><code>hunch_merge_verdict</code></td><td>A cited <b>BLOCK / WARN / PASS</b> over a working-tree, staged, branch or commit diff (see <a class="link" href="#merge-verdict">Causal Merge Verdict</a>).</td></tr>
+          <tr><td><code>hunch_capture_decision</code></td><td>Start a capture session: a one-question-at-a-time interview plus a <code>capture_token</code>.</td></tr>
+          <tr><td><code>hunch_record_decision</code></td><td>Persist a decision. Refuses a second live decision on a topic, and refuses to change a human-confirmed decision unless the human confirms it.</td></tr>
+          <tr><td><code>hunch_record_correction</code></td><td>Save a human correction as a scoped rule (see <a class="link" href="#never-twice">Never Twice</a>). <code>supersedes: [con_*]</code> retires the rule it reverses.</td></tr>
+          <tr><td><code>hunch_record_finding</code></td><td>Persist an observation with no code change, anchored to a date and evidence.</td></tr>
+          <tr><td><code>hunch_review_imported_adr</code></td><td>Apply the human’s exact answer to an imported-ADR question.</td></tr>
+          <tr><td><code>hunch_report</code></td><td>Inspect the evidence for Hunch’s contribution to a task.</td></tr>
         </tbody>
       </table>
+      <h3 id="mcp-groups">Specialist groups</h3>
+      <p>Specialist tools are hidden until they are needed, so a host doesn’t pay for their schemas on every session. A hidden tool is not registered at all.</p>
+      <table class="tbl">
+        <thead><tr><th>Group</th><th>On when</th><th>Tools</th></tr></thead>
+        <tbody>
+          <tr><td><code>policy</code></td><td>The repo holds a policy.</td><td><code>hunch_policy_candidates</code> <code>hunch_policy_plan</code> <code>hunch_policy_card</code> <code>hunch_policy_shadow</code> <code>hunch_policy_proof</code> <code>hunch_policy_evaluate</code> <code>hunch_policy_upgrade_correction</code> — Constitution policy review. Only a human activates a policy.</td></tr>
+          <tr><td><code>nuryel</code></td><td>The root stores state records, or the server is pinned with <code>hunch mcp --root &lt;dir&gt;</code>.</td><td><code>nuryel_capabilities</code> <code>nuryel_read</code> <code>nuryel_write</code> <code>nuryel_capture</code> <code>nuryel_capture_batch</code> <code>nuryel_subscribe</code> <code>nuryel_records</code> — the <a class="link" href="#shared-state">state contract</a>.</td></tr>
+          <tr><td><code>analysis</code></td><td>Opt-in only.</td><td><code>hunch_project_dna</code> <code>hunch_project_dna_delta</code> <code>hunch_project_match</code> <code>hunch_change_proof</code> <code>hunch_change_identity</code> <code>hunch_shortlist</code> <code>hunch_evidence_map</code> <code>hunch_wiki_status</code> — research, audit and sealed-proof tools.</td></tr>
+          <tr><td><code>constitution-experiments</code></td><td>Opt-in only.</td><td><code>hunch_constitution_g2_readiness</code> <code>hunch_constitution_g3_readiness</code> <code>hunch_constitution_g2_shadow_queue</code> <code>hunch_constitution_g2_operational_drill</code> <code>hunch_constitution_g2_candidates</code> <code>hunch_constitution_g2_behavior_candidates</code> <code>hunch_constitution_g2_behavior_replay</code> <code>hunch_constitution_g2_behavior_materialization</code> <code>hunch_constitution_g2_behavior_policy_materialize</code> — experiment track; the CLI remains the primary surface.</td></tr>
+        </tbody>
+      </table>
+      <p>Choose groups with <code>HUNCH_MCP_TOOLS</code> or the <code>mcp_tools</code> key in <code>.hunch/config.json</code>: <code>all</code>, <code>core</code>, or extra groups on top of core such as <code>core,nuryel</code>. The server’s startup log names what is hidden.</p>
     </section>
 
     <section id="slash">
@@ -575,8 +754,9 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
       <h2>The memory loop — it runs itself<a class="anchor" href="#memory-loop">#</a></h2>
       <div class="note tip watch"><span class="ic">▶</span><b>Watch:</b> <a class="link" href="https://www.youtube.com/watch?v=76bllCiJrk8" target="_blank" rel="noopener">Ep 3 · Commits become memory</a> (2:53) · <a class="link" href="https://www.youtube.com/playlist?list=PLIXqtdE0LcNI" target="_blank" rel="noopener">full series</a></div>
       <p>Captured memory becomes available as <em>advisory</em> context without routine manual triage. Genuine conflicts and authority decisions can still need review. Blocking power requires human confirmation. Configured hooks and synchronization handle much of the loop; task reports show what was observed:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log              <span class="c"># the memory timeline: capture · adopt · supersede · prune · repair</span>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> log              <span class="c"># the memory timeline: capture · adopt · supersede · prune · repair · edit</span>
 <span class="k">hunch</span> log --diff &lt;sha&gt;  <span class="c"># what one move changed</span>
+<span class="k">hunch</span> log --for &lt;branch&gt; <span class="c"># which memory led to which feature commit</span>
 <span class="k">hunch</span> revert-move &lt;sha&gt; <span class="c"># undo one move (local git revert, never pushed)</span>
 <span class="k">hunch</span> escalations       <span class="c"># the decisions only YOU can make — normally empty</span>
 <span class="k">hunch</span> repair --apply    <span class="c"># heal bindings after a rename (sync does this automatically)</span>
@@ -587,11 +767,37 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElem
           <tr><td><b>Auto-trust</b></td><td>a capture is live advisory memory instantly; migrate an old draft backlog once with <code>hunch adopt-drafts</code></td></tr>
           <tr><td><b>Self-repair</b></td><td>renames heal every exact file binding — decision files, tripwire &amp; constraint scopes, policy selectors — from git’s own rename detection; each repair is a revertable timeline move</td></tr>
           <tr><td><b>Inline escalations</b></td><td>only what the graph can’t settle itself asks you: a topic conflict, a candidate rule, a proposed rule with its proof, a repaired rule needing a fresh proof — each a question with its resolution verb</td></tr>
-          <tr><td><b>Local-first</b></td><td>memory auto-commits locally and rides your next push; <code>hunch push</code> (or the panel’s Approve-to-push) is the explicit outward step</td></tr>
+          <tr><td><b>Local-first</b></td><td>memory auto-commits locally and rides your next push; <code>hunch push</code> (or the panel’s Approve-to-push) is the explicit outward step. On the default branch, memory is written but <a class="link" href="#default-branch">left uncommitted</a></td></tr>
+          <tr><td><b>Failing-test recall</b></td><td>when a Bash or PowerShell run fails and its output contains failing tests, the hook says which past bug matches, at failure time</td></tr>
+          <tr><td><b>Review memory</b></td><td>automatic review memory reads the whole PR conversation — conversation comments and review bodies, not only inline review comments</td></tr>
+          <tr><td><b>Timely escalations</b></td><td>the prompt hook asks only the escalations the prompt touches, once per session; <code>hunch escalations</code> lists the rest</td></tr>
         </tbody>
       </table>
       <p>In VS Code, the <b>Hunch Memory</b> panel is the same spine as a source-control view: the timeline with click-to-diff and one-click local revert, a <b>⚖ Needs your decision</b> group that exists only while something real needs you, and a <b>🏛 Constitution</b> group where activate / demote / withdraw / retire are each one audited click.</p>
       <div class="note"><span class="ic">ℹ</span>The rule of the loop: <em>advisory is automatic; blocking is always one explicit human act</em> — and a rule whose bindings were auto-repaired asks once for a fresh proof before it can block again.</div>
+    </section>
+
+    <section id="verify">
+      <h2>Run only the tests a change needs <span class="pill ok">v1.46</span><a class="anchor" href="#verify">#</a></h2>
+      <p><code>hunch verify</code> selects the tests that import a changed file, or that the impact map shows ran it. <strong>Doubt always means more tests:</strong> a change it can’t trace runs the full suite.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> verify                      <span class="c"># tests the working-tree change can affect</span>
+<span class="k">hunch</span> verify --staged             <span class="c"># select from staged changes only</span>
+<span class="k">hunch</span> verify --base origin/main   <span class="c"># select from a branch range plus the working tree</span>
+<span class="k">hunch</span> verify --list               <span class="c"># print the selection with reasons; run nothing</span>
+<span class="k">hunch</span> verify --refresh-map        <span class="c"># rebuild the impact map (each test under V8 coverage)</span>
+<span class="k">hunch</span> verify --full               <span class="c"># run the whole suite; --ci does the same in CI</span></pre></div>
+      <p>The impact map is a derived cache at <code>.hunch-cache/test-impact.json</code>. Without one, selection uses the import graph.</p>
+      <h3 id="verify-vs-task-verify"><code>hunch verify</code> or <code>hunch task verify</code>?</h3>
+      <table class="tbl">
+        <thead><tr><th>Command</th><th>Use it to</th></tr></thead>
+        <tbody>
+          <tr><td><code>hunch verify</code></td><td><strong>Choose and run tests</strong> for the current change.</td></tr>
+          <tr><td><code>hunch task verify &lt;id&gt; -- &lt;command&gt;</code></td><td><strong>Record a check for a task report.</strong> It runs the command you name and keeps its result and hash, never raw output.</td></tr>
+        </tbody>
+      </table>
+      <p><code>hunch task verify</code> stops a check after <strong>8 minutes</strong> by default — under the agent host’s 10-minute shell cap, so a long check fails fast instead of being backgrounded. Change it with <code>--timeout &lt;seconds&gt;</code>.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> task verify &lt;task-id&gt; -- hunch verify                   <span class="c"># record the selected tests as this task's check</span>
+<span class="k">hunch</span> task verify &lt;task-id&gt; --timeout &lt;seconds&gt; -- npm test   <span class="c"># a longer or shorter budget</span></pre></div>
     </section>
 
     <section id="never-twice">
@@ -604,6 +810,35 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 <span class="d">→</span> con_… recorded as advisory testimony without a capture token.
   Confirm the rule through the supported human review flow before relying on a deny.</pre></div>
       <p>The <code>UserPromptSubmit</code> hook nudges the agent to persist a rule whenever your prompt reads like a correction. Scoping is conservative by default (the file you were in); a repo-wide rule is only <em>blocking</em> when you pass <code>applies_to_all</code>, so one correction can’t silently gate the whole tree.</p>
+      <h3 id="correction-supersedes">Reverse a rule without leaving the old one live</h3>
+      <p>When a correction reverses an earlier rule, pass <code>supersedes: [con_*]</code> (up to 16). Each target is marked retired with a <code>valid_to</code> in the same memory home. Nothing is deleted, and the edit hook stops serving the reversed rule next to its replacement. The response also lists up to 8 other active rules on exactly the same scope.</p>
+      <p>An agent write never replaces a constraint a human confirmed.</p>
+    </section>
+
+    <section id="derive-rules">
+      <h2>Rules from your docs — <code>hunch derive-rules</code> <span class="pill ok">v1.49</span><a class="anchor" href="#derive-rules">#</a></h2>
+      <p>Mark a rule in any markdown doc and the sentence that follows becomes a constraint. <strong>The doc is the rule’s source; the graph stays the authority.</strong></p>
+      <div class="code" data-lang="markdown"><div class="code-head"><span class="lbl">CONTRIBUTING.md</span><button class="copy">Copy</button></div><pre><span class="c">&lt;!-- hunch:rule scope=src/api/** severity=warning --&gt;</span>
+Handlers never read the database directly; go through the repository layer.</pre></div>
+      <p>The marker is <code>&lt;!-- hunch:rule scope=&lt;glob&gt; [severity=…] [type=…] [id=…] --&gt;</code>.</p>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> derive-rules                    <span class="c"># import marked rules from every tracked .md file</span>
+<span class="k">hunch</span> derive-rules --dry-run          <span class="c"># report what would change; write nothing</span>
+<span class="k">hunch</span> derive-rules --check            <span class="c"># CI: exit 1 when docs and graph disagree</span>
+<span class="k">hunch</span> derive-rules --accept-changes   <span class="c"># also apply rules that were edited or renamed</span></pre></div>
+      <p>Nothing is guessed:</p>
+      <ul>
+        <li>Markers in code blocks or example ranges are <strong>ignored</strong>.</li>
+        <li>An unclosed fence or a bad attribute is <strong>reported</strong>.</li>
+        <li>An edited or renamed rule is <strong>held</strong> until <code>--accept-changes</code>.</li>
+        <li>A removed marker leaves its constraint reported as <strong>orphaned</strong>, never auto-retired.</li>
+        <li>An id collision is reported as a <strong>conflict</strong>.</li>
+      </ul>
+      <h3 id="derive-rules-propose">Draft rules from unmarked prose</h3>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> derive-rules --propose CONTRIBUTING.md       <span class="c"># draft rules with your selected subscription CLI</span>
+<span class="k">hunch</span> derive-rules --proposals                     <span class="c"># list the local review queue</span>
+<span class="k">hunch</span> derive-rules --accept &lt;id&gt; --expect &lt;hash&gt;   <span class="c"># accept one draft as an active constraint</span>
+<span class="k">hunch</span> derive-rules --drop &lt;id&gt;                     <span class="c"># drop one; it is not proposed again</span></pre></div>
+      <p>Drafts are queued for review and never applied on their own. They are capped at <code>warning</code> and must quote the doc verbatim.</p>
     </section>
 
     <section id="merge-verdict">
@@ -649,51 +884,184 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
 
     <section id="cli">
       <h2>CLI reference<a class="anchor" href="#cli">#</a></h2>
-      <p>Run <code>hunch &lt;command&gt; --help</code> for full flags. The everyday commands:</p>
-      <table class="tbl">
+      <p>Commands grouped by what you are doing. Run <code>hunch &lt;command&gt; --help</code> for every flag, or press <kbd>/</kbd> and type a command name.</p>
+      <h3 id="cli-setup">Set up</h3>
+      <table class="tbl" data-cli>
         <thead><tr><th>Command</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td><code>init</code></td><td>Scaffold <code>.hunch/</code>, index, install hooks, wire up assistants.</td></tr>
-          <tr><td><code>update [--global] [--dry-run]</code></td><td>Install the latest Hunch release and repair every configured harness pin in the current repository.</td></tr>
-          <tr><td><code>index</code></td><td>Parse the repo into a symbol/dependency graph (deterministic, no LLM).</td></tr>
-          <tr><td><code>backfill</code></td><td>Replay git history to seed decisions (cold-start fix). <code>--since 90d</code></td></tr>
-          <tr><td><code>sync</code></td><td>Capture a decision from a commit (run by the post-commit hook).</td></tr>
-          <tr><td><code>query</code></td><td>Full-text + graph search. Add <code>--semantic</code> for embeddings recall.</td></tr>
-          <tr><td><code>why</code></td><td>Explain why a file/symbol is the way it is. <code>--as-of &lt;ref&gt;</code></td></tr>
-          <tr><td><code>timeline</code></td><td>The decision history for a file/symbol over time.</td></tr>
-          <tr><td><code>context</code></td><td>Assemble the minimal relevant Hunch slice for a task.</td></tr>
-          <tr><td><code>fragile</code></td><td>Ranked fragility report with evidence.</td></tr>
-          <tr><td><code>check</code></td><td>Flag changes that touch a do-not-break invariant (local + CI guard); also flags (advisory) symbols you add that already exist elsewhere.</td></tr>
-          <tr><td><code>status</code></td><td>Enforcement readiness at a glance — what's enforcing, what's waiting for confirmation, what went stale.</td></tr>
-          <tr><td><code>veto</code></td><td>Decision Guard — flag changes that reverse a rejected alternative.</td></tr>
-          <tr><td><code>structure</code></td><td>Repo map / dir contents / file outline / symbol definition — from the graph, no grep. <code>hunch structure src/auth</code></td></tr>
-          <tr><td><code>impact</code></td><td>The impact surface of a change — dependents reached, invariants, decisions concerned. <code>hunch impact origin/main</code>, <code>--commit &lt;sha&gt;</code>, or staged by default. Advisory.</td></tr>
-          <tr><td><code>path</code></td><td>Shortest dependency chain between two points: <code>hunch path chargeUser verifySession</code>.</td></tr>
-          <tr><td><code>drift</code></td><td>Flag doc≠graph drift — a file anchored to a <em>superseded</em> decision (<code>anchor-stale</code>), a markdown pin to a superseded/missing decision (<a class="link" href="#grounding">topic anchors</a>), a live finding whose anchor evaporated (<code>finding-stale</code>), plus topic collisions. Deterministic; exits non-zero for CI.</td></tr>
-          <tr><td><code>findings</code></td><td>The open-observations ledger — audited gaps/debt with no fix landed yet, anchored to a date + evidence instead of a commit. <code>hunch findings src/procs/**</code>, <code>--all</code> for history.</td></tr>
-          <tr><td><code>reconcile-topics</code></td><td>Scan for &gt;1 live decision per <b>topic</b> (an invariant a git merge can violate) and exit non-zero. Wire into a post-merge hook / CI.</td></tr>
-          <tr><td><code>heal</code></td><td>Read-only doc↔graph reconciliation — report where prose and the graph disagree; never rewrites docs silently.</td></tr>
-          <tr><td><code>wiki</code></td><td>Generate the <a class="link" href="#wiki">component wiki + specs ledger</a> from the graph. <code>--check</code> CI gate, <code>--heal</code> regenerates only stale pages, <code>--private</code> renders the full graph into the overlay repo.</td></tr>
+          <tr><td><code>init</code></td><td>Scaffold <code>.hunch/</code>, index, install hooks, wire up the assistants it finds. <code>--details</code>, <code>--all-assistants</code>, <code>--firmness &lt;level&gt;</code>, <code>--no-auto-commit</code>.</td></tr>
+          <tr><td><code>update</code></td><td>Install the latest release and repair every configured harness pin in this repository. <code>--global</code>, <code>--dry-run</code>.</td></tr>
+          <tr><td><code>uninstall</code></td><td><a class="link" href="#uninstall">Remove what Hunch installed</a> and opt the repository out. <code>--dry-run</code>, <code>--purge</code>.</td></tr>
+          <tr><td><code>integrations</code></td><td><code>integrations check</code> reports harness coverage (<code>--harness</code>, <code>--probe</code>, <code>--require</code>); <code>integrations repair-pins</code> repairs stale pins.</td></tr>
+          <tr><td><code>provider</code></td><td>Show or set the local synthesis provider. Never changes team config.</td></tr>
+          <tr><td><code>firmness</code></td><td>Get or set <a class="link" href="#firmness">how firmly</a> the agent hooks enforce Hunch.</td></tr>
+          <tr><td><code>mcp</code></td><td>Start the MCP server over stdio. <code>--root &lt;dir&gt;</code> serves one partition.</td></tr>
           <tr><td><code>ci</code></td><td>Scaffold the CI Constraint Guard (GitHub Action).</td></tr>
+          <tr><td><code>doctor</code></td><td>Diagnose the environment: git, synthesis provider, index freshness, memory home, ignore rules.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-ask">Ask</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>ui</code></td><td>Open the <a class="link" href="#ui">local web UI</a> for this repository’s memory. <code>--port &lt;n&gt;</code>, <code>--no-open</code>.</td></tr>
+          <tr><td><code>why</code></td><td>Explain why a file, symbol or record id is the way it is. <code>--as-of &lt;ref&gt;</code>.</td></tr>
+          <tr><td><code>query</code></td><td>Full-text + graph search. <code>--semantic</code> adds embeddings recall.</td></tr>
+          <tr><td><code>context</code></td><td>Assemble the minimal relevant slice for a task.</td></tr>
+          <tr><td><code>timeline</code></td><td>The decision history for a file or symbol.</td></tr>
+          <tr><td><code>structure</code></td><td>Repo map, directory contents, file outline or symbol definition, from the graph.</td></tr>
+          <tr><td><code>path</code></td><td>Shortest dependency chain between two points: <code>hunch path chargeUser verifySession</code>.</td></tr>
+          <tr><td><code>now</code></td><td>Recent decisions and the roadmap: every live proposed decision.</td></tr>
+          <tr><td><code>findings</code></td><td>Live findings — observed gaps with no fix landed yet. <code>--all</code> for history.</td></tr>
+          <tr><td><code>fragile</code></td><td>Ranked fragility report with evidence.</td></tr>
+          <tr><td><code>runbook</code></td><td>Capture a runbook from a commit range, or <code>--find &lt;query&gt;</code> to look one up.</td></tr>
+          <tr><td><code>dna</code></td><td>Project DNA: <code>dna inspect</code>, <code>dna context</code>, <code>dna diff &lt;older-ref&gt; &lt;newer-ref&gt;</code>.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-check">Check a change</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>check</code></td><td>Flag changes that touch a do-not-break invariant, and (advisory) symbols you add that already exist. <code>--staged</code>, <code>--working</code>, <code>--base &lt;ref&gt;</code>, <code>--commit &lt;sha&gt;</code>, <code>--strict</code>, <code>--blast</code>, <code>--public-only</code>.</td></tr>
+          <tr><td><code>verify</code></td><td><a class="link" href="#verify">Run only the tests</a> the change can affect. <code>--staged</code>, <code>--base &lt;ref&gt;</code>, <code>--list</code>, <code>--refresh-map</code>, <code>--full</code>, <code>--ci</code>.</td></tr>
+          <tr><td><code>veto</code></td><td>Decision Guard — flag changes that reverse a rejected alternative.</td></tr>
+          <tr><td><code>conform</code></td><td>Prove the code still satisfies recorded intent over the graph. <code>--strict</code> to fail.</td></tr>
+          <tr><td><code>impact</code></td><td>The impact surface of a change: dependents reached, invariants, decisions concerned. Advisory.</td></tr>
+          <tr><td><code>compare</code></td><td>Rank candidate branches or commits by architectural fit.</td></tr>
+          <tr><td><code>drift</code></td><td>Detect doc≠graph and memory drift. Deterministic; exits non-zero for CI.</td></tr>
+          <tr><td><code>reconcile-topics</code></td><td>Find topics with more than one live decision and exit non-zero.</td></tr>
+          <tr><td><code>status</code></td><td>Enforcement readiness: what’s enforcing, what’s waiting for confirmation, what went stale.</td></tr>
+          <tr><td><code>prove</code></td><td>Derive a sealed proof for one exact committed change.</td></tr>
+          <tr><td><code>eval</code></td><td>Score retrieval over a golden set. <code>--guards</code> scores enforcement; <code>--grounding</code> replays each case through the prompt hook’s selection and reports precision and recall.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-record">Record and edit memory</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>new</code></td><td><a class="link" href="#memory-verbs">Add</a> a decision, constraint or finding by hand.</td></tr>
+          <tr><td><code>edit</code></td><td>Edit one record’s text by id.</td></tr>
+          <tr><td><code>link</code></td><td>Link a record to files, components or a feature (topic).</td></tr>
+          <tr><td><code>remove</code></td><td>Retire a record without deleting it. <code>--superseded-by &lt;dec_id&gt;</code>.</td></tr>
+          <tr><td><code>restore</code></td><td>Undo <code>remove</code>. <code>--clear-superseded-by</code>.</td></tr>
+          <tr><td><code>review</code></td><td>Triage drafts and answer imported-ADR questions. <code>--confirm &lt;id&gt;</code>, <code>--accept &lt;id&gt;</code>, <code>--reject &lt;id&gt;</code>, <code>--accept-verified</code>.</td></tr>
           <tr><td><code>record-constraint</code></td><td>Record an invariant the codebase must not break.</td></tr>
-          <tr><td><code>record-bug</code></td><td>Capture a Bug from a failing test (symptom + suspects).</td></tr>
-          <tr><td><code>test</code></td><td>Run tests; capture failures as Bugs, promote recurrences to Constraints.</td></tr>
+          <tr><td><code>retire-constraint</code></td><td>Retire an active constraint: close its valid-time window.</td></tr>
+          <tr><td><code>record-bug</code></td><td>Capture a bug from a failing test (symptom + suspects).</td></tr>
           <tr><td><code>supersede</code></td><td>Mark one decision as replaced by another (invalidate, don’t delete).</td></tr>
-          <tr><td><code>stale</code></td><td>List decisions/constraints whose files changed after last verified (drift).</td></tr>
-          <tr><td><code>review</code></td><td>Triage low-confidence drafts: list, accept, or reject.</td></tr>
-          <tr><td><code>firmness</code></td><td>Get or set how firmly the agent hook enforces Hunch.</td></tr>
-          <tr><td><code>embed</code></td><td>Generate local embeddings for semantic search (opt-in).</td></tr>
-          <tr><td><code>compact</code></td><td>Prune low-value auto-captured records.</td></tr>
+          <tr><td><code>derive-rules</code></td><td><a class="link" href="#derive-rules">Derive constraints</a> from <code>hunch:rule</code> markers in markdown. <code>--check</code>, <code>--accept-changes</code>, <code>--propose</code>.</td></tr>
+          <tr><td><code>capture-comments</code></td><td>Lift inline <code>hunch-why:</code> / <code>hunch-rule:</code> comments into the graph.</td></tr>
+          <tr><td><code>test</code></td><td>Run tests; capture failures as bugs and mark passing tests’ bugs fixed.</td></tr>
+          <tr><td><code>import-adr</code></td><td>Import an existing MADR/Nygard ADR corpus into the decision graph. No LLM.</td></tr>
+          <tr><td><code>export-adr</code></td><td>Project the public decision graph as a regenerated MADR corpus.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-loop">The memory loop</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>index</code></td><td>Parse the repo into a symbol/dependency graph (deterministic, no LLM).</td></tr>
+          <tr><td><code>backfill</code></td><td>Replay git history to seed decisions. <code>--since 90d</code>.</td></tr>
+          <tr><td><code>sync</code></td><td>Capture a decision from a commit (run by the post-commit hook). <code>--deep</code>, <code>--verify</code>.</td></tr>
+          <tr><td><code>log</code></td><td>The memory-move timeline. <code>--diff &lt;sha&gt;</code>, <code>--for &lt;commit|branch&gt;</code>, <code>--json</code>.</td></tr>
+          <tr><td><code>revert-move</code></td><td>Undo one memory move (local only, never pushed).</td></tr>
+          <tr><td><code>escalations</code></td><td>The decisions a human must make now.</td></tr>
+          <tr><td><code>repair</code></td><td>Heal memory bindings after a rename. Dry-run unless <code>--apply</code>.</td></tr>
+          <tr><td><code>repair-provenance</code></td><td>Detect a decision whose commit was orphaned by a squash-merge and propose the match.</td></tr>
+          <tr><td><code>push</code></td><td>The explicit outward step: push the current branch to its remote.</td></tr>
+          <tr><td><code>adopt-drafts</code></td><td>Adopt a legacy draft backlog as advisory memory, once.</td></tr>
+          <tr><td><code>review-memory</code></td><td>Turn sourced PR review threads into scoped review rules.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-tasks">Tasks and reports</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>task</code></td><td>The task lifecycle: <code>task start</code>, <code>task verify</code>, <code>task finish</code>, <code>task list</code>.</td></tr>
+          <tr><td><code>report</code></td><td>Inspect what memory reached a task and which checks ran. <code>--html</code>.</td></tr>
+          <tr><td><code>stats</code></td><td>Accumulated memory, caught violations and payback.</td></tr>
+          <tr><td><code>served</code></td><td>Which memory records actually reached an agent, how often, and which never have.</td></tr>
+          <tr><td><code>footprint</code></td><td>Measure how much text Hunch injects into an agent’s context.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-docs">Docs</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>heal</code></td><td>Every drift finding with its next action. Never rewrites prose silently.</td></tr>
+          <tr><td><code>wiki</code></td><td>Generate the <a class="link" href="#wiki">component wiki + specs ledger</a>. <code>--check</code>, <code>--heal</code>, <code>--private</code>.</td></tr>
+          <tr><td><code>grounding</code></td><td>Check the committed grounding docs against what the public graph generates.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-team">Team, worktrees and state</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>private</code></td><td>Enable a <a class="link" href="#private">private memory overlay</a>. <code>--repo &lt;url&gt;</code>, <code>--migrate</code>.</td></tr>
+          <tr><td><code>shared</code></td><td>Enable a <a class="link" href="#team">shared memory repo</a>. <code>--repo &lt;url&gt;</code>, <code>--trust</code>, <code>--sync</code>.</td></tr>
+          <tr><td><code>memory-policy</code></td><td>The committed <a class="link" href="#memory-home">memory home policy</a>: <code>memory-policy status</code>, <code>memory-policy check</code>, <code>memory-policy migrate</code>.</td></tr>
+          <tr><td><code>worktree</code></td><td>Create a git worktree already wired into Hunch. <code>-b &lt;name&gt;</code> for a new branch.</td></tr>
+          <tr><td><code>workspaces</code></td><td>This repository’s worktrees and branches across machines.</td></tr>
+          <tr><td><code>branches</code></td><td>Every local branch with a deterministic merged verdict. Read-only.</td></tr>
+          <tr><td><code>serve</code></td><td>The self-hosted <a class="link" href="#shared-state">state server</a>. <code>serve init</code> creates a partition config.</td></tr>
+          <tr><td><code>state</code></td><td>Read and write a served workspace using the state contract; JSON output.</td></tr>
+          <tr><td><code>policy</code></td><td>Constitution policy review. Only a human activates a policy.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="cli-maintenance">Maintenance and internals</h3>
+      <table class="tbl" data-cli>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>stale</code></td><td>List decisions and constraints whose files changed after they were last verified.</td></tr>
+          <tr><td><code>compact</code></td><td>Preview low-value auto-captured records eligible for compaction. It deletes nothing.</td></tr>
           <tr><td><code>migrate</code></td><td>Upgrade <code>.hunch/</code> records to the current schema version.</td></tr>
-          <tr><td><code>mcp</code></td><td>Start the MCP server over stdio.</td></tr>
-          <tr><td><code>doctor</code></td><td>Diagnose the environment (git, synthesis provider, index freshness) + flag memory drift (dead refs, dangling supersedes, stale “proposed” docs).</td></tr>
-          <tr><td><code>conform</code></td><td>Intent-conformance — prove the code still satisfies each decision’s recorded intent over the graph. <code>--strict</code> to fail.</td></tr>
-          <tr><td><code>compare</code></td><td>Rank candidate branches/commits by architectural fit. <code>hunch compare feat-a feat-b --base main</code></td></tr>
-          <tr><td><code>runbook</code></td><td>Distill a reusable runbook from a commit range, or <code>--find &lt;query&gt;</code> to look one up.</td></tr>
-          <tr><td><code>eval</code></td><td>Score retrieval quality (Recall@k, MRR) over a golden set; A/B the graph stream. <code>--kind runbooks</code></td></tr>
-          <tr><td><code>capture-comments</code></td><td>Lift inline <code>hunch-why:</code> / <code>hunch-rule:</code> comments into the graph (decisions + constraints).</td></tr>
-          <tr><td><code>hook</code></td><td>The agent pre-edit hook handler (installed by <code>init</code>; reads the event JSON on stdin) — injects relevant memory before an edit, and at <a class="link" href="#firmness">strict firmness</a> denies edits that hit a blocking invariant. Never blocks on its own failure.</td></tr>
-          <tr><td><code>merge-driver</code></td><td>(internal) git merge driver for <code>.hunch/</code> JSON — resolves concurrent edits by record id, no conflict markers. Wired by <code>init</code>.</td></tr>
+          <tr><td><code>embed</code></td><td>Generate local embeddings for semantic search (opt-in).</td></tr>
+          <tr><td><code>hook</code></td><td>The agent hook handler installed by <code>init</code>; reads the event JSON on stdin. Never blocks on its own failure.</td></tr>
+          <tr><td><code>merge-driver</code></td><td>(internal) git merge driver for <code>.hunch/</code> JSON — resolves concurrent edits by record id.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="env">
+      <h2>Environment variables<a class="anchor" href="#env">#</a></h2>
+      <p>All optional. Unset, Hunch uses its defaults.</p>
+      <h3 id="env-synthesis">Synthesis</h3>
+      <table class="tbl">
+        <thead><tr><th>Variable</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>HUNCH_SYNTH_PROVIDER</code></td><td>One-shell provider override, for example <code>claude-cli</code> or <code>openai-compat</code>. <code>auto</code> disables the local choice.</td></tr>
+          <tr><td><code>HUNCH_SYNTH_BASE_URL</code></td><td>Base URL of an OpenAI-compatible endpoint.</td></tr>
+          <tr><td><code>HUNCH_SYNTH_MODEL</code></td><td>Model name for that endpoint.</td></tr>
+          <tr><td><code>HUNCH_SYNTH_API_KEY</code></td><td>Optional key. Omit for keyless local servers.</td></tr>
+          <tr><td><code>HUNCH_SYNTH_TIMEOUT_MS</code></td><td>Request timeout. Default 5 minutes.</td></tr>
+          <tr><td><code>HUNCH_SYNTH_MAX_TOKENS</code></td><td>Optional output cap.</td></tr>
+          <tr><td><code>HUNCH_SYNTH_ALLOW_METERED</code></td><td><code>1</code> allows a public remote endpoint. A deliberate billing and trust opt-in.</td></tr>
+          <tr><td><code>HUNCH_CLI_CONFIG</code></td><td>CLI adapter config. A missing or malformed file falls back to deterministic synthesis, and <code>hunch doctor</code> prints why. <code>HUNCH_REVIEW_CLI_CONFIG</code> is the review-memory equivalent.</td></tr>
+          <tr><td><code>HUNCH_PR_CONTEXT</code></td><td><code>0</code> stops commit synthesis from fetching the merged PR’s description with your <code>gh</code> CLI.</td></tr>
+          <tr><td><code>HUNCH_SIG_MIN_LINES</code></td><td>Changed-line threshold below which a commit with no structural change and no explanatory body isn’t sent to a model. Falls back to 12 when it isn’t positive.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="env-memory">Memory, hooks and retrieval</h3>
+      <table class="tbl">
+        <thead><tr><th>Variable</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>HUNCH_PRIVATE_DIR</code></td><td>Path to the private overlay. Overrides <code>.hunch/local.json</code> per shell. Keep it unset in public CI.</td></tr>
+          <tr><td><code>HUNCH_AUTO_COMMIT_DEFAULT_BRANCH</code></td><td><code>1</code> restores automatic memory commits on the <a class="link" href="#default-branch">default branch</a>.</td></tr>
+          <tr><td><code>HUNCH_TASK_SELECTION</code></td><td><code>0</code> restores the previous, broader prompt-hook delivery instead of task-scored selection.</td></tr>
+          <tr><td><code>HUNCH_SIBLING_WARM</code></td><td><code>0</code> turns off the background worker that computes sibling-fix lessons for the pre-edit hook.</td></tr>
+          <tr><td><code>HUNCH_DEAD_PRIOR_SHIFT</code></td><td>Extra ranking shift that sinks superseded, retired and rejected records in retrieval. Default 2; <code>0</code> restores the old behaviour.</td></tr>
+          <tr><td><code>HUNCH_PIPELINE</code></td><td><code>0</code> is the kill switch for the verification pipeline hooks.</td></tr>
+          <tr><td><code>HUNCH_COMMIT_GIT_TIMEOUT_MS</code></td><td>Longest one git call inside a memory flush may take. Default 60 s.</td></tr>
+          <tr><td><code>HUNCH_MCP_TOOLS</code></td><td>Which <a class="link" href="#mcp-groups">MCP tool groups</a> a server exposes: <code>all</code>, <code>core</code>, or a comma-separated list.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="env-other">State client and update check</h3>
+      <table class="tbl">
+        <thead><tr><th>Variable</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>HUNCH_STATE_URL</code></td><td>Server base URL for <code>hunch state</code>. Default <code>http://127.0.0.1:7474</code>.</td></tr>
+          <tr><td><code>HUNCH_STATE_TOKEN</code></td><td>Agent token for <code>hunch state</code>. Tokens are not accepted as command arguments.</td></tr>
+          <tr><td><code>HUNCH_NO_UPDATE_CHECK</code></td><td><code>1</code> disables the cached update notice. <code>NO_UPDATE_NOTIFIER=1</code> does the same.</td></tr>
         </tbody>
       </table>
     </section>
@@ -727,7 +1095,14 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
       <h3>Curate the draft queue</h3>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> review                        <span class="c"># segmented: ready-to-confirm vs needs-scrutiny</span>
 <span class="k">hunch</span> review --accept-verified      <span class="c"># batch-accept the well-grounded ones</span>
-<span class="k">hunch</span> compact                       <span class="c"># prune rejected / superseded / stale low-value drafts</span></pre></div>
+<span class="k">hunch</span> compact                       <span class="c"># preview low-value drafts eligible for compaction</span></pre></div>
+
+      <h3>Review memory in the browser</h3>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> ui   <span class="c"># browse, search, edit; Deliberate lists what needs your judgment</span></pre></div>
+
+      <h3>Run only the tests your change needs</h3>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> verify --list   <span class="c"># see the selection and the reason for each test</span>
+<span class="k">hunch</span> verify          <span class="c"># run it</span></pre></div>
 
       <h3>Check a change before you merge</h3>
       <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> check --staged --strict       <span class="c"># does this break a do-not-break rule?</span>
@@ -762,6 +1137,17 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     <section id="storage">
       <h2>Where it’s stored<a class="anchor" href="#storage">#</a></h2>
       <p>The source of truth is plain, readable JSON in a Git repository you control: under <code>.hunch/</code> in the code repo by default, or in a dedicated private memory repo in Matrix mode. The code repo then carries only the credential-free <code>.hunch/team.json</code>; local paths and the derived SQLite search index stay ignored and can be rebuilt at any time.</p>
+      <table class="tbl">
+        <thead><tr><th>Path</th><th>What it holds</th><th>Committed?</th></tr></thead>
+        <tbody>
+          <tr><td><code>.hunch/</code></td><td>Memory records as JSON.</td><td>Yes (public memory)</td></tr>
+          <tr><td><code>.hunch/config.json</code></td><td>Shared config: the memory home policy and the <code>repo_id</code>.</td><td>Yes</td></tr>
+          <tr><td><code>.hunch/team.json</code></td><td>Credential-free pointer to the shared memory repo.</td><td>Yes</td></tr>
+          <tr><td><code>.hunch/local.json</code></td><td>This machine’s overlay path and preferences.</td><td>No (gitignored)</td></tr>
+          <tr><td><code>.hunch-cache/test-impact.json</code></td><td>The <a class="link" href="#verify">test impact map</a>, a derived cache.</td><td>No</td></tr>
+          <tr><td><code>.hunch-removed</code></td><td>The <a class="link" href="#uninstall">opt-out marker</a> written by <code>hunch uninstall</code>.</td><td>Yes, to keep every clone opted out</td></tr>
+        </tbody>
+      </table>
     </section>
 
     <section id="doctor">
@@ -775,6 +1161,10 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
           <tr><td>Synthesis is <code>deterministic</code></td><td>Log into Claude Code, Codex, or Cursor. If more than one is available, choose with <code>hunch provider &lt;name&gt;</code>.</td></tr>
           <tr><td>Graph looks stale</td><td><code>hunch index</code> to rebuild the symbol graph from current source.</td></tr>
           <tr><td>Schema mismatch after upgrade</td><td><code>hunch migrate</code> to upgrade <code>.hunch/</code> records.</td></tr>
+          <tr><td>A capture is refused: the memory home can’t be resolved</td><td>Run <code>hunch memory-policy status</code>, then commit the policy and <code>repo_id</code> in <code>.hunch/config.json</code>. See <a class="link" href="#memory-home">One memory home</a>.</td></tr>
+          <tr><td>Captured records never reach teammates</td><td>The ignore rules may exclude <code>.hunch/</code>. <code>hunch doctor</code> names the rule and the fix.</td></tr>
+          <tr><td>Memory is written but not committed on <code>main</code></td><td>Expected: see <a class="link" href="#default-branch">the default branch</a>.</td></tr>
+          <tr><td>Synthesis fell back after setting a CLI config</td><td>A missing or malformed <code>HUNCH_CLI_CONFIG</code> uses the deterministic provider. <code>hunch doctor</code> prints why.</td></tr>
           <tr><td>Advertised team memory is unavailable</td><td>Check Git access and <code>.hunch/team.json</code>, then run <code>hunch shared --repo &lt;the-same-url&gt;</code>. Hunch refuses to fall back to another graph.</td></tr>
         </tbody>
       </table>
@@ -804,7 +1194,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     <section id="maintenance">
       <h2>Maintenance<a class="anchor" href="#maintenance">#</a></h2>
       <p>Two housekeeping commands keep the graph healthy over time:</p>
-      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> compact   <span class="c"># prune rejected/superseded/stale low-value drafts</span>
+      <div class="code" data-lang="bash"><div class="code-head"><span class="lbl">terminal</span><button class="copy">Copy</button></div><pre><span class="k">hunch</span> compact   <span class="c"># preview low-value auto-captured records eligible for compaction</span>
 <span class="k">hunch</span> stale     <span class="c"># list records whose files changed after they were last verified</span></pre></div>
       <p>Routine captures are available as advisory memory, and <code>hunch escalations</code> asks you inline about the few things the graph can't settle itself. Migrating an older repo? One <code>hunch adopt-drafts</code> clears a legacy queue, and <code>hunch log</code> shows every memory move — each one revertable.</p>
     </section>
@@ -818,8 +1208,16 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     </section>
 
     <section id="develop">
-      <h2>Develop &amp; contribute<a class="anchor" href="#develop">#</a></h2>
-      <p>Hunch is source-available under the <strong>Functional Source License (FSL-1.1-ALv2)</strong>; each release becomes Apache-2.0 two years after it ships. Contributions are welcome — see <a class="link" href="https://github.com/davesheffer/hunch/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a> and the <a class="link" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">repo</a> to get started.</p>
+      <h2>License &amp; contributing<a class="anchor" href="#develop">#</a></h2>
+      <p>Hunch is source-available under the <strong>Functional Source License (FSL-1.1-ALv2)</strong>.</p>
+      <ul>
+        <li><strong>You can</strong> use, modify and run Hunch for your own work, internal or commercial.</li>
+        <li><strong>You can’t</strong> offer it to others in a commercial product or service that competes with Hunch.</li>
+        <li><strong>Each release converts to Apache-2.0</strong> two years after it ships.</li>
+        <li>Releases before the change keep the license they shipped with: Apache-2.0 from v0.15.2, MIT before that. <code>clients/python</code> stays Apache-2.0 and <code>vscode-extension</code> stays MIT.</li>
+      </ul>
+      <p>See <a class="link" href="https://github.com/davesheffer/hunch/blob/main/LICENSE" target="_blank" rel="noopener">LICENSE</a> and <code>NOTICE</code> for the exact terms.</p>
+      <p>Contributions are welcome and need a signed Contributor Assignment Agreement (<code>CLA.md</code>), checked on every pull request. Start with <a class="link" href="https://github.com/davesheffer/hunch/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a> and the <a class="link" href="https://github.com/davesheffer/hunch" target="_blank" rel="noopener">repo</a>.</p>
     </section>
   </main>
 
@@ -865,14 +1263,26 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     const h2 = s.querySelector("h2"); if (!h2 || !tocList) return;
     const a = document.createElement("a");
     a.href = "#" + s.id;
-    a.textContent = h2.textContent.replace(/#$/, "").replace(/\s+(v0\.\d+|default)$/i, "").trim();
+    a.textContent = h2.textContent.replace(/#$/, "").replace(/\s+(v\d+\.\d+|default)$/i, "").trim();
     a.dataset.id = s.id;
     tocList.appendChild(a);
   });
   const sideLinks = [...document.querySelectorAll("aside.side a")];
   const tocLinks = [...document.querySelectorAll("#tocList a")];
+  const sideEl = document.getElementById("side");
   const setActive = (id) => {
-    sideLinks.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#" + id));
+    sideLinks.forEach((a) => {
+      const on = a.getAttribute("href") === "#" + id;
+      a.classList.toggle("active", on);
+      if (!on) { a.removeAttribute("aria-current"); return; }
+      a.setAttribute("aria-current", "location");
+      // keep "you are here" visible inside the long sidebar (desktop only; mobile is a drawer)
+      if (sideEl && matchMedia("(min-width: 921px)").matches) {
+        const r = a.getBoundingClientRect(), s = sideEl.getBoundingClientRect();
+        if (r.top < s.top + 40 || r.bottom > s.bottom - 40) sideEl.scrollTop += r.top - s.top - s.height / 2;
+      }
+    });
+    document.querySelectorAll("aside.side .nav-group").forEach((g) => g.classList.toggle("current", !!g.querySelector("a.active")));
     tocLinks.forEach((a) => a.classList.toggle("active", a.dataset.id === id));
   };
   const obs = new IntersectionObserver((entries) => {
@@ -1009,7 +1419,7 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     {q:"Will it slow me down?", kw:["slow","slow me down","performance","speed","overhead","lag","fast","daemon","background process","eating cpu","cpu","always running","indexing","in the background","hold up"], a:`Initial indexing and optional synthesis take work; later indexing can reuse unchanged files. Retrieval and checks have budgets, but large graphs, providers and network synchronization affect latency. Measure the setup you use rather than assuming a fixed overhead. → <a href="#doctor">Troubleshooting</a>`},
     {q:"Do I have to do anything, or is it automatic?", kw:["do i have to","do i need","need to do","anything","automatic","manual","effort","maintain","by hand","works for me","hands off"], a:`Setup installs supported hooks and guidance. They can capture and deliver memory during normal work, but the host must load and trust them. Record important decisions and inspect reports; human confirmation is required for blocking authority. → <a href="#initialize">Getting started</a>`},
     {q:"Does it work on Windows / Mac / Linux?", kw:["windows","mac","macos","linux","operating system","cross platform","wsl","m1","m2","m3","arm","apple silicon","intel mac","silicon"], a:`Yes — Windows, macOS and Linux. Paths and setup are handled per-OS automatically; there's one small Windows tip for Claude Code. → <a href="#windows">Windows note</a>`},
-    {q:"What languages does it support?", kw:["language","languages","python","typescript","javascript","java","golang","rust","support code","ruby","understand","understands","code structure","understand my code","php","laravel","kotlin","swift","scala","perl","go lang","yaml","helm"], a:`The code-structure part understands TypeScript, JavaScript, Python, Go, PHP, YAML, and chart-scoped Helm templates today (a language registry makes each new language one entry). The "why" part — decisions, bugs, rules — works for <b>any</b> language, since it reads your commits and diffs. → <a href="#graph">The graph</a>`},
+    {q:"What languages does it support?", kw:["language","languages","python","typescript","javascript","java","golang","rust","support code","ruby","understand","understands","code structure","understand my code","php","laravel","kotlin","swift","scala","perl","go lang","yaml","helm","elixir","phoenix"], a:`The code-structure part understands TypeScript, JavaScript, Python, Go, PHP, Elixir, YAML, and chart-scoped Helm templates today. The "why" part — decisions, bugs, rules — works for <b>any</b> language, since it reads your commits and diffs. → <a href="#languages">Supported languages</a>`},
     {q:"Does it work offline?", kw:["offline","no internet","without internet","disconnected","airplane","no network","network access","need internet","everything local","air gapped","without network","local only"], a:`Local indexing, retrieval and deterministic checks can run offline once dependencies are installed. Git synchronization, npm downloads and remote synthesis need their services. Select the deterministic fallback when you want local drafting. → <a href="#synthesis">Synthesis</a>`},
     {q:"How is it different from Copilot or Cursor memory?", kw:["different","different from","different from copilot","different from cursor","copilot memory","cursor memory","versus","compare","competitor","better than","vs","wiki","adr","adrs","just a wiki","documentation","confluence","notion","cody","sourcegraph","just comments","commit messages","readme","replace"], a:`Those search your code at edit time. Hunch captures the <b>why</b> at commit/PR/bug time and curates it into a lasting graph — a teammate who remembers the history, not just a fast reader of the current code. → <a href="#overview">Overview</a>`},
     {q:"Can it generate documentation?", kw:["generate docs","generate documentation","wiki","component wiki","specs","spec","stale docs","docs go stale","outdated docs","doc rot","adopt","ledger","auto docs","keep docs updated","maintain docs"], a:`Yes — <code>hunch wiki</code> renders a component wiki straight from the graph, and a <b>specs ledger</b> grades every markdown doc in your repo (grounded / stale / unverified). Stale docs get a wiki-managed, graph-healed copy; your originals are never rewritten. Staleness is drift-gated, not scheduled. → <a href="#wiki">The component wiki</a>`},
@@ -1017,9 +1427,9 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     {q:"Is it open source?", kw:["open source","license","apache","mit","source code","free software","github repo"], a:`It's source-available under the Functional Source License (FSL-1.1-ALv2): read every line on GitHub, and use, modify and run it for your own work, internal or commercial. You can't make it available to others in a commercial product or service that competes with Hunch. Each release becomes Apache-2.0 two years after it ships. → <a href="#develop">Develop & contribute</a>`},
     {q:"Just tell me how to start in a minute.", kw:["quick start","quickstart","one minute","fastest","tldr","just start","get going","steps","60 second"], a:`Install with <code>npm i -g @davesheffer/hunch</code>, run <code>hunch init</code> in your repository and reload your assistant. If <code>hunch</code> is not found, use <code>npx -y @davesheffer/hunch@latest init</code>. In Codex, review and trust the hook commands with <code>/hooks</code>. Then ask a question and check the reported integration coverage. → <a href="#install">Install</a>`},
     {q:"What's semantic search?", kw:["semantic","embedding","embeddings","meaning search","smart search","search by meaning"], a:`An optional add-on that lets you search by <b>meaning</b>, not just keywords — so "how do we handle logins" finds the right notes even if they say "authentication." Off by default. → <a href="#storage">Storage</a>`},
-    {q:"Does it need maintenance?", kw:["maintenance","prune","cleanup","clean up","compact","too big","tidy","grow","getting huge","dir is huge","trim","getting big","shrink"], a:`Barely. <code>hunch compact</code> tidies low-value drafts when you want, and stale notes are flagged automatically. → <a href="#maintenance">Maintenance</a>`},
+    {q:"Does it need maintenance?", kw:["maintenance","prune","cleanup","clean up","compact","too big","tidy","grow","getting huge","dir is huge","trim","getting big","shrink"], a:`Barely. <code>hunch compact</code> previews low-value drafts, and stale notes are flagged automatically. → <a href="#maintenance">Maintenance</a>`},
     {q:"How can I contribute or report a problem?", kw:["contribute","contributing","report","issue","bug report","help out","feedback","suggest"], a:`The code is on GitHub — open an issue or PR there. See the contributing guide. → <a href="#develop">Develop & contribute</a>`},
-    {q:"How do I remove it?", kw:["remove","uninstall","delete hunch","get rid","stop using","disable hunch","uninstal","unistall","remove it","wipe hunch"], a:`Remove Hunch-owned assistant configuration and Git hook entries while preserving unrelated entries, then uninstall the package. Keep or back up the memory store if you want its history; removing an integration does not require deleting shared or private records. → <a href="#storage">Storage</a>`},
+    {q:"How do I remove it?", kw:["remove","uninstall","delete hunch","get rid","stop using","disable hunch","uninstal","unistall","remove it","wipe hunch"], a:`Run <code>hunch uninstall</code> in the repository (<code>--dry-run</code> shows the plan first). It removes what Hunch installed, leaves your own content alone and keeps <code>.hunch/</code>, your memory, unless you pass <code>--purge</code>. It writes <code>.hunch-removed</code> so Hunch is not set up there again. → <a href="#uninstall">Remove Hunch</a>`},
     {q:"What can I do with the CLI?", kw:["cli","command","commands","terminal","what commands"], a:`Lots — <code>init</code>, <code>query</code>, <code>why</code>, <code>check</code>, <code>backfill</code>, <code>private</code>, <code>doctor</code> and more. The full list is in the reference. → <a href="#cli">CLI reference</a>`},
     {q:"What are symbols, components and edges?", kw:["symbol","symbols","component","components","edge","edges","building blocks","functions and files","code map","nodes","function","functions","class","classes","methods","know my code","calls what","what code calls","what calls what","how does hunch know","knows what calls"], a:`Those are the building blocks of the code map Hunch keeps: <b>symbols</b> are your functions and classes, <b>components</b> are modules (roughly, folders), and <b>edges</b> are the connections between them (who calls or imports whom). Hunch uses this map to trace what a change might affect. → <a href="#graph">The reasoning graph</a>`},
     {q:"What will my change affect? (blast radius)", kw:["blast radius","affect","ripple","dependents","impact","what breaks","depends on","knock on","downstream","what does this touch"], a:`Hunch can show a change's <b>blast radius</b> — everything that depends on the file you're touching, directly or several hops away — so you and the AI see what might break <i>before</i> editing. → <a href="#graph">The reasoning graph</a>`},
@@ -1039,16 +1449,16 @@ Agent: hunch_record_correction({ rule: "never import lodash; use src/utils",
     {q:"What if a note is wrong, stale, or a false positive?", kw:["wrong","false positive","false positives","false alarm","stale","out of date","outdated","override","dismiss","get past","disagree","intentional","on purpose","nagging","delete a constraint","remove a rule","contradict","contradicts","hallucinated","inaccurate","just wrong","bad advice","edit a note","edit a decision","change a note","fix a note"], a:`You stay in control. Every note carries a <b>confidence</b> — low-confidence auto-guesses stay advisory and never block. Anything wrong you can edit or supersede (the old version stays in history, never lost). Only <b>human-confirmed</b>, high-confidence rules can block, and even those you can dismiss, override, or soften by lowering the firmness level. Stale notes get flagged automatically. → <a href="#provenance">Provenance &amp; confidence</a>`},
     {q:"Is there vendor lock-in? Can I take my memory with me?", kw:["lock in","lock-in","lockin","vendor lock","export","take my memory","take it with me","portable","proprietary","own my data","my data later","leave hunch"], a:`No lock-in. The source of truth is plain JSON in a Git repository you control — the code repo or your dedicated Matrix memory repo. Keep or copy that repository anywhere; removing Hunch integration never requires deleting the memory history. → <a href="#storage">Where it's stored</a>`},
     {q:"It's installed — what do I do day to day?", kw:["day to day","daily","now what","do i do","what do i do","once installed","after install","after init","use it day","my workflow","whats next","installed now"], a:`Work with your assistant normally, ask Hunch about earlier decisions, and save important corrections or findings. Configured hooks help carry memory between tasks. Check the completion card or <code>hunch report</code> to see what was delivered and verified. → <a href="#task-reports">Task reports</a>`},
-    {q:"Where do I see what it remembered?", kw:["see the notes","view notes","read the memory","what it remembered","see what it knows","look at the memory","see the decisions","browse the memory","inspect","read what it"], a:`Ask your assistant ("why is this file built this way?"), or use the terminal: <code>hunch query "..."</code> to search and <code>hunch why &lt;file&gt;</code> to see the decisions, bugs and rules attached to something. The raw notes are human-readable JSON in the <code>.hunch/</code> folder too. → <a href="#first-query">Your first query</a>`},
+    {q:"Where do I see what it remembered?", kw:["see the notes","view notes","read the memory","what it remembered","see what it knows","look at the memory","see the decisions","browse the memory","inspect","read what it","web ui","browser","dashboard","hunch ui"], a:`Ask your assistant ("why is this file built this way?"), or use the terminal: <code>hunch query "..."</code> to search and <code>hunch why &lt;file&gt;</code> to see the decisions, bugs and rules attached to something. Or run <code>hunch ui</code> to browse and search it in your browser. The raw notes are human-readable JSON in the <code>.hunch/</code> folder too. → <a href="#ui">Memory UI</a>`},
     {q:"Is it SOC 2 or GDPR compliant?", kw:["soc 2","soc2","gdpr","hipaa","compliance","compliant","iso 27001","data residency","regulatory"], a:`Hunch does not certify your deployment's regulatory compliance. Storage, Git sharing, served partitions and synthesis-provider settings are choices made in your environment. → <a href="#private">Private memory</a>`},
     {q:"Is the .hunch store encrypted?", kw:["encryption","encrypt","encrypted","at rest","encryption at rest"], a:`The store is plain JSON in your repo, so encryption is whatever your disk or git host already provides (e.g. FileVault, an encrypted volume, your private GitHub). Sensitive notes can also be kept in a separate <b>private</b> repo. → <a href="#private">Private memory</a>`},
     {q:"Is there an audit log of who changed a note?", kw:["audit","audit log","who changed","who added","who wrote","siem","track changes","accountability","change history"], a:`Records retain provenance and committed changes can be inspected with Git history. State write results distinguish local, committed and pushed durability, so a successful local write does not imply a published audit trail. → <a href="#provenance">Provenance</a>`},
     {q:"Does it train an AI model on my code?", kw:["train","training","train a model","train on my code","model training","fine tune","fine-tune","learn to train","used for training"], a:`Hunch does not train or fine-tune models. Optional synthesis and connected assistants use their configured providers; review those providers' data policies for the context you send. → <a href="#synthesis">Synthesis</a>`},
     {q:"Can I use my own or a local LLM?", kw:["custom llm","fine tuned","fine-tuned model","my own model","local llm","local model","ollama","self hosted model","self-hosted","bring my own model"], a:`Yes. Set <code>HUNCH_SYNTH_PROVIDER=openai-compat</code>, a base URL, and a model to use Ollama, vLLM, LM Studio, llama.cpp, or another chat-completions endpoint directly. Local and private-network endpoints need no billing flag; public remotes require <code>HUNCH_SYNTH_ALLOW_METERED=1</code>. → <a href="#synthesis">Synthesis</a>`},
-    {q:"Is there a desktop or phone app?", kw:["desktop app","gui","graphical","is there an app","phone","mobile","ios","android","web app","run on my phone"], a:`Hunch includes a CLI, MCP server, an optional editor companion and local HTML task reports. You can also run the state HTTP service. These are the interfaces documented here; there is no separate phone app in this repository. → <a href="#install">Install</a>`},
+    {q:"Is there a desktop or phone app?", kw:["desktop app","gui","graphical","is there an app","phone","mobile","ios","android","web app","run on my phone"], a:`Yes, a local one: <code>hunch ui</code> opens a web UI for your repository's memory in your browser, served on your own machine. Hunch also includes a CLI, MCP server, an optional editor companion and local HTML task reports. There is no separate phone app. → <a href="#ui">Memory UI</a>`},
     {q:"Who makes Hunch? Is there a company or sales?", kw:["who made","who makes","who built","company","sales","invoice","phone number","contact","maintainer","per seat","seat pricing","subscription to renew","renew","talk to someone","support contact"], a:`Hunch is a source-available project maintained in the linked GitHub repository. Use its issue tracker for product questions and the Security page for sensitive reporting options. The package is licensed under FSL-1.1-ALv2. → <a href="#develop">Project information</a>`},
     {q:"Does it integrate with Jira, Slack or Linear?", kw:["jira","slack","linear","integrate","integration","integrations","webhook","post to slack","post the notes","ticket","asana"], a:`Hunch does not act as a managed connector to those systems. An agent uses its own tools and can record actions, commitments and source references through Hunch's state contract. → <a href="#shared-state">Shared state</a>`},
-    {q:"What can't Hunch do? (limitations)", kw:["cant do","can t do","cant","what cant","cannot do","limitation","limitations","drawbacks","downside","downsides","weakness","weaknesses","what it doesnt do","not good at","shortcomings","biggest limitation"], a:`Hunch does not run the agent, independently verify every external action or guarantee that a model uses retrieved memory. Code parsing covers TypeScript, JavaScript, Python, Go, PHP, YAML and chart-scoped Helm; memory works with other languages too. Hooks differ by host, and broad organizational impact remains a pilot. → <a href="#overview">Overview</a>`},
+    {q:"What can't Hunch do? (limitations)", kw:["cant do","can t do","cant","what cant","cannot do","limitation","limitations","drawbacks","downside","downsides","weakness","weaknesses","what it doesnt do","not good at","shortcomings","biggest limitation"], a:`Hunch does not run the agent, independently verify every external action or guarantee that a model uses retrieved memory. Code parsing covers TypeScript, JavaScript, Python, Go, PHP, Elixir, YAML and chart-scoped Helm; memory works with other languages too. Hooks differ by host, and broad organizational impact remains a pilot. → <a href="#overview">Overview</a>`},
     {q:"Is there a security policy or disclosure process?", kw:["security policy","disclosure","responsible disclosure","vulnerability","report a vulnerability","security issue","cve","security bug","report security"], a:`Use the repository's GitHub Security page for current vulnerability reporting options. Local files, Git sharing, MCP and the optional HTTP service have different access boundaries. → <a href="https://github.com/davesheffer/hunch/security">Security policy</a>`},
     {q:"How do I verify the package matches the source?", kw:["verify the package","npm provenance","package provenance","matches the source","supply chain","tampered","authentic","verify install","verify it was built","signed package","sigstore"], a:`Hunch is published to npm with <b>build provenance</b> (<code>--provenance</code>), so npm shows it was built from this repo's public CI — you can verify that link on the package page. And since the source is public, you can read or diff every line. → <a href="#develop">Develop &amp; contribute</a>`},
   ];
