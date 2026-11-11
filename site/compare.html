@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Compare Hunch — engineering memory and governance</title>
-<meta name="description" content="How Hunch's engineering-memory and change-control surface compares with assistant memories, memory services, code-graph assurance tools, and AI code review." />
+<title>Compare Hunch — engineering memory you can check</title>
+<meta name="description" content="How Hunch compares with assistant memories, memory services, code-graph assurance tools and AI code review, on ten properties you can verify yourself." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="icon" href="/hunch-mark.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/brand.css" />
+<link rel="stylesheet" href="/upgrade.css?v=refresh-152" />
 <link rel="stylesheet" href="/navigation.css" />
 <script defer src="/navigation.js"></script>
 <link rel="canonical" href="https://www.hunchmemory.com/compare" />
@@ -26,51 +28,108 @@
     color-scheme:light;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:clip}
   a{color:inherit;text-decoration:none}
+  p a,li a{color:var(--moss);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px;text-decoration-color:rgba(58,107,88,.4)}
+  p a:hover,li a:hover{text-decoration-color:var(--moss)}
   ::selection{background:var(--moss);color:#fff}
   :focus-visible{outline:2px solid var(--moss);outline-offset:3px;border-radius:4px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--bg-2);border:1px solid var(--line-2);border-radius:5px;padding:.1em .38em}
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
   .mono{font-family:var(--mono)}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .skip{position:absolute;inset-inline-start:16px;top:-64px;z-index:100;padding:10px 14px;border-radius:9px;background:var(--ink);color:var(--bg);font-size:14px;font-weight:500;transition:top .2s var(--ease)}
+  .skip:focus{top:10px}
+  main:focus{outline:none}
 
-  .masthead{padding:72px 0 18px}
+  .masthead{padding:76px 0 8px}
   .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;color:var(--mut);text-transform:lowercase}
-  .masthead h1{font-family:var(--mono);font-weight:300;font-size:clamp(28px,4.4vw,42px);line-height:1.16;letter-spacing:-.03em;margin:16px 0 12px}
-  .masthead h1 em{font-style:normal;font-weight:500;color:var(--moss-ink)}
-  .masthead p{color:var(--mut);font-size:16.5px;max-width:66ch;margin:0 0 8px}
-  .note{font-size:13.5px;color:var(--mut-2);max-width:74ch}
+  .masthead h1{font-weight:500;font-size:clamp(34px,5.4vw,54px);line-height:1.08;letter-spacing:-.045em;margin:14px 0 18px}
+  .masthead .lede{color:var(--ink-2);font-size:18px;max-width:60ch;margin:0}
+  .masthead .lede strong{font-weight:600;color:var(--moss-ink)}
+  .note{font-size:13.5px;color:var(--mut-2);max-width:78ch}
+  .masthead .note{margin:16px 0 0}
 
-  .tbl-scroll{overflow-x:auto;margin:34px 0 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
-  table{border-collapse:collapse;width:100%;min-width:880px;font-size:14px}
-  th,td{padding:12px 14px;border-bottom:1px solid var(--line-2);vertical-align:top;text-align:center}
+  section{padding:44px 0 0}
+  h2{font-size:clamp(23px,2.9vw,31px);margin:0}
+  .sec-head{display:flex;align-items:end;justify-content:space-between;gap:16px 28px;flex-wrap:wrap}
+
+  /* the answer at a glance, before the table */
+  .glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .glance article{padding:26px 0 28px;padding-inline-end:28px}
+  .glance article+article{border-inline-start:1px solid var(--line);padding-inline-start:28px}
+  .glance h3{margin:10px 0 6px;font-size:18px;line-height:1.3}
+  .glance p{margin:0;color:var(--mut);font-size:14.5px}
+  .glance .n{font-family:var(--mono);font-size:12.5px;letter-spacing:.05em;color:var(--moss-ink)}
+
+  .legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0;padding:0;list-style:none;font-size:13px;color:var(--mut)}
+  .legend b{font-weight:600;margin-inline-end:5px}
+  .swipe{display:none;margin:14px 0 0;font-size:13px;color:var(--mut-2)}
+  .tbl-scroll{overflow-x:auto;margin:22px 0 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;min-width:900px;font-size:14px}
+  th,td{padding:13px 14px;border-bottom:1px solid var(--line-2);vertical-align:top;text-align:center;transition:background-color .2s ease}
   thead th{font-family:var(--mono);font-size:12px;letter-spacing:.04em;font-weight:500;color:var(--ink-2);background:var(--bg-2);text-align:center}
-  tbody th{font-weight:500;color:var(--ink);text-align:start;font-size:13.5px;line-height:1.45;min-width:230px;position:sticky;inset-inline-start:0;background:var(--surface)}
+  tbody th{font-weight:500;color:var(--ink);text-align:start;font-size:14px;line-height:1.45;min-width:232px;position:sticky;inset-inline-start:0;z-index:1;background:var(--surface)}
   tbody tr:last-child th,tbody tr:last-child td{border-bottom:none}
-  thead th:first-child{position:sticky;inset-inline-start:0;background:var(--bg-2);z-index:1}
-  td.hunch{background:var(--moss-wash)}
-  thead th.hunch{color:var(--moss-ink);background:color-mix(in srgb,var(--moss-wash) 70%,var(--bg-2))}
-  .yes{color:var(--moss-ink);font-weight:600}
+  thead th:first-child{position:sticky;inset-inline-start:0;background:var(--bg-2);z-index:2;text-align:start}
+  td.hunch{background:var(--moss-wash);border-inline:1px solid rgba(58,107,88,.16)}
+  thead th.hunch{color:var(--moss-ink);font-size:13px;background:color-mix(in srgb,var(--moss-wash) 70%,var(--bg-2));border-inline:1px solid rgba(58,107,88,.16)}
+  @media (hover:hover){
+    tbody tr:hover td{background:rgba(28,32,30,.028)}
+    tbody tr:hover th{background:#f3f5f3}
+    tbody tr:hover td.hunch{background:rgba(58,107,88,.13)}
+  }
+  .yes{color:var(--moss-ink);font-weight:600;font-size:15px}
   .no{color:var(--mut-2)}
   .varies{color:var(--mut);font-size:12.5px}
-  .sub{display:block;font-weight:400;color:var(--mut);font-size:12px;margin-top:2px}
+  .sub{display:block;font-weight:400;color:var(--mut);font-size:12px;line-height:1.4;margin-top:3px}
+  @media (max-width:900px){.swipe{display:block}}
+  @media (max-width:640px){
+    table{min-width:780px;font-size:13.5px}
+    tbody th{min-width:148px;max-width:148px;font-size:13px}
+    th,td{padding:11px 10px}
+  }
 
-  .routes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:36px 0 20px}
-  .route{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:20px 22px}
-  .route h3{font-family:var(--mono);font-weight:500;font-size:14.5px;margin:0 0 8px;color:var(--moss-ink)}
-  .route p{margin:0;font-size:14px;color:var(--ink-2)}
+  .routes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:24px 0 0}
+  .route{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:22px 24px 24px}
+  .route.is-hunch{border-color:rgba(58,107,88,.34);background:color-mix(in srgb,var(--moss-wash) 60%,var(--surface))}
+  .route h3{font-size:17px;margin:0 0 8px;line-height:1.3}
+  .route p{margin:0;font-size:14.5px;color:var(--ink-2)}
+  .route p+p{margin-top:10px;color:var(--mut);font-size:13.5px}
 
-  .cta{margin:34px 0 80px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-  .cta .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13.5px;font-weight:500;padding:10px 18px;border-radius:9px;border:1px solid var(--ink);background:var(--ink);color:var(--bg)}
+  .since{list-style:none;margin:22px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 36px;border-top:1px solid var(--line)}
+  .since li{display:grid;grid-template-columns:42px 1fr;gap:10px;padding:12px 0;border-bottom:1px solid var(--line-2);font-size:14.5px;color:var(--ink-2);line-height:1.5}
+  .since li>span{font:12px/1.9 var(--mono);color:var(--mut-2)}
+  .since-more{margin:16px 0 0;font-size:14px;color:var(--mut)}
+  @media (max-width:760px){
+    .glance{grid-template-columns:1fr}
+    .glance article{padding:22px 0}.glance article+article{border-inline-start:0;border-top:1px solid var(--line);padding-inline-start:0}
+    .since{grid-template-columns:1fr}
+  }
+
+  .cta{margin:56px 0 84px;padding:30px 32px 32px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);box-shadow:0 22px 54px -44px rgba(20,31,25,.42)}
+  .cta h2{max-width:22ch}
+  .cta-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:22px}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13.5px;font-weight:500;padding:9px 16px;border-radius:9px;border:1px solid var(--ink);background:var(--ink);color:var(--bg)}
+  .cta .btn{min-height:44px;padding:10px 20px;transition:transform .42s cubic-bezier(.16,1,.3,1),background-color .3s ease,border-color .3s ease,box-shadow .42s cubic-bezier(.16,1,.3,1)}
   .cta .btn:hover{background:var(--moss-ink);border-color:var(--moss-ink);color:#fff}
-  .cta code{font-family:var(--mono);font-size:13px;background:var(--bg-2);border:1px solid var(--line-2);border-radius:8px;padding:8px 12px}
+  @media (hover:hover){.cta .btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px -16px rgba(28,32,30,.42)}}
+  .copyline{display:flex;align-items:center;gap:10px;direction:ltr}
+  .copyline code{padding:11px 14px;font-size:13.5px;background:var(--bg);border:1px solid var(--line);border-radius:9px}
+  .copybtn{font-family:var(--mono);font-size:12.5px;padding:10px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface);cursor:pointer;color:var(--mut)}
+  .copybtn:hover{color:var(--ink);border-color:var(--ink)}
+  .cta .note{margin:16px 0 0}
 
   footer{border-top:1px solid var(--line);padding:26px 0 40px;color:var(--mut);font-size:13.5px}
   footer .wrap{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
   footer a:hover{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){.skip,th,td,.cta .btn{transition:none}.cta .btn:hover{transform:none}}
 </style>
 </head>
 <body>
+  <a class="skip" href="#main">Skip to content</a>
   <nav class="nav" aria-label="Main">
     <div class="wrap nav-in">
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>hunch</a>
@@ -86,142 +145,187 @@
     </div>
   </nav>
 
-  <main class="wrap">
+  <main id="main" class="wrap" tabindex="-1">
     <header class="masthead">
-      <div class="eyebrow">compare · by verifiable properties</div>
-      <h1>Where Hunch <em>fits</em> — and where it doesn't</h1>
-      <p>Four categories of tools touch engineering memory for AI-assisted codebases. Each is genuinely good at something. This page compares <strong>properties you can verify yourself</strong> for Hunch's engineering-memory and change-control surface. Hunch also ships a <a href="/docs#shared-state" style="text-decoration:underline">self-hosted shared-state service</a> for sourced decisions, completed work and commitments across authorized scopes.</p>
-      <p class="note">Category-level by design: tools within a category differ, and all of them ship faster than any comparison table. Where a property varies inside a category we say so. Snapshot: August 2026.</p>
+      <div class="eyebrow">compare</div>
+      <h1>How Hunch compares</h1>
+      <p class="lede">Four kinds of tools touch engineering memory for AI-assisted code. Each is good at something. Hunch is the only column below that both <strong>records the why</strong> and <strong>enforces it without a model</strong>.</p>
+      <p class="note">Compared by category, on purpose: tools within a category differ, and all of them ship faster than any table. Where a property varies inside a category, we say so. Categories: August 2026 snapshot. Hunch column: v1.52.0, November 2026.</p>
     </header>
 
-    <div class="tbl-scroll" role="region" aria-label="Property comparison" tabindex="0">
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Property</th>
-            <th scope="col">Assistant built-in memories<span class="sub">editor / platform memory features</span></th>
-            <th scope="col">Memory SaaS &amp; MCP servers<span class="sub">hosted recall layers</span></th>
-            <th scope="col">Code-graph assurance CLIs<span class="sub">structure-derived evidence</span></th>
-            <th scope="col">AI code review bots<span class="sub">PR-time analysis</span></th>
-            <th scope="col" class="hunch">Hunch</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">Source of truth lives in your git repo<span class="sub">portable, reviewable files — no vendor store</span></th>
-            <td><span class="no">✗</span><span class="sub">vendor account/cloud</span></td>
-            <td><span class="varies">varies</span><span class="sub">mostly hosted</span></td>
-            <td><span class="yes">✓</span><span class="sub">local index</span></td>
-            <td><span class="no">✗</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">JSON in .hunch/</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Works across assistants<span class="sub">same memory for every MCP client</span></th>
-            <td><span class="no">✗</span><span class="sub">bound to one product</span></td>
-            <td><span class="yes">✓</span></td>
-            <td><span class="yes">✓</span></td>
-            <td><span class="no">✗</span><span class="sub">PR surface only</span></td>
-            <td class="hunch"><span class="yes">✓</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Records the WHY<span class="sub">decisions with rejected alternatives, bug lineage</span></th>
-            <td><span class="no">✗</span><span class="sub">facts &amp; preferences</span></td>
-            <td><span class="varies">varies</span><span class="sub">lessons in some</span></td>
-            <td><span class="no">✗</span><span class="sub">structure, not rationale</span></td>
-            <td><span class="varies">varies</span><span class="sub">learned review patterns</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">incl. what was rejected</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Deterministic enforcement<span class="sub">no model call in the block path</span></th>
-            <td><span class="no">✗</span><span class="sub">recall only</span></td>
-            <td><span class="no">✗</span><span class="sub">recall only</span></td>
-            <td><span class="yes">✓</span></td>
-            <td><span class="no">✗</span><span class="sub">model-driven review</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">graph reachability</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Human-gated authority<span class="sub">nothing blocks without explicit activation</span></th>
-            <td><span class="no">—</span></td>
-            <td><span class="no">—</span></td>
-            <td><span class="varies">varies</span></td>
-            <td><span class="varies">varies</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">advisory until a human says so</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Blocks with a receipt<span class="sub">every gate cites the decision / incident behind it</span></th>
-            <td><span class="no">✗</span></td>
-            <td><span class="no">✗</span></td>
-            <td><span class="varies">varies</span><span class="sub">evidence, structure-derived</span></td>
-            <td><span class="no">✗</span><span class="sub">uncited comments</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">con_/dec_/bug_ ids</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Self-hosted, works offline<span class="sub">no account, no cloud dependency</span></th>
-            <td><span class="no">✗</span></td>
-            <td><span class="no">✗</span></td>
-            <td><span class="yes">✓</span></td>
-            <td><span class="no">✗</span></td>
-            <td class="hunch"><span class="yes">✓</span></td>
-          </tr>
-          <tr>
-            <th scope="row">No per-token API cost<span class="sub">runs on your existing subscription or deterministically</span></th>
-            <td><span class="yes">✓</span><span class="sub">bundled</span></td>
-            <td><span class="varies">varies</span><span class="sub">usage pricing common</span></td>
-            <td><span class="yes">✓</span></td>
-            <td><span class="varies">varies</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">refuses metered APIs by default</span></td>
-          </tr>
-          <tr>
-            <th scope="row">Team memory in a repo you control<span class="sub">shared via your own private git remote</span></th>
-            <td><span class="no">✗</span><span class="sub">org features, vendor-side</span></td>
-            <td><span class="varies">varies</span><span class="sub">hosted team plans</span></td>
-            <td><span class="no">✗</span></td>
-            <td><span class="no">✗</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">git is the sync layer</span></td>
-          </tr>
-          <tr>
-            <th scope="row">CI / code-scanning integration<span class="sub">gate PRs; SARIF output</span></th>
-            <td><span class="no">✗</span></td>
-            <td><span class="no">✗</span></td>
-            <td><span class="yes">✓</span></td>
-            <td><span class="yes">✓</span><span class="sub">PR comments</span></td>
-            <td class="hunch"><span class="yes">✓</span><span class="sub">PR guard + SARIF</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="note">“varies” means credible tools in the category land on both sides of the property. Every Hunch claim above is testable against the <a href="https://github.com/davesheffer/hunch" style="text-decoration:underline">public source</a> — the source of truth is committed JSON, the gates are deterministic code, and blocks print their citations.</p>
-
-    <section class="routes" aria-label="Honest routing">
-      <div class="route">
-        <h3>you may not need Hunch if…</h3>
-        <p>you work solo in one editor and just want it to remember preferences — its built-in memory is enough. Or your invariants are purely import-shaped — an import-contract linter is a solid, deterministic answer.</p>
-      </div>
-      <div class="route">
-        <h3>hunch is built for…</h3>
-        <p>teams (human + AI) where decisions, completed work, commitments and the <em>why</em> behind code must outlive a session — whichever assistant did the work.</p>
-      </div>
-      <div class="route">
-        <h3>the one-line difference</h3>
-        <p>For engineering changes, Hunch connects an event → curated rationale → human-scoped authority → deterministic change receipt. The same product serves sourced work state to authorized agents; broader cross-agent impact remains under pilot measurement.</p>
+    <section aria-label="The difference at a glance">
+      <div class="glance">
+        <article><span class="n">01</span><h3>It remembers the why</h3><p>Decisions, the alternatives you rejected and the bugs behind them, linked to the code they explain.</p></article>
+        <article><span class="n">02</span><h3>It checks with code</h3><p>No model call in the block path. Every block cites the rule, decision or incident behind it.</p></article>
+        <article><span class="n">03</span><h3>It stays yours</h3><p>Committed JSON in <code>.hunch/</code>. No account, no cloud dependency. Teams sync through their own Git remote.</p></article>
       </div>
     </section>
 
+    <section aria-labelledby="table-title">
+      <div class="sec-head">
+        <h2 id="table-title">Ten properties you can verify yourself</h2>
+        <ul class="legend" aria-label="Legend">
+          <li><b class="yes">✓</b>yes</li>
+          <li><b class="no">✗</b>no</li>
+          <li><b class="varies">varies</b>tools land on both sides</li>
+          <li><b class="no">—</b>not applicable</li>
+        </ul>
+      </div>
+      <p class="swipe">Swipe sideways to see every column →</p>
+      <div class="tbl-scroll" role="region" aria-labelledby="table-title" tabindex="0">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Property</th>
+              <th scope="col" class="hunch">Hunch</th>
+              <th scope="col">Assistant built-in memories<span class="sub">editor / platform memory features</span></th>
+              <th scope="col">Memory SaaS &amp; MCP servers<span class="sub">hosted recall layers</span></th>
+              <th scope="col">Code-graph assurance CLIs<span class="sub">structure-derived evidence</span></th>
+              <th scope="col">AI code review bots<span class="sub">PR-time analysis</span></th>
+            </tr>
+          </thead>
+          <tbody>
+          <tr>
+            <th scope="row">Lives in your Git repo<span class="sub">portable, reviewable files; no vendor store</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">JSON in .hunch/</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">vendor account/cloud</span></td>
+            <td><span class="varies">varies</span><span class="sub">mostly hosted</span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">local index</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+          </tr>
+          <tr>
+            <th scope="row">Works across assistants<span class="sub">same memory for every MCP client</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">bound to one product</span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">PR surface only</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Records the why<span class="sub">decisions, rejected alternatives, bug lineage</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">incl. what was rejected</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">facts &amp; preferences</span></td>
+            <td><span class="varies">varies</span><span class="sub">lessons in some</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">structure, not rationale</span></td>
+            <td><span class="varies">varies</span><span class="sub">learned review patterns</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Deterministic enforcement<span class="sub">no model call in the block path</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">graph reachability</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">recall only</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">recall only</span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">model-driven review</span></td>
+          </tr>
+          <tr>
+            <th scope="row">A human grants authority<span class="sub">nothing blocks without explicit activation</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">advisory until a human says so</span></td>
+            <td><span class="no"><span aria-hidden="true">—</span><span class="sr-only">Not applicable</span></span></td>
+            <td><span class="no"><span aria-hidden="true">—</span><span class="sr-only">Not applicable</span></span></td>
+            <td><span class="varies">varies</span></td>
+            <td><span class="varies">varies</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Blocks with a receipt<span class="sub">every gate cites the decision or incident behind it</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">con_/dec_/bug_ ids</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+            <td><span class="varies">varies</span><span class="sub">evidence, structure-derived</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">uncited comments</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Self-hosted, works offline<span class="sub">no account, no cloud dependency</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+          </tr>
+          <tr>
+            <th scope="row">No per-token API cost<span class="sub">runs on your existing subscription, or deterministically</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">refuses metered APIs by default</span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">bundled</span></td>
+            <td><span class="varies">varies</span><span class="sub">usage pricing common</span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="varies">varies</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Team memory in a repo you control<span class="sub">shared through your own private Git remote</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">git is the sync layer</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span><span class="sub">org features, vendor-side</span></td>
+            <td><span class="varies">varies</span><span class="sub">hosted team plans</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+          </tr>
+          <tr>
+            <th scope="row">CI and code scanning<span class="sub">gates PRs; SARIF output</span></th>
+            <td class="hunch"><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">PR guard + SARIF</span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+            <td><span class="no"><span aria-hidden="true">✗</span><span class="sr-only">No</span></span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span></td>
+            <td><span class="yes"><span aria-hidden="true">✓</span><span class="sr-only">Yes</span></span><span class="sub">PR comments</span></td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">“varies” means credible tools in the category land on both sides of the property. Every Hunch claim is testable against the <a href="https://github.com/davesheffer/hunch">public source</a>: the source of truth is committed JSON, the gates are deterministic code, and blocks print their citations.</p>
+    </section>
+
+    <section aria-labelledby="routes-title">
+      <div class="sec-head"><h2 id="routes-title">Pick the right tool</h2></div>
+      <div class="routes">
+        <div class="route">
+          <h3>You may not need Hunch if…</h3>
+          <p>You work solo in one editor and just want it to remember preferences. Its built-in memory is enough.</p>
+          <p>Or your rules are purely import-shaped. An import-contract linter is a solid, deterministic answer.</p>
+        </div>
+        <div class="route is-hunch">
+          <h3>Hunch is built for…</h3>
+          <p>Teams of people and agents where decisions, finished work, commitments and the <em>why</em> behind code must outlive a session, whichever assistant did the work.</p>
+        </div>
+        <div class="route">
+          <h3>The one-line difference</h3>
+          <p>An event → curated rationale → human-scoped authority → deterministic change receipt.</p>
+          <p>Hunch also ships a <a href="/docs#shared-state">self-hosted shared-state service</a>. Its broader cross-agent impact is still being measured.</p>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="since-title">
+      <div class="sec-head"><h2 id="since-title">New in the Hunch column since August</h2></div>
+      <ul class="since">
+        <li><span>1.52</span><div><code>hunch ui</code>: a local web UI to browse, edit and review memory. Only a person’s click writes it.</div></li>
+        <li><span>1.52</span><div>Elixir is indexed with symbol-level dependency edges.</div></li>
+        <li><span>1.51</span><div>One memory home per repository, across worktrees and clones.</div></li>
+        <li><span>1.49</span><div><code>hunch derive-rules</code>: rules written in markdown become constraints, and <code>--check</code> gates CI.</div></li>
+        <li><span>1.46</span><div><code>hunch verify</code> runs only the tests a change needs. Doubt means more tests.</div></li>
+        <li><span>1.44</span><div><code>hunch uninstall</code>: a clean opt-out that keeps your memory.</div></li>
+      </ul>
+      <p class="since-more"><a href="/changelog">Read the full changelog →</a></p>
+    </section>
+
     <div class="cta">
-      <a class="btn" href="/#start">Get started</a>
-      <code>npm i -g @davesheffer/hunch</code>
-      <span class="note">advisory by default — nothing blocks until you say so.</span>
+      <h2>Try it on one repository.</h2>
+      <div class="cta-row">
+        <div class="copyline">
+          <code id="install-cmd">npm i -g @davesheffer/hunch</code>
+          <button class="copybtn" type="button" data-clip="#install-cmd" data-clip-done="Copied"><svg class="clip-ico" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><g class="ico-copy"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.5v-.4a1.6 1.6 0 0 0-1.6-1.6H3.1a1.6 1.6 0 0 0-1.6 1.6v5.8a1.6 1.6 0 0 0 1.6 1.6h.4"/></g><path class="ico-check" d="M3 8.6l3.2 3.2L13 4.9"/></svg><span class="clip-label">Copy</span></button>
+        </div>
+        <a class="btn" href="/#start">Get started</a>
+      </div>
+      <p class="note">Advice by default. Nothing blocks until you say so, and <code>hunch uninstall</code> removes it.</p>
     </div>
   </main>
 
   <footer>
     <div class="wrap">
-      <span>© Hunch — shared records for AI agents.</span>
+      <span>© Hunch. Engineering memory for AI coding assistants.</span>
       <span><a href="/">Home</a> · <a href="/docs">Docs</a> · <a href="/blog">Blog</a> · <a href="/changelog">Changelog</a></span>
     </div>
   </footer>
 
   <script defer src="/_vercel/insights/script.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
+  <script src="/upgrade.js?v=refresh-152"></script>
 </body>
 </html>

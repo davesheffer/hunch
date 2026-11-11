@@ -11,7 +11,7 @@
 .nav .brand{font-family:var(--mono);font-weight:500;font-size:15px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
 .nav-links{display:flex;gap:22px;margin-inline-start:auto;align-items:center}
 .nav-links a{font-size:14px;color:var(--mut,var(--muted,#66706b));opacity:1;transition:color .15s var(--ease)}
-.nav-links a:hover,.nav-links a[aria-current="page"]{color:var(--ink)}
+.nav-links a:hover,.nav-links a[aria-current="page"],.nav-links a[aria-current="location"]{color:var(--ink)}
 .lang-picker{position:relative;display:inline-flex;align-items:center;color:var(--mut,var(--muted,#66706b))}
 .lang-picker::after{content:"";position:absolute;inset-inline-end:10px;top:50%;width:5px;height:5px;border-right:1.25px solid currentColor;border-bottom:1.25px solid currentColor;transform:translateY(-68%) rotate(45deg);transform-origin:center;pointer-events:none;color:var(--mut-2,var(--muted-2,#8b948f))}
 .lang-select{appearance:none;-webkit-appearance:none;min-width:54px;padding-block:7px;padding-inline:10px 25px;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--bg,var(--paper,#f7f8f7)) 82%,transparent);color:var(--ink-2,var(--ink-soft,#3c4440));font:500 11.5px/1 var(--mono);letter-spacing:.04em;cursor:pointer;transition:border-color .25s ease,background-color .25s ease,color .25s ease}
@@ -44,6 +44,6 @@ html[lang="he"] .nav .btn,html[lang="ar"] .nav .btn{font-family:var(--sans-local
   .nav.menu-open .nav-menu{display:flex;flex-direction:column;position:absolute;top:100%;inset-inline:0;padding:8px 24px 14px;background:var(--bg,var(--paper,#f7f8f7));border-bottom:1px solid var(--line-2,var(--line));box-shadow:0 18px 30px -24px rgba(28,32,30,.35)}
   .nav-menu a{padding:11px 2px;font-size:15px;color:var(--ink-2,var(--ink-soft,#3c4440));border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
   .nav-menu a:last-child{border-bottom:0}
-  .nav-menu a:hover,.nav-menu a[aria-current="page"]{color:var(--ink)}
+  .nav-menu a:hover,.nav-menu a[aria-current="page"],.nav-menu a[aria-current="location"]{color:var(--ink)}
 }
 @media (prefers-reduced-motion:reduce){.nav-burger span{transition:none}}
