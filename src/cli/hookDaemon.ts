@@ -5,16 +5,24 @@
  * daemon leaves the caller on today's in-process path, and a missing daemon is
  * started in the background after that hook has finished, never waited for.
  *
- * Requests run one at a time: a hook arriving while another runs is told "busy" and
- * runs in-process, as it would with no daemon. Each one gets the client's allow-listed
+ * Requests run one at a time: a hook arriving while another runs sees the daemon's busy
+ * marker (or is told "busy") and runs in-process, as it would with no daemon. Each one gets the client's allow-listed
  * environment over a pristine snapshot, the client's cwd and a clean exit code; its
  * stdout and stderr (console.* included) are captured; everything is restored afterwards.
  *
  * Security: the endpoint lives in a per-user directory (POSIX: 0700, owned by the user,
  * not a symlink; Windows: the user's LOCALAPPDATA) and carries a random token in a 0600
  * file. The daemon proves it holds the token (HMAC over the client's nonce) before the
- * client sends the payload, and rejects any request without the token. It serves only the
- * repository root it was started for.
+ * client sends the payload, and drops any request without the token. It serves only the
+ * repository root it was started for. A connection must send its hello within
+ * HELLO_BUDGET_MS and HELLO_MAX_BYTES; the hello carries no secret, so a peer that can open
+ * the endpoint may then send one request line (at most MAX_MESSAGE_BYTES, within
+ * GO_BUDGET_MS), dropped unless it carries the token. Without the token a peer never takes
+ * the run slot: at worst it pushes hooks onto the in-process path, never runs or sees one.
+ *
+ * A hook the daemon may already have run is never re-run: if the daemon dies after the
+ * client's `go`, that hook is reported lost on stderr and exits 0, because running it again
+ * could repeat its side effects (task records, captures).
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -22,7 +30,7 @@ import { appendFileSync, chmodSync, linkSync, lstatSync, mkdirSync, readFileSync
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { isAbsolute, join, posix, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { findRoot } from "../core/paths.js";
 import { HUNCH_VERSION } from "../core/version.js";
 
@@ -41,6 +49,13 @@ const BUILD_POLL_MS = 5_000;
  *  that cannot start never turn into a spawn storm. */
 const SPAWN_BACKOFF_MS = 15_000;
 const MAX_MESSAGE_BYTES = 64 * 1024 * 1024;
+/** What an unauthenticated connection may cost the daemon before it is dropped: a
+ *  client sends its hello right after connecting, and it is under 100 bytes. */
+const HELLO_BUDGET_MS = 500;
+const HELLO_MAX_BYTES = 1024;
+/** A busy marker this old is checked against the endpoint before it is believed: a daemon
+ *  killed mid-run leaves its marker, and its pid may since belong to another process. */
+const BUSY_VERIFY_MS = 5_000;
 
 /** Whether the opt-in switch is on. Env only: a config key would cost every hook a
  *  config read before it could even choose the path. */
@@ -115,9 +130,12 @@ function pipeSecret(dir: string, create: boolean): string | null {
   return read();
 }
 
-/** The endpoint, its token file and the spawn marker for one (user, root, build). On
- *  Windows `path` is empty until the per-user pipe secret exists (only a daemon creates it). */
-function endpointFor(root: string, build: string, createSecret = false): { path: string; dir: string; token: string; spawned: string } {
+interface Endpoint { path: string; dir: string; id: string; token: string; spawned: string; busy: string }
+
+/** The endpoint, its token file, the spawn marker and the busy marker for one (user, root,
+ *  build). On Windows `path` is empty until the per-user pipe secret exists (only a daemon
+ *  creates it). */
+function endpointFor(root: string, build: string, createSecret = false): Endpoint {
   let user = "";
   try { user = userInfo().username; } catch { /* no passwd entry */ }
   const uid = process.getuid?.() ?? user;
@@ -129,12 +147,32 @@ function endpointFor(root: string, build: string, createSecret = false): { path:
     const dir = join(local && isAbsolute(local) ? local : join(homedir(), "AppData", "Local"), "hunch", "hook-daemon");
     if (createSecret) { try { ensurePrivateDir(dir); } catch { /* pipeSecret then finds no dir */ } }
     const secret = pipeSecret(dir, createSecret);
-    const pipe = secret ? createHash("sha256").update(`${secret}\0${h}`).digest("hex").slice(0, 32) : "";
-    return { path: pipe ? `\\\\.\\pipe\\hunch-${pipe}` : "", dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
+    return { path: secret ? pipePath(secret, h) : "", dir, ...files(dir, h) };
   }
   const tmp = tmpdir();
   const dir = posixEndpointDir(isAbsolute(tmp) ? tmp : "/tmp", uid, h);
-  return { path: join(dir, `${h}.sock`), dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
+  return { path: join(dir, `${h}.sock`), dir, ...files(dir, h) };
+}
+const files = (dir: string, h: string) => ({ id: h, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`), busy: join(dir, `${h}.busy`) });
+const pipePath = (secret: string, h: string): string =>
+  `\\\\.\\pipe\\hunch-${createHash("sha256").update(`${secret}\0${h}`).digest("hex").slice(0, 32)}`;
+
+/** Whether the daemon is running a hook right now. It cannot answer a handshake while
+ *  that hook does synchronous work, so a concurrent hook would spend its whole handshake
+ *  budget only to be told "busy": the marker lets it go in-process at once. A marker left
+ *  by a daemon that died (pid gone) or older than any run is ignored ("no"); one older than
+ *  BUSY_VERIFY_MS is "verify": believed only if the endpoint still answers. */
+function daemonBusy(file: string): "no" | "yes" | "verify" {
+  try {
+    const age = Date.now() - statSync(file).mtimeMs;
+    if (age > RUN_DEADLINE_MS) return "no";
+    const pid = Number(readFileSync(file, "utf8"));
+    if (!Number.isInteger(pid) || pid <= 0) return "no";
+    try { process.kill(pid, 0); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "EPERM") return "no"; }
+    return age > BUSY_VERIFY_MS ? "verify" : "yes";
+  } catch {
+    return "no";
+  }
 }
 
 /** POSIX endpoint dir for socket `<h>.sock`. sun_path holds 104 bytes on macOS/BSD and
@@ -179,30 +217,48 @@ function dirState(dir: string): "ok" | "missing" | "bad" {
 }
 
 /** Sequential newline-terminated JSON messages from one socket; leftover bytes stay
- *  buffered for the next call. `next` gives null on close/overflow/garbage/timeout. */
-export function lineReader(socket: Socket): { next<T>(ms?: number): Promise<T | null> } {
-  let buf = "";
+ *  buffered for the next call. `next` gives null on close/overflow/garbage/timeout.
+ *  A message longer than `maxBytes` (UTF-8 bytes, settable between messages) drops the
+ *  connection. Each byte is scanned once: a large request costs linear time. */
+export function lineReader(socket: Socket, maxBytes = MAX_MESSAGE_BYTES): { next<T>(ms?: number): Promise<T | null>; maxBytes: number } {
+  let partial: Buffer[] = [];
+  let size = 0;
+  const lines: string[] = [];
   let ended = false;
   let waiter: ((line: string | null) => void) | null = null;
   const pump = (): void => {
     if (!waiter) return;
-    const end = buf.indexOf("\n");
     let line: string | null;
-    if (end >= 0) { line = buf.slice(0, end); buf = buf.slice(end + 1); } else if (ended) line = null; else return;
+    if (lines.length) line = lines.shift()!; else if (ended) line = null; else return;
     const w = waiter;
     waiter = null;
     w(line);
   };
   const stop = (): void => { ended = true; pump(); };
-  socket.setEncoding("utf8");
-  socket.on("data", (chunk: string) => {
-    buf += chunk;
-    if (buf.length > MAX_MESSAGE_BYTES) { buf = ""; socket.destroy(); stop(); } else pump();
+  const overflow = (): void => { partial = []; size = 0; lines.length = 0; socket.destroy(); stop(); };
+  socket.on("data", (chunk: Buffer | string) => {
+    if (ended) return;
+    let data = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    for (let at = data.indexOf(0x0a); at >= 0; at = data.indexOf(0x0a)) {
+      if (size + at > reader.maxBytes) return overflow();
+      partial.push(data.subarray(0, at));
+      lines.push(Buffer.concat(partial, size + at).toString("utf8"));
+      partial = [];
+      size = 0;
+      data = data.subarray(at + 1);
+    }
+    if (data.length) {
+      size += data.length;
+      if (size > reader.maxBytes) return overflow();
+      partial.push(data);
+    }
+    pump();
   });
   socket.on("end", stop);
   socket.on("close", stop);
   socket.on("error", stop);
-  return {
+  const reader = {
+    maxBytes,
     next<T>(ms?: number): Promise<T | null> {
       return new Promise((resolve) => {
         const timer = ms === undefined ? undefined : setTimeout(() => { waiter = null; resolve(null); }, ms);
@@ -215,6 +271,7 @@ export function lineReader(socket: Socket): { next<T>(ms?: number): Promise<T | 
       });
     },
   };
+  return reader;
 }
 
 // ---- client ------------------------------------------------------------------
@@ -232,12 +289,52 @@ function connectWithin(path: string, ms: number): Promise<{ socket?: Socket; cod
  *  console child the daemon runs (git.exe) would open a new console window, visible
  *  and slow. This console-less host runs the daemon with CREATE_NO_WINDOW (windowsHide,
  *  no inherited stdio): one hidden console its children inherit. The daemon sits in the
- *  host's kill-on-close job, so the two live and die together. It keeps the neutral cwd
- *  it was started in (the endpoint dir), as the daemon does. */
+ *  host's kill-on-close job, so the two live and die together. The client starts the
+ *  host in the endpoint dir, so neither ever holds the repository as its cwd. */
 export function runHookDaemonHost(root: string): void {
   const child = spawn(process.execPath, [bundleEntry(), "hook-daemon", root], { stdio: "ignore", windowsHide: true });
   child.on("exit", (code) => process.exit(code ?? 0));
   child.on("error", () => process.exit(0));
+}
+
+const PRELOAD_FLAGS = new Set(["--require", "-r", "--import", "--loader", "--experimental-loader"]);
+
+/** NODE_OPTIONS with every relative preload (`--require ./x`, `--import=./y`, ...) made absolute
+ *  against `cwd`. The daemon boots in its endpoint dir, never the repository (Windows: a process
+ *  whose cwd is the repository keeps it from being renamed or removed), yet a relative preload
+ *  must resolve as it does for an in-process hook. The value is returned unchanged unless a
+ *  preload was rewritten. Parsing follows node's: whitespace separates, double quotes group,
+ *  and a backslash escapes the next character only inside quotes. */
+export function anchorNodeOptions(options: string, cwd: string): string {
+  const tokens: string[] = [];
+  let token: string | null = null, quoted = false;
+  for (let i = 0; i < options.length; i++) {
+    const c = options[i]!;
+    if (quoted && c === "\\" && i + 1 < options.length) { token = (token ?? "") + options[++i]; continue; }
+    if (c === '"') { quoted = !quoted; token = token ?? ""; continue; }
+    if (!quoted && /\s/.test(c)) { if (token !== null) tokens.push(token); token = null; continue; }
+    token = (token ?? "") + c;
+  }
+  if (token !== null) tokens.push(token);
+  const anchor = (flag: string, value: string): string => {
+    if (!/^\.\.?[\\/]/.test(value)) return value;
+    const abs = resolve(cwd, value);
+    return flag === "--require" || flag === "-r" ? abs : pathToFileURL(abs).href;
+  };
+  let changed = false;
+  const out = tokens.map((t, i) => {
+    const prev = tokens[i - 1];
+    let next = t;
+    if (prev !== undefined && PRELOAD_FLAGS.has(prev)) next = anchor(prev, t);
+    else {
+      const eq = t.indexOf("=");
+      if (eq > 0 && PRELOAD_FLAGS.has(t.slice(0, eq))) next = `${t.slice(0, eq)}=${anchor(t.slice(0, eq), t.slice(eq + 1))}`;
+    }
+    if (next !== t) changed = true;
+    return next;
+  });
+  if (!changed) return options;
+  return out.map((t) => (t === "" || /[\s"\\]/.test(t) ? `"${t.replace(/[\\"]/g, "\\$&")}"` : t)).join(" ");
 }
 
 /** Claim the one start attempt per backoff window. The marker is created exclusively,
@@ -267,13 +364,16 @@ function spawnDaemonAfterExit(root: string, endpoint: { dir: string; spawned: st
       ensurePrivateDir(endpoint.dir);
       if (dirState(endpoint.dir) !== "ok" || !claimSpawn(endpoint.spawned)) return;
       const entry = process.platform === "win32" ? "hook-daemon-host" : "hook-daemon";
-      // Never the repository as cwd: an idle daemon would hold it, and on Windows the
-      // repo dir could then not be renamed or removed until the daemon exits.
-      // The daemon runs from another cwd: a relative diagnostics log is pinned to this one.
-      const log = process.env.HUNCH_HOOK_DAEMON_LOG;
+      // Started in its endpoint dir, never this hook's cwd (Windows: even a booting process
+      // would hold the repository against rename/remove). What resolves against the hook's
+      // cwd (a relative diagnostics log, relative preloads) is pinned to it first.
+      let here = endpoint.dir;
+      try { here = process.cwd(); } catch { /* the hook's cwd is gone: nothing relative resolves */ }
+      const env: NodeJS.ProcessEnv = { ...process.env };
+      if (env.HUNCH_HOOK_DAEMON_LOG) env.HUNCH_HOOK_DAEMON_LOG = resolve(here, env.HUNCH_HOOK_DAEMON_LOG);
+      if (env.NODE_OPTIONS) env.NODE_OPTIONS = anchorNodeOptions(env.NODE_OPTIONS, here);
       const child = spawn(process.execPath, [bundleEntry(), entry, root], {
-        cwd: endpoint.dir, detached: true, stdio: "ignore", windowsHide: true,
-        env: log ? { ...process.env, HUNCH_HOOK_DAEMON_LOG: resolve(log) } : process.env,
+        cwd: endpoint.dir, detached: true, stdio: "ignore", windowsHide: true, env,
       });
       child.on("error", () => { /* fail-open: the in-process path already ran */ });
       child.unref();
@@ -311,11 +411,16 @@ async function attempt(provider: string, payload: string): Promise<boolean> {
     spawnDaemonAfterExit(root, endpoint);
     return fallback("secret");
   }
+  const busy = daemonBusy(endpoint.busy);
+  if (busy === "yes") return fallback("busy");
   const { socket, code } = await connectWithin(endpoint.path, CONNECT_BUDGET_MS);
   if (!socket) {
+    // Nobody there (a busy marker's daemon included: it died mid-run): start one.
     if (code === "ENOENT" || code === "ECONNREFUSED") spawnDaemonAfterExit(root, endpoint);
     return fallback(`connect:${code}`);
   }
+  // A long run is still a run: the endpoint answered, so the marker's daemon is alive.
+  if (busy === "verify") { socket.destroy(); return fallback("busy"); }
   let token: string;
   try { token = readFileSync(endpoint.token, "utf8").trim(); } catch { socket.destroy(); return fallback("token"); }
   const reader = lineReader(socket);
@@ -440,13 +545,42 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
     return { stdout: stdout.join(""), stderr: stderr.join(""), exitCode };
   };
 
+  /** Whether clients still reach this daemon at the shared endpoint. POSIX: the socket
+   *  file this daemon published, by identity. Closing a server makes libuv unlink the path
+   *  it was bound to, and another daemon may have published its own socket at the shared
+   *  path since (a racing start, or one started after a temp cleaner removed ours): so the
+   *  server is bound to a private name, moved into place, and the shared path is unlinked
+   *  only while it is still this very socket. Windows: the pipe name still derives from the
+   *  current per-user secret; once that is gone or replaced, clients look for (and start) a
+   *  daemon on another pipe, which shares this one's token file. */
+  let bound: { dev: number; ino: number } | undefined;
+  const owned = (): boolean => {
+    if (process.platform === "win32") {
+      const secret = pipeSecret(endpoint.dir, false);
+      return secret !== null && pipePath(secret, endpoint.id) === endpoint.path;
+    }
+    try {
+      const st = lstatSync(endpoint.path);
+      return bound !== undefined && st.isSocket() && st.dev === bound.dev && st.ino === bound.ino;
+    } catch { return false; }
+  };
+  const writeToken = (): void => {
+    const temp = `${endpoint.token}.${process.pid}`;
+    writeFileSync(temp, token, { mode: 0o600 });
+    renameSync(temp, endpoint.token);
+  };
+
   /** Stop accepting, let the running request finish and answer the queued ones "closing", then exit. */
   const shutdown = (): Promise<void> => {
     if (stopped) return stopped;
     closing = true;
+    // Still listening here, so no starting daemon can take the path over in between: its
+    // probe would reach this one and it would exit.
+    if (process.platform !== "win32" && owned()) { try { rmSync(endpoint.path, { force: true }); } catch { /* gone */ } }
     server.close();
     stopped = (async () => {
       do { await queue; } while (pending > 0);
+      // A successor's token written between the read and the rm is rewritten at its next poll.
       try { if (readFileSync(endpoint.token, "utf8").trim() === token) rmSync(endpoint.token, { force: true }); } catch { /* gone */ }
       process.exit(0);
     })();
@@ -490,10 +624,16 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
       let reply: HookReply | { error: string; ran?: false };
       const started = Date.now();
       const watchdog = setTimeout(() => { debugLog(`stuck ${RUN_DEADLINE_MS}ms`); process.exit(1); }, RUN_DEADLINE_MS);
+      const mark = String(process.pid);
+      try { writeFileSync(endpoint.busy, mark, { mode: 0o600 }); } catch { /* clients then wait for the handshake */ }
       try { reply = await execute(request); } catch (e) {
         reply = { error: `run:${e instanceof Error ? e.message : String(e)}`, ...(e instanceof NotRun ? { ran: false as const } : {}) };
       }
-      finally { clearTimeout(watchdog); }
+      finally {
+        clearTimeout(watchdog);
+        // Only our own: a successor that took the endpoint over may be running a hook now.
+        try { if (readFileSync(endpoint.busy, "utf8") === mark) rmSync(endpoint.busy, { force: true }); } catch { /* ignored once stale */ }
+      }
       debugLog(`run ${Date.now() - started}ms`);
       await finish(socket, reply);
     } finally {
@@ -509,17 +649,21 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
 
   const server = createServer((socket) => {
     socket.on("error", () => { /* the client gave up; it runs in-process */ });
-    const reader = lineReader(socket);
+    // Until its hello a connection costs at most HELLO_BUDGET_MS and HELLO_MAX_BYTES (the
+    // client sends nothing else before the proof); then one request line, dropped without
+    // the token. Only an authenticated request enters the queue.
+    const reader = lineReader(socket, HELLO_MAX_BYTES);
     void (async () => {
-      const hello = await reader.next<{ v?: number; hello?: unknown }>(GO_BUDGET_MS);
+      const hello = await reader.next<{ v?: number; hello?: unknown }>(HELLO_BUDGET_MS);
       if (!hello || hello.v !== PROTOCOL || typeof hello.hello !== "string" || !/^[0-9a-f]{32}$/.test(hello.hello)) {
         socket.destroy();
         return;
       }
+      reader.maxBytes = MAX_MESSAGE_BYTES;
       socket.write(`${JSON.stringify({ proof: proofFor(token, hello.hello) })}\n`);
       const request = await reader.next<HookRequest>(GO_BUDGET_MS);
       if (!request || request.v !== PROTOCOL || typeof request.token !== "string" || !sameToken(request.token, token)) {
-        socket.end(`${JSON.stringify({ error: "rejected" })}\n`);
+        socket.destroy();
         return;
       }
       if (request.buildId !== build) {
@@ -546,26 +690,45 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
     })();
   });
 
-  if (!await listen(server, endpoint.path)) {
-    // POSIX keeps a dead daemon's socket file; take it over only if nobody answers.
-    if (process.platform === "win32") return process.exit(0);
-    const probe = await connectWithin(endpoint.path, 200);
-    if (probe.socket) { probe.socket.destroy(); return process.exit(0); }
-    if (probe.code !== "ECONNREFUSED") return process.exit(0);
-    rmSync(endpoint.path, { force: true });
+  if (process.platform === "win32") {
+    // A pipe name is single-instance: losing the bind means another daemon serves it.
     if (!await listen(server, endpoint.path)) return process.exit(0);
+  } else {
+    // Bound to a private name (no longer than the shared one, for sun_path), then moved
+    // over the shared path: only when nobody answers there (none yet, or a dead daemon's file).
+    const own = join(endpoint.dir, `${randomBytes(8).toString("hex")}.sock`);
+    if (!await listen(server, own)) return process.exit(0);
+    try {
+      chmodSync(own, 0o600);
+      const st = lstatSync(own);
+      bound = { dev: st.dev, ino: st.ino };
+    } catch { server.close(); return process.exit(0); }
+    const probe = await connectWithin(endpoint.path, 200);
+    probe.socket?.destroy();
+    if (probe.socket || (probe.code !== "ENOENT" && probe.code !== "ECONNREFUSED")) { server.close(); return process.exit(0); }
+    // Two daemons starting at once can both get here; the later rename wins and the
+    // other, no longer owning the path, exits at its next poll without unlinking it.
+    try { renameSync(own, endpoint.path); } catch { server.close(); return process.exit(0); }
   }
-  if (process.platform !== "win32") chmodSync(endpoint.path, 0o600);
-  const temp = `${endpoint.token}.${process.pid}`;
-  writeFileSync(temp, token, { mode: 0o600 });
-  renameSync(temp, endpoint.token);
+  writeToken();
+  // This daemon now owns the endpoint: any marker is a predecessor's (dead, or unreachable).
+  try { rmSync(endpoint.busy, { force: true }); } catch { /* clients also verify an old one */ }
   debugLog("listening");
   touch();
-  // A rebuilt CLI, or a token file removed (a temp cleaner) or replaced: clients can no
-  // longer reach this daemon, so exit and let the next hook start a fresh one.
+  // A rebuilt CLI, or the shared endpoint no longer this daemon's (see owned): clients can
+  // no longer reach it, so it exits and the next hook starts a fresh one. A token file
+  // removed (a temp cleaner) or overwritten by a daemon that lost the path is rewritten.
   setInterval(() => {
+    // Shutting down: the endpoint may already be a successor's, token included.
+    if (closing) return;
+    if (buildId() !== build || !owned()) return void shutdown();
+    // A marker left while nothing runs here (its removal failed, or a predecessor's) would keep
+    // clients in-process for as long as its pid lives: once clients verify it, it goes.
+    if (pending === 0) {
+      try { if (Date.now() - statSync(endpoint.busy).mtimeMs > BUSY_VERIFY_MS) rmSync(endpoint.busy, { force: true }); } catch { /* none */ }
+    }
     let current = "";
     try { current = readFileSync(endpoint.token, "utf8").trim(); } catch { /* gone */ }
-    if (buildId() !== build || current !== token) void shutdown();
+    if (current !== token) { try { writeToken(); } catch { void shutdown(); } }
   }, BUILD_POLL_MS).unref();
 }

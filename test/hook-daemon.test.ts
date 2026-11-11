@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, utimesSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { connect } from "node:net";
+import { connect, createServer, type Socket } from "node:net";
 import { cleanupDir } from "./fixtures.js";
 import { createHash } from "node:crypto";
 import { lineReader, posixEndpointDir, proofFor } from "../src/cli/hookDaemon.js";
@@ -40,11 +40,13 @@ function fixture(t: { after: (f: () => void) => void }) {
   spawnSync("git", ["init", "-q"], { cwd: root });
   const log = join(base, "daemon.log");
   const env = { ...process.env, HUNCH_HOOK_DAEMON: "1", HUNCH_HOOK_DAEMON_LOG: log, LOCALAPPDATA: join(base, "local"), TMPDIR: base, TEMP: base, TMP: base };
+  // Daemons a test already saw exit: their pids may belong to other processes by now.
+  const reaped = new Set<number>();
   t.after(() => {
-    for (const pid of daemons(log)) { try { process.kill(pid); } catch { /* gone */ } }
+    for (const pid of daemons(log)) { if (!reaped.has(pid)) { try { process.kill(pid); } catch { /* gone */ } } }
     cleanupDir(base);
   });
-  return { root, log, env, base };
+  return { root, log, env, base, reaped };
 }
 const lines = (log: string) => existsSync(log) ? readFileSync(log, "utf8").split("\n").filter(Boolean) : [];
 const daemons = (log: string) => lines(log).filter((l) => l.endsWith(" listening")).map((l) => Number(l.split(" ")[1]));
@@ -111,7 +113,7 @@ test("concurrent first hooks start a single daemon", { skip: !built, timeout: 60
   assert.equal(daemons(f.log).length, 1);
 });
 
-test("the daemon rejects a request without its token", { skip: !built, timeout: 60_000 }, async (t) => {
+test("the daemon drops a request without its token", { skip: !built, timeout: 60_000 }, async (t) => {
   const f = fixture(t);
   hook(f.root, f.env, payload(f.root, "s3"));
   await until(() => daemons(f.log).length === 1);
@@ -120,9 +122,12 @@ test("the daemon rejects a request without its token", { skip: !built, timeout: 
   const { path, token } = endpointOf(f.base);
   const { socket, reader } = await handshake(path, token);
   socket.write(`${JSON.stringify({ v: 3, token: "wrong", buildId: "x", provider: "claude", cwd: f.root, root: f.root, env: {}, payload: "{}" })}\n`);
-  assert.deepEqual(await reader.next(2000), { error: "rejected" });
+  assert.equal(await reader.next(2000), null);
   socket.destroy();
-  writeFileSync(join(f.base, "done"), "");
+  // The dropped peer cost nothing: the next hook is served.
+  const served = lines(f.log).filter((l) => l.endsWith(" served")).length;
+  hook(f.root, f.env, payload(f.root, "s3"));
+  assert.equal(lines(f.log).filter((l) => l.endsWith(" served")).length, served + 1, lines(f.log).join("\n"));
 });
 
 test("a strict denial served by the daemon is the in-process denial", { skip: !built, timeout: 60_000 }, async (t) => {
@@ -185,4 +190,231 @@ test("an idle daemon does not hold the repository dir (Windows: rename/remove wo
   renameSync(f.root, `${f.root}-moved`);
   // Still the same live daemon: the rename did not just outlast it.
   process.kill(daemons(f.log)[0]!, 0);
+});
+
+test("the hook that starts a daemon leaves the repository free at once (Windows: rename would fail EBUSY)", { skip: !built, timeout: 60_000 }, async (t) => {
+  const f = fixture(t);
+  hook(f.root, f.env, payload(f.root, "s19"));
+  // The daemon is booting right now: it must not have the repository as its cwd.
+  renameSync(f.root, `${f.root}-moved`);
+  await until(() => daemons(f.log).length === 1);
+});
+
+const endpointDir = (base: string) => process.platform === "win32" ? join(base, "local", "hunch", "hook-daemon") : join(base, `hunch-${process.getuid?.()}`);
+/** The endpoint's file-name hash, from its token file. */
+const endpointId = (base: string) => readdirSync(endpointDir(base)).find((n) => n.endsWith(".token"))!.slice(0, -".token".length);
+const servedCount = (log: string) => lines(log).filter((l) => l.endsWith(" served")).length;
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+/** A hook run without blocking this process, so an in-test server can answer it. */
+function hookAsync(root: string, env: NodeJS.ProcessEnv, input: string): Promise<{ stdout: string; stderr: string; status: number | null }> {
+  return new Promise((done) => {
+    const p = spawn(process.execPath, [cli, "hook"], { cwd: root, env });
+    let stdout = "", stderr = "";
+    p.stdout.on("data", (c) => (stdout += c));
+    p.stderr.on("data", (c) => (stderr += c));
+    p.on("close", (status) => done({ stdout, stderr, status }));
+    p.stdin.end(input);
+  });
+}
+/** A served daemon, its endpoint, and the in-process output for `input`. */
+async function liveDaemon(t: { after: (f: () => void) => void }, session: string) {
+  const f = fixture(t);
+  const input = payload(f.root, session);
+  const off = hook(f.root, { ...f.env, HUNCH_HOOK_DAEMON: "0" }, input);
+  hook(f.root, f.env, input);
+  await until(() => daemons(f.log).length === 1);
+  hook(f.root, f.env, input);
+  assert.equal(servedCount(f.log), 1, lines(f.log).join("\n"));
+  return { ...f, input, off, pid: daemons(f.log)[0]!, ...endpointOf(f.base) };
+}
+
+test("a daemon that lost its socket path exits without unlinking its successor's", { skip: !built || process.platform === "win32", timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s9");
+  // A temp cleaner removes the socket; the next hook starts a successor right away.
+  rmSync(d.path);
+  rmSync(join(endpointDir(d.base), `${endpointId(d.base)}.spawn`));
+  hook(d.root, d.env, d.input);
+  await until(() => daemons(d.log).length === 2);
+  // The first daemon notices it no longer owns the path and exits...
+  await until(() => !alive(d.pid));
+  d.reaped.add(d.pid);
+  // ...leaving the successor's socket in place: hooks are still served.
+  hook(d.root, d.env, d.input);
+  assert.equal(servedCount(d.log), 2, lines(d.log).join("\n"));
+});
+
+test("a hook arriving while the daemon runs one goes in-process without a handshake", { skip: !built, timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s10");
+  const busy = join(endpointDir(d.base), `${endpointId(d.base)}.busy`);
+  writeFileSync(busy, String(d.pid));
+  const out = hook(d.root, d.env, d.input);
+  assert.ok(lines(d.log).some((l) => l.endsWith(" fallback busy")), lines(d.log).join("\n"));
+  assert.equal(servedCount(d.log), 1);
+  assert.equal(norm(out.stdout), norm(d.off.stdout));
+  // A marker naming no live process is ignored.
+  writeFileSync(busy, "2147483646");
+  hook(d.root, d.env, d.input);
+  assert.equal(servedCount(d.log), 2, lines(d.log).join("\n"));
+  // An old marker left while the daemon idles (its removal failed) names a live process: the
+  // idle daemon clears it at its next poll, so it never holds hooks off for long.
+  writeFileSync(busy, String(process.pid));
+  const old = new Date(Date.now() - 6000);
+  utimesSync(busy, old, old);
+  await until(() => !existsSync(busy), 8000);
+  hook(d.root, d.env, d.input);
+  assert.equal(servedCount(d.log), 3, lines(d.log).join("\n"));
+});
+
+test("an old busy marker whose daemon was killed mid-run (pid since reused) does not block a new daemon", { skip: !built, timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s16");
+  process.kill(d.pid);
+  await until(() => !alive(d.pid));
+  d.reaped.add(d.pid);
+  const dir = endpointDir(d.base), id = endpointId(d.base);
+  rmSync(join(dir, `${id}.spawn`), { force: true });
+  // The marker's pid now names a live, unrelated process (this one).
+  const busy = join(dir, `${id}.busy`);
+  writeFileSync(busy, String(process.pid));
+  const old = new Date(Date.now() - 6000);
+  utimesSync(busy, old, old);
+  hook(d.root, d.env, d.input);
+  assert.match(lines(d.log).join("\n"), /fallback connect:(?:ENOENT|ECONNREFUSED)/);
+  await until(() => daemons(d.log).length === 2);
+  hook(d.root, d.env, d.input);
+  assert.equal(servedCount(d.log), 2, lines(d.log).join("\n"));
+});
+
+test("the daemon marks itself busy while it runs a hook, and clears the mark after", { skip: !built, timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s17");
+  const name = `${endpointId(d.base)}.busy`;
+  const seen: string[] = [];
+  const watcher = watch(endpointDir(d.base), (_event, file) => { if (file) seen.push(String(file)); });
+  t.after(() => watcher.close());
+  const bundle = statSync(resolve("dist/cli/hook.bundle.js"));
+  const buildId = `${HUNCH_VERSION}:${bundle.size}:${bundle.mtimeMs}`;
+  // A watcher may start a moment late (macOS FSEvents): a few runs give it the chance.
+  for (let run = 0; run < 5 && !seen.includes(name); run++) {
+    const { socket, reader } = await handshake(d.path, d.token);
+    socket.write(`${JSON.stringify({ v: 3, token: d.token, buildId, provider: "claude", cwd: d.root, root: d.root, env: {}, payload: d.input })}\n`);
+    assert.deepEqual(await reader.next(2000), { ready: true });
+    socket.write(`${JSON.stringify({ go: true })}\n`);
+    const reply = await reader.next<{ exitCode: number }>(30_000);
+    socket.destroy();
+    assert.equal(reply?.exitCode, 0);
+    await sleep(300);
+  }
+  assert.ok(seen.includes(name), `no ${name} event in ${JSON.stringify(seen)}`);
+  assert.ok(!existsSync(join(endpointDir(d.base), name)));
+});
+
+test("a daemon whose pipe secret was replaced exits; its successor serves", { skip: !built || process.platform !== "win32", timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s18");
+  const dir = endpointDir(d.base);
+  // The per-user secret is gone (a profile cleaner): the next hook finds no pipe and starts
+  // a daemon on a fresh secret's pipe, which shares the old daemon's token file.
+  rmSync(join(dir, "pipe.secret"));
+  rmSync(join(dir, `${endpointId(d.base)}.spawn`));
+  hook(d.root, d.env, d.input);
+  await until(() => daemons(d.log).length === 2);
+  await until(() => !alive(d.pid));
+  d.reaped.add(d.pid);
+  // No token rewrite war: every hook is served from here on.
+  const before = servedCount(d.log);
+  for (let i = 0; i < 4; i++) hook(d.root, d.env, d.input);
+  assert.equal(servedCount(d.log), before + 4, lines(d.log).join("\n"));
+});
+
+test("an unauthenticated connection is dropped within the hello budget, an oversized hello at once", { skip: !built, timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s11");
+  const closedAfter = async (send?: string): Promise<number> => {
+    const socket = connect(d.path);
+    socket.on("error", () => { /* reset by the daemon */ });
+    await new Promise<void>((ok) => socket.once("connect", () => ok()));
+    const started = Date.now();
+    if (send) socket.write(send);
+    await new Promise<void>((ok) => socket.once("close", () => ok()));
+    return Date.now() - started;
+  };
+  const silent = await closedAfter();
+  assert.ok(silent < 1500, `silent connection held ${silent}ms`);
+  const oversized = await closedAfter("x".repeat(4096));
+  assert.ok(oversized < silent, `oversized hello held ${oversized}ms, a silent one ${silent}ms`);
+  hook(d.root, d.env, d.input);
+  assert.equal(servedCount(d.log), 2, lines(d.log).join("\n"));
+});
+
+/** Kill the daemon and serve its endpoint with a scripted fake that passes the handshake. */
+async function fakeDaemon(t: { after: (f: () => void) => void }, d: { pid: number; path: string; token: string; reaped: Set<number> },
+  afterRequest: (socket: Socket, reader: ReturnType<typeof lineReader>) => Promise<void>): Promise<void> {
+  process.kill(d.pid);
+  await until(() => !alive(d.pid));
+  d.reaped.add(d.pid);
+  if (process.platform !== "win32") rmSync(d.path, { force: true });
+  const server = createServer((socket) => {
+    socket.on("error", () => { /* the client gave up */ });
+    const reader = lineReader(socket);
+    void (async () => {
+      const hello = await reader.next<{ hello: string }>(2000);
+      if (!hello) return void socket.destroy();
+      socket.write(`${JSON.stringify({ proof: proofFor(d.token, hello.hello) })}\n`);
+      if (!await reader.next(2000)) return void socket.destroy();
+      await afterRequest(socket, reader);
+    })();
+  });
+  // Windows frees a dead process's pipe name a moment after the process is gone.
+  for (const end = Date.now() + 10_000; ; await sleep(100)) {
+    const code = await new Promise<string | null>((ok) => {
+      server.once("error", (e: NodeJS.ErrnoException) => ok(e.code ?? "error"));
+      server.listen(d.path, () => ok(null));
+    });
+    if (code === null) break;
+    if (code !== "EADDRINUSE" || Date.now() > end) assert.fail(`fake daemon listen ${code}`);
+  }
+  t.after(() => { server.close(); });
+}
+
+test("a not-run answer after go makes the client run the hook in-process", { skip: !built, timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s12");
+  await fakeDaemon(t, d, async (socket, reader) => {
+    socket.write(`${JSON.stringify({ ready: true })}\n`);
+    await reader.next(2000);
+    socket.end(`${JSON.stringify({ error: "go", ran: false })}\n`);
+  });
+  const out = await hookAsync(d.root, d.env, d.input);
+  assert.ok(lines(d.log).some((l) => l.endsWith(" fallback notrun:go")), lines(d.log).join("\n"));
+  assert.equal(norm(out.stdout), norm(d.off.stdout));
+  assert.equal(out.status, d.off.status);
+});
+
+test("a daemon of another build makes the client run the hook in-process", { skip: !built, timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s13");
+  await fakeDaemon(t, d, async (socket) => { socket.end(`${JSON.stringify({ error: "build" })}\n`); });
+  const out = await hookAsync(d.root, d.env, d.input);
+  assert.ok(lines(d.log).some((l) => l.endsWith(" fallback queue:build")), lines(d.log).join("\n"));
+  assert.equal(norm(out.stdout), norm(d.off.stdout));
+});
+
+test("a daemon lost after go is reported, never re-run in-process", { skip: !built, timeout: 60_000 }, async (t) => {
+  const d = await liveDaemon(t, "s14");
+  await fakeDaemon(t, d, async (socket, reader) => {
+    socket.write(`${JSON.stringify({ ready: true })}\n`);
+    await reader.next(2000);
+    socket.destroy();
+  });
+  const out = await hookAsync(d.root, d.env, d.input);
+  // The hook may already have run there: running it again could repeat its side effects.
+  assert.equal(out.stdout, "");
+  assert.match(out.stderr, /hook daemon lost the reply/);
+  assert.equal(out.status, 0);
+});
+
+test("a relative NODE_OPTIONS preload does not keep the daemon from starting", { skip: !built, timeout: 60_000 }, async (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.root, "preload.cjs"), "");
+  const env = { ...f.env, NODE_OPTIONS: [process.env.NODE_OPTIONS, "--require ./preload.cjs"].filter(Boolean).join(" ") };
+  const input = payload(f.root, "s15");
+  hook(f.root, env, input);
+  await until(() => daemons(f.log).length === 1);
+  hook(f.root, env, input);
+  assert.equal(servedCount(f.log), 1, lines(f.log).join("\n"));
 });
