@@ -9,7 +9,9 @@ import test from "node:test";
 
 import { git, RELEASE_CLEAN_STATUS_ARGS, statusWithoutMemoryChurn } from "../tooling/release-gate.mjs";
 import {
+  parseShardProfile,
   parseShardSpec,
+  SHARD_PROFILES,
   selectShard,
   verifyDelegatedGateReceipt,
   verifyNode24Evidence,
@@ -18,16 +20,17 @@ import {
 
 const COMMIT = "a".repeat(40);
 
-function manifestsFor(input: string[], total: number, runtime: { node: string; platform: string } = { node: "v24.0.0", platform: "linux" }) {
+function manifestsFor(input: string[], total: number, runtime: { node: string; platform: string } = { node: "v24.0.0", platform: "linux" }, profile: string | null = null) {
   const sorted = [...new Set(input)].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
   return Array.from({ length: total }, (_, offset) => ({
     schema: "hunch.test-shard.v1",
     shard: `${offset + 1}/${total}`,
     index: offset + 1,
     total,
+    profile,
     commit: COMMIT,
     input: sorted,
-    selected: selectShard(sorted, { index: offset + 1, total }),
+    selected: selectShard(sorted, { index: offset + 1, total }, profile),
     exit_code: 0,
     source_unchanged: true,
     ...runtime,
@@ -59,6 +62,54 @@ test("selectShard is deterministic, disjoint, and exhaustive across every shard"
   assert.deepEqual(selectShard(["a", "b"], { index: 3, total: 4 }), [], "a shard past the file count is empty");
   assert.deepEqual(selectShard([], { index: 1, total: 1 }), []);
   assert.throws(() => selectShard(["a"], { index: 0, total: 2 }));
+});
+
+/** The platform-matrix-safety step's file list, read from ci.yml. */
+function platformList(): string[] {
+  const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+  const step = /- name: Native bindings, atomic writes, and the team Matrix stay safe\n([\s\S]*?)\n\s+- name: /.exec(workflow);
+  assert.ok(step, "ci.yml has the platform-matrix-safety test step");
+  assert.match(step[1], /^\s+HUNCH_TEST_SHARD_PROFILE: platform$/m, "the platform step splits under the platform profile");
+  const line = /^\s+run: node tooling\/run-tests\.mjs --test-concurrency=1 (.+)$/m.exec(step[1]);
+  assert.ok(line, "the platform step runs run-tests.mjs over an explicit file list");
+  return line[1].trim().split(/\s+/);
+}
+
+test("the platform profile splits by weight: deterministic, disjoint, exhaustive, heaviest file alone", () => {
+  const input = platformList();
+  const { weights, defaultWeight } = SHARD_PROFILES.platform;
+  for (const file of Object.keys(weights)) {
+    assert.ok(existsSync(file), `weighted file ${file} exists`);
+    assert.ok(input.includes(file), `weighted file ${file} is on the platform list`);
+  }
+  const weightOf = (file: string) => (weights as Record<string, number>)[file] ?? defaultWeight;
+  const loadOf = (files: string[]) => files.reduce((sum, file) => sum + weightOf(file), 0);
+  for (const total of [1, 2, 3, 4, 7]) {
+    const shards = Array.from({ length: total }, (_, offset) => selectShard(input, { index: offset + 1, total }, "platform"));
+    assert.deepEqual(shards, Array.from({ length: total }, (_, offset) => selectShard([...input].reverse(), { index: offset + 1, total }, "platform")),
+      `input order never changes the split (n=${total})`);
+    const all = shards.flat();
+    assert.equal(all.length, new Set(all).size, `no file runs twice (n=${total})`);
+    assert.deepEqual([...all].sort(), [...new Set(input)].sort(), `every file runs exactly once (n=${total})`);
+    for (const shard of shards) assert.deepEqual(shard, [...shard].sort(), "each shard runs its files in sorted order");
+  }
+  const three = Array.from({ length: 3 }, (_, offset) => selectShard(input, { index: offset + 1, total: 3 }, "platform"));
+  const count = Array.from({ length: 3 }, (_, offset) => selectShard(input, { index: offset + 1, total: 3 }));
+  // Greedy least-loaded bound: no shard exceeds an even share plus one file,
+  // or the single heaviest file when that alone is more.
+  const heaviest = Math.max(...input.map(weightOf));
+  const worst = Math.max(...three.map(loadOf));
+  assert.ok(worst <= Math.max(heaviest, loadOf(input) / 3 + heaviest), `weighted worst shard ${worst} stays within the greedy bound`);
+  assert.ok(worst <= Math.max(...count.map(loadOf)), "the weighted split is never worse than the count split");
+  // Least-loaded wins, ties to the lowest index; unlisted files weigh the default.
+  assert.deepEqual([1, 2].map((index) => selectShard(["b", "a", "c"], { index, total: 2 }, "platform")), [["a", "c"], ["b"]]);
+  assert.throws(() => selectShard(input, { index: 1, total: 3 }, "nope"), /unknown test shard profile "nope"/);
+  assert.equal(parseShardProfile(""), null);
+  assert.equal(parseShardProfile(undefined), null);
+  assert.equal(parseShardProfile("platform"), "platform");
+  assert.throws(() => parseShardProfile("toString"), /unknown test shard profile/);
+  assert.throws(() => parseShardProfile(["platform"]), /unknown test shard profile/);
+  assert.deepEqual(selectShard(["b", "a"], { index: 1, total: 2 }, ""), ["a"], "an empty profile is the count split");
 });
 
 test("verifyShardManifests proves coverage and names every way it can fail", () => {
@@ -94,6 +145,21 @@ test("verifyShardManifests proves coverage and names every way it can fail", () 
   assert.ok(onNode([ok[0], { ...ok[1], node: "v22.11.0" }, ok[2]], 24).some((error) => /shard 2\/3: ran on Node "v22\.11\.0", expected Node 24/.test(error)));
   assert.ok(onNode([ok[0], ok[1], { ...ok[2], node: undefined }], 24).some((error) => /shard 3\/3: ran on Node undefined, expected Node 24/.test(error)));
   assert.ok(onNode(ok, 24, "win32").some((error) => /shard 1\/3: ran on platform "linux", expected win32/.test(error)));
+
+  // A profile is part of the proof: the verdict recomputes each shard's
+  // selection under the profile it expects, and the manifest must name it.
+  const files = ["test/team-matrix-e2e.test.ts", "test/workspaces.test.ts", "test/task-selection.test.ts", "test/a.test.ts", "test/b.test.ts", "test/c.test.ts"];
+  const weighted = manifestsFor(files, 3, { node: "v22.0.0", platform: "win32" }, "platform");
+  assert.deepEqual(verifyShardManifests(weighted, { total: 3, commit: COMMIT, profile: "platform" }), []);
+  const asCount = verifyShardManifests(weighted, { total: 3, commit: COMMIT });
+  assert.ok(asCount.some((error) => /split by profile "platform", expected null/.test(error)), asCount.join("\n"));
+  assert.ok(asCount.some((error) => /ran a different file set than its deterministic selection/.test(error)), asCount.join("\n"));
+  const relabeled = manifestsFor(files, 3, { node: "v22.0.0", platform: "win32" }).map((manifest) => ({ ...manifest, profile: "platform" }));
+  const forgedLabel = verifyShardManifests(relabeled, { total: 3, commit: COMMIT, profile: "platform" });
+  assert.ok(forgedLabel.some((error) => /ran a different file set than its deterministic selection/.test(error)),
+    `a count split labeled "platform" is still caught: ${forgedLabel.join("\n")}`);
+  const unlabeled = weighted.map(({ profile: _profile, ...manifest }) => manifest);
+  assert.ok(verifyShardManifests(unlabeled, { total: 3, commit: COMMIT, profile: "platform" }).some((error) => /split by profile null, expected "platform"/.test(error)));
 });
 
 test("verify-node24 rejects shard manifests recorded on another Node line", () => {
@@ -135,7 +201,7 @@ test("verify-platform accepts one green receipt + manifest per shard and rejects
       const body = { schema: "hunch.platform-matrix-safety.v1", commit: COMMIT, node: "v22.11.0", runner_os: "Windows", shard, outcome: "success", tests, ...overrides };
       return { ...body, content_hash: `sha256:${createHash("sha256").update(JSON.stringify(body)).digest("hex")}` };
     };
-    manifestsFor(tests, 3, { node: "v22.11.0", platform: "win32" }).forEach((manifest, offset) => {
+    manifestsFor(tests, 3, { node: "v22.11.0", platform: "win32" }, "platform").forEach((manifest, offset) => {
       put(`platform-matrix-safety-windows-latest-${offset + 1}-${COMMIT}/test-shard-manifest.json`, manifest);
       put(`platform-matrix-safety-windows-latest-${offset + 1}-${COMMIT}/platform-matrix-safety.json`, receipt(`${offset + 1}/3`));
     });
@@ -148,7 +214,7 @@ test("verify-platform accepts one green receipt + manifest per shard and rejects
     assert.match(wrongOs.stderr, /runner_os is "Windows", expected macOS/);
     assert.match(wrongOs.stderr, /shard 1\/3: ran on platform "win32", expected darwin/);
     const shardDir = (shard: number) => `platform-matrix-safety-windows-latest-${shard}-${COMMIT}`;
-    const [firstManifest] = manifestsFor(tests, 3, { node: "v22.11.0", platform: "win32" });
+    const [firstManifest] = manifestsFor(tests, 3, { node: "v22.11.0", platform: "win32" }, "platform");
     put(`${shardDir(1)}/platform-matrix-safety.json`, receipt("1/3", { node: "v24.0.0" }));
     put(`${shardDir(1)}/test-shard-manifest.json`, { ...firstManifest, node: "v24.0.0" });
     const wrongNode = verify();
@@ -193,6 +259,7 @@ test("run-tests.mjs shards its file arguments, writes the manifest, and never le
       `test(${JSON.stringify(name)}, () => {`,
       "  assert.equal(process.env.HUNCH_TEST_SHARD, undefined);",
       "  assert.equal(process.env.HUNCH_TEST_SHARD_MANIFEST, undefined);",
+      "  assert.equal(process.env.HUNCH_TEST_SHARD_PROFILE, undefined);",
       `  writeFileSync(${JSON.stringify(marker(name))}, "1");`,
       "});",
       "",
@@ -222,6 +289,7 @@ ${run.stderr}`);
       shard: "1/2",
       index: 1,
       total: 2,
+      profile: null,
       commit: headBefore,
       input: [first, second],
       selected: [first],
@@ -245,6 +313,27 @@ ${run.stderr}`);
       env: { ...inherited, HUNCH_TEST_SHARD: "", HUNCH_TEST_SHARD_MANIFEST: join(dir, "orphan.json") },
     });
     assert.equal(orphan.status, 2, "a manifest without a shard is a configuration error");
+    const orphanProfile = spawnSync(process.execPath, ["tooling/run-tests.mjs", first], {
+      encoding: "utf8",
+      env: { ...inherited, HUNCH_TEST_SHARD: "", HUNCH_TEST_SHARD_PROFILE: "platform" },
+    });
+    assert.equal(orphanProfile.status, 2, "a profile without a shard is a configuration error");
+    assert.match(orphanProfile.stderr, /HUNCH_TEST_SHARD_PROFILE is set without HUNCH_TEST_SHARD/);
+    const unknownProfile = spawnSync(process.execPath, ["tooling/run-tests.mjs", first], {
+      encoding: "utf8",
+      env: { ...inherited, HUNCH_TEST_SHARD: "1/2", HUNCH_TEST_SHARD_PROFILE: "nope", HUNCH_TEST_SHARD_MANIFEST: join(dir, "nope.json") },
+    });
+    assert.equal(unknownProfile.status, 2);
+    assert.match(unknownProfile.stderr, /unknown test shard profile "nope"/);
+    assert.equal(existsSync(join(dir, "nope.json")), false, "a refused profile writes no manifest");
+    const weighted = spawnSync(process.execPath, ["tooling/run-tests.mjs", "--test-concurrency=1", second, first], {
+      encoding: "utf8",
+      env: { ...inherited, HUNCH_TEST_SHARD: "2/2", HUNCH_TEST_SHARD_PROFILE: "platform", HUNCH_TEST_SHARD_MANIFEST: join(dir, "weighted.json") },
+    });
+    assert.equal(weighted.status, 0, `${weighted.stdout}\n${weighted.stderr}`);
+    const weightedManifest = JSON.parse(readFileSync(join(dir, "weighted.json"), "utf8"));
+    assert.equal(weightedManifest.profile, "platform");
+    assert.deepEqual(weightedManifest.selected, selectShard([first, second], { index: 2, total: 2 }, "platform"));
     const invalid = spawnSync(process.execPath, ["tooling/run-tests.mjs", first], {
       encoding: "utf8",
       env: { ...inherited, HUNCH_TEST_SHARD: "3/2" },

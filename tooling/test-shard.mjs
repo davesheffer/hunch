@@ -44,12 +44,72 @@ function sortedUnique(files) {
   return [...new Set(files)].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 }
 
-/** Sorted file k belongs to shard (k mod total) + 1. */
-export function selectShard(files, { index, total }) {
+// Weighted split profiles: seconds a file took on the slowest runner of the
+// suite it belongs to (any file not listed weighs `defaultWeight`). A profile
+// only moves files between shards; coverage is proven the same way.
+// `platform`: the platform-matrix-safety list, Windows runner timings from CI
+// run 42975277613 (team-matrix-e2e alone outweighs a third of the list).
+export const SHARD_PROFILES = Object.freeze({
+  platform: Object.freeze({
+    defaultWeight: 1,
+    weights: Object.freeze({
+      "test/team-matrix-e2e.test.ts": 281,
+      "test/workspaces.test.ts": 96,
+      "test/task-selection.test.ts": 79,
+      "test/ui.test.ts": 57,
+      "test/hook-shared-worktree.test.ts": 47,
+      "test/workspace-ledger.test.ts": 43,
+      "test/workspace-prune.test.ts": 36,
+      "test/lock-parity.test.ts": 31,
+      "test/memory-home-policy.test.ts": 20,
+      "test/init-shared-autocommit.test.ts": 17,
+      "test/strays.test.ts": 14,
+      "test/test-selection.test.ts": 14,
+      "test/updatecheck.test.ts": 11,
+      "test/dependency-snapshot-isolation.test.ts": 8,
+      "test/hook-daemon.test.ts": 7,
+      "test/development-preparation.test.ts": 6,
+      "test/git-merge-range.test.ts": 5,
+      "test/task-verify-exit.test.ts": 5,
+      "test/experiment.test.ts": 4,
+      "test/bounded-spawn.test.ts": 3,
+      "test/providers.test.ts": 3,
+    }),
+  }),
+});
+
+/** A profile name from the environment: "" means none (the count split). */
+export function parseShardProfile(name) {
+  if (name === undefined || name === null || name === "") return null;
+  if (typeof name !== "string" || !Object.hasOwn(SHARD_PROFILES, name)) {
+    throw new Error(`unknown test shard profile ${JSON.stringify(name)}: expected one of ${Object.keys(SHARD_PROFILES).join(", ")}`);
+  }
+  return name;
+}
+
+/** Without a profile, sorted file k belongs to shard (k mod total) + 1. With
+ *  one, heaviest first (ties in code-unit order), each file goes to the shard
+ *  carrying the least weight so far (ties to the lowest index). Either way the
+ *  shard's files come back sorted, and input order never changes the split. */
+export function selectShard(files, { index, total }, profile = null) {
   if (!Number.isInteger(index) || !Number.isInteger(total) || index < 1 || index > total) {
     throw new Error(`invalid test shard ${index}/${total}`);
   }
-  return sortedUnique(files).filter((_, k) => k % total === index - 1);
+  const sorted = sortedUnique(files);
+  const name = parseShardProfile(profile);
+  if (name === null) return sorted.filter((_, k) => k % total === index - 1);
+  const { defaultWeight, weights } = SHARD_PROFILES[name];
+  const weightOf = (file) => Object.hasOwn(weights, file) ? weights[file] : defaultWeight;
+  const order = [...sorted].sort((a, b) => weightOf(b) - weightOf(a) || (a < b ? -1 : a > b ? 1 : 0));
+  const load = new Array(total).fill(0);
+  const mine = [];
+  for (const file of order) {
+    let target = 0;
+    for (let shard = 1; shard < total; shard += 1) if (load[shard] < load[target]) target = shard;
+    load[target] += weightOf(file);
+    if (target === index - 1) mine.push(file);
+  }
+  return sortedUnique(mine);
 }
 
 function isStringList(value) {
@@ -66,8 +126,8 @@ function sortedCopy(list) {
 
 /** Every reason the manifests fail to prove `total` green shards covered one
  *  input exactly once on `commit` (on Node `node` and `process.platform`
- *  `platform`, when given); empty means proven. */
-export function verifyShardManifests(manifests, { total, commit, expectedInput, node, platform }) {
+ *  `platform`, when given) under split `profile`; empty means proven. */
+export function verifyShardManifests(manifests, { total, commit, expectedInput, node, platform, profile = null }) {
   if (!Array.isArray(manifests)) return ["shard manifests must be a list"];
   const errors = [];
   if (manifests.length !== total) errors.push(`expected ${total} shard manifests, found ${manifests.length}`);
@@ -90,6 +150,7 @@ export function verifyShardManifests(manifests, { total, commit, expectedInput, 
     if (manifest.source_unchanged !== true) errors.push(`${label}: the source tree changed while its tests ran`);
     if (node !== undefined && nodeMajor(manifest.node) !== node) errors.push(`${label}: ran on Node ${JSON.stringify(manifest.node)}, expected Node ${node}`);
     if (platform !== undefined && manifest.platform !== platform) errors.push(`${label}: ran on platform ${JSON.stringify(manifest.platform)}, expected ${platform}`);
+    if ((manifest.profile ?? null) !== profile) errors.push(`${label}: split by profile ${JSON.stringify(manifest.profile ?? null)}, expected ${JSON.stringify(profile)}`);
     const listsOk = isStringList(manifest.input) && isStringList(manifest.selected);
     if (!listsOk) errors.push(`${label}: input and selected must be lists of file paths`);
     if (indexOk && listsOk && manifest.total === total) usable.push({ label, manifest });
@@ -120,7 +181,7 @@ export function verifyShardManifests(manifests, { total, commit, expectedInput, 
   }
   const owner = new Map();
   for (const { label, manifest } of usable) {
-    if (!sameList(manifest.selected, selectShard(manifest.input, { index: manifest.index, total }))) {
+    if (!sameList(manifest.selected, selectShard(manifest.input, { index: manifest.index, total }, profile))) {
       errors.push(`${label}: ran a different file set than its deterministic selection`);
     }
     for (const file of manifest.selected) {
@@ -224,7 +285,7 @@ export function verifyPlatformEvidence({ dir, commit, total, os }) {
   const found = collectEvidence(dir, ["test-shard-manifest.json", "platform-matrix-safety.json"]);
   const manifests = readJsonEvidence(found["test-shard-manifest.json"], errors);
   const receipts = readJsonEvidence(found["platform-matrix-safety.json"], errors);
-  errors.push(...verifyShardManifests(manifests, { total, commit, node: PLATFORM_NODE_MAJOR, platform: PLATFORM_NODE_PLATFORM[os] }));
+  errors.push(...verifyShardManifests(manifests, { total, commit, node: PLATFORM_NODE_MAJOR, platform: PLATFORM_NODE_PLATFORM[os], profile: "platform" }));
   if (receipts.length !== total) errors.push(`expected ${total} platform receipts, found ${receipts.length}`);
   const input = isStringList(manifests[0]?.input) ? sortedCopy(manifests[0].input) : null;
   const shardCounts = new Map();

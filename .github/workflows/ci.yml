@@ -439,7 +439,8 @@ jobs:
       # multi-clone Matrix and atomic persistence paths on Windows. The complete
       # release gate runs above on Node 24 on every run (its test stage sharded)
       # and on Node 22 on push to main. Three shards per OS, each still serial
-      # (--test-concurrency=1) on its own runner.
+      # (--test-concurrency=1) on its own runner, split by measured weight (the
+      # `platform` profile in tooling/test-shard.mjs), not by file count.
       - name: Native bindings, atomic writes, and the team Matrix stay safe
         id: matrix-safety
         if: env.MEMORY_ONLY != 'true'
@@ -447,6 +448,7 @@ jobs:
           HUNCH_TEST_COMPILED_CLI: "1"
           HUNCH_TEST_SHARD: ${{ matrix.shard }}/3
           HUNCH_TEST_SHARD_MANIFEST: test-shard-manifest.json
+          HUNCH_TEST_SHARD_PROFILE: platform
         run: node tooling/run-tests.mjs --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts test/vscode-workspace.test.ts test/development-preparation.test.ts test/fixture-environment.test.ts test/experiment.test.ts test/git-merge-range.test.ts test/workspace-ledger.test.ts test/workspace-prune.test.ts test/workspaces.test.ts test/hook-shared-worktree.test.ts test/init-shared-autocommit.test.ts test/task-verify-exit.test.ts test/update.test.ts test/test-selection.test.ts test/dependency-snapshot-isolation.test.ts test/procstart.test.ts test/spawn-command.test.ts test/bounded-spawn.test.ts test/task-selection.test.ts test/updatecheck.test.ts test/verification-launcher.test.ts test/claudeconfig.test.ts test/providers.test.ts test/registry.test.ts test/lock-parity.test.ts test/cli-adapter.test.ts test/provider-exec.test.ts test/memory-home-policy.test.ts test/strays.test.ts test/worktree-hazards.test.ts test/ui.test.ts test/hook-daemon.test.ts
 
       - name: Write platform Matrix safety receipt

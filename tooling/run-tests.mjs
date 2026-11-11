@@ -50,15 +50,19 @@ export function fixtureGitSystemConfig(inherited = process.env) {
 
 /** CI sharding is never inherited: a nested run-tests invocation inside a test
  * would otherwise silently run only its own slice of files. */
-const SHARD_ENV_KEYS = ["HUNCH_TEST_SHARD", "HUNCH_TEST_SHARD_MANIFEST"];
+const SHARD_ENV_KEYS = ["HUNCH_TEST_SHARD", "HUNCH_TEST_SHARD_MANIFEST", "HUNCH_TEST_SHARD_PROFILE"];
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const shardSpec = process.env.HUNCH_TEST_SHARD || "";
   const manifestPath = process.env.HUNCH_TEST_SHARD_MANIFEST || "";
-  if (manifestPath && !shardSpec) {
-    process.stderr.write("run-tests: HUNCH_TEST_SHARD_MANIFEST is set without HUNCH_TEST_SHARD\n");
-    process.exit(2);
+  const profileName = process.env.HUNCH_TEST_SHARD_PROFILE || "";
+  for (const [key, value] of [["HUNCH_TEST_SHARD_MANIFEST", manifestPath], ["HUNCH_TEST_SHARD_PROFILE", profileName]]) {
+    if (value && !shardSpec) {
+      process.stderr.write(`run-tests: ${key} is set without HUNCH_TEST_SHARD\n`);
+      process.exit(2);
+    }
   }
+  let profile = null;
   let testArgs = process.argv.slice(2);
   let shard = null;
   let shardFiles = [];
@@ -66,10 +70,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   let release = null;
   if (shardSpec) {
     // Only a sharded run loads these; an unsharded run imports nothing new.
-    const { parseShardSpec, selectShard } = await import("./test-shard.mjs");
+    const { parseShardProfile, parseShardSpec, selectShard } = await import("./test-shard.mjs");
     release = await import("./release-gate.mjs");
     try {
       shard = parseShardSpec(shardSpec);
+      profile = parseShardProfile(profileName);
     } catch (error) {
       process.stderr.write(`run-tests: ${error.message}\n`);
       process.exit(2);
@@ -83,7 +88,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     }
     const isTestFile = (arg) => !arg.startsWith("-") && /\.test\.m?ts$/.test(arg);
     shardFiles = testArgs.filter(isTestFile);
-    selected = selectShard(shardFiles, shard);
+    selected = selectShard(shardFiles, shard, profile);
     testArgs = [...testArgs.filter((arg) => !isTestFile(arg)), ...selected];
   }
   // A shard proves it tested the checked-out source: HEAD and the non-memory
@@ -136,6 +141,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
           shard: `${shard.index}/${shard.total}`,
           index: shard.index,
           total: shard.total,
+          profile,
           commit: before.commit,
           input: [...new Set(shardFiles)].sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
           selected,
