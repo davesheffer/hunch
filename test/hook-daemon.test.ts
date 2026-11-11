@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { connect } from "node:net";
@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { lineReader, posixEndpointDir, proofFor } from "../src/cli/hookDaemon.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { hunchPaths } from "../src/core/paths.js";
+import { HUNCH_VERSION } from "../src/core/version.js";
 import { mkConstraint } from "./helpers.js";
 
 test("a socket path past sun_path falls back to /tmp; one that fits stays in TMPDIR", () => {
@@ -58,6 +59,26 @@ function hook(root: string, env: NodeJS.ProcessEnv, input: string) {
   return { stdout: r.stdout, stderr: r.stderr, status: r.status };
 }
 const norm = (s: string) => s.replace(/htask_[0-9a-f]+|hocc_[0-9a-f]+/g, "ID");
+/** The live daemon's endpoint and token, found through the fixture's endpoint dir. */
+function endpointOf(base: string): { path: string; token: string } {
+  const dirEnd = process.platform === "win32" ? join(base, "local", "hunch", "hook-daemon") : join(base, `hunch-${process.getuid?.()}`);
+  const tokenFile = readdirSync(dirEnd).find((n) => n.endsWith(".token"))!;
+  const id = tokenFile.slice(0, -".token".length);
+  // Windows: the pipe name also hashes a per-user secret, so it is not derivable from the token file name alone.
+  const secret = process.platform === "win32" ? readFileSync(join(dirEnd, "pipe.secret"), "utf8").trim() : "";
+  const pipe = createHash("sha256").update(`${secret}\0${id}`).digest("hex").slice(0, 32);
+  const path = process.platform === "win32" ? String.raw`\\.\pipe\hunch-${pipe}` : join(dirEnd, `${id}.sock`);
+  return { path, token: readFileSync(join(dirEnd, tokenFile), "utf8").trim() };
+}
+async function handshake(path: string, token: string) {
+  const socket = connect(path);
+  await new Promise<void>((ok, bad) => { socket.once("connect", ok); socket.once("error", bad); });
+  const reader = lineReader(socket);
+  const nonce = "ab".repeat(16);
+  socket.write(`${JSON.stringify({ v: 3, hello: nonce })}\n`);
+  assert.equal((await reader.next<{ proof: string }>(2000))?.proof, proofFor(token, nonce));
+  return { socket, reader };
+}
 
 test("first hook runs in-process and starts the daemon; the next is served with identical output", { skip: !built, timeout: 60_000 }, async (t) => {
   const f = fixture(t);
@@ -96,21 +117,8 @@ test("the daemon rejects a request without its token", { skip: !built, timeout: 
   await until(() => daemons(f.log).length === 1);
   // Locate the endpoint through the client's own view: a served hook proves it exists.
   hook(f.root, f.env, payload(f.root, "s3"));
-  const dirEnd = process.platform === "win32" ? join(f.base, "local", "hunch", "hook-daemon") : join(f.base, `hunch-${process.getuid?.()}`);
-  const { readdirSync } = await import("node:fs");
-  const tokenFile = readdirSync(dirEnd).find((n) => n.endsWith(".token"))!;
-  const id = tokenFile.slice(0, -".token".length);
-  // Windows: the pipe name also hashes a per-user secret, so it is not derivable from the token file name alone.
-  const secret = process.platform === "win32" ? readFileSync(join(dirEnd, "pipe.secret"), "utf8").trim() : "";
-  const pipe = createHash("sha256").update(`${secret}\0${id}`).digest("hex").slice(0, 32);
-  const path = process.platform === "win32" ? String.raw`\\.\pipe\hunch-${pipe}` : join(dirEnd, `${id}.sock`);
-  const token = readFileSync(join(dirEnd, tokenFile), "utf8").trim();
-  const socket = connect(path);
-  await new Promise<void>((ok, bad) => { socket.once("connect", ok); socket.once("error", bad); });
-  const reader = lineReader(socket);
-  const nonce = "ab".repeat(16);
-  socket.write(`${JSON.stringify({ v: 3, hello: nonce })}\n`);
-  assert.equal((await reader.next<{ proof: string }>(2000))?.proof, proofFor(token, nonce));
+  const { path, token } = endpointOf(f.base);
+  const { socket, reader } = await handshake(path, token);
   socket.write(`${JSON.stringify({ v: 3, token: "wrong", buildId: "x", provider: "claude", cwd: f.root, root: f.root, env: {}, payload: "{}" })}\n`);
   assert.deepEqual(await reader.next(2000), { error: "rejected" });
   socket.destroy();
@@ -140,4 +148,41 @@ test("a strict denial served by the daemon is the in-process denial", { skip: !b
   assert.equal(decision(off.stdout).permissionDecision, "deny");
   assert.deepEqual(decision(on.stdout), decision(off.stdout));
   assert.equal(on.status, off.status);
+});
+
+test("a go arriving past the daemon's budget is answered not-run, so the client runs the hook in-process", { skip: !built, timeout: 60_000 }, async (t) => {
+  const f = fixture(t);
+  hook(f.root, f.env, payload(f.root, "s7"));
+  await until(() => daemons(f.log).length === 1);
+  hook(f.root, f.env, payload(f.root, "s7"));
+  const { path, token } = endpointOf(f.base);
+  const { socket, reader } = await handshake(path, token);
+  const bundle = statSync(resolve("dist/cli/hook.bundle.js"));
+  const buildId = `${HUNCH_VERSION}:${bundle.size}:${bundle.mtimeMs}`;
+  socket.write(`${JSON.stringify({ v: 3, token, buildId, provider: "claude", cwd: f.root, root: f.root, env: {}, payload: payload(f.root, "s7") })}\n`);
+  assert.deepEqual(await reader.next(2000), { ready: true });
+  // No `go` within GO_BUDGET_MS (2s): the daemon answers not-run instead of dropping the socket.
+  assert.deepEqual(await reader.next(5000), { error: "go", ran: false });
+  socket.destroy();
+  // The abandoned request released the daemon: the next hook is served again.
+  const served = lines(f.log).filter((l) => l.endsWith(" served")).length;
+  hook(f.root, f.env, payload(f.root, "s7"));
+  assert.equal(lines(f.log).filter((l) => l.endsWith(" served")).length, served + 1, lines(f.log).join("\n"));
+});
+
+test("an idle daemon does not hold the repository dir (Windows: rename/remove would fail EBUSY)", { skip: !built, timeout: 60_000 }, async (t) => {
+  const f = fixture(t);
+  hook(f.root, f.env, payload(f.root, "s8"));
+  await until(() => daemons(f.log).length === 1);
+  const served = lines(f.log).filter((l) => l.endsWith(" served")).length;
+  hook(f.root, f.env, payload(f.root, "s8"));
+  assert.equal(lines(f.log).filter((l) => l.endsWith(" served")).length, served + 1, lines(f.log).join("\n"));
+  // POSIX lets a busy dir be renamed, so there the cwd itself is the evidence (Linux only).
+  if (process.platform === "linux") {
+    const cwd = readlinkSync(`/proc/${daemons(f.log)[0]!}/cwd`), repo = realpathSync(f.root);
+    assert.ok(cwd !== repo && !cwd.startsWith(`${repo}/`), `daemon cwd ${cwd} is inside ${repo}`);
+  }
+  renameSync(f.root, `${f.root}-moved`);
+  // Still the same live daemon: the rename did not just outlast it.
+  process.kill(daemons(f.log)[0]!, 0);
 });

@@ -1341,7 +1341,9 @@ export function stopVerdict(state: PipelineState, firmness: Firmness): { block: 
 }
 
 // ------------------------------------------------------------------ storage
-const STATE_DIR = join(tmpdir(), "hunch-pipeline");
+/** Read per call, never at module load: a hook daemon serves each request under that
+ * request's TEMP/TMP/TMPDIR. */
+const stateDir = (): string => join(tmpdir(), "hunch-pipeline");
 const SWEEP_AGE_MS = 48 * 3600 * 1000;
 
 export function pipelineEnabled(): boolean {
@@ -1415,7 +1417,7 @@ export function loadPipelineState(sessionId: string): PipelineState {
 /** Persist session state (best effort — scratch data, single writer). */
 export function savePipelineState(sessionId: string, state: PipelineState): void {
   try {
-    mkdirSync(STATE_DIR, { recursive: true });
+    mkdirSync(stateDir(), { recursive: true });
     sweep();
     writeFileSync(stateFile(sessionId), JSON.stringify(state));
   } catch {
@@ -1424,14 +1426,15 @@ export function savePipelineState(sessionId: string, state: PipelineState): void
 }
 
 function stateFile(sessionId: string): string {
-  return join(STATE_DIR, `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
+  return join(stateDir(), `${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80)}.json`);
 }
 
 function sweep(): void {
   try {
-    for (const f of readdirSync(STATE_DIR)) {
+    const dir = stateDir();
+    for (const f of readdirSync(dir)) {
       try {
-        if (Date.now() - statSync(join(STATE_DIR, f)).mtimeMs > SWEEP_AGE_MS) rmSync(join(STATE_DIR, f), { force: true });
+        if (Date.now() - statSync(join(dir, f)).mtimeMs > SWEEP_AGE_MS) rmSync(join(dir, f), { force: true });
       } catch {
         /* raced — skip */
       }
