@@ -45,6 +45,7 @@ const PASSTHROUGH = /for \(const (\w+) of \[([^\]]*)\]\)\s*\{?\s*if \(process\.e
  *  Each needs a reason; a new dynamic read fails until it is listed here. */
 const DYNAMIC_ALLOW: Record<string, string> = {
   "src/extractors/nativeTreeSitter.ts: process.env[key]": "saves the native-binding override keys it is about to set, to restore them afterwards; keys come from NATIVE_PACKAGES, not user input",
+  "src/cli/hookDaemon.ts: process.env[name]": "setEnv mirrors the requesting client's allow-listed environment into the daemon process (names come from that env, not user input); every variable Hunch itself reads is registered by its literal read elsewhere",
   "src/store/hunchStore.ts: process.env[name]": "numEnv(name) helper; every caller passes a literal name, which discovery reads through the \\w*Env(\"X\") pattern",
 };
 

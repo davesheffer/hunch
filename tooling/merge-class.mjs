@@ -63,6 +63,7 @@ export const GROUNDING_DOCS = Object.freeze(["CLAUDE.md", "AGENTS.md"]);
  *  memory-only change can break, so exactly what its CI fast path runs. */
 export const MEMORY_GRAPH_TESTS = Object.freeze([
   "test/grounding-freshness.test.ts",
+  "test/lean-grounding.test.ts",
   "test/public-constraint-scope.test.ts",
 ]);
 

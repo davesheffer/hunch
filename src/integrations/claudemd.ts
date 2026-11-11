@@ -9,7 +9,7 @@ import { basename, join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
 import { PolicyRepository } from "../constitution/repository.js";
-import { renderCountsMatch, parseGroundingCounts, groundingTemplate } from "../core/groundingLag.js";
+import { renderCountsMatch, parseGroundingCounts, groundingTemplate, groundingVariant, GROUNDING_VARIANT_LEAN } from "../core/groundingLag.js";
 import type { GroundingCounts } from "../core/groundingLag.js";
 
 export const HUNCH_START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
@@ -77,7 +77,14 @@ export function stripManagedSection(text: string): string {
   return text.slice(0, iStart) + text.slice(iEnd + END.length);
 }
 
-export function renderHunchSection(store: HunchStore, root?: string): string {
+export function renderHunchSection(store: HunchStore, root?: string, existing?: string): string {
+  return renderHunchSectionAs(store, root, resolveGroundingVariant(existing));
+}
+
+/** Render in an explicit variant, ignoring the env: freshness checks judge a committed
+ *  block against a render in the variant it was written in (stamp-driven). */
+export function renderHunchSectionAs(store: HunchStore, root: string | undefined, variant: "lean" | "full"): string {
+  const lean = variant === "lean";
   const constraints = store.json
     .loadAll("constraints")
     .filter((c) => c.status === "active" && !c.valid_to)
@@ -103,8 +110,23 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
   const lines: string[] = [];
   lines.push(START);
   lines.push(`<!-- hunch:template ${GROUNDING_TEMPLATE} -->`);
+  if (lean) lines.push(GROUNDING_VARIANT_LEAN);
   lines.push("## 🧠 Hunch (Engineering Memory)");
   lines.push("");
+  if (lean) {
+    // Experimental lean block: the per-moment tool list repeats the MCP server's
+    // instructions, which every MCP client already loads. Same template number on
+    // purpose: a variant, not newer prose, so a default render may replace it.
+    lines.push(
+      "This repo has **Hunch**, a graph of *why* the code is the way it is. It holds " +
+        `${renderCountsMatch(counts)}. The \`hunch_*\` MCP tools and hooks deliver it; their instructions say when.`,
+    );
+    lines.push("");
+    lines.push(LEAN_CONTRACT);
+    pushInvariants(lines, constraints);
+    lines.push(END);
+    return lines.join("\n");
+  }
   lines.push(
     "This repo has **Hunch**, a graph of *why* the code is the way it is. It holds " +
       `${renderCountsMatch(counts)}. Use the \`hunch_*\` MCP tools by moment:`,
@@ -127,17 +149,44 @@ export function renderHunchSection(store: HunchStore, root?: string): string {
       `📖 Component wiki: \`${wiki.dir}/\` (${wiki.pages} page(s)) — a GENERATED view of this graph; the graph stays the source of truth. Stale pages surface in \`hunch drift\`; regenerate with \`hunch wiki --heal\`.`,
     );
   }
-  if (constraints.length) {
-    lines.push("");
-    lines.push("### ⛔ Top invariants (do not break)");
-    for (const c of constraints) {
-      lines.push(`- **[${c.severity}]** ${c.severity === "blocking" ? c.statement : clip(c.statement, INVARIANT_CHARS)} _(scope: ${c.scope.join(", ") || "repo"}; ${c.id})_`);
-    }
-  }
+  pushInvariants(lines, constraints);
   lines.push("");
   lines.push("_Records carry provenance and confidence; treat low-confidence items as advisory._");
   lines.push(END);
   return lines.join("\n");
+}
+
+const LEAN_CONTRACT =
+  'Per task: reuse the hook\'s task or `hunch_task(action: "start", title)` once; `hunch_context(target, task_id)` first; `hunch_check_constraints(scope)` before editing shared code; run checks through the hook\'s `task verify` launcher; `hunch_task(action: "finish", task_id)` and show its card verbatim at the end; record only what the human decides or corrects.';
+
+/** Experimental lean variant (HUNCH_LEAN_GROUNDING, read at call time): the block
+ *  keeps the counts, one contract line and the Top invariants. "1" forces lean, "0"
+ *  forces full; anything else keeps the variant of the block being replaced
+ *  (stamp-driven), so a refresh never churns a committed block between variants.
+ *  `existing` is the doc text (or block) about to be replaced. */
+export function resolveGroundingVariant(existing?: string): "lean" | "full" {
+  const flag = process.env.HUNCH_LEAN_GROUNDING;
+  if (flag === "1") return "lean";
+  if (flag === "0") return "full";
+  return existing !== undefined && groundingVariant(existing) === "lean" ? "lean" : "full";
+}
+
+/** Experimental (HUNCH_LEAN_GROUNDING=1): MCP-side switch; the MCP server has no existing block. */
+export function leanGroundingEnabled(): boolean {
+  return process.env.HUNCH_LEAN_GROUNDING === "1";
+}
+
+function readIfExists(file: string): string | undefined {
+  return existsSync(file) ? readFileSync(file, "utf8") : undefined;
+}
+
+function pushInvariants(lines: string[], constraints: { severity: string; statement: string; scope: string[]; id: string }[]): void {
+  if (!constraints.length) return;
+  lines.push("");
+  lines.push(INVARIANTS_HEADING + " (do not break)");
+  for (const c of constraints) {
+    lines.push(`- **[${c.severity}]** ${c.severity === "blocking" ? c.statement : clip(c.statement, INVARIANT_CHARS)} _(scope: ${c.scope.join(", ") || "repo"}; ${c.id})_`);
+  }
 }
 
 /** Insert/replace the marker-delimited HUNCH section in a markdown doc, preserving
@@ -168,7 +217,7 @@ export function upsertSection(file: string, section: string, fallbackTitle: stri
 
 /** Insert/replace the HUNCH section in CLAUDE.md, preserving everything else. */
 export function updateClaudeMd(root: string, store: HunchStore, opts?: { force?: boolean }): string {
-  return upsertSection(join(root, "CLAUDE.md"), renderHunchSection(store, root), `# ${basename(root)}`, opts);
+  return upsertSection(join(root, "CLAUDE.md"), renderHunchSection(store, root, readIfExists(join(root, "CLAUDE.md"))), `# ${basename(root)}`, opts);
 }
 
 /** Cut at the last whitespace at or before `max - 1` chars, so a word is never split. */

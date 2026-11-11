@@ -38,8 +38,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { renderHunchSection } from "../src/integrations/claudemd.js";
-import { classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
+import { renderHunchSectionAs } from "../src/integrations/claudemd.js";
+import { groundingVariant, classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
@@ -70,10 +70,12 @@ test("the committed CLAUDE.md grounding block matches what the graph generates (
   process.env.HUNCH_PRIVATE_DIR = emptyPrivate;
   const store = new HunchStore(hunchPaths(repoRoot));
   try {
-    const rendered = renderHunchSection(store, repoRoot);
-    const generated = blockContent(rendered) ?? rendered.trim();
     const committed = committedBlock(join(repoRoot, "CLAUDE.md"));
     assert.ok(committed !== null, "CLAUDE.md carries a managed HUNCH block");
+    // Stamp-driven: judge the committed block against a render in ITS variant, ignoring
+    // HUNCH_LEAN_GROUNDING (the experimental lean variant stamps itself).
+    const rendered = renderHunchSectionAs(store, repoRoot, groundingVariant(committed));
+    const generated = blockContent(rendered) ?? rendered.trim();
     const verdict = classifyGroundingBlock(committed, generated);
     // `newer` is tolerated in a repo whose pinned Hunch lags its docs, never here: this
     // source tree IS the newest renderer, so a higher template stamp is a bad block.

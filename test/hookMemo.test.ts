@@ -84,6 +84,16 @@ test("noteEditedFiles moves only the edited entries; shell writes after it are s
   assert.deepEqual(shellWrittenFiles(root, s), ["src/a.ts"]);
 });
 
+test("runHookCommand opens a memo scope itself, so the hook-only bundle and the daemon memoize too", async () => {
+  const { runHookCommand } = await import("../src/cli/hookCommand.js");
+  endHookInvocation();
+  assert.equal(hookActive(), false);
+  // Unrecognized input returns before any grounding; the scope is already open.
+  await runHookCommand({ provider: "claude" }, async () => "{}");
+  assert.equal(hookActive(), true);
+  endHookInvocation();
+});
+
 test("a stray .git dir in a subdirectory is not taken for a toplevel: shell writes keep the subdir prefix", (t) => {
   const root = repo(t);
   const sub = join(root, "src");

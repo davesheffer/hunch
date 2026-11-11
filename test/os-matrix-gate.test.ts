@@ -16,6 +16,7 @@ const rel = (p: string) => relative(ROOT, p).replace(/\\/g, "/");
 /** src file -> tests that exercise it. `via` is the regex proving the test reaches
  *  it; default: a direct static import of the module. */
 const MAPPING: Record<string, { tests: string[]; via?: RegExp }> = {
+  "src/cli/hookDaemon.ts": { tests: ["test/hook-daemon.test.ts"] },
   "src/cli/ui.ts": { tests: ["test/ui.test.ts"], via: /directCliArgs\("ui"/ },
   "src/cli/update.ts": { tests: ["test/update.test.ts"] },
   "src/cli/verify.ts": { tests: ["test/test-selection.test.ts"], via: /hunchCliArgs\("verify"/ },

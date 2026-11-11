@@ -8,42 +8,79 @@
 import "./preflight.js"; // MUST stay the first import — Node-version gate before node:sqlite loads
 import { normalizeInitiator } from "../synthesis/initiator.js";
 import { runHookCommand } from "./hookCommand.js";
+import { fastHookArgs } from "./hookArgs.js";
+import { runHookDaemon, runHookDaemonHost } from "./hookDaemon.js";
 import { markerFor } from "./optOutGate.js";
-import { trackedStore } from "./teamStore.js";
+import { clearTrackedStore, trackedStore } from "./teamStore.js";
 
-/** `{ provider }` only for exactly `hook`, `hook --provider X` or `hook --provider=X`
- *  (X non-empty); null sends the invocation through the full CLI. The shim in
- *  tooling/bundle-cli.mjs applies the same rule inline. */
-export function fastHookArgs(args: string[]): { provider: string } | null {
-  if (args[0] !== "hook") return null;
-  if (args.length === 1) return { provider: "claude" };
-  if (args.length === 3 && args[1] === "--provider" && args[2]) return { provider: args[2] };
-  if (args.length === 2 && args[1]!.startsWith("--provider=") && args[1]!.length > "--provider=".length) {
-    return { provider: args[1]!.slice("--provider=".length) };
+/** Same as the full CLI's global preAction for `hook` without --initiator; false for an
+ *  opted-out repository, which stays silent (the caller exits 0). */
+function prepare(provider: string): boolean {
+  process.env.HUNCH_INITIATOR = ["claude", "cursor"].includes(provider) ? normalizeInitiator(provider) : "unknown";
+  return !markerFor(process.cwd());
+}
+
+export { fastHookArgs };
+
+/** Set by the daemon client (hookClient.ts) when it already read the hook's stdin. */
+const HANDED_INPUT = Symbol.for("hunch.hook.input");
+
+/** The hook's stdin (a TTY has none), unless the daemon client already consumed it. */
+function readInput(): Promise<string> {
+  return new Promise((resolve) => {
+    const handed = (globalThis as Record<symbol, unknown>)[HANDED_INPUT];
+    if (typeof handed === "string") return resolve(handed);
+    if (process.stdin.isTTY) return resolve("");
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => (data += c));
+    process.stdin.on("end", () => resolve(data));
+    process.stdin.on("error", () => resolve(data));
+  });
+}
+
+function failed(e: unknown): void {
+  try {
+    trackedStore()?.close();
+  } catch {
+    /* ignore */
   }
-  return null;
+  const msg = e instanceof Error ? e.message : String(e);
+  console.error(`hunch: ${msg}`);
 }
 
 async function main(provider: string): Promise<void> {
-  // Same as the full CLI's global preAction for `hook` without --initiator.
-  process.env.HUNCH_INITIATOR = ["claude", "cursor"].includes(provider) ? normalizeInitiator(provider) : "unknown";
-  // Same as the opt-out gate for `hook`: an opted-out repository stays silent, exit 0.
-  if (markerFor(process.cwd())) process.exit(0);
-  await runHookCommand({ provider });
+  if (!prepare(provider)) process.exit(0);
+  await runHookCommand({ provider }, readInput);
+}
+
+/** What the daemon runs per request: `main` minus the process exits, with the same failure output. */
+async function serve(provider: string, payload: string): Promise<void> {
+  try {
+    if (!prepare(provider)) return;
+    await runHookCommand({ provider }, async () => payload);
+  } catch (e) {
+    failed(e);
+    process.exitCode = 1;
+  } finally {
+    // A store the handler left open (an error path) must not outlive its request.
+    try { trackedStore()?.close(); } catch { /* already closed */ }
+    clearTrackedStore();
+  }
 }
 
 // Runs when loaded as the hook bundle. The guard makes importing this module
 // (tests) inert unless the process really was launched as `hunch hook`.
-const fast = fastHookArgs(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const fast = fastHookArgs(argv);
 if (fast) {
   main(fast.provider).catch((e) => {
-    try {
-      trackedStore()?.close();
-    } catch {
-      /* ignore */
-    }
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error(`hunch: ${msg}`);
+    failed(e);
     process.exit(1);
   });
+} else if (argv.length === 2 && argv[0] === "hook-daemon") {
+  // Hidden entries of the opt-in hook daemon (hookDaemon.ts), started by a hook.
+  runHookDaemon(argv[1]!, serve).catch(() => process.exit(0));
+} else if (argv.length === 2 && argv[0] === "hook-daemon-host") {
+  runHookDaemonHost(argv[1]!);
 }

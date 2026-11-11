@@ -30,7 +30,7 @@ import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, s
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, deliversCommandOutcome, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
-import { PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag } from "../core/pipeline.js";
+import { PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag } from "../core/pipeline.js";
 import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { nowData } from "../wiki/wiki.js";
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, relevantEscalations, type Escalation } from "../core/escalations.js";
@@ -42,9 +42,11 @@ import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../cor
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
-export async function runHookCommand(opts: { provider?: string }): Promise<void> {
-    // Every entry (full CLI, the hook-only bundle) comes through here: one hook
-    // invocation, one memo scope.
+/** `input` supplies the event JSON; it defaults to the process's stdin. The hook daemon passes
+ *  the payload it already holds. */
+export async function runHookCommand(opts: { provider?: string }, input: () => Promise<string> = readStdin): Promise<void> {
+    // Every entry (full CLI, the hook-only bundle, the hook daemon) comes through
+    // here: one hook invocation, one memo scope.
     beginHookInvocation();
     // A hook MUST NEVER break the agent: on ANY error or unrecognized input we
     // exit 0 and never deny (the action defers to the host's normal flow).
@@ -57,7 +59,7 @@ export async function runHookCommand(opts: { provider?: string }): Promise<void>
     try {
       provider = hookProvider(opts.provider);
       if (!provider) return;
-      const evt = normalizeHookEvent(JSON.parse(await readStdin()), provider);
+      const evt = normalizeHookEvent(JSON.parse(await input()), provider);
       if (!evt) return;
       eventName = evt.hook_event_name;
       // Grounding reads the store of the checkout the event's file is in; the prompt's
@@ -211,18 +213,37 @@ export async function runHookCommand(opts: { provider?: string }): Promise<void>
         // escalating one) must still become an enforced rule. Neither is the unverified
         // nag below, the one nag that must repeat.
         const parts: string[] = [];
-        // Always stamp the key, so a correction that delivers the reminder counts as
-        // this session's one delivery.
-        const reminderDue = injectionMode(evt.session_id, "prompt-reminder", HOOK_REMINDER) === "full";
-        if (isCorrection) parts.push(`${HOOK_REMINDER}\n\n${CORRECTION_NUDGE}`);
-        else if (reminderDue) parts.push(HOOK_REMINDER);
+        // Scored at most once per prompt; the report below reuses it.
+        const promptProvider = provider;
+        let scored: { selection: TaskSelection | null } | undefined;
+        const scoreOnce = (): TaskSelection | null => {
+          if (!scored) {
+            store ??= new HunchStore(paths);
+            scored = { selection: scorePromptSelection(root, store, promptProvider, evt) };
+          }
+          return scored.selection;
+        };
+        // Experimental quiet mode: nothing relevant retrieved for this prompt, so the
+        // availability reminder and the full task rules stay out (and unstamped, so a
+        // later prompt that retrieves memory still gets them in full). A correction
+        // is never dropped. A scoring failure counts as "not empty": today's output.
+        let quiet = false;
+        if (quietEmptyEnabled()) {
+          // Empty means scored and nothing qualified (a blocking constraint qualifies
+          // without being listed). Not scored at all (selection disabled, a host
+          // notification, no task id) is not empty: today's output.
+          try { const sel = scoreOnce(); quiet = sel !== null && !sel.qualifying.length; } catch { quiet = false; }
+        }
+        if (isCorrection) {
+          injectionMode(evt.session_id, "prompt-reminder", HOOK_REMINDER);
+          parts.push(`${HOOK_REMINDER}\n\n${CORRECTION_NUDGE}`);
+        } else if (!quiet && injectionMode(evt.session_id, "prompt-reminder", HOOK_REMINDER) === "full") parts.push(HOOK_REMINDER);
         // Reporting failure must not suppress the existing correction/policy reminder.
         try {
-          const report = startHookReport(root, provider, evt);
+          const report = startHookReport(root, provider, evt, quiet ? { minimal: true } : undefined);
           if (report) {
             parts.push(report);
-            store ??= new HunchStore(paths);
-            const selected = promptTaskSelection(root, store, provider, evt);
+            const selected = promptTaskSelection(root, provider, evt, scoreOnce());
             if (selected) parts.push(selected);
           }
         } catch { /* passive reporting remains fail-open */ }
@@ -393,6 +414,16 @@ export async function runHookCommand(opts: { provider?: string }): Promise<void>
           // `hunch escalations`. A provider with no prompt event would never ask,
           // so its orientation event keeps asking every actionable entry.
           const actionableEsc = deliversPromptEvent(provider) ? [] : (await actionableEscalationsWithAnchors(paths.root, s)).actionable;
+          // Experimental quiet mode: no live constraint, bug or finding and nothing to
+          // ask means there is nothing to orient on; only the environment's execution
+          // obligations (controllerBrief) still ride session start.
+          if (quietEmptyEnabled() && !actionableEsc.length
+            && !s.advisoryRecs("constraints").some((c) => c.status === "active")
+            && !s.advisoryRecs("bugs").length
+            && !s.advisoryRecs("findings").some((f) => f.triage === "open")) {
+            if (controllerBrief) emitContext(provider, "SessionStart", controllerBrief);
+            return;
+          }
           if (!decisions.length && !actionableEsc.length) {
             // A fresh graph with nothing to raise has nothing to orient on, but the
             // operating loop is still delivered. A queued commit-repair escalation
@@ -659,19 +690,28 @@ async function promptEscalations(root: string, store: HunchStore, provider: Hook
   return `⚖ ${unasked.length} decision(s) this task touches need the human's call — ASK the user inline, never decide for them: ${unasked.map((e) => e.question).join(" · ")}`;
 }
 
-function promptTaskSelection(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput): string {
+type TaskSelection = ReturnType<typeof selectForTask>;
+/** The scoring step of a prompt's memory retrieval: null when selection does not
+ * apply (disabled, a host notification, no task id). Free of side effects, so the
+ * caller can learn whether retrieval is empty before rendering anything. */
+function scorePromptSelection(root: string, store: HunchStore, provider: HookProvider, evt: HunchHookInput): TaskSelection | null {
   // A host notification is not a task prompt: the earlier selection stands untouched.
-  if (!taskSelectionEnabled() || isNotificationPrompt(evt.prompt)) return "";
-  const taskId = hookReportTaskId(root, provider, evt);
-  if (!taskId) return "";
+  if (!taskSelectionEnabled() || isNotificationPrompt(evt.prompt)) return null;
+  if (!hookReportTaskId(root, provider, evt)) return null;
   // Host-injected blocks (reminders, browser instructions) are not the task the human named.
-  const humanText = stripHostBlocks(evt.prompt ?? "");
-  const selection = selectForTask(liveSelectionRecords({
+  return selectForTask(liveSelectionRecords({
     decisions: store.recs("decisions"),
     bugs: store.recs("bugs"),
     constraints: store.recs("constraints"),
     findings: store.recs("findings"),
-  }), humanText, { root, pathExists: (p) => existsSync(join(root, p)) });
+  }), stripHostBlocks(evt.prompt ?? ""), { root, pathExists: (p) => existsSync(join(root, p)) });
+}
+
+function promptTaskSelection(root: string, provider: HookProvider, evt: HunchHookInput, selection: TaskSelection | null): string {
+  if (!selection) return "";
+  const taskId = hookReportTaskId(root, provider, evt);
+  if (!taskId) return "";
+  const humanText = stripHostBlocks(evt.prompt ?? "");
   // Same task id again (a notification alias) keeps its own earlier selection; a
   // new task that CONTINUES the session's previous one inherits that task's
   // selection only on a bare follow-up ("continue", "go on"), so it is not left
@@ -804,6 +844,15 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
     supplements,
     ...(selected ? { taskSelected: selected } : {}),
   });
+  // Experimental quiet mode: a block with no ranked record, no retired-code or
+  // topic-anchor supplement and no sibling lesson is only a header and structural
+  // lines. Say nothing, and record nothing as served.
+  if (quietEmptyEnabled()
+    && !envelope.delivered.length
+    && !siblings.text
+    && !envelope.supplements.some((x) => x.delivered && (x.kind === "retired-code" || x.kind === "doc-grounding" || x.kind === "decision-grounding"))) {
+    return null;
+  }
   // Outside the envelope's budget on purpose: the lesson is a code change, not a
   // one-line supplement, and memory records must not crowd it out.
   const text = [siblings.text, envelope.text.trim()].filter(Boolean).join("\n\n");

@@ -10,6 +10,8 @@
  *                               `hunch hook` needs (no Commander, no other
  *                               commands' imports; ~100 ms of schema construction
  *                               a hook never uses)
+ *   dist/cli/hook-client.bundle.js - the opt-in hook daemon client: tries the warm
+ *                               daemon, else hands the same stdin to hook.bundle.js
  *   dist/cli/index.js         - tiny entry: Node-version gate, compile cache,
  *                               then the hook bundle for a plain `hook` argv
  *                               (same rule as fastHookArgs in hookMain.ts) or
@@ -37,6 +39,8 @@ if (readFileSync(entry, "utf8").includes(MARKER)) {
 const bundles = [
   { entry, bundle },
   { entry: `${cli}hookMain.js`, bundle: `${cli}hook.bundle.js` },
+  // Opt-in hook daemon client (HUNCH_HOOK_DAEMON=1): loads neither handler nor store.
+  { entry: `${cli}hookClient.js`, bundle: `${cli}hook-client.bundle.js` },
 ];
 for (const { entry: input, bundle: output } of bundles) {
   await build({
@@ -76,7 +80,8 @@ const a = process.argv.slice(2);
 const fastHook = a[0] === "hook" && (a.length === 1
   || (a.length === 3 && a[1] === "--provider" && !!a[2])
   || (a.length === 2 && a[1].startsWith("--provider=") && a[1].length > 11));
-await import(fastHook ? "./hook.bundle.js" : "./index.bundle.js");
+const hookBundle = fastHook && process.env.HUNCH_HOOK_DAEMON === "1" ? "./hook-client.bundle.js" : "./hook.bundle.js";
+await import(fastHook ? hookBundle : "./index.bundle.js");
 `;
 writeFileSync(`${entry}.tmp`, shim);
 renameSync(`${entry}.tmp`, entry);
