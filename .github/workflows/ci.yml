@@ -10,20 +10,26 @@ on:
 permissions:
   contents: read
 
+# Only a PR's superseded run is cancelled. Every push to main gets its own
+# group (its run id): a shared group would still cancel a *pending* main run
+# when the next merge queues, and that run is the only one that runs the
+# complete Node 22 gate for its commit.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # A memory-only PR (graph records under .hunch/ plus the grounding docs Hunch
   # regenerates from them) cannot change code, so the required legs below run a
   # graph-only fast path instead of the full gate, and merge-class auto-merge
-  # lands it in minutes. The required checks are matrix jobs: skipping a whole
-  # job would report a bare "ci" and leave "ci (22)" pending forever, so every
-  # leg still runs and gates its own steps. The PR cannot widen the class that
-  # judges it — the classifier is read from the target branch, never the PR's
-  # tree — and any failure here falls back to the full run. Pushes to main
-  # always run everything.
+  # lands it in minutes. The required "ci (22)" and "ci (24)" checks are
+  # one-element matrix jobs: a skipped matrix job reports its unexpanded name, so
+  # a skip (a cancelled run) leaves the required check pending
+  # instead of passing it, whereas a skipped static-named job reports success.
+  # Every leg therefore runs and gates its own steps. The PR cannot widen the
+  # class that judges it — the classifier is read from the target branch, never
+  # the PR's tree — and any failure here falls back to the full run. Pushes to
+  # main always run everything.
   classify:
     # Skipped on push: the legs then see an empty output and run in full.
     if: github.event_name == 'pull_request'
@@ -85,7 +91,18 @@ jobs:
       - run: python -m unittest discover -s clients/python/tests
       - run: node tooling/verify-python-state.mjs python --proof
 
-  ci:
+  # PR wall time is the slowest required leg, so the release gate's test stage
+  # (the full suite, ~13 of a leg's 16 min) runs as four disjoint shards on Node
+  # 24, beside a gate that runs every other stage and records `test` as
+  # delegated. The required "ci (24)" check is the verdict job below: it proves
+  # the shards ran exactly the full test/*.test.ts set on this commit, all
+  # green, and that the delegated gate passed everything else. A tagged release
+  # can never delegate (release.yml runs the complete gate in one process).
+  # Node 22 runs the complete gate on push to main; a PR gets typecheck, the
+  # compiled CLI, and the runtime-sensitive tests on Node 22. Both required
+  # checks are one-element matrix jobs so a skip never reports success (above).
+  ci-node22:
+    name: ci (${{ matrix.node }})
     needs: classify
     # A failed classify still runs the leg, in full: never a skipped required check.
     if: ${{ !cancelled() }}
@@ -93,9 +110,8 @@ jobs:
     # The release gate alone runs the full suite in 17-20 min; 20 cancelled main (f93798da).
     timeout-minutes: 30
     strategy:
-      fail-fast: false
       matrix:
-        node-version: [22, 24]
+        node: [22]
     env:
       MEMORY_ONLY: ${{ needs.classify.outputs.memory_only == 'true' }}
     steps:
@@ -107,7 +123,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ matrix.node }}
           cache: npm
 
       # The memory home policy gate (dec_66636a2b1b): a PR must not add or modify a
@@ -163,30 +179,114 @@ jobs:
         if: env.MEMORY_ONLY != 'true'
         run: npm run build
 
+      # Node 22 on a PR: the runtime-floor checks — strict types, the compiled CLI
+      # starts, and the tests that exercise node:sqlite, the native tree-sitter
+      # bindings, atomic writes, migration, and MCP startup. The full suite and
+      # the whole gate run on Node 22 on every push to main.
+      - name: Node 22 PR smoke — typecheck, compiled CLI, runtime-sensitive tests
+        if: github.event_name == 'pull_request' && env.MEMORY_ONLY != 'true'
+        env:
+          HUNCH_TEST_COMPILED_CLI: "1"
+        run: |
+          npm run typecheck
+          node dist/cli/index.js --version
+          node tooling/run-tests.mjs --test-concurrency=4 test/store.test.ts test/parse.test.ts test/io.test.ts test/migrate.test.ts test/mcp-startup-sync.test.ts
+
       # One cross-platform gate is shared by normal CI and the publish workflow:
       # typecheck, full tests, core + VS Code builds, fresh index + conformance, clean tarball
       # rehearsal/privacy sentinel, and production dependency audit. It emits a
       # content-addressed receipt even when a prerequisite fails.
       - name: Constitution release gate
-        if: env.MEMORY_ONLY != 'true'
+        if: github.event_name != 'pull_request' && env.MEMORY_ONLY != 'true'
         env:
           HUNCH_TEST_COMPILED_CLI: "1"
         run: npm run gate:release -- --output release-gate.json
 
       - name: Upload release-gate receipt
+        if: ${{ always() && github.event_name != 'pull_request' && env.MEMORY_ONLY != 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: constitution-release-gate-node-22-${{ github.sha }}
+          path: release-gate.json
+          if-no-files-found: error
+          overwrite: true
+
+  gate-node24:
+    name: release gate (24, test stage on shards)
+    needs: classify
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MEMORY_ONLY: ${{ needs.classify.outputs.memory_only == 'true' }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # Same gate as the Node 22 leg (dec_66636a2b1b): the target's CLI, before the PR's install.
+      - name: Memory policy check
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HUNCH_NO_UPDATE_CHECK: "1"
+        run: |
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          if ! git grep -q 'command("memory-policy")' "origin/${BASE_REF}" -- src/cli/index.ts; then
+            echo "::notice::origin/${BASE_REF} predates the memory policy gate; nothing to enforce"
+            exit 0
+          fi
+          base="$RUNNER_TEMP/base"
+          git worktree add --detach "$RUNNER_TEMP/base" "origin/${BASE_REF}"
+          (cd "$base" && npm ci --ignore-scripts --no-audit --no-fund && npm run build)
+          node "$base/dist/cli/index.js" memory-policy check --base "origin/${BASE_REF}"
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Memory-only fast path — graph tests, fresh index, conformance, drift
+        if: env.MEMORY_ONLY == 'true'
+        run: |
+          tests="$(node -e 'import("./tooling/merge-class.mjs").then((m) => console.log(m.MEMORY_GRAPH_TESTS.join(" ")))')"
+          test -n "$tests"
+          node tooling/run-tests.mjs $tests
+          export HUNCH_PRIVATE_DIR="$(mktemp -d)" HUNCH_SYNTH_PROVIDER=deterministic
+          npx tsx src/cli/index.ts index --no-auto-commit
+          npx tsx src/cli/index.ts conform --strict
+          npx tsx src/cli/index.ts drift --fail-on finding-stale
+
+      - name: Build compiled CLI for black-box tests
+        if: env.MEMORY_ONLY != 'true'
+        run: npm run build
+
+      # Every gate stage except `test`, which the receipt records as delegated
+      # (result "partial", never candidate-ready); the test-shards job runs it.
+      - name: Constitution release gate, test stage delegated to the shards
+        if: env.MEMORY_ONLY != 'true'
+        env:
+          HUNCH_TEST_COMPILED_CLI: "1"
+        run: npm run gate:release -- --delegate-test --output release-gate.json
+
+      - name: Upload release-gate receipt
         if: ${{ always() && env.MEMORY_ONLY != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: constitution-release-gate-node-${{ matrix.node-version }}-${{ github.sha }}
+          name: constitution-release-gate-node-24-${{ github.sha }}
           path: release-gate.json
           if-no-files-found: error
+          overwrite: true
 
       # Exercise the exact lifecycle and package manifest npm will use before a
       # version tag can be cut. The release workflow repeats the fail-closed
       # release gate on the tag; this pre-tag Node 24 leg catches packaging-only
       # regressions while the change is still a PR/main commit.
       - name: Build Node 24 npm package candidate
-        if: matrix.node-version == 24 && env.MEMORY_ONLY != 'true'
+        if: env.MEMORY_ONLY != 'true'
         id: package-candidate
         run: |
           npm run prepublishOnly
@@ -194,13 +294,13 @@ jobs:
           node -e 'const fs=require("node:fs"); const value=JSON.parse(fs.readFileSync("npm-package-manifest.json","utf8")); if (!Array.isArray(value) || value.length !== 1 || !Array.isArray(value[0].files)) throw new Error("npm package manifest is malformed");'
 
       - name: Write Node 24 package-candidate receipt
-        if: ${{ always() && matrix.node-version == 24 && env.MEMORY_ONLY != 'true' }}
+        if: ${{ always() && env.MEMORY_ONLY != 'true' }}
         env:
           CANDIDATE_OUTCOME: ${{ steps.package-candidate.outcome }}
         run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const manifest=fs.existsSync("npm-package-manifest.json")?fs.readFileSync("npm-package-manifest.json"):null; const body={schema:"hunch.npm-package-candidate.v1",commit:process.env.GITHUB_SHA,node:process.version,outcome:process.env.CANDIDATE_OUTCOME,manifest_sha256:manifest?"sha256:"+crypto.createHash("sha256").update(manifest).digest("hex"):null}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("npm-package-candidate-receipt.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
 
       - name: Upload Node 24 package-candidate receipt
-        if: ${{ always() && matrix.node-version == 24 && env.MEMORY_ONLY != 'true' }}
+        if: ${{ always() && env.MEMORY_ONLY != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: npm-package-candidate-node-24-${{ github.sha }}
@@ -208,14 +308,102 @@ jobs:
             npm-package-candidate-receipt.json
             npm-package-manifest.json
           if-no-files-found: error
+          overwrite: true
+
+  # The gate's test stage, `npm test` exactly, split by tooling/test-shard.mjs:
+  # the sorted file list, file k to shard (k mod 4) + 1. Each shard writes a
+  # manifest of what it was given, what it ran, its exit code, and whether the
+  # source tree stayed untouched; the verdict proves the shards cover the suite.
+  test-shards:
+    name: test (24, ${{ matrix.shard }}/4)
+    needs: classify
+    if: ${{ !cancelled() && needs.classify.outputs.memory_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Build compiled CLI for black-box tests
+        run: npm run build
+
+      - name: Release-gate test stage, shard ${{ matrix.shard }}/4
+        env:
+          HUNCH_TEST_COMPILED_CLI: "1"
+          HUNCH_TEST_SHARD: ${{ matrix.shard }}/4
+          HUNCH_TEST_SHARD_MANIFEST: test-shard-manifest.json
+        run: npm test
+
+      - name: Upload shard manifest
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-shard-node-24-${{ matrix.shard }}-${{ github.sha }}
+          path: test-shard-manifest.json
+          if-no-files-found: error
+          overwrite: true
+
+  ci-node24:
+    name: ci (${{ matrix.node }})
+    needs: [classify, gate-node24, test-shards]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node: [24]
+    env:
+      MEMORY_ONLY: ${{ needs.classify.outputs.memory_only == 'true' }}
+      GATE_RESULT: ${{ needs.gate-node24.result }}
+      SHARDS_RESULT: ${{ needs.test-shards.result }}
+    steps:
+      - name: Upstream jobs finished green
+        run: |
+          echo "gate-node24: $GATE_RESULT; test-shards: $SHARDS_RESULT; memory-only: $MEMORY_ONLY"
+          test "$GATE_RESULT" = success
+          if [ "$MEMORY_ONLY" = true ]; then test "$SHARDS_RESULT" = skipped; else test "$SHARDS_RESULT" = success; fi
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        if: env.MEMORY_ONLY != 'true'
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        if: env.MEMORY_ONLY != 'true'
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Download gate, package, and shard evidence
+        if: env.MEMORY_ONLY != 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: "*-node-24-*${{ github.sha }}"
+          path: ${{ runner.temp }}/evidence
+
+      - name: Shards cover the suite exactly; the delegated gate passed the rest
+        if: env.MEMORY_ONLY != 'true'
+        run: node tooling/test-shard.mjs verify-node24 --dir "$RUNNER_TEMP/evidence" --commit "$GITHUB_SHA" --total 4
 
   platform-matrix-safety:
+    name: platform-matrix-safety shard (${{ matrix.os }}, ${{ matrix.shard }}/3)
     needs: classify
     if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
+        shard: [1, 2, 3]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
@@ -249,12 +437,16 @@ jobs:
 
       # Exercise the platform-specific native lock regression plus the real
       # multi-clone Matrix and atomic persistence paths on Windows. The complete
-      # release gate runs on both supported Node lines above.
+      # release gate runs above on Node 24 on every run (its test stage sharded)
+      # and on Node 22 on push to main. Three shards per OS, each still serial
+      # (--test-concurrency=1) on its own runner.
       - name: Native bindings, atomic writes, and the team Matrix stay safe
         id: matrix-safety
         if: env.MEMORY_ONLY != 'true'
         env:
           HUNCH_TEST_COMPILED_CLI: "1"
+          HUNCH_TEST_SHARD: ${{ matrix.shard }}/3
+          HUNCH_TEST_SHARD_MANIFEST: test-shard-manifest.json
         run: node tooling/run-tests.mjs --test-concurrency=1 test/parse.test.ts test/io.test.ts test/migrate.test.ts test/matrix-release-verification.test.ts test/team-matrix-e2e.test.ts test/vscode-workspace.test.ts test/development-preparation.test.ts test/fixture-environment.test.ts test/experiment.test.ts test/git-merge-range.test.ts test/workspace-ledger.test.ts test/workspace-prune.test.ts test/workspaces.test.ts test/hook-shared-worktree.test.ts test/init-shared-autocommit.test.ts test/task-verify-exit.test.ts test/update.test.ts test/test-selection.test.ts test/dependency-snapshot-isolation.test.ts test/procstart.test.ts test/spawn-command.test.ts test/bounded-spawn.test.ts test/task-selection.test.ts test/updatecheck.test.ts test/verification-launcher.test.ts test/claudeconfig.test.ts test/providers.test.ts test/registry.test.ts test/lock-parity.test.ts test/cli-adapter.test.ts test/provider-exec.test.ts test/memory-home-policy.test.ts test/strays.test.ts test/worktree-hazards.test.ts test/ui.test.ts test/hook-daemon.test.ts
 
       - name: Write platform Matrix safety receipt
@@ -262,12 +454,60 @@ jobs:
         env:
           MATRIX_SAFETY_OUTCOME: ${{ steps.matrix-safety.outcome }}
           MATRIX_RUNNER_OS: ${{ runner.os }}
-        run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const body={schema:"hunch.platform-matrix-safety.v1",commit:process.env.GITHUB_SHA,node:process.version,runner_os:process.env.MATRIX_RUNNER_OS,outcome:process.env.MATRIX_SAFETY_OUTCOME,tests:["test/parse.test.ts","test/io.test.ts","test/migrate.test.ts","test/matrix-release-verification.test.ts","test/team-matrix-e2e.test.ts","test/vscode-workspace.test.ts","test/development-preparation.test.ts","test/fixture-environment.test.ts","test/experiment.test.ts","test/git-merge-range.test.ts","test/workspace-ledger.test.ts","test/workspace-prune.test.ts","test/workspaces.test.ts","test/hook-shared-worktree.test.ts","test/init-shared-autocommit.test.ts","test/task-verify-exit.test.ts","test/update.test.ts","test/test-selection.test.ts","test/dependency-snapshot-isolation.test.ts","test/procstart.test.ts","test/spawn-command.test.ts","test/bounded-spawn.test.ts","test/task-selection.test.ts","test/updatecheck.test.ts","test/verification-launcher.test.ts","test/claudeconfig.test.ts","test/providers.test.ts","test/registry.test.ts","test/lock-parity.test.ts","test/cli-adapter.test.ts","test/provider-exec.test.ts","test/memory-home-policy.test.ts","test/strays.test.ts","test/worktree-hazards.test.ts","test/ui.test.ts","test/hook-daemon.test.ts"]}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("platform-matrix-safety.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
+          MATRIX_SHARD: ${{ matrix.shard }}/3
+        run: node -e 'const fs=require("node:fs"),crypto=require("node:crypto"); const body={schema:"hunch.platform-matrix-safety.v1",commit:process.env.GITHUB_SHA,node:process.version,runner_os:process.env.MATRIX_RUNNER_OS,shard:process.env.MATRIX_SHARD,outcome:process.env.MATRIX_SAFETY_OUTCOME,tests:["test/parse.test.ts","test/io.test.ts","test/migrate.test.ts","test/matrix-release-verification.test.ts","test/team-matrix-e2e.test.ts","test/vscode-workspace.test.ts","test/development-preparation.test.ts","test/fixture-environment.test.ts","test/experiment.test.ts","test/git-merge-range.test.ts","test/workspace-ledger.test.ts","test/workspace-prune.test.ts","test/workspaces.test.ts","test/hook-shared-worktree.test.ts","test/init-shared-autocommit.test.ts","test/task-verify-exit.test.ts","test/update.test.ts","test/test-selection.test.ts","test/dependency-snapshot-isolation.test.ts","test/procstart.test.ts","test/spawn-command.test.ts","test/bounded-spawn.test.ts","test/task-selection.test.ts","test/updatecheck.test.ts","test/verification-launcher.test.ts","test/claudeconfig.test.ts","test/providers.test.ts","test/registry.test.ts","test/lock-parity.test.ts","test/cli-adapter.test.ts","test/provider-exec.test.ts","test/memory-home-policy.test.ts","test/strays.test.ts","test/worktree-hazards.test.ts","test/ui.test.ts","test/hook-daemon.test.ts"]}; const content_hash="sha256:"+crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"); fs.writeFileSync("platform-matrix-safety.json",JSON.stringify({...body,content_hash},null,2)+"\n");'
 
       - name: Upload platform Matrix safety receipt
         if: ${{ always() && env.MEMORY_ONLY != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: platform-matrix-safety-${{ matrix.os }}-${{ github.sha }}
-          path: platform-matrix-safety.json
+          name: platform-matrix-safety-${{ matrix.os }}-${{ matrix.shard }}-${{ github.sha }}
+          path: |
+            platform-matrix-safety.json
+            test-shard-manifest.json
           if-no-files-found: error
+          overwrite: true
+
+  # The required "platform-matrix-safety (<os>)" check. Every shard job of this
+  # run attempt must have finished green first: a shard that never ran in this
+  # attempt can still leave a same-SHA receipt from an earlier attempt, so the
+  # artifacts alone never prove this run. A matrix `needs` result mixes both
+  # OSes, so on a full run each OS is then judged from its own three receipts
+  # and manifests (Node 22, this OS's runner), each shard exactly once.
+  platform-matrix-safety-verdict:
+    name: platform-matrix-safety (${{ matrix.os }})
+    needs: [classify, platform-matrix-safety]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    env:
+      MEMORY_ONLY: ${{ needs.classify.outputs.memory_only == 'true' }}
+      SHARDS_RESULT: ${{ needs.platform-matrix-safety.result }}
+    steps:
+      - name: Every platform shard job finished green
+        run: test "$SHARDS_RESULT" = success
+
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        if: env.MEMORY_ONLY != 'true'
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        if: env.MEMORY_ONLY != 'true'
+        with:
+          node-version: 22
+
+      - name: Download this platform's shard receipts
+        if: env.MEMORY_ONLY != 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: platform-matrix-safety-${{ matrix.os }}-*-${{ github.sha }}
+          path: ${{ runner.temp }}/evidence
+
+      - name: Three green shards covered the platform test list exactly
+        if: env.MEMORY_ONLY != 'true'
+        env:
+          MATRIX_OS: ${{ matrix.os }}
+        run: node tooling/test-shard.mjs verify-platform --dir "$RUNNER_TEMP/evidence" --commit "$GITHUB_SHA" --total 3 --os "$MATRIX_OS"

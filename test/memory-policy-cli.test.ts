@@ -1104,28 +1104,32 @@ function steps(job: string): string[] {
 
 test("§10 CI runs memory-policy check against the PR base on every PR leg, fast path included", () => {
   const ci = readFileSync(".github/workflows/ci.yml", "utf8").replace(/\r\n/g, "\n");
-  const gate = steps(jobBlock(ci, "ci")).filter((step) => /memory-policy\s+check/.test(step));
-  assert.equal(gate.length, 1, "the ci job has exactly one memory-policy check step");
-  const step = gate[0];
-  assert.match(step, /--base\s+"?origin\/\$\{\{\s*github\.base_ref\s*\}\}"?|--base\s+"?origin\/\$\{?BASE_REF\}?"?/, `the check runs against the PR base:\n${step}`);
-  const condition = /^\s+if:\s*(.+)$/m.exec(step)?.[1] ?? "";
-  assert.match(condition, /github\.event_name\s*==\s*'pull_request'/, `the step is PR-only:\n${step}`);
-  assert.doesNotMatch(condition, /MEMORY_ONLY|memory_only/, "the gate is not skipped on the memory-only fast path");
-  assert.doesNotMatch(step, /src\/cli\/index\.ts\s+index\b|\bhunch\s+index\b/, "the gate stays cheap: no index");
+  for (const leg of ["ci-node22", "gate-node24"]) {
+    const gate = steps(jobBlock(ci, leg)).filter((step) => /memory-policy\s+check/.test(step));
+    assert.equal(gate.length, 1, `the ${leg} job has exactly one memory-policy check step`);
+    const step = gate[0];
+    assert.match(step, /--base\s+"?origin\/\$\{\{\s*github\.base_ref\s*\}\}"?|--base\s+"?origin\/\$\{?BASE_REF\}?"?/, `the check runs against the PR base:\n${step}`);
+    const condition = /^\s+if:\s*(.+)$/m.exec(step)?.[1] ?? "";
+    assert.match(condition, /github\.event_name\s*==\s*'pull_request'/, `the step is PR-only:\n${step}`);
+    assert.doesNotMatch(condition, /MEMORY_ONLY|memory_only/, "the gate is not skipped on the memory-only fast path");
+    assert.doesNotMatch(step, /src\/cli\/index\.ts\s+index\b|\bhunch\s+index\b/, "the gate stays cheap: no index");
+  }
 });
 
 test("§10 the memory-policy gate runs the BASE branch's CLI, before any PR code or dependency runs in the leg", () => {
   const ci = readFileSync(".github/workflows/ci.yml", "utf8").replace(/\r\n/g, "\n");
-  const legSteps = steps(jobBlock(ci, "ci"));
-  const gateAt = legSteps.findIndex((step) => /memory-policy\s+check/.test(step));
-  const step = legSteps[gateAt] ?? "";
-  // A PR edits its own src/ and package-lock: the gate must execute neither.
-  assert.doesNotMatch(step, /\b(tsx|node|hunch)\s+(--\S+\s+)*"?(\.\/)?(src\/cli\/index\.ts|dist\/cli\/index\.js)/, `the gate must not run the checkout's CLI:\n${step}`);
-  assert.match(step, /git worktree add\b[^\n]*\$RUNNER_TEMP\/base[^\n]*origin\/\$\{BASE_REF\}/, `the gate checks out the base into its own worktree:\n${step}`);
-  assert.match(step, /npm ci\b[^\n]*--ignore-scripts/, `the base install runs no lifecycle scripts:\n${step}`);
-  assert.match(step, /node\s+"?\$base\/dist\/cli\/index\.js"?\s+memory-policy\s+check/, `the gate runs the base's built CLI (no tsx: a PR tsconfig must not steer it):\n${step}`);
-  const installAt = legSteps.findIndex((s) => /^\s+run:\s*npm ci\s*$/m.test(s));
-  assert.ok(gateAt >= 0 && installAt > gateAt, `the gate (step ${gateAt}) runs before the PR's own npm ci (step ${installAt})`);
+  for (const leg of ["ci-node22", "gate-node24"]) {
+    const legSteps = steps(jobBlock(ci, leg));
+    const gateAt = legSteps.findIndex((step) => /memory-policy\s+check/.test(step));
+    const step = legSteps[gateAt] ?? "";
+    // A PR edits its own src/ and package-lock: the gate must execute neither.
+    assert.doesNotMatch(step, /\b(tsx|node|hunch)\s+(--\S+\s+)*"?(\.\/)?(src\/cli\/index\.ts|dist\/cli\/index\.js)/, `the gate must not run the checkout's CLI:\n${step}`);
+    assert.match(step, /git worktree add\b[^\n]*\$RUNNER_TEMP\/base[^\n]*origin\/\$\{BASE_REF\}/, `the gate checks out the base into its own worktree:\n${step}`);
+    assert.match(step, /npm ci\b[^\n]*--ignore-scripts/, `the base install runs no lifecycle scripts:\n${step}`);
+    assert.match(step, /node\s+"?\$base\/dist\/cli\/index\.js"?\s+memory-policy\s+check/, `the gate runs the base's built CLI (no tsx: a PR tsconfig must not steer it):\n${step}`);
+    const installAt = legSteps.findIndex((s) => /^\s+run:\s*npm ci\s*$/m.test(s));
+    assert.ok(gateAt >= 0 && installAt > gateAt, `${leg}: the gate (step ${gateAt}) runs before the PR's own npm ci (step ${installAt})`);
+  }
 });
 
 // ---------------------------------------------------------------- §11 ship-memory
