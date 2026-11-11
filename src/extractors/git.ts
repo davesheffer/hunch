@@ -1,6 +1,6 @@
 /** Deterministic git introspection for the extractor + learning loop.
  *  No LLM here — just parsing what git already knows. */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { devNull, tmpdir } from "node:os";
 import { isAbsolute, resolve, join, basename, dirname, relative, sep, posix } from "node:path";
@@ -624,7 +624,8 @@ const CAPTURE_REMOTE_TIMEOUT_MS = 15_000;
 /** A user's whole branch can be large, so `hunch push` gets far longer than a memory capture push. */
 const BRANCH_PUSH_TIMEOUT_MS = 300_000;
 export const DEFAULT_READ_REMOTE_TIMEOUT_MS = 5_000;
-// A capture can spend roughly 90s in commit + bounded merge/push/retry seams.
+// A capture can spend roughly 90s in commit + bounded merge/push/retry seams,
+// plus at most OVERLAY_PROBE_BUDGET_MS for the changed-path probe (~100s).
 // A contending writer waits beyond that proven ceiling, then takes the lock and
 // drains every already-durable JSON write itself. This removes the old "maybe a
 // third capture sweeps it later" liveness hole.
@@ -633,6 +634,8 @@ const CAPTURE_LOCK_HANDOFF_MS = 120_000;
  *  reports durability "local" (HUNCH_COMMIT_GIT_TIMEOUT_MS overrides; tests use a short one). */
 const COMMIT_GIT_TIMEOUT_MS = 60_000;
 const SLOW_FLUSH_MS = 5_000;
+/** Shared bound for the changed-path probe (rev-parse + status) inside the commit lock. */
+const OVERLAY_PROBE_BUDGET_MS = 10_000;
 function commitGitTimeoutMs(): number {
   const raw = Number(process.env.HUNCH_COMMIT_GIT_TIMEOUT_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : COMMIT_GIT_TIMEOUT_MS;
@@ -787,9 +790,11 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       if (!paths) return null;
       // Force-add only the exact contained JSON source-of-truth allowlist. A
       // remote .gitignore, local info/exclude, or ambient excludesFile must not
-      // be able to silently stop the shared graph's heartbeat.
-      for (let index = 0; index < paths.length; index += 128) {
-        if (!run(["-c", `core.attributesFile=${gitNullDevice()}`, "-c", "core.autocrlf=false", "add", "-f", "--", ...paths.slice(index, index + 128)])) {
+      // be able to silently stop the shared graph's heartbeat. Only paths git
+      // reports as changed need staging; any doubt falls back to the full list.
+      const toAdd = changedOverlayPaths(hunchDir, env, paths) ?? paths;
+      for (let index = 0; index < toAdd.length; index += 128) {
+        if (!run(["-c", `core.attributesFile=${gitNullDevice()}`, "-c", "core.autocrlf=false", "add", "-f", "--", ...toAdd.slice(index, index + 128)])) {
           run(["reset", "-q", "--", "."]);
           return null;
         }
@@ -1062,6 +1067,86 @@ function isDerivedStoreArtifact(relativeName: string): boolean {
     || relativeName === "pending-commit-repairs.json"
     || relativeName === "dropped-commit-repairs.json"
     || relativeName === "pending-doc-rules.json";
+}
+
+/** Case-folded, NFC-normalized match key. On a case-insensitive checkout the
+ *  index spelling of a tracked path can differ from the on-disk spelling the
+ *  allowlist holds, and macOS core.precomposeUnicode can emit NFC while readdir
+ *  returns NFD. Folding only ever widens the match, which is the safe direction. */
+function foldOverlayPath(path: string): string {
+  return path.normalize("NFC").toLowerCase();
+}
+
+/** Test seam: force the changed-path probe to fail so the full-allowlist fallback runs. */
+export const overlayFlushTestHooks = { failStatus: false };
+
+/** The subset of `allowlist` (paths relative to hunchDir) that git reports as
+ *  changed: modified, staged, untracked, or ignored (overlay JSON can be hidden
+ *  by .gitignore / info/exclude and is force-added). Returns null on ANY doubt
+ *  so the caller falls back to adding the full allowlist. Porcelain paths are
+ *  relative to the repo top-level, so the hunchDir prefix is stripped first. */
+function changedOverlayPaths(hunchDir: string, env: NodeJS.ProcessEnv, allowlist: string[]): string[] | null {
+  try {
+    if (overlayFlushTestHooks.failStatus) return null;
+    // No optional locks and one shared bound across both calls: a killed status
+    // must not strand index.lock or eat the flush's time budget (it runs inside
+    // the commit lock); on timeout we fall back.
+    const deadline = Date.now() + Math.min(commitGitTimeoutMs(), OVERLAY_PROBE_BUDGET_MS);
+    const opts = { encoding: "utf8" as const, stdio: ["ignore", "pipe", "ignore"] as ("ignore" | "pipe")[], env: { ...env, GIT_OPTIONAL_LOCKS: "0" }, maxBuffer: 256 * 1024 * 1024 };
+    const prefix = execFileSync("git", ["-C", hunchDir, "rev-parse", "--show-prefix"], { ...opts, timeout: deadline - Date.now() }).replace(/[\r\n]+$/, "");
+    if (prefix && !prefix.endsWith("/")) return null;
+    const remaining = deadline - Date.now();
+    if (remaining < 1_000) return null;
+    // stderr is captured, not discarded: git can exit 0 with a partial listing and only
+    // a warning (e.g. Windows "could not open directory ...: Filename too long"), and an
+    // incomplete listing must not narrow the add.
+    const status = spawnSync("git", [
+      "-C", hunchDir, "-c", "gc.auto=0",
+      "-c", `core.attributesFile=${gitNullDevice()}`, "-c", "core.autocrlf=false",
+      "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
+      "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--no-renames", "--", ".",
+    ], { ...opts, timeout: remaining, stdio: ["ignore", "pipe", "pipe"] });
+    // Other fallbacks are correctness-safe and stay silent (a persistent git warning
+    // would otherwise log on every flush); a timeout is a slow flush, so say so.
+    if ((status.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") {
+      console.error(`hunch: overlay change probe in "${hunchDir}" timed out; adding the full allowlist`);
+    }
+    if (status.error || status.status !== 0 || status.signal || status.stderr.length > 0) return null;
+    const out = status.stdout;
+    const files = new Set<string>();
+    const dirs: string[] = [];
+    const fields = out.split("\0");
+    if (fields[fields.length - 1] === "") fields.pop();
+    for (let i = 0; i < fields.length; i++) {
+      const entry = fields[i]!;
+      if (entry.length < 4 || entry[2] !== " ") return null;
+      const x = entry[0]!, y = entry[1]!;
+      // Defensive: a rename/copy carries a second path field; take both.
+      const names = [entry.slice(3)];
+      if (x === "R" || x === "C" || y === "R" || y === "C") {
+        const extra = fields[++i];
+        if (extra === undefined) return null;
+        names.push(extra);
+      }
+      if (x === " " && y === " ") continue;
+      for (const name of names) {
+        // A non-prefix name (incl. an ancestor dir entry such as `!! .hunch/`
+        // reported from above hunchDir) cannot be mapped: fall back.
+        if (!name.startsWith(prefix)) return null;
+        const rel = name.slice(prefix.length);
+        // The whole hunchDir collapsed into one entry; "" would match nothing.
+        if (rel === "") return null;
+        const folded = foldOverlayPath(rel);
+        if (folded.endsWith("/")) dirs.push(folded); else files.add(folded);
+      }
+    }
+    return allowlist.filter((p) => {
+      const folded = foldOverlayPath(p);
+      return files.has(folded) || dirs.some((d) => folded.startsWith(d));
+    });
+  } catch {
+    return null;
+  }
 }
 
 /** Enumerate ordinary JSON files already contained under an overlay. Push-capable
