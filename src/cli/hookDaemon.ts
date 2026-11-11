@@ -21,7 +21,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, chmodSync, linkSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { homedir, tmpdir, userInfo } from "node:os";
-import { join, posix } from "node:path";
+import { isAbsolute, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findRoot } from "../core/paths.js";
 import { HUNCH_VERSION } from "../core/version.js";
@@ -122,14 +122,18 @@ function endpointFor(root: string, build: string, createSecret = false): { path:
   try { user = userInfo().username; } catch { /* no passwd entry */ }
   const uid = process.getuid?.() ?? user;
   const h = createHash("sha256").update(`${user}\0${uid}\0${canonicalRoot(root)}\0${build}`).digest("hex").slice(0, 32);
+  // A relative base would resolve differently in the client (repo cwd) and the daemon
+  // (endpoint-dir cwd), so the two would never meet: such a base falls back to the default.
   if (process.platform === "win32") {
-    const dir = join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "hunch", "hook-daemon");
+    const local = process.env.LOCALAPPDATA;
+    const dir = join(local && isAbsolute(local) ? local : join(homedir(), "AppData", "Local"), "hunch", "hook-daemon");
     if (createSecret) { try { ensurePrivateDir(dir); } catch { /* pipeSecret then finds no dir */ } }
     const secret = pipeSecret(dir, createSecret);
     const pipe = secret ? createHash("sha256").update(`${secret}\0${h}`).digest("hex").slice(0, 32) : "";
     return { path: pipe ? `\\\\.\\pipe\\hunch-${pipe}` : "", dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
   }
-  const dir = posixEndpointDir(tmpdir(), uid, h);
+  const tmp = tmpdir();
+  const dir = posixEndpointDir(isAbsolute(tmp) ? tmp : "/tmp", uid, h);
   return { path: join(dir, `${h}.sock`), dir, token: join(dir, `${h}.token`), spawned: join(dir, `${h}.spawn`) };
 }
 
@@ -228,9 +232,10 @@ function connectWithin(path: string, ms: number): Promise<{ socket?: Socket; cod
  *  console child the daemon runs (git.exe) would open a new console window, visible
  *  and slow. This console-less host runs the daemon with CREATE_NO_WINDOW (windowsHide,
  *  no inherited stdio): one hidden console its children inherit. The daemon sits in the
- *  host's kill-on-close job, so the two live and die together. */
+ *  host's kill-on-close job, so the two live and die together. It keeps the neutral cwd
+ *  it was started in (the endpoint dir), as the daemon does. */
 export function runHookDaemonHost(root: string): void {
-  const child = spawn(process.execPath, [bundleEntry(), "hook-daemon", root], { cwd: root, stdio: "ignore", windowsHide: true });
+  const child = spawn(process.execPath, [bundleEntry(), "hook-daemon", root], { stdio: "ignore", windowsHide: true });
   child.on("exit", (code) => process.exit(code ?? 0));
   child.on("error", () => process.exit(0));
 }
@@ -262,8 +267,13 @@ function spawnDaemonAfterExit(root: string, endpoint: { dir: string; spawned: st
       ensurePrivateDir(endpoint.dir);
       if (dirState(endpoint.dir) !== "ok" || !claimSpawn(endpoint.spawned)) return;
       const entry = process.platform === "win32" ? "hook-daemon-host" : "hook-daemon";
+      // Never the repository as cwd: an idle daemon would hold it, and on Windows the
+      // repo dir could then not be renamed or removed until the daemon exits.
+      // The daemon runs from another cwd: a relative diagnostics log is pinned to this one.
+      const log = process.env.HUNCH_HOOK_DAEMON_LOG;
       const child = spawn(process.execPath, [bundleEntry(), entry, root], {
-        cwd: root, detached: true, stdio: "ignore", windowsHide: true,
+        cwd: endpoint.dir, detached: true, stdio: "ignore", windowsHide: true,
+        env: log ? { ...process.env, HUNCH_HOOK_DAEMON_LOG: resolve(log) } : process.env,
       });
       child.on("error", () => { /* fail-open: the in-process path already ran */ });
       child.unref();
@@ -380,7 +390,6 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
   const served = canonicalRoot(root);
   const pristineEnv: Env = {};
   for (const [name, value] of Object.entries(process.env)) if (value !== undefined) pristineEnv[name] = value;
-  const pristineCwd = process.cwd();
   // Workers the handler spawns (sibling-warm) re-run `process.argv[1]` with a hidden
   // command the hook bundle this daemon runs from does not route: point it at the CLI
   // entry beside the bundle, as in a hook process.
@@ -388,6 +397,10 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
 
   try { ensurePrivateDir(endpoint.dir); } catch { return; }
   if (dirState(endpoint.dir) !== "ok") return;
+  // Between requests the daemon sits in its endpoint dir, never in a repository it would
+  // keep busy (Windows: rename/remove fails while a process has it as cwd).
+  const pristineCwd = endpoint.dir;
+  try { process.chdir(pristineCwd); } catch { return; }
   const token = randomBytes(32).toString("hex");
   let queue: Promise<unknown> = Promise.resolve();
   let idle: NodeJS.Timeout | undefined;
@@ -452,6 +465,13 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
   process.on("uncaughtException", onFatal("uncaughtException"));
   process.on("unhandledRejection", onFatal("unhandledRejection"));
 
+  /** A request's final line. A shutdown waits for the request, so the line is flushed
+   *  (or FLUSH_BUDGET_MS passes) before the process may exit. */
+  const finish = (socket: Socket, message: unknown): Promise<void> => socket.destroyed ? Promise.resolve() : new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, FLUSH_BUDGET_MS);
+    socket.end(`${JSON.stringify(message)}\n`, () => { clearTimeout(timer); resolve(); });
+  });
+
   /** One queued request: announce `ready`, run only once the client answers `go`. */
   const serve = async (socket: Socket, reader: ReturnType<typeof lineReader>, request: HookRequest): Promise<void> => {
     try {
@@ -461,7 +481,12 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
       }
       socket.write(`${JSON.stringify({ ready: true })}\n`);
       const go = await reader.next<{ go?: boolean }>(GO_BUDGET_MS);
-      if (!go || go.go !== true) { socket.destroy(); return; }
+      // A late `go` already left the client past its fallback point: dropping the socket
+      // would skip the hook (a strict deny included). Nothing ran, so it runs in-process.
+      if (!go || go.go !== true) {
+        await finish(socket, { error: "go", ran: false });
+        return;
+      }
       let reply: HookReply | { error: string; ran?: false };
       const started = Date.now();
       const watchdog = setTimeout(() => { debugLog(`stuck ${RUN_DEADLINE_MS}ms`); process.exit(1); }, RUN_DEADLINE_MS);
@@ -470,11 +495,7 @@ export async function runHookDaemon(root: string, handle: HookHandler): Promise<
       }
       finally { clearTimeout(watchdog); }
       debugLog(`run ${Date.now() - started}ms`);
-      // A shutdown waits for this: the reply is flushed before the process may exit.
-      if (!socket.destroyed) await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, FLUSH_BUDGET_MS);
-        socket.end(`${JSON.stringify(reply)}\n`, () => { clearTimeout(timer); resolve(); });
-      });
+      await finish(socket, reply);
     } finally {
       pending--;
       touch();

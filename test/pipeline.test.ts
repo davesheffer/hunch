@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { cleanupDir } from "./fixtures.js";
 import {
   auditExecutableProbeContractAxes,
   armExecutionObligations,
@@ -714,4 +718,18 @@ test("state round-trip survives save/load; garbage session id yields fresh state
   const fresh = loadPipelineState("no-such-session-ever");
   assert.equal(fresh.turn, 0);
   assert.equal(fresh.verifyAfterEdit, true);
+});
+
+test("pipeline state follows a TEMP/TMP/TMPDIR change made after import (a hook daemon's per-request env)", (t) => {
+  const saved = { TEMP: process.env.TEMP, TMP: process.env.TMP, TMPDIR: process.env.TMPDIR };
+  const dir = mkdtempSync(join(tmpdir(), "hunch-pipeline-env-"));
+  t.after(() => {
+    for (const [name, value] of Object.entries(saved)) if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    cleanupDir(dir);
+  });
+  process.env.TEMP = process.env.TMP = process.env.TMPDIR = dir;
+  const id = `pipeline-env-${process.pid}`;
+  savePipelineState(id, onPrompt(emptyState()));
+  assert.ok(existsSync(join(dir, "hunch-pipeline", `${id}.json`)));
+  assert.equal(loadPipelineState(id).turn, 1);
 });
