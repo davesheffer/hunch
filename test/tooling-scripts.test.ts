@@ -82,6 +82,43 @@ test("blog-locales.mjs: every locale carries the same UI keys and well-formed, u
   }
 });
 
+// ---------------------------------------------------------------- homepage-locales.mjs
+const HOMEPAGE_LOCALE_TOOLING = ["generate-site-locales.mjs", "homepage-locales.mjs", "blog-locales.mjs", "changelog-locales.mjs"];
+const lf = (value: string) => value.replace(/\r\n?/g, "\n");
+
+function stageHomepage(t: Ctx, englishHome: string): string {
+  const root = stage(t, HOMEPAGE_LOCALE_TOOLING[0]!, { "site/index.html": englishHome });
+  for (const script of HOMEPAGE_LOCALE_TOOLING.slice(1)) copyFileSync(join(PROJECT_ROOT, "tooling", script), join(root, "tooling", script));
+  return root;
+}
+
+test("homepage-locales.mjs: regenerating reproduces every committed localized homepage", async (t) => {
+  const { homepageLocales } = await import("../tooling/homepage-locales.mjs") as { homepageLocales: Record<string, unknown> };
+  const root = stageHomepage(t, readFileSync(join(PROJECT_ROOT, "site", "index.html"), "utf8"));
+  const r = run(root, "generate-site-locales.mjs", ["--homepage-only"]);
+  assert.equal(r.status, 0, r.out);
+  for (const locale of Object.keys(homepageLocales)) {
+    const generated = readFileSync(join(root, "site", locale, "index.html"), "utf8");
+    const committed = lf(readFileSync(join(PROJECT_ROOT, "site", locale, "index.html"), "utf8"));
+    assert.ok(generated === committed, `site/${locale}/index.html differs from its generator output; edit tooling/homepage-locales.mjs and regenerate instead of hand-editing the page`);
+  }
+});
+
+test("homepage-locales.mjs: an English edit under a translation, or new untranslated copy, stops the generator", (t) => {
+  const english = lf(readFileSync(join(PROJECT_ROOT, "site", "index.html"), "utf8"));
+  const edited = english.replace(/<h1 /, '<h1 data-edited="1" ');
+  assert.notEqual(edited, english);
+  const editedRun = run(stageHomepage(t, edited), "generate-site-locales.mjs", ["--homepage-only"]);
+  assert.notEqual(editedRun.status, 0);
+  assert.match(editedRun.out, /homepage hunk \d+ source fragment not found/);
+
+  const added = english.replace("</main>", "<p>Brand new English paragraph nobody translated yet.</p>\n</main>");
+  assert.notEqual(added, english);
+  const addedRun = run(stageHomepage(t, added), "generate-site-locales.mjs", ["--homepage-only"]);
+  assert.notEqual(addedRun.status, 0);
+  assert.match(addedRun.out, /untranslated visible English: "Brand new English paragraph/);
+});
+
 // ---------------------------------------------------------------- constitution-clean-rehearsal.mjs
 test("constitution-clean-rehearsal.mjs refuses --output without a path before packing anything", (t) => {
   // A full run packs + installs the package and drives a fresh repo: CI-scale work.
