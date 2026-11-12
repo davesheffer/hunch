@@ -60,7 +60,7 @@ function ctx(root: string, quiet: boolean, payload: Record<string, unknown>): st
   mkdirSync(tmp, { recursive: true });
   const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp };
   delete env.HUNCH_PIPELINE;
-  if (quiet) env.HUNCH_QUIET_EMPTY = "1"; else delete env.HUNCH_QUIET_EMPTY;
+  env.HUNCH_QUIET_EMPTY = quiet ? "1" : "0";
   const out = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", "claude"], {
     cwd: root, env, input: JSON.stringify({ cwd: root, session_id: "quiet-s", prompt_id: "quiet-p", ...payload }), encoding: "utf8",
   }).trim();
@@ -74,7 +74,7 @@ test("quiet-empty: the flag is read at call time", () => {
   const prior = process.env.HUNCH_QUIET_EMPTY;
   try {
     delete process.env.HUNCH_QUIET_EMPTY;
-    assert.equal(quietEmptyEnabled(), false);
+    assert.equal(quietEmptyEnabled(), true, "quiet-empty is the default");
     process.env.HUNCH_QUIET_EMPTY = "1";
     assert.equal(quietEmptyEnabled(), true);
     process.env.HUNCH_QUIET_EMPTY = "0";

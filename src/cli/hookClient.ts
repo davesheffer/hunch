@@ -1,5 +1,5 @@
 /**
- * Hook entry used instead of the hook bundle when HUNCH_HOOK_DAEMON=1 (chosen by the
+ * Hook entry used instead of the hook bundle unless HUNCH_HOOK_DAEMON is off (chosen by the
  * shim in tooling/bundle-cli.mjs). Bundled alone as dist/cli/hook-client.bundle.js: it
  * loads neither the hook handler nor the store, so a hook served by the warm daemon pays
  * only node's boot and this small module. Anything that keeps the daemon from answering
@@ -8,7 +8,8 @@
  */
 import "./preflight.js"; // MUST stay the first import — Node-version gate
 import { fastHookArgs } from "./hookArgs.js";
-import { tryHookDaemon } from "./hookDaemon.js";
+import { hookDaemonEnabled, tryHookDaemon } from "./hookDaemon.js";
+import { findRoot, realpathNorm } from "../core/paths.js";
 import { markerFor } from "./optOutGate.js";
 
 /** Same hand-over key hookMain.ts reads. */
@@ -32,7 +33,8 @@ async function run(): Promise<void> {
       if (markerFor(process.cwd())) process.exit(0);
       const input = await readInput();
       (globalThis as Record<symbol, unknown>)[HANDED_INPUT] = input;
-      if (await tryHookDaemon(fast.provider, input)) return;
+      // `.hunch/config.json` hooks.daemon: false keeps this repository in-process.
+      if (hookDaemonEnabled(process.env, findRoot(realpathNorm(process.cwd()))) && await tryHookDaemon(fast.provider, input)) return;
     } catch {
       // Fall through to the in-process handler, which reports its own failures.
     }

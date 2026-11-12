@@ -175,7 +175,7 @@ function sessionTaskInstruction(task: { task_id: string; title: string }, cwdLit
  * the only source of both the launcher and the finish instruction, so it carries
  * its own finish sentence. */
 export function taskInstruction(task: { task_id: string; title: string }, cwdLiteral: string, provider: HookProvider, launcher: () => { shell: string; note?: string } = verificationLauncher, form: "full" | "compact" | "minimal" = "full"): string {
-  const head = `Hunch has already opened this prompt's report: ${task.task_id}. Reuse this exact ID; never open another report. Pass this task_id and cwd: ${cwdLiteral} to hunch_context and decision/correction/finding captures.`;
+  const head = `Hunch opened this prompt's report: ${task.task_id}. Reuse this exact ID; never open another. Pass task_id and cwd: ${cwdLiteral} to hunch_context and captures.`;
   let verify: string;
   try {
     const l = launcher();
@@ -183,15 +183,14 @@ export function taskInstruction(task: { task_id: string; title: string }, cwdLit
       const finishRule = HOST_CLOSES_TASK.has(provider) ? "finish only if this task used Hunch" : `finish it yourself with hunch_task(action: "finish", task_id, cwd)`;
       const rules = form === "compact" ? "Same rules as this session's first report; " : "";
       const finish = form === "compact" ? finishRule : finishRule.charAt(0).toUpperCase() + finishRule.slice(1);
-      return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}). Use it instead of any earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. ${rules}${finish}.`;
+      return `Hunch report for this prompt: ${task.task_id} (cwd: ${cwdLiteral}); use it, not an earlier ID. Never call hunch_task start. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. ${rules}${finish}.`;
     }
-    verify = ` Never call hunch_task start for it. For checks, run: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Verify with the tests that cover your change (the files you edited and their tests); the full suite is CI's job. The default budget is ${DEFAULT_CHECK_TIMEOUT_MS / 60_000} min; add --timeout <seconds> before -- only if the whole suite is really needed.`;
+    verify = ` Never call hunch_task start for it. Checks: ${l.shell} task verify ${task.task_id} -- <command> [arguments]${l.note ?? ""}. Run the tests that cover your change; the full suite is CI's job (the default budget is ${DEFAULT_CHECK_TIMEOUT_MS / 60_000} min; --timeout <seconds> before -- raises it).`;
   }
   catch { return `${head} Call hunch_task(action: "start", task_id: "${task.task_id}", title: ${JSON.stringify(task.title)}, cwd: ${cwdLiteral}) to obtain verification_argv, and finish with hunch_task(action: "finish", task_id, cwd) before responding and show its card.`; }
-  const used = `this task used Hunch (a hunch_* call on this ID, a task verify check, Hunch hook context you acted on, or an application to claim)`;
   const finish = HOST_CLOSES_TASK.has(provider)
-    ? ` ONLY if ${used}, call hunch_task(action: "finish", task_id, cwd) before responding and show its card; otherwise skip it — this host's stop hook closes the task and shows the evidence.`
-    : ` No stop hook closes this task, so finish it yourself whether or not ${used}: call hunch_task(action: "finish", task_id, cwd) before responding and show its card.`;
+    ? ` ONLY if this task used Hunch (a hunch_* call on this ID, a task verify check, hook context you acted on, or an application to claim), call hunch_task(action: "finish", task_id, cwd) and show its card; else the stop hook closes it.`
+    : ` No stop hook closes this task, so finish it yourself whether or not it used Hunch: call hunch_task(action: "finish", task_id, cwd) before responding and show its card.`;
   return `${head}${verify}${finish}`;
 }
 /** The session key a hook event maps to: a hash of (root, provider, session,

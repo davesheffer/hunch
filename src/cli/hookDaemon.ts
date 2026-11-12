@@ -1,5 +1,5 @@
 /**
- * Opt-in hook daemon (HUNCH_HOOK_DAEMON=1): one warm process per (user, repository
+ * Hook daemon (default on; HUNCH_HOOK_DAEMON=0 opts out): one warm process per (user, repository
  * root, build) runs the full `hook` handler, so a hook pays neither node's boot nor
  * the hook bundle's load. The client side is fail-open: any problem reaching the
  * daemon leaves the caller on today's in-process path, and a missing daemon is
@@ -32,6 +32,7 @@ import { homedir, tmpdir, userInfo } from "node:os";
 import { isAbsolute, join, posix, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { findRoot } from "../core/paths.js";
+import { hookSwitch } from "../core/hookSwitches.js";
 import { HUNCH_VERSION } from "../core/version.js";
 
 const PROTOCOL = 3;
@@ -57,9 +58,10 @@ const HELLO_MAX_BYTES = 1024;
  *  killed mid-run leaves its marker, and its pid may since belong to another process. */
 const BUSY_VERIFY_MS = 5_000;
 
-/** Whether the opt-in switch is on. Env only: a config key would cost every hook a
- *  config read before it could even choose the path. */
-export const hookDaemonEnabled = (env: NodeJS.ProcessEnv = process.env): boolean => env.HUNCH_HOOK_DAEMON === "1";
+/** Whether the daemon is on: HUNCH_HOOK_DAEMON, then `.hunch/config.json` hooks.daemon,
+ *  then on (src/core/hookSwitches.ts). The shim routes to the client unless the env says
+ *  off; the client asks this with the root before contacting a daemon. */
+export const hookDaemonEnabled = (env: NodeJS.ProcessEnv = process.env, root?: string): boolean => hookSwitch("daemon", root, env).value === true;
 
 /** Environment a request carries. It replaces the daemon's own value of every
  *  matching name (absent in the request = absent for the request). TEMP/TMP/TMPDIR

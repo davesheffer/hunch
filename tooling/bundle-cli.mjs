@@ -39,7 +39,7 @@ if (readFileSync(entry, "utf8").includes(MARKER)) {
 const bundles = [
   { entry, bundle },
   { entry: `${cli}hookMain.js`, bundle: `${cli}hook.bundle.js` },
-  // Opt-in hook daemon client (HUNCH_HOOK_DAEMON=1): loads neither handler nor store.
+  // Hook daemon client (default on; HUNCH_HOOK_DAEMON=0 opts out): loads neither handler nor store.
   { entry: `${cli}hookClient.js`, bundle: `${cli}hook-client.bundle.js` },
 ];
 for (const { entry: input, bundle: output } of bundles) {
@@ -80,7 +80,8 @@ const a = process.argv.slice(2);
 const fastHook = a[0] === "hook" && (a.length === 1
   || (a.length === 3 && a[1] === "--provider" && !!a[2])
   || (a.length === 2 && a[1].startsWith("--provider=") && a[1].length > 11));
-const hookBundle = fastHook && process.env.HUNCH_HOOK_DAEMON === "1" ? "./hook-client.bundle.js" : "./hook.bundle.js";
+const daemonOff = /^(0|false|off)$/i.test((process.env.HUNCH_HOOK_DAEMON ?? "").trim());
+const hookBundle = fastHook && !daemonOff ? "./hook-client.bundle.js" : "./hook.bundle.js";
 await import(fastHook ? hookBundle : "./index.bundle.js");
 `;
 writeFileSync(`${entry}.tmp`, shim);

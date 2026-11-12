@@ -10,6 +10,10 @@ import { writeCursorRule, refreshExistingGrounding, regenerateGrounding, refresh
 import { execFileSync } from "node:child_process";
 import { parseGroundingCounts, classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
 
+// These tests pin the full block (per-moment tool list, policy tools); the lean default
+// is covered by test/lean-grounding.test.ts.
+process.env.HUNCH_LEAN_GROUNDING = "0";
+
 // The grounding documents each MCP tool's call signature. If a documented param name
 // drifts from the tool's actual inputSchema key, an agent copies the wrong key and the
 // call fails Zod validation ("expected string, received undefined"). Lock the signatures
