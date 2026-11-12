@@ -684,6 +684,16 @@
       }
     ]
   },
+  "NODE_OPTIONS": {
+    "class": "platform-passthrough",
+    "purpose": "Forwarded to the hook daemon's child with relative preloads anchored to the launch directory",
+    "tests": [
+      {
+        "file": "test/hook-daemon.test.ts",
+        "title": "a relative NODE_OPTIONS preload does not keep the daemon from starting"
+      }
+    ]
+  },
   "NO_PROXY": {
     "class": "network-passthrough",
     "purpose": "Proxy bypass forwarded to isolated npm dependency snapshots",
