@@ -390,14 +390,27 @@ const DEFINITION = /^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|#{1,6}
  *  else. `[PAY-1.1]: Refunds must …` is prose, so a definition. */
 const LINK_DESTINATION = /^:[ \t]*(<[^<>\n]*>|[^\s<>]+)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?[ \t]*$/;
 
-/** Whether the text after `[ID]` makes a link reference definition: its token looks like a
- *  destination (`#…`, `<…>`, `/…`, `./…`, `../…`, a URI scheme, a path with `/`, or a file
- *  name with an extension). `[PAY-1.3]: Idempotent.` is a one-word clause. */
+/** Whether the text after `[ID]` makes a link reference definition: its token must look
+ *  like a destination: starts with `#`; `<…>` that is empty or holds one of `/ . # :`;
+ *  starts with `/`, `./`, `../`; a URI scheme followed by a non-space character; a path with
+ *  `/` whose last segment has a file extension (or that ends with `/`); or a bare file name
+ *  with a document extension (optionally `#anchor`). `[PAY-1.1]: N/A`, `: HTTP/2`, `: v2.0`,
+ *  `: Node.js` and `: <removed>` are clauses. */
 function isLinkReference(rest: string): boolean {
   const m = LINK_DESTINATION.exec(rest);
   if (!m) return false;
   const dest = m[1]!;
-  return /^(?:[#</]|\.\.?\/|[a-z][a-z0-9+.-]*:)/.test(dest) || dest.includes("/") || /\.[A-Za-z0-9]+$/.test(dest);
+  if (dest.startsWith("#")) return true;
+  if (dest.startsWith("<")) {
+    const inner = dest.slice(1, -1);
+    return inner === "" || /[/.#:]/.test(inner);
+  }
+  if (/^(?:\/|\.\.?\/)/.test(dest) || /^[a-z][a-z0-9+.-]*:\S/i.test(dest)) return true;
+  if (dest.includes("/")) {
+    const path = dest.replace(/#.*$/, "");
+    return path.endsWith("/") || /\.[A-Za-z0-9]+$/.test(path.slice(path.lastIndexOf("/") + 1));
+  }
+  return /^[^#]+\.(?:md|markdown|html|htm|rst|txt|pdf|adoc|json|yaml|yml)(?:#.*)?$/i.test(dest);
 }
 
 /** Backtick runs of one line, each with the index of the next run of exactly its length
@@ -528,14 +541,14 @@ function withoutComments(text: string, markdown: boolean): string {
         continue;
       }
       if (open === -1) break;
-      const close = line.indexOf("-->", open + 4);
+      const close = line.indexOf("-->", open + 2); // `<!-->` and `<!--->` are complete comments
       if (close !== -1) {
         kept += line.slice(last, open) + " ".repeat(close + 3 - open);
         pos = last = close + 3;
         continue;
       }
       // The comment runs past this line: it must close somewhere, else blank nothing more.
-      if (text.indexOf("-->", lineStart + open + 4) === -1) {
+      if (text.indexOf("-->", lineStart + open + 2) === -1) {
         out.push(kept + line.slice(last));
         return [...out, ...lines.slice(li + 1)].join("\n");
       }
@@ -562,17 +575,28 @@ function scanMarkers(text: string, markdown: boolean): { markers: Marker[]; head
   let prevStart = -1;
   let prevText = false;
   let prevContinues = false; // the line above continued a text line (a wrapped paragraph)
+  let prevUnder = -1; // start of the line above when it is an underline pattern, else -1
+  let prevPrevUnder = -1; // same, for the line two above (a possible rst overline)
+  const thematic = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
   lines.forEach((line, i) => {
     const start = offset;
     offset += line.length + 1;
-    if (fenced[i]) { prevText = prevContinues = false; return; }
+    if (fenced[i]) { prevText = prevContinues = false; prevUnder = prevPrevUnder = -1; return; }
     // A setext underline under a one-line paragraph makes that line the heading; under a
     // wrapped paragraph (the last line of a wrapped clause, say) the text ends at the
     // underline itself, so the paragraph's last line is never lost.
     const setext = prevText && underline.test(line);
     if (/^\s{0,3}#{1,6}(\s|$)/.test(line)) headings.push(start);
-    else if (setext) headings.push(prevContinues ? start : prevStart);
-    const text = !underline.test(line) && line.trim() !== ""; // an underline/overline is no text
+    else if (markdown && !underline.test(line) && thematic.test(line)) headings.push(start); // a thematic break ends clause text
+    else if (setext) {
+      // rst overline + title + underline: the heading begins at its overline, not the title line.
+      headings.push(prevContinues ? start : !markdown && prevPrevUnder !== -1 ? prevPrevUnder : prevStart);
+    }
+    const isUnder = underline.test(line);
+    // An underline/overline, and in Markdown a thematic break (`***`, `___`), is no text.
+    const text = !isUnder && line.trim() !== "" && !(markdown && thematic.test(line));
+    prevPrevUnder = prevUnder;
+    prevUnder = isUnder ? start : -1;
     prevContinues = prevText && text;
     prevStart = start;
     prevText = text;
@@ -589,7 +613,7 @@ function scanMarkers(text: string, markdown: boolean): { markers: Marker[]; head
       markers.push({ prefix: m[2]!, num: m[3]!, manual: Boolean(m[4]), lineStart: start, start: start + at, end: start + m.index + m[0].length, line: i + 1 });
     }
   });
-  return { markers, headings };
+  return { markers, headings: headings.sort((a, b) => a - b) };
 }
 
 /** Clauses of the spec with id `specId`. Text runs from a definition to the line of the
@@ -601,13 +625,15 @@ export function parseClauses(text: string, specId: string, path?: string): Parse
   const own = markers.filter((m) => m.prefix === specId);
   const clauses: Clause[] = [];
   const seen = new Map<string, number[]>();
+  let hi = 0;
   own.forEach((m, i) => {
     const id = `${specId}-${m.num}`;
+    while (hi < headings.length && headings[hi]! <= m.start) hi++; // both ascending
     const lines = seen.get(id);
     if (lines) { lines.push(m.line); return; }
     seen.set(id, [m.line]);
     const nextMarker = i + 1 < own.length ? own[i + 1]!.lineStart : src.length;
-    const nextHeading = headings.find((h) => h > m.start) ?? src.length;
+    const nextHeading = headings[hi] ?? src.length;
     clauses.push({ id, line: m.line, manual: m.manual, text: src.slice(m.end, Math.min(nextMarker, nextHeading)) });
   });
   const duplicates = [...seen].filter(([, lines]) => lines.length > 1).map(([id, lines]) => ({ id, lines }));

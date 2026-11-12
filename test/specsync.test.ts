@@ -605,7 +605,9 @@ test("[SS-3.4] a link reference definition needs a destination-like token, and o
   assert.deepEqual(ids("[PAY-1.3]: Idempotent.\n", "x.md"), ["PAY-1.3"]);
   assert.deepEqual(ids("[PAY-1.4]: Required.\n", "x.txt"), ["PAY-1.4"]);
   assert.deepEqual(ids("[PAY-1.4]: #pay-14\n", "x.txt"), ["PAY-1.4"], "no link references outside Markdown");
-  assert.deepEqual(ids("[PAY-1.1]: #pay-11\n[PAY-1.2]: pay.md\n[PAY-1.5]: docs/pay\n", "x.md"), []);
+  assert.deepEqual(ids("[PAY-1.1]: #pay-11\n[PAY-1.2]: pay.md\n[PAY-1.6]: docs/pay.md\n", "x.md"), []);
+  // An extensionless slash token reads like prose (`N/A`, `HTTP/2`): a clause, never silently dropped.
+  assert.deepEqual(ids("[PAY-1.5]: docs/pay\n", "x.md"), ["PAY-1.5"]);
   assert.deepEqual(clausePrefixes("[ISO-8601]: https://x\n", "x.md"), []);
 });
 
@@ -624,4 +626,42 @@ test("[SS-4.7] the deletion log parser fails closed on output before a commit he
   assert.throws(() => parseDeletionLog("junk\n\x01123\0\npath\0"), /before a commit header/);
   assert.throws(() => parseDeletionLog("gpg: Signature made\0\x01123\0\npath\0"), /before a commit header/);
   assert.throws(() => parseDeletionLog("\x01abc\0\npath\0"), /unreadable commit time/);
+});
+
+const ids = (text: string, path = "pay.md") => parseClauses(text, "PAY", path).clauses.map((c) => c.id);
+
+test("[SS-3.2] `<!-->` and `<!--->` are complete comments, not unclosed openers", () => {
+  assert.deepEqual(ids("<!-->\n[PAY-1.1] visible clause\n\n<!-- note -->\n[PAY-1.2] shown"), ["PAY-1.1", "PAY-1.2"]);
+  assert.deepEqual(ids("<!--->\n[PAY-1.1] visible clause\n"), ["PAY-1.1"]);
+});
+
+test("[SS-3.5] rst: an overline heading ends the previous clause at the overline", () => {
+  const spec = (title: string) => `[PAY-1.1] charge once\n\n=====\n${title}\n=====\n[PAY-1.2] other`;
+  const a = parseClauses(spec("Next"), "PAY", "pay.rst").clauses[0]!;
+  assert.doesNotMatch(a.text, /=/);
+  assert.equal(clauseTextChanged(spec("Next"), spec("Renamed"), "PAY", "pay.rst"), false);
+});
+
+test("[SS-3.5] markdown: a thematic break is no clause text", () => {
+  for (const hr of ["***", "___", "* * *"]) {
+    const c = parseClauses(`[PAY-1.1] x\n\n${hr}\nSection Two\n-----------\n`, "PAY", "pay.md").clauses[0]!;
+    assert.equal(c.text.replace(/\s+/g, ""), "x", hr);
+  }
+});
+
+test("[SS-3.2] link reference definitions need a destination-like token; prose after the id is a clause", () => {
+  for (const rest of ["N/A", "HTTP/2", "v2.0", "Node.js", "note:", "<removed>"]) {
+    assert.deepEqual(ids(`[PAY-1.1]: ${rest}`), ["PAY-1.1"], rest);
+  }
+  for (const rest of ["#pay-11", "https://x.y/z", "./spec.md", "docs/a.md#x", "<https://x>"]) {
+    assert.deepEqual(ids(`[PAY-1.1]: ${rest}`), [], rest);
+  }
+});
+
+test("[SS-3.5] parseClauses stays linear in headings x clauses", () => {
+  const n = 20_000;
+  const text = Array.from({ length: n }, (_, i) => `# H${i}\n[PAY-${i + 1}] clause ${i}\n`).join("\n");
+  const t0 = Date.now();
+  assert.equal(parseClauses(text, "PAY", "pay.md").clauses.length, n);
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
 });

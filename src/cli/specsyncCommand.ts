@@ -361,15 +361,41 @@ function headMovedAt(root: string): number | null {
   return m ? Number(m[1]) * 1000 + 999 : null;
 }
 
+/** Deletions HEAD took in through its own movement (a `git merge main` into the branch, a
+ *  fast-forward pull on the base itself), which base..HEAD never lists: each reflog step
+ *  old -> new is diffed and its deleted paths dated when HEAD moved. Only steps at or after
+ *  `since` (the oldest JUnit report's mtime, ms) matter, and at most 200 entries are read.
+ *  A step whose commit is gone (expired, pruned) is skipped. */
+function reflogDeletions(root: string, since: number, note: (file: string, ms: number) => void): void {
+  const r = git(root, ["log", "-g", "--no-show-signature", "--format=%H %gd", "--date=unix", "HEAD", "--"]);
+  if (!r.ok) return;
+  const entries = r.out.split("\n").filter((l) => l.trim() !== "").slice(0, 200).map((l) => {
+    const m = /^([0-9a-f]{40}|[0-9a-f]{64}) HEAD@\{(\d+)\}$/.exec(l.trim());
+    if (!m) throw new Error(`git log -g returned an unreadable reflog line ${JSON.stringify(l.slice(0, 80))}`);
+    return { commit: m[1]!, ms: Number(m[2]) * 1000 + 999 };
+  });
+  for (let i = 0; i + 1 < entries.length && entries[i]!.ms >= since; i++) {
+    const { commit: next, ms } = entries[i]!;
+    const old = entries[i + 1]!.commit;
+    if (old === next) continue;
+    const d = git(root, ["diff", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z", old, next, "--"]);
+    if (!d.ok) continue;
+    for (const f of zList(d.out)) note(f, ms);
+  }
+}
+
 /** When each path under `root` was last deleted (ms): a deletion committed in base..HEAD
  *  (renames count as deleting the old path, a file added and deleted on the branch too)
  *  dates by when HEAD last moved (its reflog), since that is when the deletion reached the
  *  work tree, whatever the commit's own date (an old commit pulled in later, a future-dated
- *  one); without a reflog, by its commit's committer time. A deletion not yet committed
+ *  one); without a reflog, by its commit's committer time. A deletion that arrived through
+ *  HEAD's own movement instead (merging the base in, a fast-forward on the base) is found
+ *  by walking the reflog back to `since` (see reflogDeletions); with no report (`since`
+ *  null) there is nothing to date against and the walk is skipped. A deletion not yet committed
  *  (gone from HEAD to the index, from HEAD or the index to the working tree) is Infinity,
  *  so a report is stale until the deletion is committed and the report regenerated. An
  *  untracked file created and removed again leaves no trace in git and cannot be dated. */
-function deletionTimes(root: string, base: { commit: string; empty: boolean }): Map<string, number> {
+function deletionTimes(root: string, base: { commit: string; empty: boolean }, since: number | null): Map<string, number> {
   const times = new Map<string, number>();
   const note = (file: string, ms: number) => {
     const f = normPath(file);
@@ -383,6 +409,7 @@ function deletionTimes(root: string, base: { commit: string; empty: boolean }): 
     const moved = headMovedAt(root);
     for (const { path, ms } of committed) note(path, moved ?? ms);
   }
+  if (since !== null) reflogDeletions(root, since, note);
   for (const cached of [false, true]) {
     const args = ["diff", ...(cached ? ["--cached"] : []), "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z", "HEAD"];
     for (const f of zList(gitOut(root, args))) note(f, Infinity);
@@ -390,12 +417,25 @@ function deletionTimes(root: string, base: { commit: string; empty: boolean }): 
   return times;
 }
 
+/** The JUnit report paths the config's globs match on disk. */
+function junitReportPaths(root: string, config: SpecSyncConfig): string[] {
+  return [...new Set(config.junit.flatMap((j) => expandFsGlob(root, j)))];
+}
+
+/** The oldest mtime (ms) among report files that exist; null when none does. */
+function oldestReportMtime(root: string, reports: readonly string[]): number | null {
+  let oldest: number | null = null;
+  for (const f of reports) {
+    try { const m = statSync(resolve(root, f)).mtimeMs; oldest = oldest === null ? m : Math.min(oldest, m); } catch { /* missing */ }
+  }
+  return oldest;
+}
+
 /** Fresh JUnit cases per spec id, plus junit findings (SS-4.7 – SS-4.9). */
-function readJunit(root: string, config: SpecSyncConfig, files: readonly string[], deleted: ReadonlyMap<string, number>, requireJunit: boolean): { perSpec: Map<string, JunitCase[]>; findings: Finding[] } {
+function readJunit(root: string, config: SpecSyncConfig, reports: readonly string[], files: readonly string[], deleted: ReadonlyMap<string, number>, requireJunit: boolean): { perSpec: Map<string, JunitCase[]>; findings: Finding[] } {
   const perSpec = new Map<string, JunitCase[]>();
   const findings: Finding[] = [];
   if (requireJunit && !config.junit.length) findings.push(finding("junit-skipped", "junit", "--require-junit: no JUnit report is configured (`junit` in the config)", undefined, true));
-  const reports = [...new Set(config.junit.flatMap((j) => expandFsGlob(root, j)))];
   if (config.junit.length && !reports.length && requireJunit) findings.push(finding("junit-skipped", config.junit.join(", "), "--require-junit: no JUnit report matches the configured globs", undefined, true));
   // Freshness inputs: the spec's tests and code, never a report itself (SS-4.7), plus the
   // time of every deletion of a path in those globs (see deletionTimes).
@@ -454,7 +494,8 @@ export function runCheck(root: string, opts: { base?: string; requireJunit?: boo
   const files = repoFiles(root);
   const fileSet = new Set(files);
   const diff = diffFromBase(root, base.commit);
-  const junit = readJunit(root, config, files, deletionTimes(root, base), !!opts.requireJunit);
+  const reports = junitReportPaths(root, config);
+  const junit = readJunit(root, config, reports, files, deletionTimes(root, base, oldestReportMtime(root, reports)), !!opts.requireJunit);
   const specs: SpecInput[] = config.specs.map((spec, i) => {
     const field = `specs[${i}].path`;
     // Exact and case-sensitive: a case-insensitive filesystem must not paper over a mismatch.

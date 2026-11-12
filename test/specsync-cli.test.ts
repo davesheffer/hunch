@@ -577,3 +577,76 @@ test("[SS-4.7] check: a file staged as new and then removed from the working tre
     }
   }
 });
+
+/** Main adds src/pay/helper.ts, then drops it; `feat` takes the add in (all HEAD moves dated). */
+function mainDropsHelper(f: Fixture, now: number): void {
+  gitAt(f, now - 3800, "checkout", "-q", "main");
+  write(f, "src/pay/helper.ts", "export const helper = 1;\n");
+  git(f, "add", "-A");
+  gitAt(f, now - 3700, "commit", "-qm", "add helper");
+  gitAt(f, now - 3650, "checkout", "-q", "feat");
+  gitAt(f, now - 3600, "merge", "-q", "--ff-only", "main");
+  gitAt(f, now - 3500, "checkout", "-q", "main");
+  git(f, "rm", "-q", "src/pay/helper.ts");
+  gitAt(f, now - 3400, "commit", "-qm", "drop helper");
+  gitAt(f, now - 3300, "checkout", "-q", "feat");
+}
+
+test("[SS-4.7][SS-4.9] check: a deletion merged in from the base side makes an older report stale", () => {
+  const f = makeFixture("junitbasemerge");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    mainDropsHelper(f, now);
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    gitAt(f, now - 30, "merge", "-q", "--no-ff", "-m", "merge main", "main");
+    const required = run(f, "spec-sync", "check", "--require-junit");
+    assert.equal(required.status, 1, required.out);
+    assert.match(required.out, /✗ \[junit-skipped\].*stale/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a deletion fast-forwarded in on the base itself (base == HEAD) makes an older report stale", () => {
+  const f = makeFixture("junitonmain");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    gitAt(f, now - 3800, "checkout", "-q", "main");
+    write(f, "src/pay/helper.ts", "export const helper = 1;\n");
+    git(f, "add", "-A");
+    gitAt(f, now - 3700, "commit", "-qm", "add helper");
+    gitAt(f, now - 3690, "checkout", "-q", "-b", "up");
+    git(f, "rm", "-q", "src/pay/helper.ts");
+    gitAt(f, now - 3600, "commit", "-qm", "drop helper");
+    gitAt(f, now - 3500, "checkout", "-q", "main");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    gitAt(f, now - 30, "merge", "-q", "--ff-only", "up");
+    const required = run(f, "spec-sync", "check", "--require-junit");
+    assert.equal(required.status, 1, required.out);
+    assert.match(required.out, /✗ \[junit-skipped\].*stale/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a base-side deletion merged in before the report leaves it fresh", () => {
+  const f = makeFixture("junitbasefresh");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    mainDropsHelper(f, now);
+    gitAt(f, now - 3000, "merge", "-q", "--no-ff", "-m", "merge main", "main");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 60, "reports/junit.xml");
+    const fresh = run(f, "spec-sync", "check", "--require-junit");
+    assert.equal(fresh.status, 1, fresh.out);
+    assert.match(fresh.out, /\[failing\] PAY-1\.1/);
+    assert.doesNotMatch(fresh.out, /junit-skipped/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
