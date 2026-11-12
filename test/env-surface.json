@@ -880,5 +880,15 @@
         "title": "under GIT_DIR / GIT_WORK_TREE / GIT_PREFIX (git hooks, aliases) shell writes still resolve against the work tree"
       }
     ]
+  },
+  "npm_config_global_prefix": {
+    "class": "platform",
+    "purpose": "npm's global prefix (set by npm/npx for every process it runs): where the optional transformers.js embedder is found when it is not installed next to Hunch",
+    "tests": [
+      {
+        "file": "test/embed.test.ts",
+        "title": "globalModuleDirs reads npm_config_global_prefix, then the prefix next to node"
+      }
+    ]
   }
 }

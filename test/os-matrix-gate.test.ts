@@ -38,6 +38,7 @@ const MAPPING: Record<string, { tests: string[]; via?: RegExp }> = {
   "src/integrations/providers.ts": { tests: ["test/providers.test.ts"] },
   "src/integrations/registry.ts": { tests: ["test/registry.test.ts"] },
   "src/serve/writelock.ts": { tests: ["test/lock-parity.test.ts"] },
+  "src/store/embedder.ts": { tests: ["test/embed.test.ts"] },
   "src/store/hunchStore.ts": { tests: ["test/experiment.test.ts", "test/workspace-ledger.test.ts"] },
   "src/store/jsonStore.ts": { tests: ["test/migrate.test.ts", "test/lock-parity.test.ts"] },
   "src/store/strays.ts": { tests: ["test/strays.test.ts"] },
