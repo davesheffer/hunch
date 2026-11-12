@@ -354,47 +354,94 @@ export function parseDeletionLog(out: string): { path: string; ms: number }[] {
   return found;
 }
 
-/** HEAD's reflog, newest first: the commit HEAD moved to and when (ms, end of that second,
- *  so a move in the report's own second counts as after it: stale, never wrongly fresh).
- *  Bounded; empty without a reflog. An unreadable line is an error, never skipped. */
-function headReflog(root: string): { commit: string; ms: number }[] {
-  const r = git(root, ["log", "-g", "-n", "5000", "--no-show-signature", "--format=%H %gd", "--date=unix", "HEAD", "--"]);
+/** HEAD's reflog, newest first: the tree HEAD moved to and when (ms, end of that second, so a
+ *  move in the report's own second counts as after it: stale, never wrongly fresh). Read
+ *  through git, so any ref backend works. Bounded; empty without a reflog. An unreadable
+ *  line is an error, never skipped. */
+function headReflog(root: string): { tree: string; ms: number }[] {
+  const r = git(root, ["log", "-g", "-n", "5000", "--no-show-signature", "--format=%T %gd", "--date=unix", "HEAD", "--"]);
   if (!r.ok) return [];
   return r.out.split("\n").filter((l) => l.trim() !== "").map((l) => {
     const m = /^([0-9a-f]{40}|[0-9a-f]{64}) HEAD@\{(\d+)\}$/.exec(l.trim());
     if (!m) throw new Error(`git log -g returned an unreadable reflog line ${JSON.stringify(l.slice(0, 80))}`);
-    return { commit: m[1]!, ms: Number(m[2]) * 1000 + 999 };
+    return { tree: m[1]!, ms: Number(m[2]) * 1000 + 999 };
   });
+}
+
+/** Deleted paths per tree pair from `git diff-tree --stdin -r --name-only -z` fed "<old> <new>"
+ *  lines: git echoes each pair as "<old> <new>\n", then the pair's paths, NUL-terminated. Git
+ *  skips a pair it cannot read silently (exit 0, no header), so every header is checked in
+ *  order and a missing or unexpected one is an error, never "nothing deleted". */
+export function parseTreePairDeletions(out: string, pairs: readonly (readonly [string, string])[]): string[][] {
+  const found: string[][] = [];
+  let pos = 0;
+  for (let i = 0; i < pairs.length; i++) {
+    const header = `${pairs[i]![0]} ${pairs[i]![1]}\n`;
+    if (!out.startsWith(header, pos)) throw new Error(`git diff-tree --stdin did not answer for ${pairs[i]![0].slice(0, 12)}..${pairs[i]![1].slice(0, 12)}`);
+    pos += header.length;
+    const next = i + 1 < pairs.length ? `${pairs[i + 1]![0]} ${pairs[i + 1]![1]}\n` : null;
+    const paths: string[] = [];
+    while (pos < out.length && !(next !== null && out.startsWith(next, pos))) {
+      const end = out.indexOf("\0", pos);
+      if (end < 0) throw new Error("git diff-tree --stdin returned an unterminated path");
+      paths.push(out.slice(pos, end));
+      pos = end + 1;
+    }
+    found.push(paths);
+  }
+  if (pos !== out.length) throw new Error("git diff-tree --stdin returned output after the last pair");
+  return found;
 }
 
 /** Committed deletions that reached the work tree after `since` (the oldest JUnit report's
  *  mtime, ms), however HEAD got there (a commit on the branch, merging or fast-forwarding the
- *  base in, a rebase or reset): one diff from the commit HEAD held at `since`, read from its
- *  reflog, to HEAD, dated when HEAD last moved. Comparing the two trees, not each step, keeps
- *  it two git calls whatever the reflog's length, and a reset that recommits the same tree
- *  deletes nothing. Returns false when the reflog cannot answer (none, no entry before
- *  `since`, the commit gone); the caller then falls back to base..HEAD by commit time. */
-function reflogDeletions(root: string, since: number, note: (file: string, ms: number) => void): boolean {
+ *  base in, a checkout, a rebase or reset): each HEAD move after `since` is a step from the
+ *  tree before it (the next older reflog entry) to the tree it reached, and a path the step
+ *  deleted is dated at that step, so one report goes stale only from moves after it. One
+ *  git diff-tree call takes every step, whatever the reflog's length. A path a step deleted
+ *  that is on disk and listed now (a reset that recommits it) is left out: its mtime already
+ *  says when it last changed. Returns null without a reflog (the caller then dates base..HEAD
+ *  by commit time); otherwise the latest move whose step cannot be read (no older entry
+ *  because the reflog expired or hit its bound, or git could not diff it), 0 for none: every
+ *  spec's inputs count as changed then, stale until the report is regenerated, never
+ *  wrongly fresh. */
+function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string>, note: (file: string, ms: number) => void): number | null {
   const entries = headReflog(root);
-  const at = entries.find((e) => e.ms < since);
-  if (!at) return false;
-  if (at.commit === entries[0]!.commit) return true; // HEAD is where it was: nothing arrived
-  const d = git(root, ["diff", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z", at.commit, "HEAD", "--"]);
-  if (!d.ok) return false;
-  for (const f of zList(d.out)) note(f, entries[0]!.ms);
-  return true;
+  if (!entries.length) return null;
+  let unknown = 0;
+  const steps = new Map<string, number>(); // "<old tree> <new tree>" -> latest move with that step
+  for (let i = 0; i < entries.length && entries[i]!.ms >= since; i++) {
+    const old = entries[i + 1];
+    if (!old) { unknown = Math.max(unknown, entries[i]!.ms); break; }
+    if (old.tree === entries[i]!.tree) continue;
+    const key = `${old.tree} ${entries[i]!.tree}`;
+    steps.set(key, Math.max(steps.get(key) ?? 0, entries[i]!.ms));
+  }
+  if (!steps.size) return unknown;
+  const pairs = [...steps.keys()].map((k) => k.split(" ") as [string, string]);
+  const d = git(root, ["diff-tree", "--stdin", "-r", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z"], pairs.map(([a, b]) => `${a} ${b}\n`).join(""));
+  let deleted: string[][] | null = null;
+  try { if (d.ok) deleted = parseTreePairDeletions(d.out, pairs); } catch { /* unknown below */ }
+  if (!deleted) return Math.max(unknown, ...steps.values());
+  pairs.forEach(([a, b], i) => {
+    const ms = steps.get(`${a} ${b}`)!;
+    for (const f of deleted[i]!) if (!onDisk.has(normPath(f))) note(f, ms);
+  });
+  return unknown;
 }
 
 /** When each path under `root` was last deleted (ms), for JUnit freshness against reports
- *  no older than `since` (null: no report exists, nothing to date). A committed deletion
- *  counts when it reached the work tree, found from HEAD's reflog (see reflogDeletions);
- *  without a usable reflog, each deletion committed in base..HEAD (renames count as
- *  deleting the old path, a file added and deleted on the branch too) dates by its commit's
- *  committer time. A deletion not yet committed (gone from HEAD to the index, from HEAD or
- *  the index to the working tree) is Infinity, so a report is stale until the deletion is
- *  committed and the report regenerated. An untracked file created and removed again
- *  leaves no trace in git and cannot be dated. */
-function deletionTimes(root: string, base: { commit: string; empty: boolean }, since: number | null): Map<string, number> {
+ *  no older than `since` (null: no report exists, nothing to date), plus `all`: a time after
+ *  which every input counts as changed, 0 for none (see reflogDeletions). `files` are the
+ *  paths on disk whose mtimes already count. A committed deletion counts when it reached the
+ *  work tree, found from HEAD's reflog; without a reflog, each deletion committed in
+ *  base..HEAD (renames count as deleting the old path, a file added and deleted on the branch
+ *  too) dates by its commit's committer time. A deletion not yet committed (gone from HEAD to
+ *  the index, from HEAD or the index to the working tree) is Infinity, so a report is stale
+ *  until the deletion is committed and the report regenerated. An untracked file created and
+ *  removed again, or a staged new file stashed away, leaves no trace in HEAD's history and
+ *  cannot be dated. */
+function deletionTimes(root: string, base: { commit: string; empty: boolean }, since: number | null, files: readonly string[]): { times: Map<string, number>; all: number } {
   const times = new Map<string, number>();
   const note = (file: string, ms: number) => {
     const f = normPath(file);
@@ -402,8 +449,10 @@ function deletionTimes(root: string, base: { commit: string; empty: boolean }, s
   };
   // Index vs working tree: needs no commit (a file staged as new, then removed).
   for (const f of zList(gitOut(root, ["diff", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z"]))) note(f, Infinity);
-  if (base.empty || since === null) return times; // no commits, or no report to date against
-  if (!reflogDeletions(root, since, note)) {
+  if (base.empty || since === null) return { times, all: 0 }; // no commits, or no report to date against
+  let all = reflogDeletions(root, since, new Set(files), note);
+  if (all === null) {
+    all = 0;
     const committed = parseDeletionLog(gitOut(root, ["log", "--no-show-signature", "--no-renames", "--relative", "--diff-filter=D", "--name-only", "--format=%x01%ct", "-z", `${base.commit}..HEAD`, "--"]));
     for (const { path, ms } of committed) note(path, ms);
   }
@@ -411,7 +460,7 @@ function deletionTimes(root: string, base: { commit: string; empty: boolean }, s
     const args = ["diff", ...(cached ? ["--cached"] : []), "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z", "HEAD"];
     for (const f of zList(gitOut(root, args))) note(f, Infinity);
   }
-  return times;
+  return { times, all };
 }
 
 /** The JUnit report paths the config's globs match on disk. */
@@ -429,7 +478,7 @@ function oldestReportMtime(root: string, reports: readonly string[]): number | n
 }
 
 /** Fresh JUnit cases per spec id, plus junit findings (SS-4.7 – SS-4.9). */
-function readJunit(root: string, config: SpecSyncConfig, reports: readonly string[], files: readonly string[], deleted: ReadonlyMap<string, number>, requireJunit: boolean): { perSpec: Map<string, JunitCase[]>; findings: Finding[] } {
+function readJunit(root: string, config: SpecSyncConfig, reports: readonly string[], files: readonly string[], deleted: { times: ReadonlyMap<string, number>; all: number }, requireJunit: boolean): { perSpec: Map<string, JunitCase[]>; findings: Finding[] } {
   const perSpec = new Map<string, JunitCase[]>();
   const findings: Finding[] = [];
   if (requireJunit && !config.junit.length) findings.push(finding("junit-skipped", "junit", "--require-junit: no JUnit report is configured (`junit` in the config)", undefined, true));
@@ -439,7 +488,8 @@ function readJunit(root: string, config: SpecSyncConfig, reports: readonly strin
   const inSpec = (s: SpecEntry, f: string) => (matchesAny(f, s.tests) || matchesAny(f, s.code)) && !matchesAny(f, config.junit);
   const inputs = new Map(config.specs.map((s) => [s.id, Math.max(
     newestMtime(root, files.filter((f) => inSpec(s, f))),
-    ...[...deleted].filter(([f]) => inSpec(s, f)).map(([, ms]) => ms),
+    deleted.all,
+    ...[...deleted.times].filter(([f]) => inSpec(s, f)).map(([, ms]) => ms),
   )]));
   const stale = new Map<string, string[]>();
   for (const report of reports) {
@@ -492,7 +542,7 @@ export function runCheck(root: string, opts: { base?: string; requireJunit?: boo
   const fileSet = new Set(files);
   const diff = diffFromBase(root, base.commit);
   const reports = junitReportPaths(root, config);
-  const junit = readJunit(root, config, reports, files, deletionTimes(root, base, oldestReportMtime(root, reports)), !!opts.requireJunit);
+  const junit = readJunit(root, config, reports, files, deletionTimes(root, base, oldestReportMtime(root, reports), files), !!opts.requireJunit);
   const specs: SpecInput[] = config.specs.map((spec, i) => {
     const field = `specs[${i}].path`;
     // Exact and case-sensitive: a case-insensitive filesystem must not paper over a mismatch.

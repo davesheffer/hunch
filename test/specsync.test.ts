@@ -13,7 +13,7 @@ import {
   parseClauses, parseLegacyHeader, validateSpecSyncConfig, type CheckInput, type JunitCase, type SpecSyncConfig,
 } from "../src/core/specsync.js";
 import { extractTestNames } from "../src/extractors/specsyncTests.js";
-import { parseDeletionLog, proposeGlobs } from "../src/cli/specsyncCommand.js";
+import { parseDeletionLog, parseTreePairDeletions, proposeGlobs } from "../src/cli/specsyncCommand.js";
 import { JUNIT_MAX_BYTES, junitIsFresh, parseJunit, readJunitFile } from "../src/core/junit.js";
 
 const PAY = { id: "PAY", path: "docs/specs/pay.md", code: ["src/pay/**"], tests: ["test/pay*.test.ts"] };
@@ -626,6 +626,19 @@ test("[SS-4.7] the deletion log parser fails closed on output before a commit he
   assert.throws(() => parseDeletionLog("junk\n\x01123\0\npath\0"), /before a commit header/);
   assert.throws(() => parseDeletionLog("gpg: Signature made\0\x01123\0\npath\0"), /before a commit header/);
   assert.throws(() => parseDeletionLog("\x01abc\0\npath\0"), /unreadable commit time/);
+});
+
+test("[SS-4.7] the tree-pair deletion parser checks every pair's header, in order", () => {
+  const a = "a".repeat(40), b = "b".repeat(40), c = "c".repeat(40);
+  const pairs = [[a, b], [b, c]] as const;
+  assert.deepEqual(parseTreePairDeletions(`${a} ${b}\nx.ts\0sub/y.ts\0${b} ${c}\n`, pairs), [["x.ts", "sub/y.ts"], []]);
+  assert.deepEqual(parseTreePairDeletions(`${a} ${b}\n${b} ${c}\nz.ts\0`, pairs), [[], ["z.ts"]]);
+  assert.deepEqual(parseTreePairDeletions("", []), []);
+  // git skips an unreadable pair silently: a missing header is an error, never "nothing deleted".
+  assert.throws(() => parseTreePairDeletions(`${b} ${c}\nz.ts\0`, pairs), /did not answer/);
+  assert.throws(() => parseTreePairDeletions(`${a} ${b}\nx.ts\0`, pairs), /did not answer/);
+  assert.throws(() => parseTreePairDeletions(`${a} ${b}\nx.ts`, [[a, b]]), /unterminated/);
+  assert.throws(() => parseTreePairDeletions(`${a} ${b}\n${b} ${c}\n`, [[a, b]]), /unterminated|after the last pair/);
 });
 
 const ids = (text: string, path = "pay.md") => parseClauses(text, "PAY", path).clauses.map((c) => c.id);
