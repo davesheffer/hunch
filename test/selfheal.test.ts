@@ -6,6 +6,10 @@ import { tempStore } from "./helpers.js";
 import { updateClaudeMd } from "../src/integrations/claudemd.js";
 import { refreshExistingGrounding, writeAgentsMd, writeCursorRule } from "../src/integrations/providers.js";
 
+// These tests assert the full block's tool list; the lean default is covered by
+// test/lean-grounding.test.ts.
+process.env.HUNCH_LEAN_GROUNDING = "0";
+
 test("self-heal: refreshExistingGrounding rewrites a stale grounding doc, idempotently, no scaffolding", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
