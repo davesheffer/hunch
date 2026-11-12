@@ -415,13 +415,16 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           // so its orientation event keeps asking every actionable entry.
           const actionableEsc = deliversPromptEvent(provider) ? [] : (await actionableEscalationsWithAnchors(paths.root, s)).actionable;
           // Experimental quiet mode: no live constraint, bug or finding and nothing to
-          // ask means there is nothing to orient on; only the environment's execution
-          // obligations (controllerBrief) still ride session start.
+          // ask means there is nothing to orient on. The operating loop is not memory:
+          // it still rides session start with the execution obligations, as on the
+          // fresh-graph path below. Dropping it removed the only post-edit verify cue,
+          // and the pylint-6528 bench lost runs to crashing patches never re-run.
           if (quietEmptyEnabled() && !actionableEsc.length
             && !s.advisoryRecs("constraints").some((c) => c.status === "active")
             && !s.advisoryRecs("bugs").length
             && !s.advisoryRecs("findings").some((f) => f.triage === "open")) {
-            if (controllerBrief) emitContext(provider, "SessionStart", controllerBrief);
+            const quietStart = [pipelineEnabled() ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
+            if (quietStart) emitContext(provider, "SessionStart", quietStart);
             return;
           }
           if (!decisions.length && !actionableEsc.length) {

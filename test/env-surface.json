@@ -436,7 +436,7 @@
       },
       {
         "file": "test/quiet-empty.test.ts",
-        "title": "quiet-empty: SessionStart on decisions only is silent under HUNCH_QUIET_EMPTY and unchanged without it"
+        "title": "quiet-empty: SessionStart on decisions only drops orientation but keeps the operating loop under HUNCH_QUIET_EMPTY"
       }
     ]
   },
