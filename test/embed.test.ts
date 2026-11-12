@@ -197,12 +197,13 @@ test(
 // install never resolves npm's global root, so `npm i -g @huggingface/transformers`
 // (doctor's advice) used to leave semantic search off there.
 test("transformers.js installed only in npm's global node_modules is still found", async (t) => {
-  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { mkdtempSync, mkdirSync, realpathSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { pathToFileURL } = await import("node:url");
   const { resolveTransformers } = await import("../src/store/embedder.js");
-  const base = mkdtempSync(join(tmpdir(), "hunch-embed-global-"));
+  // realpath: macOS tmpdir is /var -> /private/var, and require resolves symlinks.
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "hunch-embed-global-")));
   t.after(() => cleanupDir(base));
   const hunchCopy = join(base, "npx", "node_modules", "@davesheffer", "hunch", "dist", "store");
   mkdirSync(hunchCopy, { recursive: true });
