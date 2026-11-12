@@ -518,13 +518,15 @@ test("[SS-4.7][SS-4.9] check: a committed deletion dates by when HEAD moved, not
   try {
     const now = Math.floor(Date.now() / 1000);
     // A deletion committed an hour ago elsewhere, fast-forwarded in after the report.
-    git(f, "checkout", "-q", "-b", "up");
+    // Every HEAD move is dated, so the reflog reads in time order like a real one. The
+    // helper exists on feat, so the fast-forward really removes it from the work tree.
     write(f, "src/pay/helper.ts", "export const helper = 1;\n");
     git(f, "add", "-A");
     gitAt(f, now - 3700, "commit", "-qm", "add helper");
+    gitAt(f, now - 3650, "checkout", "-q", "-b", "up");
     git(f, "rm", "-q", "src/pay/helper.ts");
     gitAt(f, now - 3600, "commit", "-qm", "drop helper");
-    git(f, "checkout", "-q", "feat");
+    gitAt(f, now - 3500, "checkout", "-q", "feat");
     gitAt(f, now, "merge", "-q", "--ff-only", "up");
     setTime(f, now - 600, "src/pay/charge.ts", "test/pay.test.ts");
     write(f, "reports/junit.xml", FAILING_XML);
@@ -628,6 +630,46 @@ test("[SS-4.7][SS-4.9] check: a deletion fast-forwarded in on the base itself (b
     const required = run(f, "spec-sync", "check", "--require-junit");
     assert.equal(required.status, 1, required.out);
     assert.match(required.out, /✗ \[junit-skipped\].*stale/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a base-side deletion stays stale however many HEAD moves follow it", () => {
+  const f = makeFixture("junitbasemoves");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    mainDropsHelper(f, now);
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    gitAt(f, now - 500, "merge", "-q", "--no-ff", "-m", "merge main", "main");
+    for (let i = 0; i < 5; i++) gitAt(f, now - 400 + i * 10, "commit", "-q", "--allow-empty", "-m", `later ${i}`);
+    const required = run(f, "spec-sync", "check", "--require-junit");
+    assert.equal(required.status, 1, required.out);
+    assert.match(required.out, /✗ \[junit-skipped\].*stale/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a soft reset that recommits the same tree after the report deletes nothing", () => {
+  const f = makeFixture("junitsoftreset");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    gitAt(f, now - 3800, "checkout", "-q", "feat");
+    write(f, "src/pay/z.ts", "export const z = 1;\n");
+    git(f, "add", "-A");
+    gitAt(f, now - 3700, "commit", "-qm", "add z");
+    setTime(f, now - 1200, "src/pay/charge.ts", "src/pay/z.ts", "test/pay.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    gitAt(f, now - 300, "reset", "-q", "--soft", "HEAD~1");
+    gitAt(f, now - 200, "commit", "-qm", "add z, reworded");
+    const fresh = run(f, "spec-sync", "check", "--require-junit");
+    assert.equal(fresh.status, 1, fresh.out);
+    assert.match(fresh.out, /\[failing\] PAY-1\.1/);
+    assert.doesNotMatch(fresh.out, /junit-skipped/);
   } finally {
     cleanupDir(f.sandbox);
   }

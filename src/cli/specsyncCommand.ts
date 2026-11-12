@@ -354,47 +354,46 @@ export function parseDeletionLog(out: string): { path: string; ms: number }[] {
   return found;
 }
 
-/** When HEAD last moved (ms, end of that second), from its reflog; null without one. */
-function headMovedAt(root: string): number | null {
-  const r = git(root, ["log", "-g", "-1", "--no-show-signature", "--format=%gd", "--date=unix", "HEAD", "--"]);
-  const m = r.ok ? /^HEAD@\{(\d+)\}$/.exec(r.out.trim()) : null;
-  return m ? Number(m[1]) * 1000 + 999 : null;
-}
-
-/** Deletions HEAD took in through its own movement (a `git merge main` into the branch, a
- *  fast-forward pull on the base itself), which base..HEAD never lists: each reflog step
- *  old -> new is diffed and its deleted paths dated when HEAD moved. Only steps at or after
- *  `since` (the oldest JUnit report's mtime, ms) matter, and at most 200 entries are read.
- *  A step whose commit is gone (expired, pruned) is skipped. */
-function reflogDeletions(root: string, since: number, note: (file: string, ms: number) => void): void {
-  const r = git(root, ["log", "-g", "--no-show-signature", "--format=%H %gd", "--date=unix", "HEAD", "--"]);
-  if (!r.ok) return;
-  const entries = r.out.split("\n").filter((l) => l.trim() !== "").slice(0, 200).map((l) => {
+/** HEAD's reflog, newest first: the commit HEAD moved to and when (ms, end of that second,
+ *  so a move in the report's own second counts as after it: stale, never wrongly fresh).
+ *  Bounded; empty without a reflog. An unreadable line is an error, never skipped. */
+function headReflog(root: string): { commit: string; ms: number }[] {
+  const r = git(root, ["log", "-g", "-n", "5000", "--no-show-signature", "--format=%H %gd", "--date=unix", "HEAD", "--"]);
+  if (!r.ok) return [];
+  return r.out.split("\n").filter((l) => l.trim() !== "").map((l) => {
     const m = /^([0-9a-f]{40}|[0-9a-f]{64}) HEAD@\{(\d+)\}$/.exec(l.trim());
     if (!m) throw new Error(`git log -g returned an unreadable reflog line ${JSON.stringify(l.slice(0, 80))}`);
     return { commit: m[1]!, ms: Number(m[2]) * 1000 + 999 };
   });
-  for (let i = 0; i + 1 < entries.length && entries[i]!.ms >= since; i++) {
-    const { commit: next, ms } = entries[i]!;
-    const old = entries[i + 1]!.commit;
-    if (old === next) continue;
-    const d = git(root, ["diff", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z", old, next, "--"]);
-    if (!d.ok) continue;
-    for (const f of zList(d.out)) note(f, ms);
-  }
 }
 
-/** When each path under `root` was last deleted (ms): a deletion committed in base..HEAD
- *  (renames count as deleting the old path, a file added and deleted on the branch too)
- *  dates by when HEAD last moved (its reflog), since that is when the deletion reached the
- *  work tree, whatever the commit's own date (an old commit pulled in later, a future-dated
- *  one); without a reflog, by its commit's committer time. A deletion that arrived through
- *  HEAD's own movement instead (merging the base in, a fast-forward on the base) is found
- *  by walking the reflog back to `since` (see reflogDeletions); with no report (`since`
- *  null) there is nothing to date against and the walk is skipped. A deletion not yet committed
- *  (gone from HEAD to the index, from HEAD or the index to the working tree) is Infinity,
- *  so a report is stale until the deletion is committed and the report regenerated. An
- *  untracked file created and removed again leaves no trace in git and cannot be dated. */
+/** Committed deletions that reached the work tree after `since` (the oldest JUnit report's
+ *  mtime, ms), however HEAD got there (a commit on the branch, merging or fast-forwarding the
+ *  base in, a rebase or reset): one diff from the commit HEAD held at `since`, read from its
+ *  reflog, to HEAD, dated when HEAD last moved. Comparing the two trees, not each step, keeps
+ *  it two git calls whatever the reflog's length, and a reset that recommits the same tree
+ *  deletes nothing. Returns false when the reflog cannot answer (none, no entry before
+ *  `since`, the commit gone); the caller then falls back to base..HEAD by commit time. */
+function reflogDeletions(root: string, since: number, note: (file: string, ms: number) => void): boolean {
+  const entries = headReflog(root);
+  const at = entries.find((e) => e.ms < since);
+  if (!at) return false;
+  if (at.commit === entries[0]!.commit) return true; // HEAD is where it was: nothing arrived
+  const d = git(root, ["diff", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z", at.commit, "HEAD", "--"]);
+  if (!d.ok) return false;
+  for (const f of zList(d.out)) note(f, entries[0]!.ms);
+  return true;
+}
+
+/** When each path under `root` was last deleted (ms), for JUnit freshness against reports
+ *  no older than `since` (null: no report exists, nothing to date). A committed deletion
+ *  counts when it reached the work tree, found from HEAD's reflog (see reflogDeletions);
+ *  without a usable reflog, each deletion committed in base..HEAD (renames count as
+ *  deleting the old path, a file added and deleted on the branch too) dates by its commit's
+ *  committer time. A deletion not yet committed (gone from HEAD to the index, from HEAD or
+ *  the index to the working tree) is Infinity, so a report is stale until the deletion is
+ *  committed and the report regenerated. An untracked file created and removed again
+ *  leaves no trace in git and cannot be dated. */
 function deletionTimes(root: string, base: { commit: string; empty: boolean }, since: number | null): Map<string, number> {
   const times = new Map<string, number>();
   const note = (file: string, ms: number) => {
@@ -403,13 +402,11 @@ function deletionTimes(root: string, base: { commit: string; empty: boolean }, s
   };
   // Index vs working tree: needs no commit (a file staged as new, then removed).
   for (const f of zList(gitOut(root, ["diff", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z"]))) note(f, Infinity);
-  if (base.empty) return times; // no commits: nothing committed, no HEAD to diff against
-  const committed = parseDeletionLog(gitOut(root, ["log", "--no-show-signature", "--no-renames", "--relative", "--diff-filter=D", "--name-only", "--format=%x01%ct", "-z", `${base.commit}..HEAD`, "--"]));
-  if (committed.length) {
-    const moved = headMovedAt(root);
-    for (const { path, ms } of committed) note(path, moved ?? ms);
+  if (base.empty || since === null) return times; // no commits, or no report to date against
+  if (!reflogDeletions(root, since, note)) {
+    const committed = parseDeletionLog(gitOut(root, ["log", "--no-show-signature", "--no-renames", "--relative", "--diff-filter=D", "--name-only", "--format=%x01%ct", "-z", `${base.commit}..HEAD`, "--"]));
+    for (const { path, ms } of committed) note(path, ms);
   }
-  if (since !== null) reflogDeletions(root, since, note);
   for (const cached of [false, true]) {
     const args = ["diff", ...(cached ? ["--cached"] : []), "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z", "HEAD"];
     for (const f of zList(gitOut(root, args))) note(f, Infinity);
