@@ -1,3 +1,4 @@
+import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempStore, prov } from "./helpers.js";
@@ -196,13 +197,13 @@ test(
 // install never resolves npm's global root, so `npm i -g @huggingface/transformers`
 // (doctor's advice) used to leave semantic search off there.
 test("transformers.js installed only in npm's global node_modules is still found", async (t) => {
-  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { pathToFileURL } = await import("node:url");
   const { resolveTransformers } = await import("../src/store/embedder.js");
   const base = mkdtempSync(join(tmpdir(), "hunch-embed-global-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  t.after(() => cleanupDir(base));
   const hunchCopy = join(base, "npx", "node_modules", "@davesheffer", "hunch", "dist", "store");
   mkdirSync(hunchCopy, { recursive: true });
   const from = pathToFileURL(join(hunchCopy, "embedder.js")).href;
