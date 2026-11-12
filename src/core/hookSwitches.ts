@@ -32,6 +32,8 @@ export const HOOK_SWITCH_ENV: Readonly<Record<HookSwitchName, string>> = {
 
 interface ConfigHooksRead { hooks: Record<string, unknown> | null; problems: string[] }
 const cache = new Map<string, { mtimeMs: number; ctimeMs: number; size: number; read: ConfigHooksRead }>();
+/** Coarsest mtime granularity worth guarding (FAT: 2 s). */
+const RACY_MS = 2000;
 
 /** Parse `hooks` out of `.hunch/config.json`, noting why a present file yields no
  *  usable switch (unparseable, `hooks` not an object, a misspelled key) so `hunch
@@ -44,7 +46,14 @@ function readConfigHooks(root: string): ConfigHooksRead {
     const hit = cache.get(file);
     if (hit && hit.mtimeMs === st.mtimeMs && hit.ctimeMs === st.ctimeMs && hit.size === st.size) return hit.read;
     const read = parseConfigHooks(readFileSync(file, "utf8"));
-    cache.set(file, { mtimeMs: st.mtimeMs, ctimeMs: st.ctimeMs, size: st.size, read });
+    // Racy-stat guard (as git's index): on a coarse-mtime filesystem a same-size rewrite
+    // within one tick keeps mtime/ctime/size, so a read taken that close to the last
+    // change is not cached; the next call re-reads until the file has settled.
+    if (Date.now() - Math.max(st.mtimeMs, st.ctimeMs) > RACY_MS) {
+      cache.set(file, { mtimeMs: st.mtimeMs, ctimeMs: st.ctimeMs, size: st.size, read });
+    } else {
+      cache.delete(file);
+    }
     return read;
   } catch (error) {
     return { hooks: null, problems: [`.hunch/config.json could not be read (${error instanceof Error ? error.message : String(error)})`] };

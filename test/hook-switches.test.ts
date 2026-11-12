@@ -96,6 +96,24 @@ test("hook switches: a config edit is seen by a long-lived process on its next r
   });
 });
 
+test("hook switches: a same-size rewrite within one mtime tick is not served from cache", (t) => {
+  // Coarse-mtime filesystems (FAT 2 s, some network shares) keep mtime and size for a
+  // same-length edit; a read taken that close to the change must not be cached.
+  const { root, cleanup } = tempStore();
+  t.after(cleanup);
+  mkdirSync(join(root, ".hunch"), { recursive: true });
+  const file = join(root, ".hunch", "config.json");
+  const tm = new Date(Math.floor(Date.now() / 2000) * 2000);
+  withEnv({}, () => {
+    writeFileSync(file, '{"hooks":{"daemon":true }}');
+    utimesSync(file, tm, tm);
+    assert.equal(hookSwitch("daemon", root).value, true);
+    writeFileSync(file, '{"hooks":{"daemon":false}}');
+    utimesSync(file, tm, tm);
+    assert.deepEqual(hookSwitch("daemon", root), { value: false, source: "config" });
+  });
+});
+
 test("hook switches: lean_grounding preserve keeps a committed block's variant; true migrates it; false pins full", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
