@@ -191,3 +191,42 @@ test(
     assert.ok(Math.abs(Math.sqrt(norm) - 1) < 1e-2, "output is L2-normalized");
   },
 );
+
+// Hunch launched through npx (the MCP server and hooks `init` writes) or from a project
+// install never resolves npm's global root, so `npm i -g @huggingface/transformers`
+// (doctor's advice) used to leave semantic search off there.
+test("transformers.js installed only in npm's global node_modules is still found", async (t) => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { pathToFileURL } = await import("node:url");
+  const { resolveTransformers } = await import("../src/store/embedder.js");
+  const base = mkdtempSync(join(tmpdir(), "hunch-embed-global-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const hunchCopy = join(base, "npx", "node_modules", "@davesheffer", "hunch", "dist", "store");
+  mkdirSync(hunchCopy, { recursive: true });
+  const from = pathToFileURL(join(hunchCopy, "embedder.js")).href;
+  const globalRoot = join(base, "prefix", "node_modules");
+  const pkg = join(globalRoot, "@huggingface", "transformers");
+  mkdirSync(pkg, { recursive: true });
+  writeFileSync(join(pkg, "package.json"), JSON.stringify({ name: "@huggingface/transformers", main: "index.cjs" }));
+  writeFileSync(join(pkg, "index.cjs"), "exports.pipeline = () => 'fake';\n");
+
+  assert.equal(resolveTransformers(from, []), null, "not next to this copy of Hunch");
+  const found = resolveTransformers(from, [join(base, "elsewhere", "node_modules"), globalRoot]);
+  assert.equal(found, pathToFileURL(join(pkg, "index.cjs")).href);
+  const mod = (await import(found!)) as { pipeline: () => string };
+  assert.equal(mod.pipeline(), "fake", "the loader imports the global copy by its URL");
+});
+
+test("globalModuleDirs reads npm_config_global_prefix, then the prefix next to node", async () => {
+  const { posix, win32 } = await import("node:path");
+  const { globalModuleDirs } = await import("../src/store/embedder.js");
+  assert.deepEqual(globalModuleDirs({ npm_config_global_prefix: "C:\\npm-global" }, "C:\\Program Files\\nodejs\\node.exe", "win32"),
+    [win32.join("C:\\npm-global", "node_modules"), win32.join("C:\\Program Files\\nodejs", "node_modules")]);
+  assert.deepEqual(globalModuleDirs({}, "/usr/local/bin/node", "linux"), [posix.join("/usr/local", "lib", "node_modules")]);
+  assert.deepEqual(globalModuleDirs({ npm_config_global_prefix: "/usr/local" }, "/usr/local/bin/node", "darwin"),
+    ["/usr/local/lib/node_modules"], "one directory, not two");
+  assert.deepEqual(globalModuleDirs({ npm_config_global_prefix: "relative/prefix" }, "/opt/node/bin/node", "linux"),
+    ["/opt/node/lib/node_modules"], "a relative prefix is ignored");
+});

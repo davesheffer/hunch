@@ -24,7 +24,8 @@ import { pathToFileURL } from "node:url";
 import { resolveSpawnCommand } from "../src/core/spawnCommand.js";
 
 const ROOT = process.cwd();
-const NAME = "([A-Z][A-Za-z0-9_]*)";
+// Upper-case names, plus npm's lower-case `npm_*` variables (npm_config_global_prefix).
+const NAME = "((?:[A-Z]|npm_)[A-Za-z0-9_]*)";
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Reads on process.env, an `env` name, or a declared alias of process.env; assignments and deletes are writes, not reads. */
 function readsFor(aliases: string[]): RegExp[] {

@@ -13,6 +13,8 @@
  * Vectors are L2-NORMALIZED, so cosine similarity == dot product downstream.
  */
 import { createRequire } from "node:module";
+import { join, posix, win32 } from "node:path";
+import { pathToFileURL } from "node:url";
 
 export interface Embedder {
   /** Embed each text → an L2-normalized Float32Array of length `dim`. */
@@ -27,17 +29,43 @@ export interface Embedder {
 const PACKAGES = ["@huggingface/transformers", "@xenova/transformers"];
 const HF_MODEL = "Xenova/all-MiniLM-L6-v2"; // 384-dim MiniLM; quantized ~23MB
 
-/** Is one of the transformers packages resolvable WITHOUT executing it? Cheap
- *  availability probe (no onnxruntime init) so `selectEmbedder()` can return null
- *  fast on the lean install. */
-function installedPackage(): string | null {
-  const req = createRequire(import.meta.url);
+/** npm's global node_modules directories, where `npm i -g @huggingface/transformers`
+ *  (doctor's advice) puts the package. npm passes its global prefix to every process
+ *  it runs, npx included; the prefix next to the running node binary is the default
+ *  layout (Windows: <prefix>\node_modules, POSIX: <prefix>/lib/node_modules). */
+export function globalModuleDirs(env: NodeJS.ProcessEnv = process.env, execPath = process.execPath,
+  platform: NodeJS.Platform = process.platform): string[] {
+  const path = platform === "win32" ? win32 : posix;
+  const modules = (prefix: string) => platform === "win32" ? path.join(prefix, "node_modules") : path.join(prefix, "lib", "node_modules");
+  const derived = platform === "win32" ? path.dirname(execPath) : path.dirname(path.dirname(execPath));
+  const prefixes = [env.npm_config_global_prefix, derived].filter((p): p is string => !!p && path.isAbsolute(p));
+  return [...new Set(prefixes.map(modules))];
+}
+
+/** What to import for transformers.js WITHOUT executing it (a cheap probe, no
+ *  onnxruntime init, so `selectEmbedder()` returns null fast on the lean install):
+ *  its bare name when it resolves next to Hunch; a file URL into npm's global
+ *  node_modules otherwise, because Hunch run through npx (the MCP server and hooks
+ *  `init` writes) or from a project install never resolves the global root on its
+ *  own; null when it is installed nowhere. */
+export function resolveTransformers(from: string = import.meta.url, dirs: string[] = globalModuleDirs()): string | null {
+  const local = createRequire(from);
   for (const p of PACKAGES) {
     try {
-      req.resolve(p);
+      local.resolve(p);
       return p;
     } catch {
-      /* not installed — try next */
+      /* not installed here — try next */
+    }
+  }
+  for (const dir of dirs) {
+    const atRoot = createRequire(join(dir, "_hunch_resolve.js"));
+    for (const p of PACKAGES) {
+      try {
+        return pathToFileURL(atRoot.resolve(p)).href;
+      } catch {
+        /* not installed globally here — try next */
+      }
     }
   }
   return null;
@@ -51,7 +79,7 @@ export class TransformersEmbedder implements Embedder {
   private load() {
     if (!this.extractor) {
       const p = (async () => {
-        const pkg = installedPackage();
+        const pkg = resolveTransformers();
         if (!pkg) throw new Error("transformers.js not installed");
         // String var (not a literal) so tsc doesn't require the optional dep to be
         // present to typecheck/build, and the import resolves at runtime when it is.
@@ -139,5 +167,5 @@ export async function selectEmbedder(): Promise<Embedder | null> {
     case "none":
       return null;
   }
-  return installedPackage() ? new TransformersEmbedder() : null;
+  return resolveTransformers() ? new TransformersEmbedder() : null;
 }
