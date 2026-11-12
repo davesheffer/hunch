@@ -3136,6 +3136,30 @@
       }
     ]
   },
+  "spec-sync check --base": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-6.7] check --base: an explicit ref works; an option-like value or no default branch exits 2"
+      }
+    ]
+  },
+  "spec-sync check --json": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-6.7] check: clean exits 0; an untested clause exits 1; --json lists findings"
+      }
+    ]
+  },
+  "spec-sync check --require-junit": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-4.7][SS-4.8][SS-4.9] check: a JUnit report older than a code edit is ignored; --require-junit flags it"
+      }
+    ]
+  },
   "stale --resync": {
     "tests": [
       {
