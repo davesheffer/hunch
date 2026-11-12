@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "דמון hooks אופציונלי ויציב יותר",
       "מתגים אופציונליים ל-hooks ולפרומפטים קלים יותר, ושמירה ברקע",
       "ממשק אינטרנט מקומי לזיכרון, ואינדוקס Elixir",
       "בית זיכרון אחד לכל מאגר, זיכרון שמקושר לקוד, ו-hooks מהירים יותר",
@@ -106,6 +107,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Более надёжный необязательный демон хуков",
       "Необязательные переключатели для более лёгких хуков и промптов, и фоновое сохранение",
       "Локальный веб-интерфейс памяти и индексация Elixir",
       "Один дом памяти на репозиторий, память, связанная с кодом, и более быстрые хуки",
@@ -204,6 +206,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "خادم خطافات اختياري أكثر متانة",
       "مفاتيح اختيارية لخطافات وموجّهات أخف، وحفظ في الخلفية",
       "واجهة ويب محلية للذاكرة، وفهرسة Elixir",
       "موطن ذاكرة واحد لكل مستودع، وذاكرة مرتبطة بالشيفرة، وخطافات أسرع",
@@ -302,6 +305,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Un daemon de hooks opcional más robusto",
       "Interruptores opcionales para hooks y prompts más ligeros, y guardados en segundo plano",
       "Una interfaz web local para la memoria e indexación de Elixir",
       "Un solo hogar de memoria por repositorio, memoria ligada al código y hooks más rápidos",
