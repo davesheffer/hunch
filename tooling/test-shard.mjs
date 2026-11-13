@@ -48,15 +48,14 @@ function sortedUnique(files) {
 // suite it belongs to (any file not listed weighs `defaultWeight`). A profile
 // only moves files between shards; coverage is proven the same way.
 // `platform`: the platform-matrix-safety list, Windows runner timings from CI
-// run 42975277613 (team-matrix-e2e alone outweighs a third of the list). The
-// spec-sync weights are local Windows timings (its CLI tests wait out
-// one-second mtime and reflog stamps), pending a CI measurement.
+// run 42975277613 (team-matrix-e2e alone outweighs a third of the list);
+// specsync-cli from PR #639's Windows shard, which ran it alone (105 s).
 export const SHARD_PROFILES = Object.freeze({
   platform: Object.freeze({
     defaultWeight: 1,
     weights: Object.freeze({
-      "test/specsync-cli.test.ts": 420,
       "test/team-matrix-e2e.test.ts": 281,
+      "test/specsync-cli.test.ts": 100,
       "test/workspaces.test.ts": 96,
       "test/task-selection.test.ts": 79,
       "test/ui.test.ts": 57,
