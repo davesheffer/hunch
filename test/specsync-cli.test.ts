@@ -39,7 +39,7 @@ function run(f: Fixture, ...args: string[]): Run {
   return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
-function makeFixture(label: string, opts: { config?: boolean; commit?: boolean; sha256?: boolean } = {}): Fixture {
+function makeFixture(label: string, opts: { config?: boolean; commit?: boolean; sha256?: boolean; reftable?: boolean } = {}): Fixture {
   const sandbox = tempDir(`hunch-specsync-${label}-`);
   const root = join(sandbox, "repo");
   const home = join(sandbox, "home");
@@ -52,7 +52,7 @@ function makeFixture(label: string, opts: { config?: boolean; commit?: boolean; 
   });
   delete env.NODE_TEST_CONTEXT;
   const f: Fixture = { sandbox, root, env };
-  git(f, "init", "-q", "-b", "main", ...(opts.sha256 ? ["--object-format=sha256"] : []));
+  git(f, "init", "-q", "-b", "main", ...(opts.sha256 ? ["--object-format=sha256"] : []), ...(opts.reftable ? ["--ref-format=reftable"] : []));
   git(f, "config", "user.email", "t@example.com");
   git(f, "config", "user.name", "T");
   git(f, "config", "core.autocrlf", "false");
@@ -963,6 +963,93 @@ test("[SS-4.7][SS-4.9] check: in a new repository the first commit after the rep
     }
   } finally {
     cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a HEAD move stamped before the report but written after it makes the report stale", () => {
+  const f = makeFixture("junitlatewrite");
+  try {
+    // Git stamps a reflog entry with the second its process first asked for the time, so a
+    // rebase that fast-forwards picks after an exec step, or a slow merge, stamps a move made
+    // after a report with a time before it. The reflog file's mtime says when the newest
+    // entry was written.
+    const now = simNow();
+    write(f, "test/pay2.test.ts", "it('[PAY-1.2] caps refunds again', () => {});\n");
+    git(f, "add", "-A");
+    gitAt(f, now - 3700, "commit", "-qm", "add pay2 test");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    // Two moves with one stamp; the older of the two drops pay2.
+    gitAt(f, now - 700, "reset", "-q", "--hard", "HEAD~1");
+    gitAt(f, now - 700, "commit", "-q", "--allow-empty", "-m", "next");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
+    // Stamped and written before the report: fresh.
+    const fresh = run(f, "spec-sync", "check", "--require-junit");
+    assert.match(fresh.out, /\[failing\] PAY-1\.1/, fresh.out);
+    assert.doesNotMatch(fresh.out, /junit-skipped/);
+    // The same stamps, the file written after the report: both moves count as after it.
+    const log = join(f.root, ".git", "logs", "HEAD");
+    utimesSync(log, now - 300, now - 300);
+    assertStale(f);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a reflog file emptied after the report keeps it stale, whatever its birth time says", () => {
+  const f = makeFixture("junitemptied");
+  try {
+    const now = simNow();
+    reportThenDropPay2(f, now);
+    assertStale(f);
+    // What `git reflog expire --expire=now --all` leaves, here with the old file's birth
+    // time, as NTFS gives a file recreated within seconds of the one it replaces.
+    const log = join(f.root, ".git", "logs", "HEAD");
+    writeFileSync(log, "");
+    utimesSync(log, now - 250, now - 250);
+    assert.ok(statSync(log).birthtimeMs < (now - 600) * 1000, "the file's birth time is before the report");
+    assertStale(f);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+/** Whether this git can create a repository on the reftable ref backend (2.45 on). */
+function gitHasReftable(): boolean {
+  const m = /(\d+)\.(\d+)/.exec(execFileSync("git", ["--version"], { encoding: "utf8" }));
+  return !!m && (Number(m[1]) > 2 || (Number(m[1]) === 2 && Number(m[2]) >= 45));
+}
+
+test("[SS-4.7][SS-4.9] check: HEAD away from its newest reflog entry is a step on either ref backend", (t) => {
+  for (const reftable of [false, true]) {
+    if (reftable && !gitHasReftable()) {
+      t.diagnostic("this git has no reftable backend: reftable case not run");
+      continue;
+    }
+    const f = makeFixture(`junitaway${reftable ? "rt" : ""}`, { reftable });
+    try {
+      const now = simNow();
+      write(f, "test/pay2.test.ts", "it('[PAY-1.2] caps refunds again', () => {});\n");
+      git(f, "add", "-A");
+      gitAt(f, now - 3700, "commit", "-qm", "add pay2 test");
+      gitAt(f, now - 3600, "checkout", "-q", "main");
+      const w: Fixture = { ...f, root: join(f.sandbox, "wt") };
+      git(f, "worktree", "add", "-q", w.root, "feat");
+      write(w, "reports/junit.xml", FAILING_XML);
+      setTime(w, now - 600, "reports/junit.xml");
+      const fresh = run(w, "spec-sync", "check", "--require-junit");
+      assert.match(fresh.out, /\[failing\] PAY-1\.1/, fresh.out);
+      assert.doesNotMatch(fresh.out, /junit-skipped/);
+      // The branch moves from the other worktree and this one follows it: pay2 leaves the
+      // work tree with no entry in this worktree's HEAD reflog.
+      git(f, "update-ref", "refs/heads/feat", "main");
+      git(w, "restore", "-s", "HEAD", "-SW", ".");
+      assert.equal(existsSync(join(w.root, "test/pay2.test.ts")), false);
+      assert.equal(git(w, "status", "--porcelain", "--untracked-files=no"), "");
+      assertStale(w);
+    } finally {
+      cleanupDir(f.sandbox);
+    }
   }
 });
 

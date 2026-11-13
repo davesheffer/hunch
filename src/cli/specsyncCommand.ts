@@ -379,7 +379,8 @@ export function moveTimes(ms: readonly number[], top: number): number[] {
 export function parseRawReflog(text: string): { old: string; new: string; ms: number }[] {
   return text.split("\n").filter((l) => l.trim() !== "").map((l) => {
     // Git strips "<" and ">" from the name and email, so the first ">" closes the email.
-    const m = /^([0-9a-f]{40}|[0-9a-f]{64}) ([0-9a-f]{40}|[0-9a-f]{64}) [^>\n]*> (\d+) [+-]\d{4}(?:\t|\r?$)/.exec(l);
+    // The zone has four digits or more (git writes "+10039" for a date given as "+9999").
+    const m = /^([0-9a-f]{40}|[0-9a-f]{64}) ([0-9a-f]{40}|[0-9a-f]{64}) [^>\n]*> (\d+) [+-]\d{4,}(?:\t|\r?$)/.exec(l);
     if (!m) throw new Error(`HEAD's reflog has an unreadable line ${JSON.stringify(l.slice(0, 80))}`);
     return { old: m[1]!, new: m[2]!, ms: reflogMs(m[3]!) };
   }).reverse();
@@ -466,8 +467,10 @@ export function parseTreePairDeletions(out: string, pairs: readonly (readonly [s
  *  so one report goes stale only from moves after it. With a reflog file (files backend),
  *  every entry names both ends of its own move, so an entry gone from the middle (expired, or
  *  its commit pruned) leaves a gap that is itself a step: from where the older entry ended to
- *  where the newer one began, dated at the newer one. HEAD away from the last entry is a step
- *  dated Infinity. Without a reflog file (reftable), `git log -g` gives only the tree each
+ *  where the newer one began, dated at the newer one. The newest entry, and each older one
+ *  with its stamp, is dated no earlier than the file's mtime (git can stamp a move with a
+ *  time before it happened). HEAD away from the last entry is a step dated Infinity, on
+ *  either backend. Without a reflog file (reftable), `git log -g` gives only the tree each
  *  move reached, so each step runs from the next older entry. One git diff-tree call takes
  *  every step, whatever the reflog's length. A path a step deleted that is on disk and listed
  *  now (a reset that recommits it) is left out: its mtime already says when it last changed.
@@ -493,9 +496,21 @@ function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string
     // report makes every input count as changed (a new repository's first commit after the
     // report too: the file is born with it). Without a birth time (0) this is not seen.
     const rewritten = birth > 0 && birth >= since ? birth : 0;
-    if (!entries.length) return rewritten || null;
+    // An empty file written after the report was emptied after it, whatever its birth time
+    // says (NTFS gives a file recreated within seconds the old one's creation time).
+    if (!entries.length) return rewritten || (mtime >= since ? mtime : null);
     unknown = rewritten;
-    const dated = moveTimes(entries.map((e) => e.ms), mtime);
+    // Git stamps an entry with the second its process first asked for the time, not the
+    // second HEAD moved (a rebase fast-forwarding picks after an exec step, a slow merge), or
+    // with a commit's own date (filter-branch), so a move made after the report can carry a
+    // stamp from before it. The file's mtime is when the newest entry was really written:
+    // that entry, and each older one with the same stamp (the same process, as far as the
+    // file can tell), is dated no earlier than the mtime. A step dated later than it happened
+    // only counts its own deletions as later, never every input.
+    const ms = entries.map((e) => e.ms);
+    const newest = ms[0]!;
+    for (let i = 0; i < ms.length && ms[i] === newest; i++) ms[i] = Math.max(newest, mtime);
+    const dated = moveTimes(ms, mtime);
     const head = gitOut(root, ["rev-parse", "--verify", "HEAD^{commit}"]).trim();
     const zero = /^0+$/; // no commit: an orphan checkout, the first commit, a branch rename
     // Where HEAD was before entry i: its old end, or for an entry from no commit, the newest
@@ -523,6 +538,8 @@ function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string
   } else {
     const entries = headReflog(root);
     if (!entries.length) return null;
+    // HEAD away from the newest entry (its branch moved from another worktree): a step.
+    step(entries[0]!.tree, gitOut(root, ["rev-parse", "--verify", "HEAD^{tree}"]).trim(), Infinity);
     const dated = moveTimes(entries.map((e) => e.ms), Infinity);
     for (let i = 0; i < entries.length && dated[i]! >= since; i++) {
       const old = entries[i + 1];
