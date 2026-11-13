@@ -3,7 +3,7 @@
  *  the graph, so a whole team shares the same settings — e.g. how firmly the
  *  agent lifecycle hooks enforce engineering memory before an edit. */
 import { existsSync, readFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { writeFileAtomic } from "./io.js";
 import type { HunchPaths } from "./paths.js";
 import { ENTITY_KINDS } from "./types.js";
@@ -56,6 +56,57 @@ export interface HunchConfig {
   /** Hook-overhead switches shared by the team (src/core/hookSwitches.ts): `lean_grounding`
    *  (true | false | "preserve"), `quiet_empty`, `daemon`. Absent = on; env overrides. */
   hooks?: Partial<Record<HookSwitchName, HookSwitchValue>>;
+  /** On which branches Hunch auto-commits PUBLIC memory (the tracked .hunch/): absent or
+   *  true = the default (every branch but the default one, per-machine opt-in there),
+   *  false = never, `{ "branches": [...] }` = only those exact branches. Read as written;
+   *  autoCommitPolicyOf decides. */
+  auto_commit?: unknown;
+}
+
+/** The team's public auto-commit policy, from `auto_commit` in `.hunch/config.json`. */
+export type AutoCommitPolicy =
+  | { kind: "default" }
+  | { kind: "off" }
+  | { kind: "branches"; branches: string[] }
+  | { kind: "invalid"; problem: string };
+
+/** Interpret a raw `auto_commit` value. Anything not exactly one of the three forms is
+ *  invalid (a misspelled key must not silently widen where memory commits). */
+export function autoCommitPolicyOf(raw: unknown): AutoCommitPolicy {
+  if (raw === undefined || raw === true) return { kind: "default" };
+  if (raw === false) return { kind: "off" };
+  const expected = 'expected true, false or { "branches": ["<branch>", ...] }';
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { kind: "invalid", problem: `.hunch/config.json has an auto_commit value ${JSON.stringify(raw)}; ${expected}` };
+  }
+  const keys = Object.keys(raw);
+  if (keys.length !== 1 || keys[0] !== "branches") {
+    return { kind: "invalid", problem: `.hunch/config.json auto_commit has key(s) ${keys.length ? keys.join(", ") : "(none)"}; ${expected}` };
+  }
+  const branches = (raw as { branches: unknown }).branches;
+  if (!Array.isArray(branches) || !branches.every((b) => typeof b === "string" && b.length > 0 && !/\s/.test(b))) {
+    return { kind: "invalid", problem: ".hunch/config.json auto_commit.branches must be an array of branch names (non-empty, no whitespace)" };
+  }
+  return { kind: "branches", branches: [...branches] as string[] };
+}
+
+/** The auto-commit policy of the .hunch/ dir `hunchDir`, read fresh on every call. A
+ *  missing config is the default; an unreadable, unparseable or non-object one is
+ *  invalid, so callers fail closed (never commit when the team setting cannot be read).
+ *  Never throws. */
+export function readAutoCommitPolicy(hunchDir: string): AutoCommitPolicy {
+  const file = join(hunchDir, "config.json");
+  if (!existsSync(file)) return { kind: "default" };
+  let parsed: unknown;
+  try {
+    parsed = parseConfigText(readFileSync(file, "utf8"));
+  } catch (error) {
+    return { kind: "invalid", problem: `.hunch/config.json cannot be read for auto_commit (${error instanceof Error ? error.message : String(error)})` };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { kind: "invalid", problem: ".hunch/config.json is not a JSON object, so auto_commit cannot be read" };
+  }
+  return autoCommitPolicyOf((parsed as { auto_commit?: unknown }).auto_commit);
 }
 
 export interface MemoryPolicy {
@@ -172,6 +223,7 @@ export function readConfig(paths: HunchPaths): HunchConfig {
       ...(raw.verify && typeof raw.verify === "object" && !Array.isArray(raw.verify) ? { verify: raw.verify } : {}),
       ...(raw.memory && typeof raw.memory === "object" && !Array.isArray(raw.memory) ? { memory: raw.memory } : {}),
       ...(raw.repo_id !== undefined ? { repo_id: raw.repo_id } : {}),
+      ...(raw.auto_commit !== undefined ? { auto_commit: raw.auto_commit } : {}),
       ...(raw.hooks && typeof raw.hooks === "object" && !Array.isArray(raw.hooks) ? { hooks: raw.hooks } : {}),
     };
   } catch {
