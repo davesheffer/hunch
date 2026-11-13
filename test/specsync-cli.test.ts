@@ -62,9 +62,11 @@ function makeFixture(label: string, opts: { config?: boolean; commit?: boolean; 
   write(f, "test/pay.test.ts", TESTS);
   if (opts.config !== false) write(f, ".hunch/spec-sync.json", `${JSON.stringify(CONFIG, null, 2)}\n`);
   if (opts.commit === false) return f;
+  // Dated a day back, so a test that dates its own HEAD moves (gitAt) keeps them in order.
+  const dayAgo = Math.floor(Date.now() / 1000) - 86400;
   git(f, "add", "-A");
-  git(f, "commit", "-qm", "base");
-  git(f, "checkout", "-q", "-b", "feat");
+  gitAt(f, dayAgo, "commit", "-qm", "base");
+  gitAt(f, dayAgo, "checkout", "-q", "-b", "feat");
   return f;
 }
 
@@ -286,10 +288,27 @@ test("[SS-5.4][SS-7.3] check: a spec path case mismatch exits 2; a renamed spec 
 const FAILING_XML = `<testsuites><testsuite name="p"><testcase classname="p" name="[PAY-1.1] captures once"><failure>x</failure></testcase></testsuite></testsuites>`;
 const PASSING_XML = `<testsuites><testsuite name="p"><testcase classname="p" name="[PAY-1.1] captures once"/><testcase classname="p" name="[PAY-1.2] caps refunds"/></testsuite></testsuites>`;
 
-/** A git call whose commit is dated `epochSec` (author and committer). */
+/** A git call whose commit and HEAD move are dated `epochSec` (author, committer, reflog),
+ *  with HEAD's reflog file mtime set to match, as git appending the entry then would. */
 function gitAt(f: Fixture, epochSec: number, ...args: string[]): string {
   const date = `@${epochSec} +0000`;
-  return execFileSync("git", args, { cwd: f.root, encoding: "utf8", env: { ...f.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }, stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const out = execFileSync("git", args, { cwd: f.root, encoding: "utf8", env: { ...f.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }, stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const log = join(f.root, ".git", "logs", "HEAD");
+  if (existsSync(log)) utimesSync(log, epochSec, epochSec);
+  return out;
+}
+
+/** The tests' clock (unix seconds), two hours ahead of the real one: every simulated report
+ *  then comes after the real moment HEAD's reflog file was born, as it does outside tests (a
+ *  reflog file born after the report means it was rewritten, and every report is stale). */
+function simNow(): number {
+  return Math.floor(Date.now() / 1000) + 7200;
+}
+
+/** Blocks until the real clock reaches `epochSec`. */
+function sleepUntil(epochSec: number): void {
+  const ms = epochSec * 1000 - Date.now();
+  if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function setTime(f: Fixture, epochSec: number, ...files: string[]): void {
@@ -303,8 +322,8 @@ test("[SS-4.6][SS-4.7] check: a root-level report written after a committed dire
     write(f, ".gitignore", "junit.xml\n");
     write(f, "lib/a.ts", "export const a = 1;\n");
     git(f, "add", "-A");
-    git(f, "commit", "-qm", "lib");
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
+    gitAt(f, now - 180, "commit", "-qm", "lib");
     git(f, "rm", "-q", "-r", "lib");
     gitAt(f, now - 120, "commit", "-qm", "drop lib");
     setTime(f, now - 600, "src/pay/charge.ts", "test/pay.test.ts");
@@ -325,7 +344,7 @@ test("[SS-4.6][SS-4.7] check: a root-level report written after a committed dire
 test("[SS-4.7][SS-4.9] check: a file added on the branch and deleted in a commit after the report makes it stale", () => {
   const f = makeFixture("junitlate");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     write(f, "src/pay/helper.ts", "export const helper = 1;\n");
     git(f, "add", "-A");
     gitAt(f, now - 300, "commit", "-qm", "add helper");
@@ -385,7 +404,7 @@ test("[SS-4.7][SS-4.9] check --require-junit: a stale report is no finding for a
     write(f, ".hunch/spec-sync.json", JSON.stringify({ ...CONFIG, junit: ["reports/*.xml"] }));
     write(f, "reports/a.xml", PASSING_XML);
     write(f, "reports/b.xml", FAILING_XML);
-    const now = Math.floor(Date.now() / 1000);
+    const now = Math.floor(Date.now() / 1000); // real: the inputs were just written
     setTime(f, now + 60, "reports/a.xml");
     setTime(f, now - 3600, "reports/b.xml");
     const both = run(f, "spec-sync", "check", "--require-junit");
@@ -516,7 +535,7 @@ test("[SS-6.7] a repository with no commits diffs against its own empty tree (SH
 test("[SS-4.7][SS-4.9] check: a committed deletion dates by when HEAD moved, not by the commit's own date", () => {
   const f = makeFixture("junitmoved");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     // A deletion committed an hour ago elsewhere, fast-forwarded in after the report.
     // Every HEAD move is dated, so the reflog reads in time order like a real one. The
     // helper exists on feat, so the fast-forward really removes it from the work tree.
@@ -537,17 +556,21 @@ test("[SS-4.7][SS-4.9] check: a committed deletion dates by when HEAD moved, not
     const required = run(f, "spec-sync", "check", "--require-junit");
     assert.equal(required.status, 1, required.out);
     assert.match(required.out, /✗ \[junit-skipped\].*stale/);
-    // A future-dated deletion commit, but HEAD moved now and the report came after: fresh.
-    git(f, "checkout", "-q", "up");
+    // A deletion committed with the clock ahead: no later move is dated before it, so the
+    // fast-forward after it counts at that time too, and a report written in between is
+    // stale (over-stale, never wrongly fresh) until it is regenerated after that time.
+    gitAt(f, now - 20, "checkout", "-q", "up");
     write(f, "src/pay/later.ts", "export const later = 1;\n");
     git(f, "add", "-A");
     gitAt(f, now - 30, "commit", "-qm", "add later");
     git(f, "rm", "-q", "src/pay/later.ts");
     gitAt(f, now + 300, "commit", "-qm", "drop later (clock ahead)");
-    git(f, "checkout", "-q", "feat");
+    gitAt(f, now - 10, "checkout", "-q", "feat");
     gitAt(f, now, "merge", "-q", "--ff-only", "up");
     setTime(f, now - 600, "src/pay/charge.ts", "test/pay.test.ts");
     setTime(f, now + 60, "reports/junit.xml");
+    assertStale(f);
+    setTime(f, now + 360, "reports/junit.xml");
     const fresh = run(f, "spec-sync", "check", "--require-junit");
     assert.equal(fresh.status, 1, fresh.out);
     assert.match(fresh.out, /\[failing\] PAY-1\.1/);
@@ -597,7 +620,7 @@ function mainDropsHelper(f: Fixture, now: number): void {
 test("[SS-4.7][SS-4.9] check: a deletion merged in from the base side makes an older report stale", () => {
   const f = makeFixture("junitbasemerge");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     mainDropsHelper(f, now);
     setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
     write(f, "reports/junit.xml", FAILING_XML);
@@ -614,7 +637,7 @@ test("[SS-4.7][SS-4.9] check: a deletion merged in from the base side makes an o
 test("[SS-4.7][SS-4.9] check: a deletion fast-forwarded in on the base itself (base == HEAD) makes an older report stale", () => {
   const f = makeFixture("junitonmain");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     gitAt(f, now - 3800, "checkout", "-q", "main");
     write(f, "src/pay/helper.ts", "export const helper = 1;\n");
     git(f, "add", "-A");
@@ -638,7 +661,7 @@ test("[SS-4.7][SS-4.9] check: a deletion fast-forwarded in on the base itself (b
 test("[SS-4.7][SS-4.9] check: a base-side deletion stays stale however many HEAD moves follow it", () => {
   const f = makeFixture("junitbasemoves");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     mainDropsHelper(f, now);
     setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
     write(f, "reports/junit.xml", FAILING_XML);
@@ -656,7 +679,7 @@ test("[SS-4.7][SS-4.9] check: a base-side deletion stays stale however many HEAD
 test("[SS-4.7][SS-4.9] check: a soft reset that recommits the same tree after the report deletes nothing", () => {
   const f = makeFixture("junitsoftreset");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     gitAt(f, now - 3800, "checkout", "-q", "feat");
     write(f, "src/pay/z.ts", "export const z = 1;\n");
     git(f, "add", "-A");
@@ -678,7 +701,7 @@ test("[SS-4.7][SS-4.9] check: a soft reset that recommits the same tree after th
 test("[SS-4.7][SS-4.9] check: a test file on disk at report time, committed after it and then checked out away, makes the report stale", () => {
   const f = makeFixture("junitaddlater");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     gitAt(f, now - 3800, "checkout", "-q", "feat");
     write(f, "test/pay2.test.ts", "it('[PAY-1.2] caps refunds again', () => {});\n");
     setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts", "test/pay2.test.ts");
@@ -700,7 +723,7 @@ test("[SS-4.7][SS-4.9] check: a test file on disk at report time, committed afte
 test("[SS-4.7][SS-4.9] check: a deletion dates by its own HEAD move, so a report written after it stays fresh through later moves", () => {
   const f = makeFixture("junitmulti");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     write(f, ".hunch/spec-sync.json", JSON.stringify({ ...CONFIG, junit: ["reports/*.xml"] }));
     write(f, "src/pay/helper.ts", "export const helper = 1;\n");
     git(f, "add", "-A");
@@ -727,7 +750,7 @@ test("[SS-4.7][SS-4.9] check: a deletion dates by its own HEAD move, so a report
 test("[SS-4.7][SS-4.9] check: with the reflog expired, a HEAD move after the report makes it stale (fails closed)", () => {
   const f = makeFixture("junitexpire");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     mainDropsHelper(f, now);
     git(f, "reflog", "expire", "--expire=now", "--all");
     setTime(f, now - 1200, "src/pay/charge.ts", "src/pay/helper.ts", "test/pay.test.ts");
@@ -745,10 +768,171 @@ test("[SS-4.7][SS-4.9] check: with the reflog expired, a HEAD move after the rep
   }
 });
 
+/** On feat: commits test/pay2.test.ts, writes a failing report after it, then resets --hard
+ *  back past that commit (pay2 leaves the work tree). Returns the dropped commit. */
+function reportThenDropPay2(f: Fixture, now: number): string {
+  write(f, "test/pay2.test.ts", "it('[PAY-1.2] caps refunds again', () => {});\n");
+  git(f, "add", "-A");
+  gitAt(f, now - 3700, "commit", "-qm", "add pay2 test");
+  const dropped = git(f, "rev-parse", "HEAD");
+  setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts", "test/pay2.test.ts");
+  write(f, "reports/junit.xml", FAILING_XML);
+  setTime(f, now - 600, "reports/junit.xml");
+  gitAt(f, now - 300, "reset", "-q", "--hard", "HEAD~1");
+  setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
+  return dropped;
+}
+
+function assertStale(f: Fixture): void {
+  const r = run(f, "spec-sync", "check", "--require-junit");
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /✗ \[junit-skipped\].*stale/);
+  assert.doesNotMatch(r.out, /\[failing\]/);
+}
+
+test("[SS-4.7][SS-4.9] check: a reflog rewritten after the report (expire of unreachable entries, gc) keeps it stale", () => {
+  for (const emptied of [false, true]) {
+    const f = makeFixture(`junitgcgap${emptied ? "0" : ""}`);
+    try {
+      // Real time here: the report comes after the reflog file was born and before the
+      // rewrite, so only the rewrite itself can tell that moves were dropped.
+      const now = Math.floor(Date.now() / 1000) + 602; // report at real +2 s
+      reportThenDropPay2(f, now);
+      assertStale(f);
+      sleepUntil(now - 597);
+      if (emptied) {
+        git(f, "reflog", "expire", "--expire=now", "--all"); // leaves an empty file
+        assert.equal(readFileSync(join(f.root, ".git", "logs", "HEAD"), "utf8"), "");
+      } else {
+        // Drops both the commit and the reset entries: the remaining reflog is consistent.
+        git(f, "reflog", "expire", "--expire-unreachable=now", "--all");
+        git(f, "gc", "-q", "--prune=now");
+      }
+      assertStale(f);
+      // A later ordinary move does not hide the rewrite.
+      gitAt(f, now, "commit", "-q", "--allow-empty", "-m", "next");
+      assertStale(f);
+    } finally {
+      cleanupDir(f.sandbox);
+    }
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: an orphan commit after the report that drops a test file makes it stale", () => {
+  const f = makeFixture("junitorphan");
+  try {
+    const now = simNow();
+    write(f, "test/pay2.test.ts", "it('[PAY-1.2] caps refunds again', () => {});\n");
+    git(f, "add", "-A");
+    gitAt(f, now - 3700, "commit", "-qm", "add pay2 test");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts", "test/pay2.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    gitAt(f, now - 300, "checkout", "-q", "--orphan", "fresh");
+    git(f, "rm", "-q", "-f", "test/pay2.test.ts");
+    gitAt(f, now - 200, "commit", "-qm", "squashed history");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");
+    const r = run(f, "spec-sync", "check", "--base", "HEAD", "--require-junit");
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /✗ \[junit-skipped\].*stale/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a back-dated commit that deletes a test file stays stale after a later commit", () => {
+  const f = makeFixture("junitbackdel");
+  try {
+    const now = simNow();
+    write(f, "test/pay2.test.ts", "it('[PAY-1.2] caps refunds again', () => {});\n");
+    git(f, "add", "-A");
+    gitAt(f, now - 3700, "commit", "-qm", "add pay2 test");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts", "test/pay2.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    git(f, "rm", "-q", "test/pay2.test.ts");
+    gitAt(f, now - 3800, "commit", "-qm", "drop pay2, committer date before the last commit's");
+    utimesSync(join(f.root, ".git", "logs", "HEAD"), now - 300, now - 300); // written now, really
+    assertStale(f);
+    gitAt(f, now - 200, "commit", "-q", "--allow-empty", "-m", "next");
+    assertStale(f);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a HEAD move whose commit object is gone makes the report stale", () => {
+  const f = makeFixture("junitmissobj");
+  try {
+    const now = simNow();
+    const dropped = reportThenDropPay2(f, now);
+    unlinkSync(join(f.root, ".git", "objects", dropped.slice(0, 2), dropped.slice(2)));
+    assertStale(f);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: an entry gone from the middle of the reflog is itself a step, so its deletion still counts", () => {
+  const f = makeFixture("junitmidgap");
+  try {
+    const now = simNow();
+    reportThenDropPay2(f, now);
+    write(f, "notes.txt", "unrelated\n");
+    git(f, "add", "notes.txt");
+    gitAt(f, now - 200, "commit", "-qm", "unrelated");
+    // Drop the reset's entry by hand: the commit entry's new end no longer meets the next old end.
+    const log = join(f.root, ".git", "logs", "HEAD");
+    const lines = readFileSync(log, "utf8").split("\n").filter((l) => l && !/\treset: /.test(l));
+    writeFileSync(log, `${lines.join("\n")}\n`);
+    utimesSync(log, now - 200, now - 200);
+    assertStale(f);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: a later HEAD move dated back cannot hide an earlier deletion after the report", () => {
+  const f = makeFixture("junitbackhide");
+  try {
+    const now = simNow();
+    mainDropsHelper(f, now);
+    setTime(f, now - 1200, "src/pay/charge.ts", "src/pay/helper.ts", "test/pay.test.ts");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    gitAt(f, now - 300, "merge", "-q", "--no-ff", "-m", "merge main", "main");
+    write(f, "notes.txt", "unrelated\n");
+    git(f, "add", "notes.txt");
+    gitAt(f, now - 7200, "commit", "-qm", "unrelated, committer date two hours back");
+    assertStale(f);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: the repository's first commit after the report deletes nothing (fresh)", () => {
+  const f = makeFixture("junitinitial", { commit: false });
+  try {
+    const now = simNow();
+    write(f, ".gitignore", "reports/\n");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts", "src/util.ts", "docs/specs/pay.md", ".hunch/spec-sync.json", ".gitignore");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 600, "reports/junit.xml");
+    git(f, "add", "-A");
+    gitAt(f, now - 300, "commit", "-qm", "base");
+    const r = run(f, "spec-sync", "check", "--require-junit");
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /\[failing\] PAY-1\.1/);
+    assert.doesNotMatch(r.out, /junit-skipped/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
 test("[SS-4.7][SS-4.9] check: a base-side deletion merged in before the report leaves it fresh", () => {
   const f = makeFixture("junitbasefresh");
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const now = simNow();
     mainDropsHelper(f, now);
     gitAt(f, now - 3000, "merge", "-q", "--no-ff", "-m", "merge main", "main");
     setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts");

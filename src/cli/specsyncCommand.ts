@@ -354,24 +354,87 @@ export function parseDeletionLog(out: string): { path: string; ms: number }[] {
   return found;
 }
 
-/** HEAD's reflog, newest first: the tree HEAD moved to and when (ms, end of that second, so a
- *  move in the report's own second counts as after it: stale, never wrongly fresh). Read
- *  through git, so any ref backend works. Bounded; empty without a reflog. An unreadable
- *  line is an error, never skipped. */
+/** A reflog time (unix seconds) in ms, at the end of that second, so a move in the report's
+ *  own second counts as after it: stale, never wrongly fresh. */
+const reflogMs = (s: string) => Number(s) * 1000 + 999;
+
+/** When each move (entries newest first) happened at the latest, never earlier than any older
+ *  move, so one entry dated back (GIT_COMMITTER_DATE) can never date a later move before an
+ *  earlier one. An entry timed before an older entry is provably dated back: it is dated at
+ *  the next newer move instead, and the newest such entry at `top` (when the reflog was last
+ *  written, at the latest). Non-increasing, newest first. */
+export function moveTimes(ms: readonly number[], top: number): number[] {
+  const older = new Array<number>(ms.length + 1).fill(0); // older[i]: latest time of entries i..
+  for (let i = ms.length - 1; i >= 0; i--) older[i] = Math.max(older[i + 1]!, ms[i]!);
+  const out = new Array<number>(ms.length);
+  for (let i = 0; i < ms.length; i++) {
+    const back = ms[i]! < older[i + 1]!;
+    out[i] = back ? (i === 0 ? Math.max(older[0]!, top) : out[i - 1]!) : older[i]!;
+  }
+  return out;
+}
+
+/** Entries of a raw files-backend reflog (`<old> <new> <ident> <unix> <tz>\t<message>`),
+ *  newest first. An unreadable line is an error, never skipped. */
+export function parseRawReflog(text: string): { old: string; new: string; ms: number }[] {
+  return text.split("\n").filter((l) => l.trim() !== "").map((l) => {
+    // Git strips "<" and ">" from the name and email, so the first ">" closes the email.
+    const m = /^([0-9a-f]{40}|[0-9a-f]{64}) ([0-9a-f]{40}|[0-9a-f]{64}) [^>\n]*> (\d+) [+-]\d{4}(?:\t|\r?$)/.exec(l);
+    if (!m) throw new Error(`HEAD's reflog has an unreadable line ${JSON.stringify(l.slice(0, 80))}`);
+    return { old: m[1]!, new: m[2]!, ms: reflogMs(m[3]!) };
+  }).reverse();
+}
+
+/** HEAD's reflog file (files ref backend) with its mtime (last append) and birth time (0 where
+ *  the filesystem has none); null when there is none (reftable, or reflogs turned off): the
+ *  caller then reads the reflog through `git log -g`. */
+function rawHeadReflog(root: string): { entries: { old: string; new: string; ms: number }[]; mtime: number; birth: number } | null {
+  const file = resolve(root, gitOut(root, ["rev-parse", "--git-path", "logs/HEAD"]).trim());
+  let text: string;
+  let st: { mtimeMs: number; birthtimeMs: number };
+  try { st = statSync(file); text = readFileSync(file, "utf8"); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
+  return { entries: parseRawReflog(text), mtime: st.mtimeMs, birth: st.birthtimeMs };
+}
+
+/** HEAD's reflog through git (any ref backend), newest first: the tree HEAD moved to and
+ *  when. Bounded; empty without a reflog. A failed call or an unreadable line is an error,
+ *  never "no reflog". */
 function headReflog(root: string): { tree: string; ms: number }[] {
-  const r = git(root, ["log", "-g", "-n", "5000", "--no-show-signature", "--format=%T %gd", "--date=unix", "HEAD", "--"]);
-  if (!r.ok) return [];
-  return r.out.split("\n").filter((l) => l.trim() !== "").map((l) => {
+  const out = gitOut(root, ["log", "-g", "-n", "5000", "--no-show-signature", "--format=%T %gd", "--date=unix", "HEAD", "--"]);
+  return out.split("\n").filter((l) => l.trim() !== "").map((l) => {
     const m = /^([0-9a-f]{40}|[0-9a-f]{64}) HEAD@\{(\d+)\}$/.exec(l.trim());
     if (!m) throw new Error(`git log -g returned an unreadable reflog line ${JSON.stringify(l.slice(0, 80))}`);
-    return { tree: m[1]!, ms: Number(m[2]) * 1000 + 999 };
+    return { tree: m[1]!, ms: reflogMs(m[2]!) };
   });
+}
+
+/** Each commit's tree, null for a commit git cannot read (its object is gone), from one
+ *  `git cat-file --batch-check` call. Output that does not answer every commit in order is
+ *  an error. */
+function commitTrees(root: string, commits: readonly string[]): Map<string, string | null> {
+  const trees = new Map<string, string | null>();
+  if (!commits.length) return trees;
+  const lines = gitOut(root, ["cat-file", "--batch-check=%(objectname) %(objecttype)"], commits.map((c) => `${c}^{tree}\n`).join("")).split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  if (lines.length !== commits.length) throw new Error(`git cat-file --batch-check answered ${lines.length} of ${commits.length} commits`);
+  commits.forEach((c, i) => {
+    const l = lines[i]!.trim();
+    const m = /^([0-9a-f]{40}|[0-9a-f]{64}) tree$/.exec(l);
+    if (m) trees.set(c, m[1]!);
+    else if (l === `${c}^{tree} missing`) trees.set(c, null);
+    else throw new Error(`git cat-file --batch-check returned ${JSON.stringify(l.slice(0, 80))} for ${c.slice(0, 12)}`);
+  });
+  return trees;
 }
 
 /** Deleted paths per tree pair from `git diff-tree --stdin -r --name-only -z` fed "<old> <new>"
  *  lines: git echoes each pair as "<old> <new>\n", then the pair's paths, NUL-terminated. Git
  *  skips a pair it cannot read silently (exit 0, no header), so every header is checked in
- *  order and a missing or unexpected one is an error, never "nothing deleted". */
+ *  order and a missing or unexpected one is an error, never "nothing deleted". A path with a
+ *  newline could pass for the next header, so it is an error too. */
 export function parseTreePairDeletions(out: string, pairs: readonly (readonly [string, string])[]): string[][] {
   const found: string[][] = [];
   let pos = 0;
@@ -384,7 +447,9 @@ export function parseTreePairDeletions(out: string, pairs: readonly (readonly [s
     while (pos < out.length && !(next !== null && out.startsWith(next, pos))) {
       const end = out.indexOf("\0", pos);
       if (end < 0) throw new Error("git diff-tree --stdin returned an unterminated path");
-      paths.push(out.slice(pos, end));
+      const path = out.slice(pos, end);
+      if (path.includes("\n")) throw new Error("git diff-tree --stdin returned a path with a newline");
+      paths.push(path);
       pos = end + 1;
     }
     found.push(paths);
@@ -395,27 +460,74 @@ export function parseTreePairDeletions(out: string, pairs: readonly (readonly [s
 
 /** Committed deletions that reached the work tree after `since` (the oldest JUnit report's
  *  mtime, ms), however HEAD got there (a commit on the branch, merging or fast-forwarding the
- *  base in, a checkout, a rebase or reset): each HEAD move after `since` is a step from the
- *  tree before it (the next older reflog entry) to the tree it reached, and a path the step
- *  deleted is dated at that step, so one report goes stale only from moves after it. One
- *  git diff-tree call takes every step, whatever the reflog's length. A path a step deleted
- *  that is on disk and listed now (a reset that recommits it) is left out: its mtime already
- *  says when it last changed. Returns null without a reflog (the caller then dates base..HEAD
- *  by commit time); otherwise the latest move whose step cannot be read (no older entry
- *  because the reflog expired or hit its bound, or git could not diff it), 0 for none: every
+ *  base in, a checkout, a rebase or reset). Each HEAD move is a step from the tree before it
+ *  to the tree it reached, dated at the move (raised to every older move's time, so one move
+ *  dated back cannot hide an earlier one), and a path a step deleted is dated at that step,
+ *  so one report goes stale only from moves after it. With a reflog file (files backend),
+ *  every entry names both ends of its own move, so an entry gone from the middle (expired, or
+ *  its commit pruned) leaves a gap that is itself a step: from where the older entry ended to
+ *  where the newer one began, dated at the newer one. HEAD away from the last entry is a step
+ *  dated Infinity. Without a reflog file (reftable), `git log -g` gives only the tree each
+ *  move reached, so each step runs from the next older entry. One git diff-tree call takes
+ *  every step, whatever the reflog's length. A path a step deleted that is on disk and listed
+ *  now (a reset that recommits it) is left out: its mtime already says when it last changed.
+ *  Returns null without a reflog (the caller then dates base..HEAD by commit time);
+ *  otherwise the latest move that cannot be read (its commit is gone, no older entry under
+ *  `git log -g`, git could not diff it, or the reflog file was rewritten after `since` by
+ *  git reflog expire or git gc, which can drop moves without a gap), 0 for none: every
  *  spec's inputs count as changed then, stale until the report is regenerated, never
  *  wrongly fresh. */
 function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string>, note: (file: string, ms: number) => void): number | null {
-  const entries = headReflog(root);
-  if (!entries.length) return null;
   let unknown = 0;
   const steps = new Map<string, number>(); // "<old tree> <new tree>" -> latest move with that step
-  for (let i = 0; i < entries.length && entries[i]!.ms >= since; i++) {
-    const old = entries[i + 1];
-    if (!old) { unknown = Math.max(unknown, entries[i]!.ms); break; }
-    if (old.tree === entries[i]!.tree) continue;
-    const key = `${old.tree} ${entries[i]!.tree}`;
-    steps.set(key, Math.max(steps.get(key) ?? 0, entries[i]!.ms));
+  const step = (a: string, b: string, ms: number) => {
+    if (a === b) return;
+    const key = `${a} ${b}`;
+    steps.set(key, Math.max(steps.get(key) ?? 0, ms));
+  };
+  const raw = rawHeadReflog(root);
+  if (raw) {
+    const { entries, mtime, birth } = raw;
+    // Git appends to the file as HEAD moves and replaces it only to drop entries (git reflog
+    // expire, git gc), which can drop moves without leaving a gap: a file born after the
+    // report makes every input count as changed. Without a birth time (0) this is not seen.
+    const rewritten = birth > 0 && birth >= since ? birth : 0;
+    if (!entries.length) return rewritten || null;
+    unknown = rewritten;
+    const dated = moveTimes(entries.map((e) => e.ms), mtime);
+    const head = gitOut(root, ["rev-parse", "--verify", "HEAD^{commit}"]).trim();
+    const zero = /^0+$/; // no commit: an orphan checkout, the first commit, a branch rename
+    // Where HEAD was before entry i: its old end, or for an entry from no commit, the newest
+    // older entry's commit (an orphan commit replaces that tree), "" for none (first commit).
+    const before = (i: number): string => {
+      if (!zero.test(entries[i]!.old)) return entries[i]!.old;
+      for (let j = i + 1; j < entries.length; j++) if (!zero.test(entries[j]!.new)) return entries[j]!.new;
+      return "";
+    };
+    const moves: [string, string, number][] = []; // commit steps
+    if (entries[0]!.new !== head) moves.push([entries[0]!.new, head, Infinity]);
+    for (let i = 0; i < entries.length && dated[i]! >= since; i++) {
+      const e = entries[i]!;
+      const older = entries[i + 1];
+      moves.push([before(i), e.new, dated[i]!]);
+      if (older && !zero.test(e.old) && older.new !== e.old) moves.push([older.new, e.old, dated[i]!]);
+    }
+    const live = moves.filter(([a, b]) => a !== b && a !== "" && !zero.test(a) && !zero.test(b));
+    const trees = commitTrees(root, [...new Set(live.flatMap(([a, b]) => [a, b]))]);
+    for (const [a, b, ms] of live) {
+      const ta = trees.get(a), tb = trees.get(b);
+      if (!ta || !tb) unknown = Math.max(unknown, ms);
+      else step(ta, tb, ms);
+    }
+  } else {
+    const entries = headReflog(root);
+    if (!entries.length) return null;
+    const dated = moveTimes(entries.map((e) => e.ms), Infinity);
+    for (let i = 0; i < entries.length && dated[i]! >= since; i++) {
+      const old = entries[i + 1];
+      if (!old) { unknown = Math.max(unknown, dated[i]!); break; }
+      step(old.tree, entries[i]!.tree, dated[i]!);
+    }
   }
   if (!steps.size) return unknown;
   const pairs = [...steps.keys()].map((k) => k.split(" ") as [string, string]);

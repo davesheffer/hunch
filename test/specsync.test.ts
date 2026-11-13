@@ -13,7 +13,7 @@ import {
   parseClauses, parseLegacyHeader, validateSpecSyncConfig, type CheckInput, type JunitCase, type SpecSyncConfig,
 } from "../src/core/specsync.js";
 import { extractTestNames } from "../src/extractors/specsyncTests.js";
-import { parseDeletionLog, parseTreePairDeletions, proposeGlobs } from "../src/cli/specsyncCommand.js";
+import { moveTimes, parseDeletionLog, parseRawReflog, parseTreePairDeletions, proposeGlobs } from "../src/cli/specsyncCommand.js";
 import { JUNIT_MAX_BYTES, junitIsFresh, parseJunit, readJunitFile } from "../src/core/junit.js";
 
 const PAY = { id: "PAY", path: "docs/specs/pay.md", code: ["src/pay/**"], tests: ["test/pay*.test.ts"] };
@@ -639,6 +639,34 @@ test("[SS-4.7] the tree-pair deletion parser checks every pair's header, in orde
   assert.throws(() => parseTreePairDeletions(`${a} ${b}\nx.ts\0`, pairs), /did not answer/);
   assert.throws(() => parseTreePairDeletions(`${a} ${b}\nx.ts`, [[a, b]]), /unterminated/);
   assert.throws(() => parseTreePairDeletions(`${a} ${b}\n${b} ${c}\n`, [[a, b]]), /unterminated|after the last pair/);
+  // A path with a newline could pass for the next header: an error, never a spoofed pair.
+  assert.throws(() => parseTreePairDeletions(`${a} ${b}\nx\n${b} ${c}\n\0`, [[a, b]]), /newline/);
+});
+
+test("[SS-4.7] HEAD moves date no earlier than older moves; a provably back-dated one dates at the next newer move", () => {
+  // Newest first.
+  assert.deepEqual(moveTimes([30, 20, 10], 99), [30, 20, 10]);
+  assert.deepEqual(moveTimes([5, 20, 10], 99), [99, 20, 10]); // newest dated back: at `top`
+  assert.deepEqual(moveTimes([40, 5, 20, 10], 99), [40, 40, 20, 10]); // dated back: at the next newer
+  assert.deepEqual(moveTimes([3, 5, 20, 10], 99), [99, 99, 20, 10]);
+  assert.deepEqual(moveTimes([25, 30, 10], 99), [99, 30, 10]);
+  assert.deepEqual(moveTimes([], 99), []);
+});
+
+test("[SS-4.7] the raw reflog parser reads each entry's own move, newest first, and rejects unreadable lines", () => {
+  const z = "0".repeat(40), a = "a".repeat(40), b = "b".repeat(40), h = "c".repeat(64);
+  const text = `${z} ${a} T <t@e.c> 1700000000 +0000\tcommit (initial): base\n${a} ${b} A B Name <t@e.c> 1700000100 -0130\tcheckout: moving\r\n${b} ${b} T <t@e.c> 1700000200 +0000\n`;
+  assert.deepEqual(parseRawReflog(text), [
+    { old: b, new: b, ms: 1700000200999 },
+    { old: a, new: b, ms: 1700000100999 },
+    { old: z, new: a, ms: 1700000000999 },
+  ]);
+  assert.deepEqual(parseRawReflog(`${h} ${h} T <t@e.c> 1 +0000\tx\n`), [{ old: h, new: h, ms: 1999 }]);
+  assert.deepEqual(parseRawReflog(""), []);
+  // A tab in the name, an empty email, no message: still entries.
+  assert.deepEqual(parseRawReflog(`${a} ${b} A\tB <> 5 +0000\n${b} ${a} T <t@e.c> 6 +0000\tmsg > 7 +0000\n`).map((e) => e.ms), [6999, 5999]);
+  assert.throws(() => parseRawReflog(`${a} ${b} T <t@e.c> 1700000000 +0000\tok\n${a} ${b} truncat`), /unreadable line/);
+  assert.throws(() => parseRawReflog(`${a} xyz T <t@e.c> 1 +0000\n`), /unreadable line/);
 });
 
 const ids = (text: string, path = "pay.md") => parseClauses(text, "PAY", path).clauses.map((c) => c.id);
