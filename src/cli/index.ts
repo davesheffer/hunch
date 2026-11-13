@@ -79,7 +79,7 @@ import { renderText, renderMarkdown, renderSarif, renderImpact, reportFailsStric
 import { partitionReview, isReviewDraft, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook, installPostMergeHook, installPostCheckoutHook, hookStatus, hookReport, hookInvocationLines, formatHookInstall, sharedHooksNote, type HookInstall } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
-import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, sharedRemoteFor, holdsOnDefaultBranch, HELD_ON_DEFAULT_BRANCH, type MemoryHome } from "../integrations/sync.js";
+import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, sharedRemoteFor, holdsOnDefaultBranch, heldNotice, type MemoryHome } from "../integrations/sync.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade, memoryIgnoreRule, describeMemoryIgnoreRule, policyNotCommitted, describePolicyNotCommitted } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
@@ -409,7 +409,7 @@ function storeFor(opts: TeamStoreOptions = {}): { store: HunchStore; root: strin
 }
 
 /** Whether a public memory flush commits the tracked grounding docs itself. When it
- *  won't (auto-commit off, or held on the default branch), a by-hand command refreshes
+ *  won't (auto-commit off, or held by the auto-commit policy), a by-hand command refreshes
  *  them on disk instead, so CLAUDE.md never keeps enforcing what the command just changed. */
 function publicFlushCommitsGrounding(store: HunchStore, root: string): boolean {
   return store.autoCommit && !holdsOnDefaultBranch(hunchPaths(root).hunch);
@@ -417,15 +417,15 @@ function publicFlushCommitsGrounding(store: HunchStore, root: string): boolean {
 
 // A held public flush says so once per command, on stderr: stdout may be a --json payload.
 let heldNoticePrinted = false;
-function noteHeld(): void {
+function noteHeld(publicHunchDir: string): void {
   if (heldNoticePrinted) return;
   heldNoticePrinted = true;
-  console.error(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+  console.error(`  ↳ ${heldNotice(publicHunchDir)}`);
 }
 
 function pumpMemoryHome(store: HunchStore, root: string, home: MemoryHome, message: string): ReturnType<typeof flushMemoryHome> {
   const flush = flushMemoryHome(store, hunchPaths(root).hunch, home, message);
-  if (flush === "held") noteHeld();
+  if (flush === "held") noteHeld(hunchPaths(root).hunch);
   return flush;
 }
 
@@ -446,7 +446,7 @@ function pumpPolicyHome(store: HunchStore, root: string, service: ConstitutionSe
 
 function pumpMemoryHomes(store: HunchStore, root: string, homes: Iterable<MemoryHome>, message: string): void {
   const flushes = flushMemoryHomes(store, hunchPaths(root).hunch, homes, message);
-  if (flushes.public === "held") noteHeld();
+  if (flushes.public === "held") noteHeld(hunchPaths(root).hunch);
 }
 
 // ---- init -----------------------------------------------------------------
@@ -999,8 +999,9 @@ program
     const publicCapture = r.status === "written" && !capturedPrivate;
     const privateCapture = capturedPrivate;
     const publicNeedsFlush = publicCapture || graphRefreshed || publicRepairTouched;
-    // The default-branch hold covers the post-commit hook too. Its baked-in --commit is
-    // the installed auto-commit default, so only a --commit typed by hand overrides it.
+    // The auto-commit policy hold (publicCommitHold) covers the post-commit hook too. Its
+    // baked-in --commit is the installed auto-commit default, so only a --commit typed by
+    // hand overrides it.
     // Decided before the grounding refresh: a held capture leaves tracked docs at HEAD,
     // so `git commit -a` cannot commit counts whose record it leaves untracked.
     const publicHeld = doCommit && publicNeedsFlush && (opts.fromHook || opts.commit === undefined) && holdsOnDefaultBranch(hunchPaths(root).hunch);
@@ -1012,7 +1013,7 @@ program
     }
     if (doCommit) {
       const privateNeedsFlush = privateCapture || (privateCorrectionQueued && graphRefreshed) || g2Recorded > 0 || privateRepairTouched;
-      if (publicHeld && !opts.quiet) console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+      if (publicHeld && !opts.quiet) console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
       const publicResult = publicNeedsFlush && !publicHeld
         ? commitAndPushHunch(
             hunchPaths(root).hunch,
@@ -2572,7 +2573,7 @@ program
     }
     if (!intents.length) console.log("No `hunch-why:` / `hunch-rule:` comments found.");
     else console.log(`✓ captured ${dec} decision(s) + ${con} constraint(s) from inline comments${opts.private ? " [private overlay]" : ""}`);
-    if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+    if (flush === "held") console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
     store.close();
   });
 
@@ -2636,7 +2637,7 @@ program
         if (store.captureHome(!!opts.private, "constraints") === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
         const flush = flushCapture(store, hunchDir, !!opts.private, `hunch: accept doc rule proposal ${rec.id}`, undefined, undefined, "constraints");
         console.log(`✓ accepted ${rec.id} [${rec.severity}] as an active constraint (scope: ${rec.scope.join(", ")})${opts.private ? " [private overlay]" : ""}`);
-        if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+        if (flush === "held") console.log(`  ↳ ${heldNotice(hunchDir)}`);
         return;
       }
       let target = pathArg ? toPosixTarget(repoRelativeTarget(pathArg, root)).replace(/\/+$/, "") : "";
@@ -2761,7 +2762,7 @@ program
       console.log(`✓ ${created} new, ${applied} updated, ${plan.moved.length} moved, ${plan.unchanged.length} unchanged${opts.private ? " [private overlay]" : ""}`);
       if (plan.changed.length > applied || (!opts.acceptChanges && plan.held.length) || plan.orphaned.length || plan.malformed.length || plan.conflicts.length) console.log(dim("  pending items above need a human call; nothing was applied for them."));
       if (writes.some((c) => c.severity === "blocking" && c.scope.includes("**"))) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
-      if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+      if (flush === "held") console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
     } finally {
       store.close();
     }
@@ -4427,7 +4428,7 @@ program
         console.log("  Your coding assistant will also ask this inline in the next Hunch session; silence never approves it.");
       }
       if (flush === "pushed") console.log("  ↳ private memory committed + pushed");
-      if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+      if (flush === "held") console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
     } finally {
       store.close();
     }
@@ -4570,7 +4571,7 @@ program
       console.log(`    To block the actual violation across the file's life, add  --forbid-dep <pkg>  (or --forbid-symbol / --match).`);
     }
     if (flush === "pushed") console.log("  ↳ private memory committed + pushed");
-    if (flush === "held") console.log(`  ↳ ${HELD_ON_DEFAULT_BRANCH}`);
+    if (flush === "held") console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
     store.close();
   });
 

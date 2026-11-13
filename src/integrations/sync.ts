@@ -5,13 +5,19 @@
  * A public record commits the repo-tracked .hunch/ WITHOUT pushing — an automatic pull/push on
  * the user's CODE repo would merge the remote into their working branch and publish unpushed
  * commits (bug_overlay_clobber); the memory commit rides their next push instead.
+ * Which branches a public commit may land on is the team's `auto_commit` setting in the
+ * committed .hunch/config.json (publicCommitHold): absent or true holds only on the default
+ * branch (per-machine opt-in there), false never commits, `{ "branches": [...] }` commits
+ * only on those exact branches, and an unreadable setting holds (fail closed). Overlay
+ * commits and state-contract writes are outside this policy.
  * Used by every CLI/MCP path that writes a record.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import type { EntityKind } from "../core/types.js";
-import { commitAndPushHunch, hunchDirHasChanges, onDefaultBranch, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
+import { readAutoCommitPolicy } from "../core/config.js";
+import { checkedOutBranch, commitAndPushHunch, hunchDirHasChanges, onDefaultBranch, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
 import { refreshCommittableGrounding } from "./providers.js";
 import { pinSharedRemote, sharedRemoteFor } from "./sharedRoute.js";
 
@@ -39,7 +45,7 @@ export function flushMemoryHome(
   }
   if (!store.autoCommit) return null;
   // Same hold as flushCapture: the public commit stages all of .hunch/, so it would
-  // otherwise sweep a capture that was just reported as held onto the default branch.
+  // otherwise sweep a capture that was just reported as held onto a branch the policy holds.
   if (holdsOnDefaultBranch(publicHunchDir)) return heldOrNothing(publicHunchDir);
   const grounding = refreshCommittableGrounding(dirname(publicHunchDir), store);
   return commitAndPushHunch(publicHunchDir, message, { push: false, alsoStage: grounding });
@@ -80,8 +86,8 @@ export function flushPrivate(store: HunchStore, message: string): void {
  *  overlay commit whose merge/push failed retries on the next flush), or null (auto-commit
  *  off, no overlay for a private record, or the commit was skipped — lock held, safety
  *  backstop, nothing staged; the record stays on disk and the next flush sweeps it up),
- *  or "held" (a public capture left uncommitted because the default branch is checked
- *  out; callers say so with HELD_ON_DEFAULT_BRANCH). */
+ *  or "held" (a public capture left uncommitted by the auto-commit policy — see
+ *  publicCommitHold; callers say why with heldNotice). */
 export function flushCapture(
   store: HunchStore,
   publicHunchDir: string,
@@ -98,7 +104,8 @@ export function flushCapture(
 
 /** Auto-commit a state-contract write (`nuryel_write`, `hunch serve`). A state root is a
  *  dedicated data repository whose writes commit on whatever branch it serves, so the
- *  default-branch hold for captures never applies; outcomes as flushCapture otherwise. */
+ *  capture auto-commit policy (default-branch hold, `auto_commit`) never applies;
+ *  outcomes as flushCapture otherwise. */
 export function flushStateWrite(
   store: HunchStore,
   publicHunchDir: string,
@@ -133,9 +140,10 @@ function flushStore(
     return null;
   }
   if (!store.autoCommit) return null;
-  // A capture never commits onto the default branch by itself: task and capture commits
-  // landed on main between the user's own. The record stays on disk; the user's next
-  // commit carries it, or the next capture on a feature branch sweeps it up. Held before
+  // A capture commits only where the auto-commit policy allows (by default never onto the
+  // default branch: task and capture commits landed on main between the user's own). The
+  // record stays on disk; the user's next commit carries it, or the next capture on an
+  // allowed branch sweeps it up. Held before
   // the grounding refresh, so an automatic capture (hook sync, MCP) leaves tracked docs at
   // HEAD instead of counting a record that `git commit -a` would leave behind; by-hand CLI
   // commands refresh them on disk themselves (publicFlushCommitsGrounding in the CLI).
@@ -157,14 +165,46 @@ function heldOrNothing(publicHunchDir: string): "held" | null {
   return hunchDirHasChanges(publicHunchDir) ? "held" : null;
 }
 
-/** Whether an automatic public memory commit must be held: the default branch is checked
- *  out and the user has not opted back in. Shared by flushStore and `hunch sync`. */
+/** Whether an automatic public memory commit must be held under the auto-commit policy
+ *  (publicCommitHold). Shared by flushStore and `hunch sync`. */
 export function holdsOnDefaultBranch(publicHunchDir: string): boolean {
-  return !defaultBranchCommitsAllowed(publicHunchDir) && onDefaultBranch(dirname(publicHunchDir));
+  return publicCommitHold(publicHunchDir) !== null;
+}
+
+/** Why an automatic public memory commit in `publicHunchDir` is held, or null when it may
+ *  commit. Follows the team's `auto_commit` in .hunch/config.json, read fresh each call:
+ *  false holds everywhere; `{ "branches": [...] }` commits only on a listed branch (exact
+ *  name; the per-machine default-branch opt-ins do not override the team list); an
+ *  unreadable or malformed value holds (fail closed); absent or true keeps the default —
+ *  hold on the default branch unless this machine opted back in. */
+export function publicCommitHold(publicHunchDir: string): string | null {
+  const policy = readAutoCommitPolicy(publicHunchDir);
+  const stays = "the record stays in .hunch/ for you to commit";
+  switch (policy.kind) {
+    case "off":
+      return `not auto-committed: .hunch/config.json sets "auto_commit": false — ${stays}`;
+    case "invalid":
+      return `not auto-committed: ${policy.problem} — ${stays}`;
+    case "branches": {
+      const branch = checkedOutBranch(dirname(publicHunchDir));
+      if (branch && policy.branches.includes(branch)) return null;
+      const listed = policy.branches.length ? policy.branches.join(", ") : "none";
+      const where = branch ? `branch "${branch}" is not listed in` : "HEAD is detached, and commits follow only";
+      return `not auto-committed: ${where} auto_commit.branches in .hunch/config.json (${listed}) — ${stays}`;
+    }
+    case "default":
+      return !defaultBranchCommitsAllowed(publicHunchDir) && onDefaultBranch(dirname(publicHunchDir)) ? HELD_ON_DEFAULT_BRANCH : null;
+  }
+}
+
+/** The notice a caller prints for a "held" public flush: the policy's actual reason. */
+export function heldNotice(publicHunchDir: string): string {
+  return publicCommitHold(publicHunchDir) ?? HELD_ON_DEFAULT_BRANCH;
 }
 
 /** Opt back in to capture commits on the default branch: `autoCommitDefaultBranch: true`
- *  in the per-machine .hunch/local.json, or HUNCH_AUTO_COMMIT_DEFAULT_BRANCH=1. */
+ *  in the per-machine .hunch/local.json, or HUNCH_AUTO_COMMIT_DEFAULT_BRANCH=1. Applies
+ *  only when .hunch/config.json sets no `auto_commit` branch list. */
 function defaultBranchCommitsAllowed(publicHunchDir: string): boolean {
   if (process.env.HUNCH_AUTO_COMMIT_DEFAULT_BRANCH === "1") return true;
   try {

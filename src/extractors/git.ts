@@ -2457,6 +2457,16 @@ export function currentBranch(cwd: string): string {
   return b === "HEAD" ? "" : b; // detached HEAD reports "HEAD" — treat as no branch
 }
 
+/** The local branch checked out in the repository at `cwd` (full name past `refs/heads/`),
+ *  or "" on a detached HEAD or outside a repository. Unlike currentBranch it reads the
+ *  symbolic ref, so a tag sharing the branch's name cannot turn it into `heads/<name>`,
+ *  and it strips an inherited hook GIT_DIR/GIT_WORK_TREE the way a memory commit does,
+ *  so the auto-commit policy checks the same repository the commit lands in. */
+export function checkedOutBranch(cwd: string): string {
+  const ref = gitSafeIsolated(["symbolic-ref", "-q", "HEAD"], cwd);
+  return ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : "";
+}
+
 /** Whether `cwd` has its repository's default branch checked out: origin/HEAD's branch
  *  when the remote names one, else `main` or `master`. False on a detached HEAD or
  *  outside a repository, so a caller keeps its pre-existing behavior there. */

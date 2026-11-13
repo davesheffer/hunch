@@ -37,7 +37,7 @@ import { leanGroundingEnabled } from "../integrations/claudemd.js";
 import { workspaceLedgerView, renderWorktreeTable, renderBranchTable, workspaceSummaryLine, snapshotHasHome, recordWorkspaceSnapshot, branchRows, worktreeRows } from "../integrations/workspaceLedger.js";
 import { workspacesConfig } from "../core/config.js";
 import { revParse, asOfDate, revExists, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, rangeFiles, rangeGateDiff, commitFiles, commitGateDiff, stagedFiles, stagedGateDiff, workingFiles, workingGateDiff, pullHunchStatusDetailed, describePullFailure, sameRemoteUrl, currentBranch, worktreePaths, pathKnownToHistory, type HunchPullStatus } from "../extractors/git.js";
-import { flushCapture, flushStateWrite, flushMemoryHome, pinSharedRemote, HELD_ON_DEFAULT_BRANCH } from "../integrations/sync.js";
+import { flushCapture, flushStateWrite, flushMemoryHome, pinSharedRemote, heldNotice } from "../integrations/sync.js";
 import { withWriteLock } from "../serve/writelock.js";
 import { advertisedTeamRemoteContract, ensureTeamOverlay, isTeamStoreTrusted, overlayMatchesTeamRemote, teamWiringConsented, untrustedTeamStoreMessage, readTeamConfig, teamRemoteContract, teamSharedRef } from "../integrations/team.js";
 import { formatSearchHit, formatStructure } from "../core/format.js";
@@ -154,8 +154,8 @@ function cwdHintOf(input: unknown): string | undefined {
 /** Honest auto-commit suffix: reports only what flushCapture ACTUALLY did. A skipped
  *  commit (backstop/lock/nothing staged) says nothing — the record is on disk and the
  *  next flush sweeps it up; claiming "auto-committed" there would be a lie. */
-const flushNote = (flush: "pushed" | "committed" | "held" | null, home: "public" | "private", mode: string): string =>
-  flush === "held" ? ` (${HELD_ON_DEFAULT_BRANCH})`
+const flushNote = (flush: "pushed" | "committed" | "held" | null, home: "public" | "private", mode: string, publicHunchDir: string): string =>
+  flush === "held" ? ` (${heldNotice(publicHunchDir)})`
   : flush === "pushed" ? ` (committed + pushed to the ${mode === "shared" ? "shared team store" : "private repo"})`
     : flush === "committed"
       ? home === "private"
@@ -2336,7 +2336,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const next = remaining.length
           ? ` ${remaining.length} imported live ADR(s) remain; call hunch_escalations and ask the next question separately.`
           : " No imported ADR review questions remain.";
-        return ok(`✓ ${outcome}${flushNote(flush, home, store.mode)}${next}`);
+        return ok(`✓ ${outcome}${flushNote(flush, home, store.mode, hunchPaths(root).hunch)}${next}`);
       } catch (error) {
         return err(`Could not apply the imported-ADR answer: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -2699,7 +2699,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // record commits+pushes its overlay repo; a public one commits .hunch/ in THIS repo
         // (commit only — it rides the user's next push, never auto-pushing their code branch).
         const flush = flushCapture(store, hunchPaths(root).hunch, !!decision.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe, "decisions");
-        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
+        const flushed = flushNote(flush, home, store.mode, hunchPaths(root).hunch) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         // Capture-session gate (staged deprecation, §9.3): the token was consumed
         // above. No token still writes (non-breaking) but lands as agent_recorded with a
         // nudge toward /capture. A token — verified or not — is never a signature: only
@@ -2867,7 +2867,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
         const retiredIds = toRetire.map((c) => c.id).join(", ");
         const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}${retiredIds ? `, retire ${retiredIds}` : ""}`, startupTeamRoute ?? undefined, observed.observe, "constraints");
-        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
+        const flushed = flushNote(flush, home, store.mode, hunchPaths(root).hunch) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
           : "flags violating edits and PRs (advisory)";
@@ -2974,7 +2974,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const observed = observeReportCapture(root, task_id, "findings", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
         store.reindex();
         const flush = flushCapture(store, hunchPaths(root).hunch, !!finding.private, `hunch: capture ${id}`, startupTeamRoute ?? undefined, observed.observe, "findings");
-        const flushed = flushNote(flush, home, store.mode) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
+        const flushed = flushNote(flush, home, store.mode, hunchPaths(root).hunch) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const where = finding.private
           ? ` [PRIVATE overlay — not committed to this repo]${flushed}`
           : home === "private" ? ` [SHARED store — one source of truth for the whole team]${flushed}` : flushed;
