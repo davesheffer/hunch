@@ -490,7 +490,8 @@ function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string
     const { entries, mtime, birth } = raw;
     // Git appends to the file as HEAD moves and replaces it only to drop entries (git reflog
     // expire, git gc), which can drop moves without leaving a gap: a file born after the
-    // report makes every input count as changed. Without a birth time (0) this is not seen.
+    // report makes every input count as changed (a new repository's first commit after the
+    // report too: the file is born with it). Without a birth time (0) this is not seen.
     const rewritten = birth > 0 && birth >= since ? birth : 0;
     if (!entries.length) return rewritten || null;
     unknown = rewritten;

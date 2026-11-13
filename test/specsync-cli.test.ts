@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { cleanupDir, isolatedCliEnv, tempDir } from "./fixtures.js";
 import { hunchCliArgs } from "./cli-invocation.js";
@@ -299,10 +299,17 @@ function gitAt(f: Fixture, epochSec: number, ...args: string[]): string {
 }
 
 /** The tests' clock (unix seconds), two hours ahead of the real one: every simulated report
- *  then comes after the real moment HEAD's reflog file was born, as it does outside tests (a
- *  reflog file born after the report means it was rewritten, and every report is stale). */
+ *  then comes after the real moment HEAD's reflog file was born, as it does outside tests
+ *  once a repository has its first commit (a reflog file born after the report reads as
+ *  rewritten, and every report is stale). */
 function simNow(): number {
   return Math.floor(Date.now() / 1000) + 7200;
+}
+
+/** Whether the filesystem dates the birth of HEAD's reflog file. Without a birth time a
+ *  reflog file replaced after the report cannot be seen (SS-4.7, known limit). */
+function reflogHasBirthTime(f: Fixture): boolean {
+  return statSync(join(f.root, ".git", "logs", "HEAD")).birthtimeMs > 0;
 }
 
 /** Blocks until the real clock reaches `epochSec`. */
@@ -790,7 +797,7 @@ function assertStale(f: Fixture): void {
   assert.doesNotMatch(r.out, /\[failing\]/);
 }
 
-test("[SS-4.7][SS-4.9] check: a reflog rewritten after the report (expire of unreachable entries, gc) keeps it stale", () => {
+test("[SS-4.7][SS-4.9] check: a reflog rewritten after the report (expire of unreachable entries, gc) keeps it stale", (t) => {
   for (const emptied of [false, true]) {
     const f = makeFixture(`junitgcgap${emptied ? "0" : ""}`);
     try {
@@ -799,6 +806,10 @@ test("[SS-4.7][SS-4.9] check: a reflog rewritten after the report (expire of unr
       const now = Math.floor(Date.now() / 1000) + 602; // report at real +2 s
       reportThenDropPay2(f, now);
       assertStale(f);
+      if (!reflogHasBirthTime(f)) {
+        t.diagnostic("no file birth time on this filesystem: a rewritten reflog is not seen, rest not run");
+        continue;
+      }
       sleepUntil(now - 597);
       if (emptied) {
         git(f, "reflog", "expire", "--expire=now", "--all"); // leaves an empty file
@@ -910,9 +921,11 @@ test("[SS-4.7][SS-4.9] check: a later HEAD move dated back cannot hide an earlie
   }
 });
 
-test("[SS-4.7][SS-4.9] check: the repository's first commit after the report deletes nothing (fresh)", () => {
+test("[SS-4.7][SS-4.9] check: a first commit's own step deletes nothing: fresh, unless the reflog file's birth says otherwise", () => {
   const f = makeFixture("junitinitial", { commit: false });
   try {
+    // Simulated clock: the report is dated after the reflog file's real birth (see the next
+    // test for a new repository on the real clock).
     const now = simNow();
     write(f, ".gitignore", "reports/\n");
     setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts", "src/util.ts", "docs/specs/pay.md", ".hunch/spec-sync.json", ".gitignore");
@@ -924,6 +937,30 @@ test("[SS-4.7][SS-4.9] check: the repository's first commit after the report del
     assert.equal(r.status, 1, r.out);
     assert.match(r.out, /\[failing\] PAY-1\.1/);
     assert.doesNotMatch(r.out, /junit-skipped/);
+  } finally {
+    cleanupDir(f.sandbox);
+  }
+});
+
+test("[SS-4.7][SS-4.9] check: in a new repository the first commit after the report makes it stale (the reflog file is born with it)", () => {
+  const f = makeFixture("junitnewrepo", { commit: false });
+  try {
+    // Real time: HEAD's reflog file does not exist before this commit, so it is born after
+    // the report, which reads the same as a reflog rewritten after it. Fails closed.
+    const now = Math.floor(Date.now() / 1000);
+    write(f, ".gitignore", "reports/\n");
+    setTime(f, now - 1200, "src/pay/charge.ts", "test/pay.test.ts", "src/util.ts", "docs/specs/pay.md", ".hunch/spec-sync.json", ".gitignore");
+    write(f, "reports/junit.xml", FAILING_XML);
+    setTime(f, now - 2, "reports/junit.xml");
+    git(f, "add", "-A");
+    git(f, "commit", "-qm", "base");
+    if (reflogHasBirthTime(f)) {
+      assertStale(f);
+    } else {
+      const r = run(f, "spec-sync", "check", "--require-junit");
+      assert.match(r.out, /\[failing\] PAY-1\.1/, r.out);
+      assert.doesNotMatch(r.out, /junit-skipped/);
+    }
   } finally {
     cleanupDir(f.sandbox);
   }
