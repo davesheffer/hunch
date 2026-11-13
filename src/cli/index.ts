@@ -105,7 +105,8 @@ import { deriveChangeProof } from "../core/changeProof.js";
 import { discoverProjectDna, evaluateProjectDnaMatch, type ProjectDnaArtifact } from "../core/projectDna.js";
 import { diffProjectDna } from "../core/projectDnaDelta.js";
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
-import { readConfig, writeConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, memoryPolicyProblem, memoryConfigTextProblem, type HunchConfig } from "../core/config.js";
+import { HOOK_SWITCH_ENV, HOOK_SWITCH_NAMES, hookSwitch, ignoredHookSwitchValues, hookConfigProblems, parseHookSwitch, type HookSwitchName } from "../core/hookSwitches.js";
+import { readConfig, writeConfig, writeHookSwitchConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, memoryPolicyProblem, memoryConfigTextProblem, type HunchConfig } from "../core/config.js";
 import { readRepoProfile, resolveRepoProfile, removeRepoProfile, repoIdForgetConflict, repoProfileKey, repoIdOf, ensureRepoId, writeRepoProfileOrWarn, repoProfileFile } from "../core/repoProfile.js";
 import { sameCanonical } from "../core/stateCanonical.js";
 import { outwardLinks, unlinkHint } from "../core/worktreeHazards.js";
@@ -5473,6 +5474,45 @@ program
     }
     const next = writeConfig(paths, { firmness: level }).firmness;
     console.log(`✓ firmness set to ${next} (takes effect on the next agent edit — no restart needed).`);
+  });
+
+// ---- switches (hook-overhead switches) ------------------------------------
+program
+  .command("switches")
+  .description("Show or set the hook-overhead switches (lean_grounding, quiet_empty, daemon) in .hunch/config.json; env vars override.")
+  .argument("[name]", HOOK_SWITCH_NAMES.join(" | "))
+  .argument("[value]", "on | off | default (lean_grounding also: preserve)")
+  .option("--json", "print every switch with its value and source as JSON")
+  .action((name: string | undefined, value: string | undefined, opts: { json?: boolean }) => {
+    const root = findRoot();
+    const paths = hunchPaths(root);
+    const show = () => {
+      const rows = HOOK_SWITCH_NAMES.map((n) => ({ name: n, env: HOOK_SWITCH_ENV[n], ...hookSwitch(n, root), ignored: ignoredHookSwitchValues(n, root) }));
+      const problems = hookConfigProblems(root);
+      if (opts.json) { console.log(JSON.stringify({ switches: rows, problems })); return; }
+      for (const p of problems) console.log(`⚠ ${p}`);
+      for (const r of rows) {
+        const shown = r.name === "lean_grounding" && r.source === "default" ? "auto" : r.value === true ? "on" : r.value === false ? "off" : r.value;
+        const note = r.name === "lean_grounding" && r.source === "default" ? "; lean for new blocks, existing blocks keep their form" : "";
+        console.log(`${r.name.padEnd(15)} ${String(shown).padEnd(9)} (${r.source === "env" ? `env ${r.env}` : r.source === "config" ? ".hunch/config.json" : "default"}${note})`);
+        for (const bad of r.ignored) console.log(`  ⚠ ignored unrecognized value ${bad}; use on/off${r.name === "lean_grounding" ? "/preserve" : ""}`);
+      }
+    };
+    if (!name) { show(); return; }
+    if (!(HOOK_SWITCH_NAMES as readonly string[]).includes(name)) return fail(`switch must be one of: ${HOOK_SWITCH_NAMES.join(", ")}`);
+    const n = name as HookSwitchName;
+    if (value === undefined) return fail(`give a value: on | off | default${n === "lean_grounding" ? " | preserve" : ""}`);
+    const clear = value.trim().toLowerCase() === "default";
+    const parsed = clear ? undefined : parseHookSwitch(n, value);
+    if (!clear && parsed === undefined) return fail(`value must be on, off or default${n === "lean_grounding" ? ", or preserve" : ""}`);
+    try {
+      writeHookSwitchConfig(paths, n, clear ? undefined : parsed);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error));
+    }
+    console.log(`✓ ${n} ${clear ? "reset to the default" : `set to ${value.trim().toLowerCase()}`} in .hunch/config.json (commit it to share with the team).`);
+    if (hookSwitch(n, root).source === "env") console.log(`  note: ${HOOK_SWITCH_ENV[n]} is set in this environment and overrides the config here.`);
+    if (n === "lean_grounding") console.log("  run `hunch grounding --refresh` to rewrite the grounding blocks; MCP instructions change on the next server start.");
   });
 
 // ---- provider (per-user synthesis provider choice) -----------------------

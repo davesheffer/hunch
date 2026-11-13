@@ -223,12 +223,12 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           }
           return scored.selection;
         };
-        // Experimental quiet mode: nothing relevant retrieved for this prompt, so the
+        // Quiet mode (default on; hookSwitches.ts quiet_empty): nothing relevant retrieved for this prompt, so the
         // availability reminder and the full task rules stay out (and unstamped, so a
         // later prompt that retrieves memory still gets them in full). A correction
         // is never dropped. A scoring failure counts as "not empty": today's output.
         let quiet = false;
-        if (quietEmptyEnabled()) {
+        if (quietEmptyEnabled(root)) {
           // Empty means scored and nothing qualified (a blocking constraint qualifies
           // without being listed). Not scored at all (selection disabled, a host
           // notification, no task id) is not empty: today's output.
@@ -414,14 +414,17 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           // `hunch escalations`. A provider with no prompt event would never ask,
           // so its orientation event keeps asking every actionable entry.
           const actionableEsc = deliversPromptEvent(provider) ? [] : (await actionableEscalationsWithAnchors(paths.root, s)).actionable;
-          // Experimental quiet mode: no live constraint, bug or finding and nothing to
-          // ask means there is nothing to orient on; only the environment's execution
-          // obligations (controllerBrief) still ride session start.
-          if (quietEmptyEnabled() && !actionableEsc.length
+          // Quiet mode (default on; hookSwitches.ts quiet_empty): no live constraint, bug or finding and nothing to
+          // ask means there is nothing to orient on. The operating loop is not memory:
+          // it still rides session start with the execution obligations, as on the
+          // fresh-graph path below. Dropping it removed the only post-edit verify cue,
+          // and the pylint-6528 bench lost runs to crashing patches never re-run.
+          if (quietEmptyEnabled(root) && !actionableEsc.length
             && !s.advisoryRecs("constraints").some((c) => c.status === "active")
             && !s.advisoryRecs("bugs").length
             && !s.advisoryRecs("findings").some((f) => f.triage === "open")) {
-            if (controllerBrief) emitContext(provider, "SessionStart", controllerBrief);
+            const quietStart = [pipelineEnabled() ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
+            if (quietStart) emitContext(provider, "SessionStart", quietStart);
             return;
           }
           if (!decisions.length && !actionableEsc.length) {
@@ -844,10 +847,10 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
     supplements,
     ...(selected ? { taskSelected: selected } : {}),
   });
-  // Experimental quiet mode: a block with no ranked record, no retired-code or
+  // Quiet mode (default on; hookSwitches.ts quiet_empty): a block with no ranked record, no retired-code or
   // topic-anchor supplement and no sibling lesson is only a header and structural
   // lines. Say nothing, and record nothing as served.
-  if (quietEmptyEnabled()
+  if (quietEmptyEnabled(root)
     && !envelope.delivered.length
     && !siblings.text
     && !envelope.supplements.some((x) => x.delivered && (x.kind === "retired-code" || x.kind === "doc-grounding" || x.kind === "decision-grounding"))) {

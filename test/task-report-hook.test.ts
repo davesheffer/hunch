@@ -32,7 +32,7 @@ function hook(root: string, event: string, extra: Record<string, unknown> = {}, 
   const tmp = join(root, ".tmp");
   mkdirSync(tmp, { recursive: true });
   const output = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", provider], {
-    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", TMPDIR: tmp, TMP: tmp, TEMP: tmp },
+    cwd: root, env: { ...process.env, HUNCH_PIPELINE: "0", HUNCH_QUIET_EMPTY: "0", TMPDIR: tmp, TMP: tmp, TEMP: tmp },
     input: JSON.stringify({ hook_event_name: event, cwd: root, session_id: "session-a", prompt_id: "prompt-a", ...extra }), encoding: "utf8",
   }).trim();
   return output ? JSON.parse(output) : null;

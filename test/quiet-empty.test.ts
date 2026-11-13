@@ -10,7 +10,7 @@ import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { refreshShellBaseline } from "../src/core/shellwrites.js";
 import { HOOK_REMINDER } from "../src/core/hookText.js";
-import { quietEmptyEnabled } from "../src/core/pipeline.js";
+import { PIPELINE_LOOP, quietEmptyEnabled } from "../src/core/pipeline.js";
 
 const cli = resolve("src/cli/index.ts");
 const prov = { source: "human_confirmed", confidence: 1, evidence: [] } as const;
@@ -60,7 +60,7 @@ function ctx(root: string, quiet: boolean, payload: Record<string, unknown>): st
   mkdirSync(tmp, { recursive: true });
   const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp };
   delete env.HUNCH_PIPELINE;
-  if (quiet) env.HUNCH_QUIET_EMPTY = "1"; else delete env.HUNCH_QUIET_EMPTY;
+  env.HUNCH_QUIET_EMPTY = quiet ? "1" : "0";
   const out = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", "claude"], {
     cwd: root, env, input: JSON.stringify({ cwd: root, session_id: "quiet-s", prompt_id: "quiet-p", ...payload }), encoding: "utf8",
   }).trim();
@@ -74,7 +74,7 @@ test("quiet-empty: the flag is read at call time", () => {
   const prior = process.env.HUNCH_QUIET_EMPTY;
   try {
     delete process.env.HUNCH_QUIET_EMPTY;
-    assert.equal(quietEmptyEnabled(), false);
+    assert.equal(quietEmptyEnabled(), true, "quiet-empty is the default");
     process.env.HUNCH_QUIET_EMPTY = "1";
     assert.equal(quietEmptyEnabled(), true);
     process.env.HUNCH_QUIET_EMPTY = "0";
@@ -84,12 +84,15 @@ test("quiet-empty: the flag is read at call time", () => {
   }
 });
 
-test("quiet-empty: SessionStart on decisions only is silent under HUNCH_QUIET_EMPTY and unchanged without it", t => {
+test("quiet-empty: SessionStart on decisions only drops orientation but keeps the operating loop under HUNCH_QUIET_EMPTY", t => {
   const root = repo(t);
   seed(root, (s) => s.json.put("decisions", decision("dec_quiet0001", "Use zebracache for sessions") as never));
   const off = ctx(root, false, { hook_event_name: "SessionStart", source: "startup" });
   assert.match(off, /Hunch orientation — 1 decision/);
-  assert.equal(ctx(root, true, { hook_event_name: "SessionStart", source: "startup" }), "");
+  assert.ok(off.includes(PIPELINE_LOOP));
+  const quiet = ctx(root, true, { hook_event_name: "SessionStart", source: "startup" });
+  assert.doesNotMatch(quiet, /Hunch orientation/);
+  assert.ok(quiet.includes(PIPELINE_LOOP), "the verify loop is not memory: quiet mode must keep it");
 });
 
 test("quiet-empty: SessionStart with an active constraint still orients under HUNCH_QUIET_EMPTY", t => {

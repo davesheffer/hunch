@@ -7,6 +7,7 @@ import { dirname } from "node:path";
 import { writeFileAtomic } from "./io.js";
 import type { HunchPaths } from "./paths.js";
 import { ENTITY_KINDS } from "./types.js";
+import type { HookSwitchName, HookSwitchValue } from "./hookSwitches.js";
 
 /** How firmly the agent lifecycle hook (`hunch hook`) enforces Hunch on edits:
  *   off      — emit nothing (hook is a no-op).
@@ -52,6 +53,9 @@ export interface HunchConfig {
    *  as written (unvalidated) so a malformed value is refused, never replaced: see
    *  repoIdOf / ensureRepoId. */
   repo_id?: unknown;
+  /** Hook-overhead switches shared by the team (src/core/hookSwitches.ts): `lean_grounding`
+   *  (true | false | "preserve"), `quiet_empty`, `daemon`. Absent = on; env overrides. */
+  hooks?: Partial<Record<HookSwitchName, HookSwitchValue>>;
 }
 
 export interface MemoryPolicy {
@@ -168,10 +172,40 @@ export function readConfig(paths: HunchPaths): HunchConfig {
       ...(raw.verify && typeof raw.verify === "object" && !Array.isArray(raw.verify) ? { verify: raw.verify } : {}),
       ...(raw.memory && typeof raw.memory === "object" && !Array.isArray(raw.memory) ? { memory: raw.memory } : {}),
       ...(raw.repo_id !== undefined ? { repo_id: raw.repo_id } : {}),
+      ...(raw.hooks && typeof raw.hooks === "object" && !Array.isArray(raw.hooks) ? { hooks: raw.hooks } : {}),
     };
   } catch {
     return defaults();
   }
+}
+
+/** Set (or, with `value` undefined, remove) one `hooks.<name>` switch, touching nothing
+ *  else in the on-disk file: other keys keep their exact values (no normalization) and an
+ *  emptied `hooks` object is dropped. Refuses an unparseable or non-object file. */
+export function writeHookSwitchConfig(paths: HunchPaths, name: HookSwitchName, value: HookSwitchValue | undefined): void {
+  let onDisk: Record<string, unknown> = {};
+  if (existsSync(paths.config)) {
+    let parsed: unknown;
+    try {
+      parsed = parseConfigText(readFileSync(paths.config, "utf8"));
+    } catch (error) {
+      throw new Error(`refusing to overwrite unparseable ${paths.config}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`refusing to overwrite ${paths.config}: it is not a JSON object`);
+    }
+    onDisk = parsed as Record<string, unknown>;
+  }
+  const rawHooks = onDisk.hooks;
+  if (rawHooks !== undefined && (!rawHooks || typeof rawHooks !== "object" || Array.isArray(rawHooks))) {
+    throw new Error(`refusing to overwrite ${paths.config}: "hooks" is not a JSON object`);
+  }
+  const hooks = { ...(rawHooks as Record<string, unknown> | undefined) };
+  if (value === undefined) delete hooks[name]; else hooks[name] = value;
+  const next = { ...onDisk };
+  if (Object.keys(hooks).length) next.hooks = hooks; else delete next.hooks;
+  mkdirSync(dirname(paths.config), { recursive: true });
+  writeFileAtomic(paths.config, JSON.stringify(next, null, 2) + "\n");
 }
 
 /** Write `.hunch/config.json`, merging `patch` over the current on-disk config. Keys

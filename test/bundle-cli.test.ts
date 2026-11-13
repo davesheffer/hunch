@@ -108,7 +108,7 @@ test("hook startup: fastHookArgs accepts only the plain hook forms", () => {
 test("bundle-cli.mjs: the entry routes plain hook argv to the hook-only bundle", compiled, () => {
   const entry = readFileSync(dist("cli/index.js"), "utf8");
   assert.match(entry, /fastHook \? hookBundle : "\.\/index\.bundle\.js"/);
-  assert.match(entry, /HUNCH_HOOK_DAEMON === "1" \? "\.\/hook-client\.bundle\.js" : "\.\/hook\.bundle\.js"/);
+  assert.match(entry, /fastHook && !daemonOff \? "\.\/hook-client\.bundle\.js" : "\.\/hook\.bundle\.js"/);
   assert.ok(existsSync(dist("cli/hook.bundle.js")));
   const hookBundle = readFileSync(dist("cli/hook.bundle.js"), "utf8");
   assert.ok(!/from\s*"commander"/.test(hookBundle) && !hookBundle.includes("// node_modules/commander/"), "hook bundle must not contain Commander");

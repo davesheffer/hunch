@@ -22,6 +22,7 @@
  * disposable, and single-writer), mirroring hookcache.ts. Failure posture is
  * con_03a0b94b2e: any error → do nothing, exit clean. Kill switch: HUNCH_PIPELINE=0.
  */
+import { hookSwitch } from "./hookSwitches.js";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1249,13 +1250,13 @@ export function proofCheckpoint(before: PipelineState, after: PipelineState, act
 
 // ------------------------------------------------------------------- gates
 export const PIPELINE_LOOP = [
-  "Hunch pipeline — operating loop (enforced on observable facts, not claims):",
-  "1. SCOPE — restate the task; define done as something observable (a passing test, a rendered page, a number).",
-  "2. EVIDENCE — observe current behavior before editing: run the failing thing, read the real code path, quote the real error.",
-  "3. CHANGE — smallest edit that fixes the root cause, not the symptom.",
-  "4. VERIFY — after the last edit, RUN the relevant check (test/build/typecheck/plan). A claim without an exit code is not a result.",
-  "5. ATTACK — one honest paragraph: what would make this conclusion wrong?",
-  "6. REPORT — what ran, what passed, what stays unverified. Failures verbatim.",
+  "Hunch operating loop (judged on observable facts, not claims):",
+  "1. SCOPE — define done as something observable (a passing test, a number).",
+  "2. EVIDENCE — before editing, run the failing thing or read the real code path.",
+  "3. CHANGE — smallest edit that fixes the root cause.",
+  "4. VERIFY — after the last edit, RUN the relevant check; no exit code, no result.",
+  "5. ATTACK — what would make this conclusion wrong?",
+  "6. REPORT — what ran, what passed, what stays unverified; failures verbatim.",
 ].join("\n");
 
 export const UNVERIFIED_NAG =
@@ -1350,10 +1351,11 @@ export function pipelineEnabled(): boolean {
   return process.env.HUNCH_PIPELINE !== "0";
 }
 
-/** Experimental: hooks stay silent when retrieval finds nothing relevant. Read at
- * call time, never at module load (a hook may run in a daemon). */
-export function quietEmptyEnabled(): boolean {
-  return process.env.HUNCH_QUIET_EMPTY === "1";
+/** Hooks stay silent when retrieval finds nothing relevant. On by default; env
+ * HUNCH_QUIET_EMPTY or `.hunch/config.json` hooks.quiet_empty turns it off (see
+ * hookSwitches.ts). Read at call time, never at module load (a hook may run in a daemon). */
+export function quietEmptyEnabled(root?: string): boolean {
+  return hookSwitch("quiet_empty", root).value === true;
 }
 
 /** Load session state; on ANY problem return a fresh state (never throw). */

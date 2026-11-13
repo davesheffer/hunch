@@ -1248,8 +1248,8 @@ export const MCP_INSTRUCTIONS = [
   "Hosts without lifecycle hooks (Windsurf, Cursor, or Codex before its hooks are trusted) receive no automatic grounding: call these tools yourself.",
 ].join("\n");
 
-/** Experimental (HUNCH_LEAN_GROUNDING=1): the same contract as MCP_INSTRUCTIONS,
- *  compressed. Read when the server is built; off by default. */
+/** The same contract as MCP_INSTRUCTIONS, compressed. Chosen when the server is built;
+ *  the default (lean_grounding switch, src/core/hookSwitches.ts). */
 export const MCP_INSTRUCTIONS_LEAN = [
   "Hunch: this repository's engineering memory (decisions, bugs, invariants, components).",
   "Per task: reuse the task_id the host's prompt hook printed, else hunch_task(action:\"start\", title) once; hunch_context(target, task_id) before reading or editing; hunch_check_constraints(scope) before editing shared code; hunch_why(target) for rationale, hunch_bug_lineage before fixing a failure; hunch_record_correction when a human corrects you, hunch_record_decision for a human's decision. Record only what the human decides or corrects.",
@@ -1257,8 +1257,8 @@ export const MCP_INSTRUCTIONS_LEAN = [
   "Hosts without lifecycle hooks get no automatic grounding: call these tools yourself.",
 ].join("\n");
 
-export function mcpInstructions(): string {
-  return leanGroundingEnabled() ? MCP_INSTRUCTIONS_LEAN : MCP_INSTRUCTIONS;
+export function mcpInstructions(root?: string): string {
+  return leanGroundingEnabled(root) ? MCP_INSTRUCTIONS_LEAN : MCP_INSTRUCTIONS;
 }
 
 export function buildServerWithRootControl(initialRoot: string, options: RootControlOptions = {}): RootControlledServer {
@@ -1403,7 +1403,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   const toolset = resolveMcpToolset(root, { configSpec: readConfig(hunchPaths(root)).mcp_tools ?? null, pinned, hasPolicies });
   const hiddenTools = new Set(toolset.hidden);
   if (toolset.hidden.length) process.stderr.write(`[hunch-mcp] tool groups: ${toolset.groups.length ? toolset.groups.join(", ") : "core only"} (${toolset.source}); ${toolset.hidden.length} specialist tool(s) hidden — HUNCH_MCP_TOOLS=all or .hunch/config.json mcp_tools to expose\n`);
-  const server = new McpServer({ name: "hunch", version: HUNCH_VERSION }, { instructions: mcpInstructions() });
+  const server = new McpServer({ name: "hunch", version: HUNCH_VERSION }, { instructions: mcpInstructions(root) });
   installLeanToolList(server);
   let activeRequests = 0;
   let pendingRoot: string | null = null;

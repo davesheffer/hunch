@@ -3360,6 +3360,14 @@
       }
     ]
   },
+  "switches --json": {
+    "tests": [
+      {
+        "file": "test/hook-switches.test.ts",
+        "title": "hunch switches: shows sources, sets and resets a switch in .hunch/config.json without touching other keys"
+      }
+    ]
+  },
   "sync --commit": {
     "tests": [
       {
