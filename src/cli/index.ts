@@ -6625,7 +6625,10 @@ program
       }
 
       store.reindex();
-      const rangeLabel = rangeResolves ? `${oldRef}..${newRef}` : "queued";
+      // Approval never scans: it applies the reviewed queue. Only a range the caller
+      // named belongs in the subject — the default ORIG_HEAD..HEAD is whatever merge
+      // happened last, usually not the one that produced these entries.
+      const rangeLabel = opts.range ? `${oldRef}..${newRef}` : "reviewed queue";
       pumpMemoryHomes(store, root, homes, `hunch: repair ${appliedIds.size} commit reference(s) after squash-merge (${rangeLabel})`);
 
       if (!opts.quiet) {
@@ -7146,7 +7149,7 @@ program
       if (commitUnresolvable.length) {
         console.log(`${commitUnresolvable.length} decision(s) cite a commit that no longer resolves in this repository:\n`);
         for (const f of commitUnresolvable) console.log(`· ${f.id} — ${f.detail}`);
-        console.log(`\nHeal: this is a HUMAN call. Check \`hunch repair-provenance\` for a queued match (the post-merge hook detects them while the commit is still resolvable, but never applies one unattended), then run \`hunch repair-provenance --apply\` to confirm it; if the commit is already gone, correct the provenance by hand or keep it as historical record.\n`);
+        console.log(`\nHeal: this is a HUMAN call. Check \`hunch repair-provenance\` for a queued match (the post-merge hook detects them while the commit is still resolvable, but never applies one unattended), then run \`hunch repair-provenance --apply\` to confirm it. If the commit is already gone from this clone, the host usually still has it: fetch the merged pull request's head (GitHub: \`git fetch origin refs/pull/<number>/head\`), then \`hunch repair-provenance --range <squash-commit>^..<squash-commit>\` can match it again. Failing that, correct the provenance by hand or keep it as historical record.\n`);
       }
       const fenceUnclosed = kind("doc-fence-unclosed");
       if (fenceUnclosed.length) {
