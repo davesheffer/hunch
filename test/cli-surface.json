@@ -1126,6 +1126,46 @@
       }
     ]
   },
+  "spec-sync": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-6.7] check: clean exits 0; an untested clause exits 1; --json lists findings"
+      }
+    ]
+  },
+  "spec-sync add": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-2.4] add derives the id from clause markers, proposes globs from named paths, never replaces a registered id"
+      }
+    ]
+  },
+  "spec-sync check": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-6.7] check: clean exits 0; an untested clause exits 1; --json lists findings"
+      }
+    ]
+  },
+  "spec-sync off": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-8.5][SS-1.3][SS-1.4] on is idempotent and imports legacy headers; off keeps the file; unparseable is refused untouched"
+      }
+    ]
+  },
+  "spec-sync on": {
+    "tests": [
+      {
+        "file": "test/specsync-cli.test.ts",
+        "title": "[SS-8.5][SS-1.3][SS-1.4] on is idempotent and imports legacy headers; off keeps the file; unparseable is refused untouched"
+      }
+    ]
+  },
   "stale": {
     "tests": [
       {

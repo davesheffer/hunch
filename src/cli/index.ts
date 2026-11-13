@@ -34,6 +34,7 @@ import { readServeConfig } from "../serve/config.js";
 import { registerUiCommands } from "./ui.js";
 import { registerUpdateCommand } from "./update.js";
 import { registerVerifyCommand } from "./verify.js";
+import { registerSpecSyncCommand } from "./specsyncCommand.js";
 import { registerReviewMemoryCommands } from "./reviewMemory.js";
 import { detectInitiator, normalizeInitiator } from "../synthesis/initiator.js";
 import { inspectIntegrations, formatIntegrationHealth, integrationHealthFails, integrationSessionWarning } from "../integrations/health.js";
@@ -241,6 +242,7 @@ registerUiCommands(program);
 registerStateCommands(program);
 registerUpdateCommand(program);
 registerVerifyCommand(program);
+registerSpecSyncCommand(program);
 registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
   const { store, root } = storeFor();
   if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
