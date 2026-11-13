@@ -1034,6 +1034,32 @@ for (const action of ["apply", "drop"] as const) {
   });
 }
 
+test("re-running a reviewed apply after it already landed says the entry is no longer queued", () => {
+  const f = squashFixture();
+  try {
+    git(f.root, "update-ref", "ORIG_HEAD", f.oldRef);
+    assert.equal(runCli(f.root, "repair-provenance", "--from-hook", "--quiet").status, 0);
+    const suggested = /hunch repair-provenance (--apply --only \S+ --expect sha256:[a-f0-9]{64})/.exec(pendingRepairResolution(f.root));
+    assert.ok(suggested, "the escalation suggests a reviewed --apply --only command");
+    const args = suggested[1]!.split(" ");
+    assert.equal(runCliRaw(f.root, "repair-provenance", ...args).status, 0);
+    const decisionAfter = readFileSync(f.decisionFile, "utf8");
+    const queueAfter = readFileSync(queueFile(f.root), "utf8");
+    // The same reviewed command again (a second session, or a retry): still refused,
+    // but told the entry is gone instead of being sent to re-review an empty queue.
+    const again = runCliRaw(f.root, "repair-provenance", ...args);
+    assert.equal(again.status, 1, again.stdout + again.stderr);
+    assert.match(again.stderr, /"dec_squash_fixture" is not in the repair queue/);
+    assert.doesNotMatch(again.stderr, /missing or stale/);
+    assert.equal(readFileSync(f.decisionFile, "utf8"), decisionAfter);
+    assert.equal(readFileSync(queueFile(f.root), "utf8"), queueAfter);
+    // Without --only the whole queue is the target.
+    const whole = runCliRaw(f.root, "repair-provenance", "--apply", "--expect", args[args.length - 1]!);
+    assert.equal(whole.status, 1, whole.stdout + whole.stderr);
+    assert.match(whole.stderr, /nothing is in the repair queue/);
+  } finally { f.cleanup(); }
+});
+
 test("repair-provenance requires a review hash before any apply or drop", () => {
   const fixture = squashFixture();
   try {

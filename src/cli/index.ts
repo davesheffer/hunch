@@ -6463,6 +6463,14 @@ program
         const reviewed = withoutDropped(queue, dropped);
         const expected = commitRepairReviewHash(reviewed, withheldRewrites(root, reviewed));
         if (!opts.expect || opts.expect !== expected) {
+          // A hash was given but what it reviewed is gone: say so. Sending the reviewer
+          // to re-review "the current queue" reads as a failure when a second session
+          // (or a retry) simply arrived after the entry was settled. Still refused.
+          const target = opts.drop ?? opts.only;
+          const gone = !!opts.expect && (target ? !reviewed.some((r) => r.id === target) : reviewed.length === 0);
+          if (gone) {
+            return fail(`repair review is stale: ${target ? `"${target}" is not` : "nothing is"} in the repair queue any more — already applied, dropped or pruned by an earlier run or another session. Nothing changed; run hunch repair-provenance to see the current queue.`);
+          }
           return fail("repair review is missing or stale; run hunch repair-provenance and use its --expect hash to review the current queue.");
         }
         if (opts.fromHook) return fail("the post-merge hook may only detect repairs, never approve them.");
