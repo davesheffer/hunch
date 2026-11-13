@@ -4,7 +4,7 @@
  * atomic writer; `check` exits 0 clean, 1 findings, 2 config error (SS-6.7, SS-7.3).
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { Command, CommanderError } from "commander";
 import { writeFileAtomic } from "../core/io.js";
@@ -379,7 +379,8 @@ export function moveTimes(ms: readonly number[], top: number): number[] {
 export function parseRawReflog(text: string): { old: string; new: string; ms: number }[] {
   return text.split("\n").filter((l) => l.trim() !== "").map((l) => {
     // Git strips "<" and ">" from the name and email, so the first ">" closes the email.
-    const m = /^([0-9a-f]{40}|[0-9a-f]{64}) ([0-9a-f]{40}|[0-9a-f]{64}) [^>\n]*> (\d+) [+-]\d{4}(?:\t|\r?$)/.exec(l);
+    // The zone has four digits or more (git writes "+10039" for a date given as "+9999").
+    const m = /^([0-9a-f]{40}|[0-9a-f]{64}) ([0-9a-f]{40}|[0-9a-f]{64}) [^>\n]*> (\d+) [+-]\d{4,}(?:\t|\r?$)/.exec(l);
     if (!m) throw new Error(`HEAD's reflog has an unreadable line ${JSON.stringify(l.slice(0, 80))}`);
     return { old: m[1]!, new: m[2]!, ms: reflogMs(m[3]!) };
   }).reverse();
@@ -466,24 +467,52 @@ export function parseTreePairDeletions(out: string, pairs: readonly (readonly [s
  *  so one report goes stale only from moves after it. With a reflog file (files backend),
  *  every entry names both ends of its own move, so an entry gone from the middle (expired, or
  *  its commit pruned) leaves a gap that is itself a step: from where the older entry ended to
- *  where the newer one began, dated at the newer one. HEAD away from the last entry is a step
- *  dated Infinity. Without a reflog file (reftable), `git log -g` gives only the tree each
+ *  where the newer one began, dated at the newer one. The newest entry, and each older one
+ *  with its stamp, may have happened as late as the file's mtime (git can stamp a move with
+ *  a time before it happened): a path such a step deleted is dated when its directory last
+ *  changed, within those two times. HEAD away from the last entry is a step dated Infinity, on
+ *  either backend. Without a reflog file (reftable), `git log -g` gives only the tree each
  *  move reached, so each step runs from the next older entry. One git diff-tree call takes
  *  every step, whatever the reflog's length. A path a step deleted that is on disk and listed
  *  now (a reset that recommits it) is left out: its mtime already says when it last changed.
- *  Returns null without a reflog (the caller then dates base..HEAD by commit time);
- *  otherwise the latest move that cannot be read (its commit is gone, no older entry under
+ *  `logged` is false without a reflog entry (the caller then dates base..HEAD by commit time
+ *  as well); `all` is the latest move that cannot be read (its commit is gone, no older entry under
  *  `git log -g`, git could not diff it, or the reflog file was rewritten after `since` by
  *  git reflog expire or git gc, which can drop moves without a gap), 0 for none: every
  *  spec's inputs count as changed then, stale until the report is regenerated, never
  *  wrongly fresh. */
-function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string>, note: (file: string, ms: number) => void): number | null {
+function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string>, note: (file: string, ms: number) => void): { all: number; logged: boolean } {
   let unknown = 0;
-  const steps = new Map<string, number>(); // "<old tree> <new tree>" -> latest move with that step
-  const step = (a: string, b: string, ms: number) => {
+  // "<old tree> <new tree>" -> the latest move with that step: `ms` when it happened at the
+  // latest, `floor` when its own stamp says (lower only for a step dated by the file's mtime).
+  const steps = new Map<string, { ms: number; floor: number }>();
+  const step = (a: string, b: string, ms: number, floor = ms) => {
     if (a === b) return;
     const key = `${a} ${b}`;
-    steps.set(key, Math.max(steps.get(key) ?? 0, ms));
+    const had = steps.get(key);
+    steps.set(key, { ms: Math.max(had?.ms ?? 0, ms), floor: Math.max(had?.floor ?? 0, floor) });
+  };
+  // When the directory that held `file` (its nearest ancestor still there, up to the root)
+  // last changed, Infinity if none can be read. Removing an entry writes its directory, so
+  // the path left the work tree no later than this.
+  const dirTimes = new Map<string, number>();
+  const dirChanged = (file: string): number => {
+    const seen: string[] = [];
+    let found = Infinity;
+    for (let dir = normPath(file); ;) {
+      const cut = dir.lastIndexOf("/");
+      dir = cut < 0 ? "" : dir.slice(0, cut);
+      const known = dirTimes.get(dir);
+      if (known !== undefined) { found = known; break; }
+      seen.push(dir);
+      // Below the root a link is not the directory that held the path: its parent is asked.
+      let st;
+      try { st = (dir ? lstatSync : statSync)(resolve(root, dir || "."), { throwIfNoEntry: false }); } catch { /* unreadable: its parent */ }
+      if (st?.isDirectory()) { found = st.mtimeMs; break; }
+      if (!dir) break;
+    }
+    for (const dir of seen) dirTimes.set(dir, found);
+    return found;
   };
   const raw = rawHeadReflog(root);
   if (raw) {
@@ -493,9 +522,25 @@ function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string
     // report makes every input count as changed (a new repository's first commit after the
     // report too: the file is born with it). Without a birth time (0) this is not seen.
     const rewritten = birth > 0 && birth >= since ? birth : 0;
-    if (!entries.length) return rewritten || null;
+    // An empty file written after the report was emptied after it, whatever its birth time
+    // says (NTFS gives a file recreated within seconds the old one's creation time).
+    // With no entry left there is no move to date: the caller dates by commit time as well.
+    if (!entries.length) return { all: Math.max(rewritten, mtime >= since ? mtime : 0), logged: false };
     unknown = rewritten;
-    const dated = moveTimes(entries.map((e) => e.ms), mtime);
+    // Git stamps an entry with the second its process first asked for the time, not the
+    // second HEAD moved (a rebase fast-forwarding picks after an exec step, a slow merge), or
+    // with a commit's own date (filter-branch), so a move made after the report can carry a
+    // stamp from before it. The file's mtime is when the newest entry was really written:
+    // that entry, and each older one with the same stamp (the same process, as far as the
+    // file can tell), may have happened as late as the mtime. The same process also writes
+    // entries after the report for moves it made before it (a rebase's last entry, after the
+    // exec step that ran the tests; a commit whose hook ran them), so a path such a step
+    // deleted is dated between the step's own stamp and the mtime, at the time its directory
+    // last changed (see dirChanged): never earlier than the stamp alone says.
+    const stamped = moveTimes(entries.map((e) => e.ms), mtime);
+    const late = entries.map((e) => e.ms);
+    for (let i = 0; i < late.length && late[i] === entries[0]!.ms; i++) late[i] = Math.max(late[i]!, mtime);
+    const dated = moveTimes(late, mtime).map((ms, i) => Math.max(ms, stamped[i]!));
     const head = gitOut(root, ["rev-parse", "--verify", "HEAD^{commit}"]).trim();
     const zero = /^0+$/; // no commit: an orphan checkout, the first commit, a branch rename
     // Where HEAD was before entry i: its old end, or for an entry from no commit, the newest
@@ -505,24 +550,26 @@ function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string
       for (let j = i + 1; j < entries.length; j++) if (!zero.test(entries[j]!.new)) return entries[j]!.new;
       return "";
     };
-    const moves: [string, string, number][] = []; // commit steps
-    if (entries[0]!.new !== head) moves.push([entries[0]!.new, head, Infinity]);
+    const moves: [string, string, number, number][] = []; // commit steps: old, new, ms, floor
+    if (entries[0]!.new !== head) moves.push([entries[0]!.new, head, Infinity, Infinity]);
     for (let i = 0; i < entries.length && dated[i]! >= since; i++) {
       const e = entries[i]!;
       const older = entries[i + 1];
-      moves.push([before(i), e.new, dated[i]!]);
-      if (older && !zero.test(e.old) && older.new !== e.old) moves.push([older.new, e.old, dated[i]!]);
+      moves.push([before(i), e.new, dated[i]!, stamped[i]!]);
+      if (older && !zero.test(e.old) && older.new !== e.old) moves.push([older.new, e.old, dated[i]!, stamped[i]!]);
     }
     const live = moves.filter(([a, b]) => a !== b && a !== "" && !zero.test(a) && !zero.test(b));
     const trees = commitTrees(root, [...new Set(live.flatMap(([a, b]) => [a, b]))]);
-    for (const [a, b, ms] of live) {
+    for (const [a, b, ms, floor] of live) {
       const ta = trees.get(a), tb = trees.get(b);
       if (!ta || !tb) unknown = Math.max(unknown, ms);
-      else step(ta, tb, ms);
+      else step(ta, tb, ms, floor);
     }
   } else {
     const entries = headReflog(root);
-    if (!entries.length) return null;
+    if (!entries.length) return { all: 0, logged: false };
+    // HEAD away from the newest entry (its branch moved from another worktree): a step.
+    step(entries[0]!.tree, gitOut(root, ["rev-parse", "--verify", "HEAD^{tree}"]).trim(), Infinity);
     const dated = moveTimes(entries.map((e) => e.ms), Infinity);
     for (let i = 0; i < entries.length && dated[i]! >= since; i++) {
       const old = entries[i + 1];
@@ -530,17 +577,20 @@ function reflogDeletions(root: string, since: number, onDisk: ReadonlySet<string
       step(old.tree, entries[i]!.tree, dated[i]!);
     }
   }
-  if (!steps.size) return unknown;
+  if (!steps.size) return { all: unknown, logged: true };
   const pairs = [...steps.keys()].map((k) => k.split(" ") as [string, string]);
   const d = git(root, ["diff-tree", "--stdin", "-r", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z"], pairs.map(([a, b]) => `${a} ${b}\n`).join(""));
   let deleted: string[][] | null = null;
   try { if (d.ok) deleted = parseTreePairDeletions(d.out, pairs); } catch { /* unknown below */ }
-  if (!deleted) return Math.max(unknown, ...steps.values());
+  if (!deleted) return { all: Math.max(unknown, ...[...steps.values()].map((s) => s.ms)), logged: true };
   pairs.forEach(([a, b], i) => {
-    const ms = steps.get(`${a} ${b}`)!;
-    for (const f of deleted[i]!) if (!onDisk.has(normPath(f))) note(f, ms);
+    const { ms, floor } = steps.get(`${a} ${b}`)!;
+    for (const f of deleted[i]!) {
+      if (onDisk.has(normPath(f))) continue;
+      note(f, ms === floor ? ms : Math.max(floor, Math.min(ms, dirChanged(f))));
+    }
   });
-  return unknown;
+  return { all: unknown, logged: true };
 }
 
 /** When each path under `root` was last deleted (ms), for JUnit freshness against reports
@@ -563,9 +613,8 @@ function deletionTimes(root: string, base: { commit: string; empty: boolean }, s
   // Index vs working tree: needs no commit (a file staged as new, then removed).
   for (const f of zList(gitOut(root, ["diff", "--no-renames", "--relative", "--name-only", "--diff-filter=D", "-z"]))) note(f, Infinity);
   if (base.empty || since === null) return { times, all: 0 }; // no commits, or no report to date against
-  let all = reflogDeletions(root, since, new Set(files), note);
-  if (all === null) {
-    all = 0;
+  const { all, logged } = reflogDeletions(root, since, new Set(files), note);
+  if (!logged) {
     const committed = parseDeletionLog(gitOut(root, ["log", "--no-show-signature", "--no-renames", "--relative", "--diff-filter=D", "--name-only", "--format=%x01%ct", "-z", `${base.commit}..HEAD`, "--"]));
     for (const { path, ms } of committed) note(path, ms);
   }

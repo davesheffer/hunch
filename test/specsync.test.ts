@@ -667,6 +667,9 @@ test("[SS-4.7] the raw reflog parser reads each entry's own move, newest first, 
   assert.deepEqual(parseRawReflog(`${a} ${b} A\tB <> 5 +0000\n${b} ${a} T <t@e.c> 6 +0000\tmsg > 7 +0000\n`).map((e) => e.ms), [6999, 5999]);
   assert.throws(() => parseRawReflog(`${a} ${b} T <t@e.c> 1700000000 +0000\tok\n${a} ${b} truncat`), /unreadable line/);
   assert.throws(() => parseRawReflog(`${a} xyz T <t@e.c> 1 +0000\n`), /unreadable line/);
+  // Git writes a five-digit zone for a date given with zone +9999.
+  assert.deepEqual(parseRawReflog(`${a} ${b} T <t@e.c> 5 +10039\tcommit: zone\n`).map((e) => e.ms), [5999]);
+  assert.throws(() => parseRawReflog(`${a} ${b} T <t@e.c> 5 +039\tcommit: zone\n`), /unreadable line/);
 });
 
 const ids = (text: string, path = "pay.md") => parseClauses(text, "PAY", path).clauses.map((c) => c.id);
