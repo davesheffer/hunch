@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "spec-sync אופציונלי, ובחירת ענפים לקומיטים אוטומטיים",
       "hooks קלים יותר כברירת מחדל",
       "דמון hooks אופציונלי ויציב יותר",
       "מתגים אופציונליים ל-hooks ולפרומפטים קלים יותר, ושמירה ברקע",
@@ -108,6 +109,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Необязательный spec-sync и выбор веток для автокоммитов",
       "Более лёгкие хуки по умолчанию",
       "Более надёжный необязательный демон хуков",
       "Необязательные переключатели для более лёгких хуков и промптов, и фоновое сохранение",
@@ -208,6 +210,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "spec-sync اختياري، واختيار الفروع للإيداعات التلقائية",
       "خطافات أخف افتراضيًا",
       "خادم خطافات اختياري أكثر متانة",
       "مفاتيح اختيارية لخطافات وموجّهات أخف، وحفظ في الخلفية",
@@ -308,6 +311,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "spec-sync opcional y elección de ramas para los commits automáticos",
       "Hooks más ligeros por defecto",
       "Un daemon de hooks opcional más robusto",
       "Interruptores opcionales para hooks y prompts más ligeros, y guardados en segundo plano",
