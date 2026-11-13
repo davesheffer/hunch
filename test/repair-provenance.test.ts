@@ -151,7 +151,7 @@ test("repair-provenance --range --apply repairs the commit and evidence, commits
     const d = readDecision(f.decisionFile);
     assert.equal(d.commit, short);
     assert.deepEqual(d.provenance.evidence, [`commit:${short}`]);
-    assert.ok(lastSubject(f.root).startsWith("hunch: repair 1 commit reference(s) after squash-merge"), lastSubject(f.root));
+    assert.equal(lastSubject(f.root), `hunch: repair 1 commit reference(s) after squash-merge (${f.oldRef}..${f.newRef})`);
     assert.deepEqual(readQueue(f.root), []);
   } finally { f.cleanup(); }
 });
@@ -1043,6 +1043,8 @@ test("re-running a reviewed apply after it already landed says the entry is no l
     assert.ok(suggested, "the escalation suggests a reviewed --apply --only command");
     const args = suggested[1]!.split(" ");
     assert.equal(runCliRaw(f.root, "repair-provenance", ...args).status, 0);
+    // No --range was named, so the subject must not claim the default ORIG_HEAD..HEAD.
+    assert.equal(lastSubject(f.root), "hunch: repair 1 commit reference(s) after squash-merge (reviewed queue)");
     const decisionAfter = readFileSync(f.decisionFile, "utf8");
     const queueAfter = readFileSync(queueFile(f.root), "utf8");
     // The same reviewed command again (a second session, or a retry): still refused,
