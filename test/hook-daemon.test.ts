@@ -99,6 +99,35 @@ test("first hook runs in-process and starts the daemon; the next is served with 
   assert.equal(second.stderr, off.stderr);
 });
 
+// 1.54: the daemon is the default route. With the env unset it starts and serves; a
+// committed `.hooks.daemon: false` keeps every hook in-process and never starts one.
+test("with HUNCH_HOOK_DAEMON unset the daemon is the default route", { skip: !built, timeout: 60_000 }, async (t) => {
+  const f = fixture(t);
+  const env = { ...f.env };
+  delete env.HUNCH_HOOK_DAEMON;
+  const input = payload(f.root, "s-default");
+  hook(f.root, env, input);
+  await until(() => daemons(f.log).length === 1);
+  hook(f.root, env, input);
+  assert.ok(lines(f.log).some((l) => l.endsWith(" served")), lines(f.log).join("\n"));
+});
+
+test("a committed hooks.daemon false keeps hooks in-process and starts no daemon", { skip: !built, timeout: 60_000 }, async (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.root, ".hunch", "config.json"), JSON.stringify({ hooks: { daemon: false } }));
+  const env = { ...f.env };
+  delete env.HUNCH_HOOK_DAEMON;
+  const input = payload(f.root, "s-off");
+  const off = hook(f.root, { ...env, HUNCH_HOOK_DAEMON: "0" }, input);
+  const a = hook(f.root, env, input);
+  const b = hook(f.root, env, input);
+  await sleep(1500);
+  assert.equal(daemons(f.log).length, 0, lines(f.log).join("\n"));
+  assert.ok(!lines(f.log).some((l) => l.endsWith(" served")), lines(f.log).join("\n"));
+  assert.equal(norm(a.stdout), norm(off.stdout));
+  assert.equal(norm(b.stdout), norm(off.stdout));
+});
+
 test("concurrent first hooks start a single daemon", { skip: !built, timeout: 60_000 }, async (t) => {
   const f = fixture(t);
   const input = payload(f.root, "s2");

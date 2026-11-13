@@ -10,6 +10,7 @@ import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
 import { PolicyRepository } from "../constitution/repository.js";
 import { renderCountsMatch, parseGroundingCounts, groundingTemplate, groundingVariant, GROUNDING_VARIANT_LEAN } from "../core/groundingLag.js";
+import { hookSwitch } from "../core/hookSwitches.js";
 import type { GroundingCounts } from "../core/groundingLag.js";
 
 export const HUNCH_START = "<!-- HUNCH:START — auto-generated, do not edit by hand -->";
@@ -78,7 +79,7 @@ export function stripManagedSection(text: string): string {
 }
 
 export function renderHunchSection(store: HunchStore, root?: string, existing?: string): string {
-  return renderHunchSectionAs(store, root, resolveGroundingVariant(existing));
+  return renderHunchSectionAs(store, root, resolveGroundingVariant(existing, root));
 }
 
 /** Render in an explicit variant, ignoring the env: freshness checks judge a committed
@@ -159,21 +160,34 @@ export function renderHunchSectionAs(store: HunchStore, root: string | undefined
 const LEAN_CONTRACT =
   'Per task: reuse the hook\'s task or `hunch_task(action: "start", title)` once; `hunch_context(target, task_id)` first; `hunch_check_constraints(scope)` before editing shared code; run checks through the hook\'s `task verify` launcher; `hunch_task(action: "finish", task_id)` and show its card verbatim at the end; record only what the human decides or corrects.';
 
-/** Experimental lean variant (HUNCH_LEAN_GROUNDING, read at call time): the block
- *  keeps the counts, one contract line and the Top invariants. "1" forces lean, "0"
- *  forces full; anything else keeps the variant of the block being replaced
- *  (stamp-driven), so a refresh never churns a committed block between variants.
- *  `existing` is the doc text (or block) about to be replaced. */
-export function resolveGroundingVariant(existing?: string): "lean" | "full" {
-  const flag = process.env.HUNCH_LEAN_GROUNDING;
-  if (flag === "1") return "lean";
-  if (flag === "0") return "full";
-  return existing !== undefined && groundingVariant(existing) === "lean" ? "lean" : "full";
+/** Lean variant: the block keeps the counts, one contract line and the Top
+ *  invariants. Resolved at call time from HUNCH_LEAN_GROUNDING, then `.hunch/config.json`
+ *  hooks.lean_grounding, then the default; see hookSwitches.ts. An explicit true → lean,
+ *  false → full, "preserve" → the variant of the block being replaced (`existing`, the
+ *  doc text or block), full when there is none.
+ *  The default keeps an existing block's variant and writes lean only for a new block:
+ *  an automatic full→lean rewrite on one branch conflicts with a counts bump on another
+ *  (the merge driver resolves counts-only conflicts), and older Hunch versions read the
+ *  same template stamp and would rewrite it back to full. Migrating is a deliberate
+ *  `hunch switches lean_grounding on` + refresh, committed once. */
+export function resolveGroundingVariant(existing?: string, root?: string): "lean" | "full" {
+  const { value, source } = hookSwitch("lean_grounding", root);
+  // Either marker, in any case, means a block exists (a lost or hand-edited marker must
+  // not read as "no block" and flip it); its variant comes from the stamp when the
+  // markers are malformed.
+  const hasBlock = existing !== undefined && /<!--\s*hunch:(start|end)\b/i.test(existing);
+  const wellFormed = existing !== undefined && existing.indexOf(START) >= 0 && existing.indexOf(END) > existing.indexOf(START);
+  const kept = existing === undefined ? "full"
+    : (wellFormed ? groundingVariant(existing) === "lean" : existing.includes(GROUNDING_VARIANT_LEAN)) ? "lean" : "full";
+  if (source === "default") return hasBlock ? kept : "lean";
+  if (value === "preserve") return kept;
+  return value ? "lean" : "full";
 }
 
-/** Experimental (HUNCH_LEAN_GROUNDING=1): MCP-side switch; the MCP server has no existing block. */
-export function leanGroundingEnabled(): boolean {
-  return process.env.HUNCH_LEAN_GROUNDING === "1";
+/** MCP-side switch (the server has no existing block): lean unless the switch is false;
+ *  "preserve" only concerns committed blocks, so the instructions stay lean. */
+export function leanGroundingEnabled(root?: string): boolean {
+  return hookSwitch("lean_grounding", root).value !== false;
 }
 
 function readIfExists(file: string): string | undefined {

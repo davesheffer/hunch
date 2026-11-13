@@ -12,8 +12,7 @@ import { buildServer, MCP_INSTRUCTIONS, MCP_INSTRUCTIONS_LEAN, mcpInstructions }
 
 function withLean<T>(on: boolean, fn: () => T): T {
   const prior = process.env.HUNCH_LEAN_GROUNDING;
-  if (on) process.env.HUNCH_LEAN_GROUNDING = "1";
-  else delete process.env.HUNCH_LEAN_GROUNDING;
+  process.env.HUNCH_LEAN_GROUNDING = on ? "1" : "0";
   try { return fn(); }
   finally {
     if (prior === undefined) delete process.env.HUNCH_LEAN_GROUNDING;
@@ -28,6 +27,9 @@ test("lean-grounding: the flag is read at call time", () => {
     assert.equal(leanGroundingEnabled(), true);
     assert.equal(mcpInstructions(), MCP_INSTRUCTIONS_LEAN);
     delete process.env.HUNCH_LEAN_GROUNDING;
+    assert.equal(leanGroundingEnabled(), true, "lean is the default");
+    assert.equal(mcpInstructions(), MCP_INSTRUCTIONS_LEAN);
+    process.env.HUNCH_LEAN_GROUNDING = "0";
     assert.equal(leanGroundingEnabled(), false);
     assert.equal(mcpInstructions(), MCP_INSTRUCTIONS);
   } finally {
@@ -36,7 +38,7 @@ test("lean-grounding: the flag is read at call time", () => {
   }
 });
 
-test("lean-grounding: the block keeps counts and invariants, drops the per-moment tool list, and is unchanged without the flag", (t) => {
+test("lean-grounding: the block keeps counts and invariants, drops the per-moment tool list, and is full under flag 0", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
   store.json.put("constraints", mkConstraint({ id: "con_lean00001", statement: "Keep module a free of side effects", scope: ["src/a.ts"], severity: "blocking" }));
@@ -120,15 +122,22 @@ test("lean-grounding: with the flag unset a refresh keeps a lean block lean, byt
   assert.equal(readFileSync(join(root, "AGENTS.md"), "utf8"), agents);
 });
 
-test("lean-grounding: flag 0 turns an existing lean block full; a full block stays full when unset", (t) => {
+test("lean-grounding: flag 0 turns an existing lean block full and keeps it full; unset leaves it full; flag 1 migrates it", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
   withFlag("1", () => updateClaudeMd(root, store));
   withFlag("0", () => updateClaudeMd(root, store));
   const full = readFileSync(join(root, "CLAUDE.md"), "utf8");
   assert.equal(groundingVariant(full), "full");
-  withFlag(undefined, () => updateClaudeMd(root, store));
+  withFlag("0", () => updateClaudeMd(root, store));
   assert.equal(readFileSync(join(root, "CLAUDE.md"), "utf8"), full);
+  withFlag(undefined, () => updateClaudeMd(root, store));
+  assert.equal(readFileSync(join(root, "CLAUDE.md"), "utf8"), full, "the default never migrates an existing block");
+  withFlag("1", () => updateClaudeMd(root, store));
+  const migrated = readFileSync(join(root, "CLAUDE.md"), "utf8");
+  assert.equal(groundingVariant(migrated), "lean");
+  withFlag(undefined, () => updateClaudeMd(root, store));
+  assert.equal(readFileSync(join(root, "CLAUDE.md"), "utf8"), migrated, "and keeps a migrated block lean");
 });
 
 test("lean-grounding: a lean block is fresh against a lean render with the flag unset", (t) => {
@@ -145,17 +154,15 @@ test("lean-grounding: a lean block is fresh against a lean render with the flag 
   });
 });
 
-test("lean-grounding: the full render with the flag unset equals the explicit full variant, carries no stamp, and keeps the committed block's full heading", (t) => {
+test("lean-grounding: the render with the flag unset is the lean variant; flag 0 is the explicit full variant with no stamp", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);
   const unset = withFlag(undefined, () => renderHunchSection(store, root));
-  assert.equal(unset, withFlag("0", () => renderHunchSection(store, root)));
-  assert.equal(unset, renderHunchSectionAs(store, root, "full"));
-  assert.doesNotMatch(unset, /hunch:variant/);
-  const committed = readFileSync(join(process.cwd(), "CLAUDE.md"), "utf8");
-  assert.equal(groundingVariant(committed), "full");
-  assert.match(unset, /Use the `hunch_\*` MCP tools by moment:/);
-  assert.match(committed, /Use the `hunch_\*` MCP tools by moment:/);
+  assert.equal(unset, renderHunchSectionAs(store, root, "lean"));
+  const full = withFlag("0", () => renderHunchSection(store, root));
+  assert.equal(full, renderHunchSectionAs(store, root, "full"));
+  assert.doesNotMatch(full, /hunch:variant/);
+  assert.match(full, /Use the `hunch_\*` MCP tools by moment:/);
 });
 
 function groundingBlockContent(text: string): string | null {

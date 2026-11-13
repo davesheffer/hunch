@@ -281,7 +281,7 @@
   },
   "HUNCH_HOOK_DAEMON": {
     "class": "hunch-config",
-    "purpose": "Experimental: serve hooks from a long-lived per-user daemon (set to 1); anything else runs in-process",
+    "purpose": "Serve hooks from a long-lived per-user daemon (default); 0 runs every hook in-process",
     "tests": [
       {
         "file": "test/hook-daemon.test.ts",
@@ -321,7 +321,7 @@
   },
   "HUNCH_LEAN_GROUNDING": {
     "class": "hunch-config",
-    "purpose": "Experimental: lean always-loaded grounding block and compact MCP instructions",
+    "purpose": "Lean always-loaded grounding block and compact MCP instructions (default); 0 restores the full block and instructions",
     "tests": [
       {
         "file": "test/lean-grounding.test.ts",
@@ -428,7 +428,7 @@
   },
   "HUNCH_QUIET_EMPTY": {
     "class": "hunch-config",
-    "purpose": "Experimental: hooks stay silent when retrieval finds nothing relevant",
+    "purpose": "Hooks stay silent when retrieval finds nothing relevant (default); 0 keeps the orientation text",
     "tests": [
       {
         "file": "test/quiet-empty.test.ts",

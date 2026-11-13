@@ -79,7 +79,7 @@ if (fast) {
     process.exit(1);
   });
 } else if (argv.length === 2 && argv[0] === "hook-daemon") {
-  // Hidden entries of the opt-in hook daemon (hookDaemon.ts), started by a hook.
+  // Hidden entries of the hook daemon (default on; hookSwitches.ts) (hookDaemon.ts), started by a hook.
   runHookDaemon(argv[1]!, serve).catch(() => process.exit(0));
 } else if (argv.length === 2 && argv[0] === "hook-daemon-host") {
   runHookDaemonHost(argv[1]!);

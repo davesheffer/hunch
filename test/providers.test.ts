@@ -7,6 +7,10 @@ import { scaffoldProviders, detectAssistants, writeCursorMcp, writeVscodeMcp, wr
 import { writeSlashCommands } from "../src/integrations/scaffold.js";
 import { publishedMcpInvocation } from "../src/cli/invocation.js";
 
+// These tests assert the full block's tool list; the lean default is covered by
+// test/lean-grounding.test.ts.
+process.env.HUNCH_LEAN_GROUNDING = "0";
+
 const inv = { command: "C:\\Program Files\\nodejs\\node.exe", args: ["C:\\repo\\dist\\cli\\index.js"] };
 
 test("scaffoldProviders writes MCP config + grounding for every assistant", () => {

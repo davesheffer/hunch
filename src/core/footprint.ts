@@ -2,13 +2,13 @@
 // context, measured deterministically from the same code paths the product
 // serves. Tokens are an estimate (characters / 4), not a tokenizer.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../mcp/server.js";
-import { renderHunchSection } from "../integrations/claudemd.js";
+import { renderHunchSectionAs, resolveGroundingVariant } from "../integrations/claudemd.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "./paths.js";
 import { PIPELINE_LOOP } from "./pipeline.js";
@@ -157,7 +157,12 @@ export async function measureFootprint(root: string, opts: { target?: string } =
 
   const store = new HunchStore(hunchPaths(root));
   try {
-    surfaces.push(surface("grounding.block", renderHunchSection(store, root).length));
+    // Measure the variant a refresh would write here: the default keeps an existing
+    // block's variant, so a repo with a committed full block pays full, not lean.
+    const claudeMd = join(root, "CLAUDE.md");
+    const existing = existsSync(claudeMd) ? readFileSync(claudeMd, "utf8") : undefined;
+    const variant = resolveGroundingVariant(existing, root);
+    surfaces.push(surface("grounding.block", renderHunchSectionAs(store, root, variant).length, { lean: variant === "lean" ? 1 : 0 }));
   } finally {
     store.close();
   }

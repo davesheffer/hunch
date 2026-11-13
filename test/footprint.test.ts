@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { measureFootprint } from "../src/core/footprint.js";
+import { renderHunchSectionAs } from "../src/integrations/claudemd.js";
 import { mkConstraint, tempStore } from "./helpers.js";
 
 // Context-footprint ceilings in characters (#372), set at measured × 1.10 rounded up to
@@ -63,5 +64,26 @@ test("footprint: every surface is measured, non-empty, and under its ceiling", a
   } finally {
     cleanup();
     if (saved !== undefined) process.env.HUNCH_MCP_TOOLS = saved;
+  }
+});
+
+test("footprint: the grounding block is measured in the variant a refresh would keep", async () => {
+  const saved = process.env.HUNCH_LEAN_GROUNDING;
+  delete process.env.HUNCH_LEAN_GROUNDING;
+  const { store, root, cleanup } = tempStore();
+  try {
+    store.json.put("constraints", mkConstraint({ id: "con_footprint_variant", statement: "Keep the context module pure.", scope: ["src/context.ts"] }));
+    store.reindex();
+    const block = async () => (await measureFootprint(root, { target: "src/context.ts" })).surfaces.find(s => s.id === "grounding.block")!;
+    const fresh = await block();
+    assert.equal(fresh.detail?.lean, 1, "no committed block: the default writes lean");
+    // A committed full block keeps its variant under the default, so that is what agents read.
+    writeFileSync(join(root, "CLAUDE.md"), `# Repo\n\n${renderHunchSectionAs(store, root, "full")}\n`);
+    const committed = await block();
+    assert.equal(committed.detail?.lean, 0, "committed full block: measured full, not lean");
+    assert.ok(committed.chars > fresh.chars);
+  } finally {
+    cleanup();
+    if (saved !== undefined) process.env.HUNCH_LEAN_GROUNDING = saved;
   }
 });

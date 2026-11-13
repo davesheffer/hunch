@@ -22,7 +22,8 @@ import { hunchCliArgs } from "./cli-invocation.js";
 const NOW = "2026-07-10T10:00:00.000Z";
 
 function cli(root: string, ...args: string[]) {
-  return spawnSync(process.execPath, hunchCliArgs(...args), { cwd: root, encoding: "utf8", env: isolatedCliEnv(), timeout: 120_000 });
+  return spawnSync(process.execPath, hunchCliArgs(...args), { cwd: root, encoding: "utf8", env: { ...isolatedCliEnv(), HUNCH_LEAN_GROUNDING: "0" }, timeout: 120_000 });
+  // ^ full grounding block: these journeys assert the policy-tool and wiki lines, which the lean default omits.
 }
 
 function repo(): { root: string; git: (...a: string[]) => void } {
