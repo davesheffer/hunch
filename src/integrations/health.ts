@@ -2,7 +2,7 @@
  * evidence that a host delivered context or enforced a decision. */
 import { existsSync, readFileSync, lstatSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { parseJsonc } from "../core/jsonc.js";
 import { writeFileAtomic } from "../core/io.js";
@@ -10,6 +10,7 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { readConfig } from "../core/config.js";
 import { hunchPaths } from "../core/paths.js";
 import { readHookObservations, type HookObservation } from "../core/hookObservations.js";
+import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE, isLauncherHookCommand, isLegacyLauncherHookCommand, launcherIsCurrent, launcherPinOf, renderHookLauncher } from "./hookLauncher.js";
 
 /** Normalized hook events that prove each capability was delivered by the host. */
 const CAPABILITY_EVIDENCE: Record<Exclude<Capability, "mcp">, readonly string[]> = {
@@ -64,6 +65,8 @@ export interface IntegrationHealth {
   scope: "repository-config";
   issues: HealthIssue[];
   harnesses: HarnessHealth[];
+  /** Advisory findings that never fail a check (hooks still work, only slower). */
+  notes: string[];
   /** Every exact Hunch pin found in repository launch config, once per file+version. */
   pins: Array<{ file: string; version: string }>;
 }
@@ -96,7 +99,7 @@ function hookCommands(value: unknown, includeDisabled = false): string[] {
   const obj = value as Obj;
   if ((!includeDisabled && obj.enabled === false) || (obj.type !== undefined && obj.type !== "command")) return [];
   const command = typeof obj.command === "string" ? obj.command : "";
-  const own = publishedHookCommand(command) !== undefined || /(?:dist|src)[\\/]+cli[\\/]+index\.(?:js|ts)/.test(command)
+  const own = publishedHookCommand(command) !== undefined || isLauncherHookCommand(command) || /(?:dist|src)[\\/]+cli[\\/]+index\.(?:js|ts)/.test(command)
     && /\s"?hook"?(?:\s+"?--provider"?\s+"?[a-z]+"?)?\s*$/.test(command);
   return [...(own ? [command] : []), ...(obj.hooks ? hookCommands(obj.hooks, includeDisabled) : [])];
 }
@@ -152,7 +155,7 @@ function expectedVersion(root: string): string {
 }
 
 export function inspectIntegrations(root: string, selected?: Harness): IntegrationHealth {
-  const report: IntegrationHealth = { schema: "hunch.integration-health/1", expectedVersion: HUNCH_VERSION, scope: "repository-config", issues: [], harnesses: [], pins: [] };
+  const report: IntegrationHealth = { schema: "hunch.integration-health/1", expectedVersion: HUNCH_VERSION, scope: "repository-config", issues: [], notes: [], harnesses: [], pins: [] };
   try { report.expectedVersion = expectedVersion(root); }
   catch (e) { report.issues.push({ file: "package.json", code: "dependency-version", detail: (e as Error).message }); }
   const firmness = readConfig(hunchPaths(root)).firmness;
@@ -161,10 +164,41 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
       const pins = [...value.matchAll(pinPattern)];
       if (value.includes("@davesheffer/hunch") && !pins.length) report.issues.push({ file, code: "unpinned-package", detail: "Hunch npm launcher has no exact version; run hunch init with the intended version" });
       for (const [, version = ""] of pins) {
-        if (!report.pins.some(p => p.file === file && p.version === version)) report.pins.push({ file, version });
+        // One finding per file and version, however often the pin repeats (the bootstrap carries it twice).
+        if (report.pins.some(p => p.file === file && p.version === version)) continue;
+        report.pins.push({ file, version });
         if (version !== report.expectedVersion) report.issues.push({ file, code: "version-drift", detail: `Hunch ${version} differs from expected ${report.expectedVersion}; run hunch integrations repair-pins` });
       }
     }
+  };
+  // The bootstrap hook command runs the committed launcher only when it is present and
+  // ours; otherwise every hook pays the npx fallback. Its pin drifts like any other.
+  let launcherChecked = false;
+  const checkLauncher = () => {
+    if (launcherChecked) return;
+    launcherChecked = true;
+    const path = join(root, HOOK_LAUNCHER_FILE);
+    if (!existsSync(path)) {
+      report.notes.push(`${HOOK_LAUNCHER_FILE} is missing, so every hook runs the slower pinned npx fallback; run hunch init and commit it`);
+      return;
+    }
+    let text = "";
+    try { text = readFileSync(path, "utf8"); } catch (e) {
+      report.notes.push(`${HOOK_LAUNCHER_FILE} is unreadable (${(e as Error).message}), so hooks run the slower pinned npx fallback`);
+      return;
+    }
+    if (!text.includes(HOOK_LAUNCHER_MARKER)) {
+      report.notes.push(`${HOOK_LAUNCHER_FILE} has no ${HOOK_LAUNCHER_MARKER} marker, so it is yours and hooks run the slower pinned npx fallback; delete it and run hunch init to restore the fast path`);
+      return;
+    }
+    // Marker-owned (as bootstrap, init and uninstall treat it) but without a readable pin.
+    const pin = launcherPinOf(text);
+    if (pin === null) {
+      report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: `carries the ${HOOK_LAUNCHER_MARKER} marker but no readable pin; run hunch integrations repair-pins to regenerate it` });
+      return;
+    }
+    recordPins(HOOK_LAUNCHER_FILE, [`@davesheffer/hunch@${pin}`]);
+    if (!launcherIsCurrent(text)) report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: "modified, or written by an older Hunch template; run hunch integrations repair-pins to regenerate it" });
   };
   // Machine-local runtime evidence; an unreadable ledger simply leaves hooks untested.
   let observed: HookObservation[] = [];
@@ -216,6 +250,8 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
         events = object(harness === "antigravity" ? config.hunch : config.hooks);
         const commands = Object.values(events).flatMap(v => hookCommands(v));
         recordPins(hooksFile, commands);
+        if (commands.some(isLegacyLauncherHookCommand)) report.notes.push(`${hooksFile} hooks run the legacy launcher (${LEGACY_HOOK_LAUNCHER_FILE}); run \`hunch init\` to migrate`);
+        if (commands.some((c) => isLauncherHookCommand(c) && !isLegacyLauncherHookCommand(c))) checkLauncher();
         if (commands.some(misroutedHook)) report.issues.push({
           file: hooksFile, code: "hook-command",
           detail: "Hunch hooks invoke the MCP subcommand instead of the hook handler; run hunch integrations repair-pins",
@@ -276,7 +312,7 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
  * tooling/sync-version-pins.mjs) so hooks and MCP never point at a version npm
  * cannot serve. Unknown git state yields [] — callers then treat nothing as local. */
 export function machineLocalIntegrationFiles(root: string): string[] {
-  const files = Object.values(HARNESSES).flatMap(s => [s.mcp, s.hooks]).filter(f => f && existsSync(join(root, f)));
+  const files = [...Object.values(HARNESSES).flatMap(s => [s.mcp, s.hooks]), HOOK_LAUNCHER_FILE].filter(f => f && existsSync(join(root, f)));
   if (!files.length) return [];
   const r = spawnSync("git", ["check-ignore", "--", ...files], { cwd: root, encoding: "utf8", windowsHide: true });
   if (r.error || (r.status !== 0 && r.status !== 1)) return [];
@@ -343,6 +379,27 @@ export function repairIntegrationPins(root: string, opts: { skip?: (file: string
       if (before !== after) pending.push({ file, before, after });
     }
   }
+  // The committed hook launcher carries the pin too; only a marker-owned regular file is rewritten.
+  const launcher = join(root, HOOK_LAUNCHER_FILE);
+  // A machine-local (git-ignored) settings.json keeps its launcher on the same version.
+  // A path that is not a readable regular file (a directory, unreadable) is not ours: skip it, as base did.
+  let launcherText: string | null = null;
+  if (existsSync(launcher) && !opts.skip?.(HOOK_LAUNCHER_FILE) && !opts.skip?.(HARNESSES.claude.hooks)) {
+    try {
+      if (lstatSync(launcher).isFile() && !lstatSync(dirname(launcher)).isSymbolicLink()) launcherText = readFileSync(launcher, "utf8");
+    } catch {
+      launcherText = null;
+    }
+  }
+  if (launcherText !== null) {
+    const before = launcherText;
+    const pin = launcherPinOf(before);
+    // Marker-owned is enough: a launcher whose pin line was lost is regenerated too.
+    if (before.includes(HOOK_LAUNCHER_MARKER) && (pin !== version || !launcherIsCurrent(before))) {
+      if (!exactVersion.test(version)) throw new Error(`refusing non-exact Hunch pin for ${HOOK_LAUNCHER_FILE}`);
+      pending.push({ file: HOOK_LAUNCHER_FILE, before, after: renderHookLauncher(version) });
+    }
+  }
   for (const { file, before } of pending) if (readFileSync(join(root, file), "utf8") !== before) throw new Error(`${file} changed during repair; retry`);
   for (const { file, after } of pending) writeFileAtomic(join(root, file), after);
   return pending.map(p => p.file);
@@ -356,6 +413,7 @@ export function formatIntegrationHealth(report: IntegrationHealth): string {
     `Hunch integrations — expected ${report.expectedVersion} (repository configuration only)`,
     ...report.harnesses.map(h => `${h.harness}:\n${CAPABILITIES.map(c => `  ${c}: ${h.capabilities[c].status} — ${h.capabilities[c].detail}`).join("\n")}`),
     ...report.issues.map(i => `ERROR ${i.file}: ${i.detail}`),
+    ...report.notes.map(n => `NOTE ${n}`),
     "Hooks become verified only from lifecycle events observed inside the host on the expected version within 30 days. Global settings, active sessions, and model compliance are not verified.",
   ].join("\n");
 }

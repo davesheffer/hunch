@@ -247,7 +247,8 @@ export function installClaudeHooks(root: string, hookCmd: string): ClaudeHookIns
   ];
 
   const next = JSON.stringify(json, null, 2) + "\n";
-  if (existed && before === next) return { path: file, action: "unchanged" };
+  // A CRLF checkout (core.autocrlf) of the same settings is unchanged.
+  if (existed && before.replace(/\r\n/g, "\n") === next) return { path: file, action: "unchanged" };
   mkdirSync(dirname(file), { recursive: true });
   writeFileAtomic(file, next);
   return { path: file, action: existed ? "updated" : "created" };

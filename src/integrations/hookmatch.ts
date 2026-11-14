@@ -5,6 +5,7 @@
  * deletes what it classifies as ours, and a writer that guesses wide deletes the
  * user's hooks (con_8460b6770f).
  */
+import { isLauncherHookCommand } from "./hookLauncher.js";
 
 /** Does one command string invoke Hunch's own hook?
  *
@@ -21,7 +22,7 @@
  * --provider) may omit it, and its quotes keep it unambiguous. Claude Code's own
  * settings.json never carries --provider, so a bare `hook` tail is all that is
  * left to match on — and a bare tail alone is far too weak, so there the WHOLE
- * command must be one of the two shapes `hunch init` has ever written (see
+ * command must be one of the shapes `hunch init` has ever written (see
  * isClaudeCodeHookCommand). */
 export function isHunchHookCommand(command: string, requireProvider: boolean): boolean {
   if (!requireProvider) return isClaudeCodeHookCommand(command);
@@ -37,11 +38,15 @@ const SOURCE_HOOK = new RegExp(
   String.raw`^\s*(?:"?npx(?:\.cmd)?"?\s+"?tsx"?|"[^"]+"|\S+)\s+(?:"${ABSOLUTE}[^"]*${CLI_ENTRY}"|${ABSOLUTE}\S*${CLI_ENTRY})\s+"?hook"?\s*$`,
 );
 
+
 /** The bare-`hook` shapes written into .claude/settings.json, matched as a whole
  *  command so nothing chained before or after one can be swept out with it:
  *
  *   - published: `npx -y --package=[hunch-exact@npm:]@davesheffer/hunch[@v] hunch hook`
  *   - source / `npm link` / dev: `<runtime> <ABSOLUTE …/dist|src/cli/index.js|ts> hook`
+ *   - published, fast: the self-contained `node -e "…" hook` bootstrap that runs
+ *     .claude/hunch-hook-launch.cjs or the pinned npx (hookLauncher.ts isLauncherHookCommand,
+ *     the exact generated text with only the pinned version varying)
  *
  *  Quoting is NOT the discriminator. shellInvocation() leaves a safe token bare, so
  *  since v1.21.1 a POSIX source install writes `/usr/bin/node /abs/dist/cli/index.js
@@ -57,5 +62,5 @@ function isClaudeCodeHookCommand(command: string): boolean {
   const published = /^\s*"?npx(?:\.cmd)?"?\s+/i.test(command)
     && /--package=(?:hunch-exact@npm:)?@davesheffer\/hunch(?:@[^"\s]+)?(?=["\s])/.test(command)
     && /\s"?hunch"?\s+"?hook"?\s*$/.test(command);
-  return published || SOURCE_HOOK.test(command);
+  return published || SOURCE_HOOK.test(command) || isLauncherHookCommand(command);
 }
