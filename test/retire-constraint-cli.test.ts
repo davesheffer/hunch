@@ -155,7 +155,7 @@ test("retire-constraint on the default branch holds the commit and says so inste
     assert.equal(run.status, 0, `${run.stdout}${run.stderr}`);
     assert.match(run.stdout, /retired — window closed/);
     assert.match(run.stderr, /not auto-committed: the default branch is checked out/, "a held flush is reported, on stderr");
-    assert.match(run.stdout, /--reason is not recorded anywhere: the commit was held/);
+    assert.match(run.stdout, /--reason is not recorded anywhere: the auto-commit policy held the commit/);
     assert.equal(git(root, "rev-parse", "HEAD"), head, "no memory commit lands on main");
     const closed = JSON.parse(readFileSync(join(root, ".hunch/constraints", `${constraint.id}.json`), "utf8")) as Constraint;
     assert.equal(closed.status, "retired", "the retirement stays on disk for the user's next commit");
