@@ -600,7 +600,7 @@ export type GitMemoryObservation =
   | { kind: "published"; commitSha: string; ref: string; basis: "push-status" | "remote-ref-confirmed" };
 export type GitMemoryObserver = (event: GitMemoryObservation) => void;
 export type HunchCommitOptions = (
-  | { push: false; alsoStage?: string[] }
+  | { push: false; alsoStage?: string[]; holdBack?: HunchHoldBack }
   | { push?: true; protectedRepoRoot: string; alsoStage?: string[]; remote?: HunchRemoteContract }
 ) & { observe?: GitMemoryObserver };
 
@@ -719,7 +719,41 @@ function memoryCommitMessageArgs(message: string, trailers: string): string[] {
     : ["-m", message, "-m", trailers];
 }
 
+/** A public commit's held captures: relative path (forward slashes, under hunchDir) -> sha256
+ *  of the held bytes. `onResult` is called exactly once per call with the paths still held
+ *  (left out of HEAD); empty means none is held any longer. A call that never reaches the
+ *  decision (no lock, nothing staged, a refused stage) reports the list unchanged. */
+export interface HunchHoldBack {
+  entries: Record<string, string>;
+  onResult: (stillHeld: string[]) => void;
+  /** Grounding docs to stage with the commit, asked for only when the decision holds nothing back. */
+  groundingIfNoneHeld?: () => string[];
+}
+
+let afterHoldBackDecisionForTests: (() => void) | null = null;
+/** Test seam: run `fn` inside the commit lock right after a hold-back decision unstaged its
+ *  candidates and before the commit (null restores none). Not for production callers. */
+export function __setAfterHoldBackDecisionForTests(fn: (() => void) | null): void {
+  afterHoldBackDecisionForTests = fn;
+}
+
 export function commitAndPushHunch(hunchDir: string, message: string, opts: HunchCommitOptions): "pushed" | "committed" | null {
+  const holdBack = opts && opts.push === false && opts.holdBack && Object.keys(opts.holdBack.entries).length ? opts.holdBack : null;
+  if (!holdBack) return commitHunchMemory(hunchDir, message, opts, null);
+  let reported = false;
+  const report = (still: string[]): void => {
+    if (reported) return;
+    reported = true;
+    try { holdBack.onResult(still); } catch { /* best effort: the held list is advisory */ }
+  };
+  try {
+    return commitHunchMemory(hunchDir, message, opts, { entries: holdBack.entries, onResult: report, groundingIfNoneHeld: holdBack.groundingIfNoneHeld });
+  } finally {
+    report(Object.keys(holdBack.entries));
+  }
+}
+
+function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitOptions, holdBack: HunchHoldBack | null): "pushed" | "committed" | null {
   // Runtime callers may be older compiled JS even though TypeScript requires the
   // protected-repository contract. Preserve this helper's never-throw promise and
   // fail closed instead of dereferencing a missing options object.
@@ -781,6 +815,8 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       }
       return false;
     };
+    // null: the pre-sweep index could not be read, so nothing is held back (base).
+    let preStaged: Set<string> | null = new Set<string>();
     if (opts.push !== false) {
       if (!overlayAttributeSourcesAreSafe(hunchDir, env)) {
         console.error(`hunch: refusing to auto-commit private memory at "${hunchDir}" — an unsafe Git attributes source could transform memory bytes. Nothing was staged, committed, or pushed.`);
@@ -800,6 +836,20 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
         }
       }
     } else {
+      // A held file the user already put in the index by hand (`git add`, or `git add -N`
+      // intent-to-add, which `diff --cached` does not list) is theirs to commit: snapshot index
+      // membership BEFORE the sweep so it is never a hold-back candidate. A failed read means
+      // no hold-back.
+      if (holdBack) {
+        try {
+          const pre = execFileSync("git", ["-C", hunchDir, "-c", "gc.auto=0", "-c", "core.quotePath=false",
+            "ls-files", "--", "."],
+          { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: commitGitTimeoutMs() });
+          preStaged = new Set(pre.split("\n").map((line) => line.trim().replace(/\\/g, "/")).filter(Boolean));
+        } catch {
+          preStaged = null;
+        }
+      }
       run(["add", "--", "."]);
     }
     // Snapshot replacement can remove stale per-record JSON. Only a push-capable
@@ -843,15 +893,51 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     // unstable tree, and it is exactly what `git reset -- .` used to clean up as a
     // side effect of the abort path these artifacts no longer take.
     if (staged.derived.length) run(["reset", "-q", "--", ...staged.derived]);
-    const memoryPaths = staged.memory;
+    let memoryPaths = staged.memory;
     if (memoryPaths.length === 0) return null;
+    // Held captures (a state write under an active capture hold) are decided from what git
+    // ACTUALLY staged, under this lock; any doubt commits everything, as base.
+    let heldBack: string[] = [];
+    let heldIds: string[] = [];
+    const alsoStage = [...(opts.alsoStage ?? [])];
+    if (holdBack) {
+      const decision = preStaged ? holdBackCandidates(hunchDir, env, memoryPaths, holdBack.entries, preStaged) : { paths: [] as string[], ids: [] as string[] };
+      heldBack = decision.paths;
+      heldIds = decision.ids;
+      // Unstage the candidates. A failed reset is doubt: put them back and commit everything.
+      if (heldBack.length) {
+        let unstaged = true;
+        for (let index = 0; index < heldBack.length && unstaged; index += 128) unstaged = run(["reset", "-q", "--", ...heldBack.slice(index, index + 128)]);
+        if (!unstaged) {
+          for (let index = 0; index < heldBack.length; index += 128) run(["add", "--", ...heldBack.slice(index, index + 128)]);
+          heldBack = [];
+          heldIds = [];
+        }
+      }
+      if (heldBack.length === 0) {
+        holdBack.onResult([]);
+        // Nothing held back: the grounding docs ride this commit, as on the no-hold path.
+        if (holdBack.groundingIfNoneHeld) {
+          try { alsoStage.push(...holdBack.groundingIfNoneHeld()); } catch { /* grounding is best effort */ }
+        }
+      } else {
+        const held = new Set(heldBack);
+        const rest = memoryPaths.filter((path) => !held.has(path));
+        if (rest.length === 0) {
+          holdBack.onResult(heldBack);
+          return null;
+        }
+        memoryPaths = rest;
+        afterHoldBackDecisionForTests?.();
+      }
+    }
     // Grounding docs refreshed by this capture ride the same memory commit, so committed record
     // counts can never go stale (the refresh-counts treadmill: every capture commit bumped the
     // count and re-staled the docs for the next release-gate clean-tree check). Staged AFTER the
     // memory-only backstop on purpose: alsoStage is a code-controlled list of generated grounding
     // docs the caller verified git-clean BEFORE rewriting, so it can neither weaken the
     // bug_overlay_clobber detection above nor sweep user edits.
-    for (const file of opts.alsoStage ?? []) {
+    for (const file of alsoStage) {
       // core.autocrlf=false on every memory add/checkout: the Git-for-Windows
       // installer default (system gitconfig autocrlf=true) would re-encode the
       // graph's JSON bytes in transit, breaking byte-exact content hashes.
@@ -875,7 +961,7 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
     // untrusted mutation seam and are unnecessary for JSON memory artifacts.
     const hooksDir = disabledHooksDir(hunchDir);
     if (!hooksDir) return null;
-    const commitPaths = [...memoryPaths, ...(opts.alsoStage ?? [])];
+    const commitPaths = [...memoryPaths, ...alsoStage];
     // Only the public store links to code; the overlays are out of scope (hunch-private#62).
     const trailers = opts.push === false ? codeLinkTrailers(hunchDir, env) : "";
     applyMachineIdentity(hunchDir, env);
@@ -902,6 +988,31 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
       }
     }
     if (!committed) return null;
+    if (holdBack && heldBack.length) {
+      // `commit --only` re-reads the listed paths' working-tree bytes, so a capture landing
+      // after the decision can make HEAD name a held-back record: then commit it too.
+      if (headNamesNone(hunchDir, env, heldIds)) holdBack.onResult(heldBack);
+      else {
+        let carried = true;
+        for (let index = 0; index < heldBack.length && carried; index += 128) carried = run(["add", "--", ...heldBack.slice(index, index + 128)]);
+        if (carried) {
+          try {
+            execFileSync("git", [
+              "-C", hunchDir,
+              "-c", `core.hooksPath=${hooksDir}`,
+              "-c", "core.autocrlf=false",
+              "-c", "commit.gpgsign=false",
+              "-c", "gc.auto=0",
+              "commit", "--no-gpg-sign", "--only",
+              ...memoryCommitMessageArgs(`${message}\n\n(carries held records the commit above references)`, trailers),
+              "--", ...heldBack,
+            ], { stdio: "ignore", env, timeout: commitGitTimeoutMs() });
+          } catch { carried = false; }
+        }
+        if (!carried) console.error(`hunch: held records the state commit in "${hunchDir}" references could not be committed with it; the next flush sweeps them`);
+        holdBack.onResult([]);
+      }
+    }
     if (opts.observe) {
       const commitSha = headShaWithEnv(hunchDir, env);
       if (/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commitSha)) observeGit(opts.observe, { kind: "committed", commitSha });
@@ -928,6 +1039,81 @@ export function commitAndPushHunch(hunchDir: string, message: string, opts: Hunc
   } finally {
     try { rmSync(lock, { recursive: true, force: true }); } catch { /* released best-effort */ }
   }
+}
+
+/** The held files a public commit may leave out: staged as NEW vs HEAD, bytes still matching
+ *  the held hash, ids readable, and no other staged memory file naming any of their ids. Empty
+ *  (commit everything, as base) on an unborn HEAD, a failed git read, a staged manifest.json,
+ *  or any reference. Never throws. */
+/** Past this many held record ids a state write commits everything (base) instead. */
+const MAX_HELD_BACK_IDS = 1000;
+
+function holdBackCandidates(hunchDir: string, env: NodeJS.ProcessEnv, memoryPaths: string[], entries: Record<string, string>, preStaged: Set<string>): { paths: string[]; ids: string[] } {
+  const none = { paths: [] as string[], ids: [] as string[] };
+  try {
+    if (memoryPaths.includes("manifest.json")) return none;
+    const out = execFileSync("git", ["-C", hunchDir, "-c", "gc.auto=0", "-c", "core.quotePath=false",
+      "diff", "--cached", "--name-status", "--no-renames", "--relative", "HEAD", "--", "."],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: commitGitTimeoutMs() });
+    const added = new Set(out.split("\n").map((line) => line.split("\t")).filter((parts) => parts[0]?.trim() === "A")
+      .map((parts) => (parts[parts.length - 1] ?? "").trim().replace(/\\/g, "/")));
+    const staged = new Set(memoryPaths);
+    const candidates: string[] = [];
+    const ids: string[] = [];
+    for (const [raw, hash] of Object.entries(entries)) {
+      const path = raw.replace(/\\/g, "/");
+      if (!staged.has(path) || !added.has(path) || preStaged.has(path) || candidates.includes(path)) continue;
+      let current: string;
+      try { current = createHash("sha256").update(readFileSync(join(hunchDir, path))).digest("hex"); } catch { continue; }
+      if (current !== hash) continue;
+      const recordIds = heldRecordIds(hunchDir, path);
+      if (recordIds === null) continue;
+      candidates.push(path);
+      ids.push(...recordIds);
+    }
+    // Thousands of held ids would make the post-commit grep backstop slow under the lock: doubt.
+    if (candidates.length === 0 || ids.length > MAX_HELD_BACK_IDS) return none;
+    const held = new Set(candidates);
+    for (const path of memoryPaths) {
+      if (held.has(path)) continue;
+      const text = readFileSync(join(hunchDir, path), "utf8");
+      if (ids.some((id) => text.includes(id))) return none;
+    }
+    // HEAD may already name a held record (a hand partial commit): leaving it out would keep
+    // HEAD dangling, so commit everything — one commit with grounding, as base.
+    if (!headNamesNone(hunchDir, env, ids)) return none;
+    return { paths: candidates, ids };
+  } catch { return none; }
+}
+
+/** A held file's record ids: its file name, or for an index.json the string ids of its array
+ *  entries; null when an index file cannot be parsed. */
+function heldRecordIds(hunchDir: string, path: string): string[] | null {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  if (name !== "index.json") return [name.replace(/\.json$/, "")];
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(join(hunchDir, path), "utf8"));
+    if (!Array.isArray(parsed)) return null;
+    return parsed.map((entry) => (entry as { id?: unknown } | null)?.id).filter((id): id is string => typeof id === "string" && id !== "");
+  } catch { return null; }
+}
+
+/** True only when git proves no HEAD file under hunchDir, and no markdown file anywhere in the
+ *  repository (grounding docs such as CLAUDE.md, doc anchors), contains any of `ids` (grep exit 1).
+ *  A match, a grep error, or a failed spawn is false. */
+function headNamesNone(hunchDir: string, env: NodeJS.ProcessEnv, ids: string[]): boolean {
+  if (ids.length === 0) return true;
+  // Chunked so a huge index.json cannot overflow the argv limit; any match or error is false.
+  for (let index = 0; index < ids.length; index += 200) {
+    try {
+      execFileSync("git", ["-C", hunchDir, "-c", "gc.auto=0", "grep", "-l", "-F", "--no-color", ...ids.slice(index, index + 200).flatMap((id) => ["-e", id]), "HEAD", "--", ".", ":(top,glob)**/*.md"],
+        { stdio: ["ignore", "pipe", "ignore"], env, timeout: commitGitTimeoutMs() });
+      return false;
+    } catch (error) {
+      if ((error as { status?: number | null }).status !== 1) return false;
+    }
+  }
+  return true;
 }
 
 /** True when `rel` is tracked with no staged or unstaged changes (untracked counts as
@@ -2484,14 +2670,29 @@ export function onDefaultBranch(cwd: string): boolean {
  *  stages. A hook's inherited GIT_DIR/GIT_WORK_TREE is stripped, so the repository is
  *  resolved from `hunchDir` itself. False when git cannot answer. */
 export function hunchDirHasChanges(hunchDir: string): boolean {
-  const changed = [
-    ...gitSafeIsolated(["diff", "--name-only", "--relative", "--no-renames", "HEAD", "--", "."], hunchDir).split("\n"),
-    ...gitSafeIsolated(["ls-files", "--others", "--exclude-standard", "--", "."], hunchDir).split("\n"),
-  ];
-  return changed.some((raw) => {
-    const path = raw.trim().replace(/\\/g, "/");
-    return path !== "" && path !== "local.json" && !isDerivedStoreArtifact(path);
-  });
+  return memoryPathsOf([
+    gitSafeIsolated(["diff", "--name-only", "--relative", "--no-renames", "HEAD", "--", "."], hunchDir),
+    gitSafeIsolated(["ls-files", "--others", "--exclude-standard", "--", "."], hunchDir),
+  ]).length > 0;
+}
+
+/** The dirty memory files under `hunchDir` (modified vs HEAD, or untracked), relative to it
+ *  with forward slashes; local.json and derived artifacts excluded. `untracked` is the subset
+ *  in neither HEAD nor the index. Null when git cannot answer exactly: HEAD does not resolve
+ *  (unborn), or either query fails. A caller that scopes a commit by this set must fall back
+ *  to its unscoped behavior on null. */
+export function hunchDirChangedPaths(hunchDir: string): { all: string[]; untracked: Set<string> } | null {
+  if (gitRawSafeIsolated(["rev-parse", "--verify", "-q", "HEAD^{commit}"], hunchDir) === null) return null;
+  const diff = gitRawSafeIsolated(["diff", "--name-only", "--relative", "--no-renames", "HEAD", "--", "."], hunchDir);
+  const others = gitRawSafeIsolated(["ls-files", "--others", "--exclude-standard", "--", "."], hunchDir);
+  if (diff === null || others === null) return null;
+  return { all: memoryPathsOf([diff, others]), untracked: new Set(memoryPathsOf([others])) };
+}
+
+function memoryPathsOf(outputs: string[]): string[] {
+  const paths = outputs.flatMap((out) => out.split("\n")).map((raw) => raw.trim().replace(/\\/g, "/"))
+    .filter((path) => path !== "" && path !== "local.json" && !isDerivedStoreArtifact(path));
+  return [...new Set(paths)];
 }
 
 /** The state files git writes while it is replaying history. `git rev-parse --git-path`

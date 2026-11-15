@@ -79,7 +79,7 @@ import { renderText, renderMarkdown, renderSarif, renderImpact, reportFailsStric
 import { partitionReview, isReviewDraft, READY_MIN_GROUNDED, type ReviewItem } from "../core/reviewqueue.js";
 import { installPostCommitHook, installPreCommitHook, installPostMergeHook, installPostCheckoutHook, hookStatus, hookReport, hookInvocationLines, formatHookInstall, sharedHooksNote, type HookInstall } from "../integrations/hooks.js";
 import { ensureSharedOverlayPointer } from "../integrations/worktree.js";
-import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, sharedRemoteFor, holdsOnDefaultBranch, heldNotice, type MemoryHome } from "../integrations/sync.js";
+import { flushCapture, flushMemoryHome, flushMemoryHomes, pinSharedRemote, sharedRemoteFor, holdsOnDefaultBranch, heldNotice, recordHeldCaptures, type MemoryHome } from "../integrations/sync.js";
 import { installMergeDriver } from "../integrations/mergeDriver.js";
 import { ensureGitignore, ignoreHunchMemory, HUNCH_MEMORY_DIRS, upgradeManagedGitignore, describeGitignoreUpgrade, memoryIgnoreRule, describeMemoryIgnoreRule, policyNotCommitted, describePolicyNotCommitted } from "../integrations/gitignore.js";
 import { writeCiWorkflow } from "../integrations/ciAction.js";
@@ -1018,6 +1018,8 @@ program
     }
     if (doCommit) {
       const privateNeedsFlush = privateCapture || (privateCorrectionQueued && graphRefreshed) || g2Recorded > 0 || privateRepairTouched;
+      // Record what the hold leaves behind, so a later state write does not sweep it in.
+      if (publicHeld) recordHeldCaptures(hunchPaths(root).hunch);
       if (publicHeld && !opts.quiet) console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
       const publicResult = publicNeedsFlush && !publicHeld
         ? commitAndPushHunch(

@@ -23,7 +23,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { HunchPaths } from "../core/paths.js";
 import { ENTITY_KINDS, SCHEMAS, type EntityKind, type EntityFor } from "../core/types.js";
 import { BASELINE_VERSION, hasPendingMigration, migrateRaw, SCHEMA_VERSION } from "../core/migrate.js";
-import { writeFileAtomic, writeFileAtomicIfAbsent } from "../core/io.js";
+import { noteFileWrite, writeFileAtomic, writeFileAtomicIfAbsent } from "../core/io.js";
 import { readStoreArtifact } from "../core/storeArtifact.js";
 import { createdAfterLock, heldLockNonces, judgeSameHostOwner, processStartedAt, selfStartToken, startTokenOf } from "../core/procstart.js";
 
@@ -510,6 +510,7 @@ export class JsonStore {
     const lexical = this.assertFileBelongsTo(directory, file);
     if (!this.validateExistingFile(directory, lexical, maxBytes)) return false;
     rmSync(lexical);
+    noteFileWrite(lexical);
     this.safeDirectory(directory.lexical, false);
     return true;
   }
