@@ -17,7 +17,7 @@
  * Every writer MERGES into existing files (preserving other servers / user prose)
  * and is idempotent, so re-running `hunch init` is safe.
  */
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, lstatSync } from "node:fs";
 import { writeFileAtomic } from "../core/io.js";
 import { homedir } from "node:os";
 import { join, dirname, delimiter } from "node:path";
@@ -25,7 +25,7 @@ import type { HunchStore } from "../store/hunchStore.js";
 import type { Invocation } from "./scaffold.js";
 import type { HookProvider } from "../core/agenthook.js";
 import { isHunchHookCommand } from "./hookmatch.js";
-import { renderHunchSection, stripManagedSection, upsertSection, updateClaudeMd, preserveNewerTemplate } from "./claudemd.js";
+import { renderHunchSection, stripManagedSection, upsertSection, updateClaudeMd, preserveNewerTemplate, planSection, planClaudeMd, withGroundingRenderMemo } from "./claudemd.js";
 import { gitCleanPaths, headFileContent } from "../extractors/git.js";
 import { parseJsonc } from "../core/jsonc.js";
 import { parse as parseToml } from "smol-toml";
@@ -274,9 +274,17 @@ export function writeAgentsMd(root: string, store: HunchStore, opts?: GroundingW
   return upsertSection(join(root, "AGENTS.md"), renderHunchSection(store, root, readIfExists(join(root, "AGENTS.md"))), "# AGENTS.md", opts);
 }
 
+function planAgentsMd(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
+  return planSection(join(root, "AGENTS.md"), renderHunchSection(store, root, readIfExists(join(root, "AGENTS.md"))), "# AGENTS.md", opts);
+}
+
 /** GitHub Copilot custom instructions (VS Code / github.com). Same grounding. */
 export function writeCopilotInstructions(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   return upsertSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store, root, readIfExists(join(root, ".github", "copilot-instructions.md"))), "# Copilot instructions", opts);
+}
+
+function planCopilotInstructions(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
+  return planSection(join(root, ".github", "copilot-instructions.md"), renderHunchSection(store, root, readIfExists(join(root, ".github", "copilot-instructions.md"))), "# Copilot instructions", opts);
 }
 
 /** `force` re-renders even a block written by a newer Hunch template. */
@@ -296,7 +304,7 @@ function ownedSection(file: string, store: HunchStore, root: string, opts?: Grou
  *  grounding in context for every request. Fully managed by Hunch (overwritten). */
 export function writeCursorRule(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".cursor", "rules", "hunch.mdc");
-  const body = `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${ownedSection(file, store, root, opts)}\n`;
+  const body = cursorRuleBody(root, store, opts);
   mkdirSync(dirname(file), { recursive: true });
   writeFileAtomic(file, body);
   return file;
@@ -332,9 +340,19 @@ export function writeWindsurfGlobalMcp(inv: Invocation, home = homedir()): strin
 
 /** Windsurf project rule (.windsurf/rules/hunch.md). `trigger: always_on` keeps the
  *  Hunch grounding in Cascade's context for every request. Fully managed (overwritten). */
+function cursorRuleBody(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
+  const file = join(root, ".cursor", "rules", "hunch.mdc");
+  return `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${ownedSection(file, store, root, opts)}\n`;
+}
+
+function windsurfRuleBody(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
+  const file = join(root, ".windsurf", "rules", "hunch.md");
+  return `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${ownedSection(file, store, root, opts)}\n`;
+}
+
 export function writeWindsurfRule(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".windsurf", "rules", "hunch.md");
-  const body = `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${ownedSection(file, store, root, opts)}\n`;
+  const body = windsurfRuleBody(root, store, opts);
   mkdirSync(dirname(file), { recursive: true });
   writeFileAtomic(file, body);
   return file;
@@ -540,6 +558,32 @@ function groundingTargets(root: string, store: HunchStore, opts?: GroundingWrite
   ];
 }
 
+/** groundingTargets as content plans: what each writer would write, without writing. */
+function groundingPlans(root: string, store: HunchStore): Array<[string, () => string]> {
+  return [
+    ["CLAUDE.md", () => planClaudeMd(root, store)],
+    ["AGENTS.md", () => planAgentsMd(root, store)],
+    [join(".github", "copilot-instructions.md"), () => planCopilotInstructions(root, store)],
+    [join(".cursor", "rules", "hunch.mdc"), () => cursorRuleBody(root, store)],
+    [join(".windsurf", "rules", "hunch.md"), () => windsurfRuleBody(root, store)],
+  ];
+}
+
+/** A rewrite with the same bytes changes nothing anyone reads when the doc is a plain
+ *  file with one link the process owns: the atomic write would only swap the inode.
+ *  A symlink, a hard link, or a foreign owner is rewritten as before (the write
+ *  replaces it with a regular file of this process). */
+function sameBytesRewriteIsNoop(file: string): boolean {
+  try {
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.nlink !== 1) return false;
+    if (typeof process.getuid === "function" && (stat.uid !== process.getuid() || stat.gid !== process.getgid?.())) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Self-heal: refresh the Hunch section in each grounding doc that ALREADY exists,
  *  and report which ones actually changed. Unlike regenerateGrounding it NEVER creates
  *  a file (so it can't scaffold grounding into a project that opted out of an
@@ -589,22 +633,33 @@ function generatedDirtOnly(root: string, rel: string, current: string): boolean 
  *  every later flush FOREVER, and each release needed a manual chore commit. A doc
  *  whose USER PROSE differs from HEAD is still left completely untouched. */
 export function refreshCommittableGrounding(root: string, store: HunchStore): string[] {
-  const changed: string[] = [];
-  const present = groundingTargets(root, store).filter(([rel]) => existsSync(join(root, rel)));
-  // One status for every doc: a spawn each was the bulk of this refresh on every flush.
-  const cleanRels = gitCleanPaths(root, present.map(([rel]) => rel));
-  for (const [rel, write] of present) {
-    const file = join(root, rel);
-    if (!existsSync(file)) continue;
-    const before = readFileSync(file, "utf8");
-    const clean = cleanRels.has(rel);
-    if (!clean && !generatedDirtOnly(root, rel, before)) continue;
-    write();
-    // A doc that was stale-DIRTY must be staged even when the regeneration is a
-    // byte no-op — the commit is what re-syncs HEAD with the worktree.
-    if (readFileSync(file, "utf8") !== before || !clean) changed.push(file);
-  }
-  return changed;
+  // Every doc renders the same section (per variant): render it once for the pass.
+  return withGroundingRenderMemo(store, () => {
+    const changed: string[] = [];
+    const present = groundingPlans(root, store).filter(([rel]) => existsSync(join(root, rel)));
+    // One status for every doc: a spawn each was the bulk of this refresh on every flush.
+    const cleanRels = gitCleanPaths(root, present.map(([rel]) => rel));
+    for (const [rel, plan] of present) {
+      const file = join(root, rel);
+      if (!existsSync(file)) continue;
+      const raw = readFileSync(file);
+      const before = raw.toString("utf8");
+      const clean = cleanRels.has(rel);
+      if (!clean && !generatedDirtOnly(root, rel, before)) continue;
+      const next = plan();
+      const bytes = Buffer.from(next, "utf8");
+      // The writer's own write, skipped when it would put back the same bytes.
+      if (!bytes.equals(raw) || !sameBytesRewriteIsNoop(file)) {
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileAtomic(file, next);
+      }
+      // A doc that was stale-DIRTY must be staged even when the regeneration is a
+      // byte no-op — the commit is what re-syncs HEAD with the worktree. (`bytes`
+      // decoded is what reading the written doc back returns.)
+      if (bytes.toString("utf8") !== before || !clean) changed.push(file);
+    }
+    return changed;
+  });
 }
 
 export interface ProviderScaffold {

@@ -24,7 +24,7 @@ import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjec
 import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, promptPaths, selectForTask } from "../core/taskSelection.js";
 import { recordServed } from "../core/served.js";
 import { readTaskReport, recordTaskDelivery, reportHash, reportPresentationEnabled, unseenLessons } from "../core/taskReport.js";
-import { snapshotDeliveredRecords } from "../core/taskReportEvidence.js";
+import { snapshotDeliveredRecords, trackedSource } from "../core/taskReportEvidence.js";
 import { renderRecalledLine } from "../core/taskReportRender.js";
 import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
@@ -189,11 +189,18 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         }
         // The turn is over: close the prompt's task and keep its record, whether
         // or not the agent called finish. Fail-open: the card below still renders.
+        // One source snapshot serves every record and the card: between them only the
+        // record flushes write the tree, and each flush is followed by a re-hash of the
+        // docs it rewrites, so each later reader sees the tree that flush left.
+        const source = trackedSource(root);
         try {
           const closed = closeHookTask(root, provider, evt);
-          if (closed.length) { store ??= new HunchStore(paths); for (const id of closed) persistTaskRecord(root, store, id); }
+          if (closed.length) {
+            store ??= new HunchStore(paths);
+            for (const id of closed) { try { persistTaskRecord(root, store, id, { source }); } finally { source.refresh(); } }
+          }
         } catch { /* the ledger and the card remain authoritative; the next finish retries */ }
-        const report = stopHookReport(root, provider, evt);
+        const report = stopHookReport(root, provider, evt, source);
         if (report) console.log(JSON.stringify(report));
         return;
       }
