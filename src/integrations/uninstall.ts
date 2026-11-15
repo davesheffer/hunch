@@ -22,7 +22,7 @@ import { HUNCH_END, HUNCH_START } from "./claudemd.js";
 import { ciWorkflowYaml } from "./ciAction.js";
 import { assertSafeTopLevelConfigFile, stripManagedGitignore } from "./gitignore.js";
 import { isHunchHookCommand } from "./hookmatch.js";
-import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE } from "./hookLauncher.js";
+import { HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, ownsLauncherText } from "./hookLauncher.js";
 import { gitRun, isInside, planHookRemoval, worktreeTops } from "./hooks.js";
 import { ATTR_LINES, targetRepositoryEnv } from "./mergeDriver.js";
 import { antigravityMcpFile, isHunchProviderHook, readJsonObj, TOML_END, TOML_START, windsurfMcpFile } from "./providers.js";
@@ -399,7 +399,7 @@ export function planUninstall(root: string, opts: { purge?: boolean } = {}): Uni
     } catch {
       text = null;
     }
-    if (text !== null && text.includes(HOOK_LAUNCHER_MARKER)) {
+    if (text !== null && ownsLauncherText(text)) {
       p.steps.push({ path: rel, kind: "delete", note: "Hunch's generated agent-hook launcher", run: () => rmSync(launcher, { force: true }) });
     }
   }
