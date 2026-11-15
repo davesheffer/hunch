@@ -22,6 +22,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import type { FlushGitFacts } from "../extractors/git.js";
 
 const EXCLUDED_SEGMENTS = new Set([".hunch", ".hunch-cache", ".git"]);
 /** Files Hunch regenerates on every capture (src/integrations/providers.ts,
@@ -30,6 +31,30 @@ export const HUNCH_MANAGED_FILES: ReadonlySet<string> = new Set(["CLAUDE.md", "A
 /** Commit subjects Hunch writes itself, and git's revert of one (`hunch revert-move`
  * writes `Revert "hunch: ..."`; reverting that gives `Reapply "..."` or a nested `Revert "..."`). */
 export const HUNCH_COMMIT_SUBJECT = /^(?:(?:revert|reapply) ")*hunch:/i;
+
+/** The user identity keys, listed with `git config -z --get-regexp`. */
+export const USER_CONFIG_LISTING = ["config", "-z", "--get-regexp", "^user\\.(name|email)$"];
+
+/** `-z` listing entries: `key\nvalue` per entry, a bare key for a value-less one. */
+function configEntriesFromZ(listedZ: string): Array<{ key: string; value: string | null }> {
+  return listedZ.split("\0").filter((entry) => entry !== "").map((entry) => {
+    const nl = entry.indexOf("\n");
+    return nl < 0 ? { key: entry, value: null } : { key: entry.slice(0, nl), value: entry.slice(nl + 1) };
+  });
+}
+
+/** The listing `git config --get-regexp` (no -z) prints for the same entries: `key value`
+ *  lines, a bare key for a value-less entry. */
+export function configListingFromZ(listedZ: string): string {
+  return configEntriesFromZ(listedZ).map((e) => (e.value === null ? `${e.key}\n` : `${e.key} ${e.value}\n`)).join("");
+}
+
+/** What `git config --get user.email` prints, trimmed, from the same listing: the last
+ *  value (a value-less key prints nothing). */
+export function userEmailFromZ(listedZ: string): string {
+  const last = configEntriesFromZ(listedZ).filter((e) => e.key === "user.email").at(-1);
+  return (last?.value ?? "").trim();
+}
 
 function gitDate(ms: number): string {
   // Second resolution, a format every git accepts.
@@ -76,7 +101,7 @@ export function headUnmovedSince(root: string, sinceMs: number): boolean {
   return false;
 }
 
-export function gitTouchedFiles(root: string, startedAt: string, finishedAt: string | null, options: { limit?: number; timeoutMs?: number; now?: number; workingTree?: boolean } = {}): string[] {
+export function gitTouchedFiles(root: string, startedAt: string, finishedAt: string | null, options: { limit?: number; timeoutMs?: number; now?: number; workingTree?: boolean; facts?: FlushGitFacts } = {}): string[] {
   const limit = Math.max(1, options.limit ?? 64);
   const timeout = options.timeoutMs ?? 3_000;
   const since = Date.parse(startedAt);
@@ -97,7 +122,20 @@ export function gitTouchedFiles(root: string, startedAt: string, finishedAt: str
   };
   try {
     // No HEAD movement since the window opened means no commit in it: skip the log.
-    const email = headUnmovedSince(root, from) ? "" : run(["config", "--get", "user.email"]).trim();
+    // Both identity keys in one listing: the memory commit that may follow in this
+    // flush checks the same keys (applyMachineIdentity) and reuses it.
+    let email = "";
+    if (!headUnmovedSince(root, from)) {
+      let listedZ: string;
+      try { listedZ = run(USER_CONFIG_LISTING); }
+      catch (error) {
+        // Exit 1: neither key is set, which is what the commit would learn too.
+        if ((error as { status?: unknown; signal?: unknown }).status === 1 && !(error as { signal?: unknown }).signal && options.facts) options.facts.userConfig = { cwd: root, listedZ: "" };
+        throw error;
+      }
+      if (options.facts) options.facts.userConfig = { cwd: root, listedZ };
+      email = userEmailFromZ(listedZ);
+    }
     if (email) {
       // One record per commit: a separator, the subject, then the paths.
       const log = run(["log", "--no-merges", "-n", "50", `--since=${gitDate(from)}`, `--until=${gitDate(to)}`, `--author=${email}`, "--format=%x1e%s", "--name-only"]);

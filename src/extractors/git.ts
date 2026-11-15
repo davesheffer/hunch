@@ -7,7 +7,7 @@ import { isAbsolute, resolve, join, basename, dirname, relative, sep, posix } fr
 import { mkdtempSync, openSync, closeSync, readSync, mkdirSync, rmSync, statSync, lstatSync, realpathSync, readFileSync, renameSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MEMLOG_FORMAT } from "../core/memorylog.js";
-import { HUNCH_COMMIT_SUBJECT, HUNCH_MANAGED_FILES } from "../core/taskTouched.js";
+import { HUNCH_COMMIT_SUBJECT, HUNCH_MANAGED_FILES, configListingFromZ } from "../core/taskTouched.js";
 import { boundedExecFileSync } from "../core/boundedSpawn.js";
 import { writeFileAtomic } from "../core/io.js";
 import { hunchAttributesAreSafe, hunchTreeAttributesAreSafe, safeOverlayGitTreeListing, safeOverlayTree } from "../core/overlaySafety.js";
@@ -55,13 +55,16 @@ function machineCommitEnv(repoRoot: string, source: NodeJS.ProcessEnv): NodeJS.P
  *  identity configured. Only a commit needs it, so callers that may stage
  *  nothing apply it right before committing: one `git config` spawn, not two
  *  on every flush. */
-function applyMachineIdentity(repoRoot: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function applyMachineIdentity(repoRoot: string, env: NodeJS.ProcessEnv, sharedListedZ?: string | null): NodeJS.ProcessEnv {
   let listed = "";
-  try {
-    listed = execFileSync("git", ["-C", repoRoot, "config", "--get-regexp", "^user\\.(name|email)$"], {
-      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: 2_000,
-    });
-  } catch { /* exit 1: neither key is set */ }
+  if (typeof sharedListedZ === "string") listed = configListingFromZ(sharedListedZ);
+  else {
+    try {
+      listed = execFileSync("git", ["-C", repoRoot, "config", "--get-regexp", "^user\\.(name|email)$"], {
+        encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env, timeout: 2_000,
+      });
+    } catch { /* exit 1: neither key is set */ }
+  }
   // `--get` answers with the last value of a multi-valued key; keep the last line per key too.
   const values = new Map<string, string>();
   for (const line of listed.split(/\r?\n/)) {
@@ -602,7 +605,93 @@ export type GitMemoryObserver = (event: GitMemoryObservation) => void;
 export type HunchCommitOptions = (
   | { push: false; alsoStage?: string[]; holdBack?: HunchHoldBack }
   | { push?: true; protectedRepoRoot: string; alsoStage?: string[]; remote?: HunchRemoteContract }
-) & { observe?: GitMemoryObserver };
+) & { observe?: GitMemoryObserver; facts?: FlushGitFacts };
+
+/** What one `git rev-parse` run in a memory directory says about its repository.
+ *  A flush used to ask for each of these in its own spawn (the auto-commit policy,
+ *  the staged-set check, the hooks dir and the code-link trailers); none of them
+ *  changes within a flush. */
+export interface MemoryRepoProbe {
+  /** The memory directory the probe ran in. */
+  dir: string;
+  /** `--show-prefix`, as printed. */
+  prefix: string;
+  /** `--absolute-git-dir`, as printed. */
+  gitDir: string;
+  /** `--git-common-dir`, absolute. */
+  commonDir: string;
+  /** `--is-shallow-repository`. */
+  shallow: string;
+}
+
+/** Answers one flush gathers once and hands down: the repository probe and the
+ *  git user identity lines gitTouchedFiles already read. Scoped to one flush;
+ *  never kept across calls. */
+export interface FlushGitFacts {
+  probe?: () => MemoryRepoProbe | null;
+  /** `git config -z --get-regexp ^user\.(name|email)$` output, read in `cwd` with
+   *  every GIT_* variable stripped. */
+  userConfig?: { cwd: string; listedZ: string };
+}
+
+/** One rev-parse for the layout facts of the repository holding `hunchDir`. Null
+ *  when git cannot answer the layout (the caller then asks each question the
+ *  pre-probe way). */
+export function probeMemoryRepo(hunchDir: string, options: { env?: NodeJS.ProcessEnv } = {}): MemoryRepoProbe | null {
+  const args = ["-C", hunchDir, "rev-parse", "--show-prefix", "--absolute-git-dir", "--is-shallow-repository",
+    "--path-format=absolute", "--git-common-dir"];
+  let out: string;
+  try {
+    out = execFileSync("git", args, {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: options.env ?? foreignRepoEnv(process.env), timeout: commitGitTimeoutMs(),
+    });
+  } catch {
+    return null;
+  }
+  const lines = out.split("\n");
+  const [prefix = "", gitDir = "", shallow = "", commonDir = ""] = lines;
+  // An older git echoes an unknown --path-format back as a line: the absolute checks catch the shift.
+  if (lines.length < 5) return null;
+  if (!isAbsolute(gitDir) || !isAbsolute(commonDir) || (shallow !== "true" && shallow !== "false")) return null;
+  if ([prefix, gitDir, commonDir].some((value) => value.includes("\r"))) return null;
+  return { dir: hunchDir, prefix, gitDir, commonDir, shallow };
+}
+
+/** A thunk that probes once, on first use. */
+export function lazyMemoryRepoProbe(hunchDir: string, options: { env?: NodeJS.ProcessEnv } = {}): () => MemoryRepoProbe | null {
+  let probed: { value: MemoryRepoProbe | null } | undefined;
+  return () => (probed ??= { value: probeMemoryRepo(hunchDir, options) }).value;
+}
+
+/** Whether `probe` answers for the repository at `cwd` the way a fresh git call there
+ *  would: it ran in `cwd`'s child memory directory, inside the same repository. A
+ *  memory directory that is a link (symlink or junction), or whose real path is not
+ *  inside `cwd`'s real path, may sit in another repository: never covered (as
+ *  parentLayout refuses a linked memory directory). */
+function probeCovers(probe: MemoryRepoProbe | null | undefined, cwd: string): probe is MemoryRepoProbe {
+  if (!probe || probe.prefix === "" || resolve(dirname(probe.dir)) !== resolve(cwd)) return false;
+  try {
+    if (lstatSync(probe.dir).isSymbolicLink()) return false;
+    return realpathSync(probe.dir) === join(realpathSync(cwd), basename(resolve(probe.dir)));
+  } catch {
+    return false;
+  }
+}
+
+/** GIT_* variables that change neither which repository git opens nor what its
+ *  configuration says. */
+const CONFIG_NEUTRAL_GIT_ENV = new Set(["GIT_EDITOR", "GIT_PAGER", "GIT_TERMINAL_PROMPT", "GIT_OPTIONAL_LOCKS", "GIT_ASKPASS", "GIT_SSH", "GIT_SSH_COMMAND", "GIT_MERGE_AUTOEDIT"]);
+
+/** The user identity listing gitTouchedFiles read earlier in this flush, when it
+ *  answers what applyMachineIdentity would ask: same repository (the memory
+ *  directory's parent, as the probe proves) and an environment whose only GIT_*
+ *  variables are configuration-neutral (gitTouchedFiles strips every GIT_* one). */
+function sharedUserConfig(hunchDir: string, probe: MemoryRepoProbe | null, facts?: FlushGitFacts): string | null {
+  const shared = facts?.userConfig;
+  if (!shared || !probeCovers(probe, shared.cwd) || resolve(probe.dir) !== resolve(hunchDir)) return null;
+  if (Object.keys(process.env).some((key) => key.toUpperCase().startsWith("GIT_") && !CONFIG_NEUTRAL_GIT_ENV.has(key.toUpperCase()))) return null;
+  return shared.listedZ;
+}
 
 function observeGit(observer: GitMemoryObserver | undefined, event: GitMemoryObservation): void {
   try { observer?.(event); } catch { /* observation cannot change a Git outcome */ }
@@ -668,7 +757,7 @@ const CODE_HEAD_SEARCH_DEPTH = 200;
  *  detached HEAD records the head only; anything git cannot answer (including a memory
  *  commit at a shallow clone's boundary, whose listing is its whole tree) is omitted,
  *  never guessed. Empty string when there is nothing to record. */
-function codeLinkTrailers(hunchDir: string, env: NodeJS.ProcessEnv): string {
+function codeLinkTrailers(hunchDir: string, env: NodeJS.ProcessEnv, probe?: MemoryRepoProbe | null): string {
   const read = (args: string[], cwd = hunchDir): string => {
     try {
       return execFileSync("git", ["--no-replace-objects", "-C", cwd, ...args], {
@@ -684,24 +773,72 @@ function codeLinkTrailers(hunchDir: string, env: NodeJS.ProcessEnv): string {
   const branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : "";
   if (branch && !/\s/.test(branch)) lines.push(`Hunch-Code-Branch: ${branch}`);
   // `git log` paths are toplevel-relative, and the project may sit in a subdirectory.
-  const [shallow = "", prefix = ""] = read(["rev-parse", "--is-shallow-repository", "--show-prefix"], dirname(hunchDir)).split("\n");
+  const [shallow = "", prefix = ""] = (probe ? parentLayout(hunchDir, probe) : null)
+    ?? read(["rev-parse", "--is-shallow-repository", "--show-prefix"], dirname(hunchDir)).split("\n");
   const memoryDir = `${prefix}${basename(resolve(hunchDir))}/`;
   const isMemoryFile = (file: string): boolean =>
     !file || file.startsWith(memoryDir) || (file.startsWith(prefix) && HUNCH_MANAGED_FILES.has(file.slice(prefix.length)));
-  const history = read(["-c", "log.showSignature=false", "-c", "core.quotePath=false", "log", "--first-parent",
-    "--no-color", "--name-only", `--max-count=${CODE_HEAD_SEARCH_DEPTH}`,
-    "--format=%x1e%H%x1f%P%x1f%(trailers:key=Hunch-Code-Head,valueonly,separator=%x20)%x1f%s", "HEAD", "--"]);
-  for (const entry of history.split("\x1e").slice(1)) {
-    const [header = "", ...files] = entry.split("\n");
-    const [sha = "", parents = "", linked = "", ...subject] = header.split("\x1f");
-    if (!isSha(sha)) break;
-    const memoryCommit = linked !== "" || HUNCH_COMMIT_SUBJECT.test(subject.join("\x1f"));
-    if (memoryCommit && !parents && shallow === "true") break;
-    if (memoryCommit && files.every(isMemoryFile)) continue;
-    lines.push(`Hunch-Code-Head: ${sha}`);
-    break;
-  }
+  const head = codeHeadOf(
+    (skip, count, from) => read(["-c", "log.showSignature=false", "-c", "core.quotePath=false", "log", "--first-parent",
+      "--no-color", "--name-only", `--max-count=${count}`, ...(skip ? [`--skip=${skip}`] : []),
+      "--format=%x1e%H%x1f%P%x1f%(trailers:key=Hunch-Code-Head,valueonly,separator=%x20)%x1f%s", from, "--"]),
+    isMemoryFile, shallow === "true");
+  if (head) lines.push(`Hunch-Code-Head: ${head}`);
   return lines.join("\n");
+}
+
+/** The first window of the code-head walk. Most walks end at the first or second
+ *  commit; the rest of the CODE_HEAD_SEARCH_DEPTH budget is read only when a whole
+ *  window was memory commits. */
+const CODE_HEAD_FIRST_WINDOW = 16;
+
+/** The code-head walk over first-parent history (see codeLinkTrailers), read in
+ *  windows: the first CODE_HEAD_FIRST_WINDOW commits from HEAD, then, only when every
+ *  one of them was skipped as a memory commit, the rest of the CODE_HEAD_SEARCH_DEPTH
+ *  budget from the last commit read (its first-parent chain is fixed, so the two
+ *  windows list exactly the commits one CODE_HEAD_SEARCH_DEPTH listing would). The
+ *  sha of the code head, or "" when the walk names none. `log(skip, count, from)`
+ *  returns `git log` output, "" when git cannot answer. Exported for tests. */
+export function codeHeadOf(log: (skip: number, count: number, from: string) => string, isMemoryFile: (file: string) => boolean, shallow: boolean): string {
+  const isSha = (value: string): boolean => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
+  let walked = 0;
+  let from = "HEAD";
+  let skip = 0;
+  while (walked < CODE_HEAD_SEARCH_DEPTH) {
+    const count = walked === 0 ? Math.min(CODE_HEAD_FIRST_WINDOW, CODE_HEAD_SEARCH_DEPTH) : CODE_HEAD_SEARCH_DEPTH - walked;
+    const entries = log(skip, count, from).split("\x1e").slice(1);
+    let last = "";
+    for (const entry of entries) {
+      const [header = "", ...files] = entry.split("\n");
+      const [sha = "", parents = "", linked = "", ...subject] = header.split("\x1f");
+      if (!isSha(sha)) return "";
+      const memoryCommit = linked !== "" || HUNCH_COMMIT_SUBJECT.test(subject.join("\x1f"));
+      if (memoryCommit && !parents && shallow) return "";
+      if (memoryCommit && files.every(isMemoryFile)) { last = sha; continue; }
+      return sha;
+    }
+    // A short window is the end of history (or git could not answer): nothing more to read.
+    if (entries.length < count || !last) return "";
+    walked += count;
+    from = last;
+    skip = 1;
+  }
+  return "";
+}
+
+/** The parent directory's `--is-shallow-repository` and `--show-prefix` lines, derived
+ *  from the memory directory's probe: its prefix minus the last segment, when that
+ *  segment is the directory's own name and not a link (git's prefix follows the real
+ *  path). Null whenever the derivation could differ from asking git there. */
+function parentLayout(hunchDir: string, probe: MemoryRepoProbe): [string, string] | null {
+  try {
+    if (!probe.prefix.endsWith("/") || resolve(probe.dir) !== resolve(hunchDir) || lstatSync(hunchDir).isSymbolicLink()) return null;
+    const parts = probe.prefix.slice(0, -1).split("/");
+    if (parts.pop() !== basename(resolve(hunchDir))) return null;
+    return [probe.shallow, parts.length ? `${parts.join("/")}/` : ""];
+  } catch {
+    return null;
+  }
 }
 
 /** `-m` arguments for a memory commit. Git reads trailers from the LAST paragraph only,
@@ -790,6 +927,9 @@ function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitO
       GIT_MERGE_AUTOEDIT: "no",
       GIT_ATTR_NOSYSTEM: "1",
     });
+    // Layout answers for this flush: the caller's probe (the policy check already ran
+    // it), else one taken on first use below, where the staged-set check asked before.
+    const probe = opts.facts?.probe ?? lazyMemoryRepoProbe(hunchDir, { env });
     const run = (args: string[]): boolean => {
       for (let attempt = 0; attempt < 2; attempt++) {
         const startedAt = Date.now();
@@ -873,7 +1013,7 @@ function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitO
     // derived artifacts and every path outside this exact Hunch subtree remain
     // fail-closed. A deletion is admitted only for the already-proven standalone
     // private/shared repository above; it can never delete protected source.
-    const staged = stagedMemoryPaths(hunchDir, env, opts.push !== false);
+    const staged = stagedMemoryPaths(hunchDir, env, opts.push !== false, probe());
     if (staged === null) {
       try { execFileSync("git", ["-C", hunchDir, "reset", "-q", "--", "."], { stdio: "ignore", env, timeout: commitGitTimeoutMs() }); } catch { /* best-effort unstage */ }
       // Public-store commits (push:false) skip QUIETLY: a non-memory staged set there is
@@ -937,13 +1077,16 @@ function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitO
     // memory-only backstop on purpose: alsoStage is a code-controlled list of generated grounding
     // docs the caller verified git-clean BEFORE rewriting, so it can neither weaken the
     // bug_overlay_clobber detection above nor sweep user edits.
-    for (const file of alsoStage) {
-      // core.autocrlf=false on every memory add/checkout: the Git-for-Windows
-      // installer default (system gitconfig autocrlf=true) would re-encode the
-      // graph's JSON bytes in transit, breaking byte-exact content hashes.
-      run(opts.push === false
-        ? ["-c", "core.autocrlf=false", "add", "--", file]
-        : ["-c", `core.attributesFile=${gitNullDevice()}`, "-c", "core.autocrlf=false", "add", "--", file]);
+    // core.autocrlf=false on every memory add/checkout: the Git-for-Windows
+    // installer default (system gitconfig autocrlf=true) would re-encode the
+    // graph's JSON bytes in transit, breaking byte-exact content hashes.
+    const addArgs = (files: string[]): string[] => opts.push === false
+      ? ["-c", "core.autocrlf=false", "add", "--", ...files]
+      : ["-c", `core.attributesFile=${gitNullDevice()}`, "-c", "core.autocrlf=false", "add", "--", ...files];
+    // One add for every doc. On any failure the per-file adds run exactly as before;
+    // each add is idempotent, so whatever the failed combined add staged ends the same.
+    if (alsoStage.length > 1 ? !run(addArgs(alsoStage)) : alsoStage.length === 1) {
+      for (const file of alsoStage) run(addArgs([file]));
     }
     // Only sync+push when a memory commit was actually created — never run pull/push against the
     // enclosing repo on an empty stage. Two-way sync: MERGE the remote BEFORE pushing so a push
@@ -959,12 +1102,12 @@ function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitO
     // smuggle local.json (or any other path) into a broad `--only -- .` commit.
     // Hooks are disabled for this machine-generated commit; user hooks are an
     // untrusted mutation seam and are unnecessary for JSON memory artifacts.
-    const hooksDir = disabledHooksDir(hunchDir);
+    const hooksDir = disabledHooksDir(hunchDir, probe());
     if (!hooksDir) return null;
     const commitPaths = [...memoryPaths, ...alsoStage];
     // Only the public store links to code; the overlays are out of scope (hunch-private#62).
-    const trailers = opts.push === false ? codeLinkTrailers(hunchDir, env) : "";
-    applyMachineIdentity(hunchDir, env);
+    const trailers = opts.push === false ? codeLinkTrailers(hunchDir, env, probe()) : "";
+    applyMachineIdentity(hunchDir, env, sharedUserConfig(hunchDir, probe(), opts.facts));
     // One retry after healing a stranded index.lock (issue #53): a lock left by
     // a timeout-killed or crashed git otherwise fails EVERY later flush fast and
     // silently — captures keep reporting success while nothing commits.
@@ -1197,11 +1340,15 @@ function stagedMemoryPaths(
   hunchDir: string,
   env: NodeJS.ProcessEnv,
   allowMemoryDeletions = false,
+  probe?: MemoryRepoProbe | null,
 ): StagedMemory | null {
   let out = "";
   let prefix = "";
-  try { prefix = execFileSync("git", ["-C", hunchDir, "rev-parse", "--show-prefix"], { encoding: "utf8", env, timeout: commitGitTimeoutMs() }).trim().replace(/\\/g, "/"); }
-  catch { return null; }
+  if (probe) prefix = probe.prefix.trim().replace(/\\/g, "/");
+  else {
+    try { prefix = execFileSync("git", ["-C", hunchDir, "rev-parse", "--show-prefix"], { encoding: "utf8", env, timeout: commitGitTimeoutMs() }).trim().replace(/\\/g, "/"); }
+    catch { return null; }
+  }
   if (!prefix) return null; // a Hunch layout is a scoped subdirectory, never the whole repository
   // Snapshot ID churn is semantically one delete plus one add. Disable Git's
   // heuristic rename presentation so the exact paths remain independently
@@ -1446,6 +1593,16 @@ function absoluteGitMetadataDir(cwd: string, env: NodeJS.ProcessEnv): string | n
       env,
       timeout: 2_000,
     }).trim();
+    return canonicalGitMetadataDir(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** The real path of a printed `--absolute-git-dir`, or null unless it is a plain directory. */
+function canonicalGitMetadataDir(printed: string): string | null {
+  try {
+    const raw = printed.trim();
     if (!raw) return null;
     const canonical = realpathSync(raw);
     const stat = lstatSync(canonical);
@@ -1540,9 +1697,9 @@ function boundedTeamEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return bounded;
 }
 
-function disabledHooksDir(hunchDir: string): string | null {
+function disabledHooksDir(hunchDir: string, probe?: MemoryRepoProbe | null): string | null {
   try {
-    const gitDir = absoluteGitMetadataDir(hunchDir, foreignRepoEnv(process.env));
+    const gitDir = probe ? canonicalGitMetadataDir(probe.gitDir) : absoluteGitMetadataDir(hunchDir, foreignRepoEnv(process.env));
     if (!gitDir) return null;
     const hooksDir = join(gitDir, "hunch-disabled-hooks");
     mkdirSync(hooksDir, { recursive: true });
