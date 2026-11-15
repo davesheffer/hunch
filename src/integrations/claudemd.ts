@@ -4,7 +4,8 @@
  * HUNCH markers — any user-authored content outside it is preserved verbatim.
  */
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
-import { writeFileAtomic } from "../core/io.js";
+import { writeFileAtomic, sameBytesRewriteIsNoop } from "../core/io.js";
+import { lineEolAt, withEol } from "../core/eol.js";
 import { basename, join, dirname } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import { wikiSummary } from "../wiki/wiki.js";
@@ -227,30 +228,42 @@ function pushInvariants(lines: string[], constraints: { severity: string; statem
  *  all user-authored content outside the markers. Shared by CLAUDE.md, AGENTS.md,
  *  and .github/copilot-instructions.md so every assistant gets the same grounding. */
 export function upsertSection(file: string, section: string, fallbackTitle: string, opts?: { force?: boolean }): string {
-  const content = planSection(file, section, fallbackTitle, opts);
-  mkdirSync(dirname(file), { recursive: true }); // e.g. .github/ for copilot-instructions
   // Atomic: this file carries the USER'S prose around the managed block — a torn
   // write must not be able to truncate it (issue #43).
-  writeFileAtomic(file, content);
+  writeGroundingFile(file, planSection(file, section, fallbackTitle, opts));
   return file;
+}
+
+/** Write a grounding doc, skipping a rewrite that would put back the same bytes
+ *  (a CRLF checkout must not go mtime-dirty) when sameBytesRewriteIsNoop allows. */
+export function writeGroundingFile(file: string, content: string): void {
+  if (existsSync(file) && readFileSync(file).equals(Buffer.from(content, "utf8")) && sameBytesRewriteIsNoop(file)) return;
+  mkdirSync(dirname(file), { recursive: true }); // e.g. .github/ for copilot-instructions
+  writeFileAtomic(file, content);
 }
 
 /** The content upsertSection writes, without writing it. */
 export function planSection(file: string, section: string, fallbackTitle: string, opts?: { force?: boolean }): string {
   let content = existsSync(file) ? readFileSync(file, "utf8") : "";
   if (!opts?.force) section = preserveNewerTemplate(content, section);
+  // User prose is spliced byte-for-byte; only the generated block (and the separators
+  // we add) take one EOL: the existing block's, else the file's first line's, else LF.
   const iStart = content.indexOf(START);
   const iEnd = content.indexOf(END);
   if (iStart >= 0 && iEnd > iStart) {
-    content = content.slice(0, iStart) + section + content.slice(iEnd + END.length);
+    content = content.slice(0, iStart) + withEol(section, lineEolAt(content, iStart)) + content.slice(iEnd + END.length);
   } else if (iStart >= 0 || iEnd >= 0) {
     // partial/corrupt markers: strip stray marker lines, then append ONE clean section.
+    const eol = lineEolAt(content, iStart >= 0 ? iStart : iEnd);
     const body = content.split("\n").filter((l) => !l.includes(START) && !l.includes(END)).join("\n").trimEnd();
-    content = body ? `${body}\n\n${section}\n` : `${section}\n`;
+    const block = withEol(section, eol);
+    content = body ? `${body}${eol}${eol}${block}${eol}` : `${block}${eol}`;
   } else if (content.trim()) {
-    content = `${content.trimEnd()}\n\n${section}\n`;
+    const eol = lineEolAt(content);
+    content = `${content.trimEnd()}${eol}${eol}${withEol(section, eol)}${eol}`;
   } else {
-    content = `${fallbackTitle}\n\n${section}\n`;
+    const eol = lineEolAt(content);
+    content = withEol(`${fallbackTitle}\n\n${section}\n`, eol);
   }
   return content;
 }
