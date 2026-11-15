@@ -35,7 +35,44 @@ export interface ReportSnapshot { hash: string | null; limitations: string[] }
 /** Bounded source snapshot, not a committed change proof. Ignored files and
  * Hunch's own memory/cache are excluded and explicitly disclosed. */
 export function reportSourceSnapshot(root: string): ReportSnapshot {
-  const limitations = ["Git-ignored files, Hunch memory/cache, and external dependencies are outside this source snapshot."];
+  return snapshotWithEntries(root).snapshot;
+}
+
+const SNAPSHOT_LIMITATIONS = ["Git-ignored files, Hunch memory/cache, and external dependencies are outside this source snapshot."];
+const SNAPSHOT_UNAVAILABLE = "A complete bounded source snapshot was unavailable; no current-change verification is claimed.";
+
+type SnapshotEntry = [string, string | null, number];
+/** A complete snapshot's per-path parts, kept so a few paths can be re-hashed. */
+interface SnapshotParts { base: string; entries: SnapshotEntry[]; sizes: number[] }
+
+/** One path's entry and the bytes it counts against the limit; throws where the
+ *  snapshot is unavailable. */
+function snapshotEntry(base: string, path: string): { entry: SnapshotEntry; size: number } {
+  const file = resolve(base, path);
+  const rel = relative(base, file);
+  if (isAbsolute(rel) || rel === ".." || rel.startsWith("../") || rel.startsWith("..\\")) throw new Error("source path escapes repository");
+  let stat;
+  try { stat = lstatSync(file); }
+  catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return { entry: [path, null, 0], size: 0 }; throw e; }
+  const parent = relative(base, realpathSync(dirname(file)));
+  if (isAbsolute(parent) || parent === ".." || parent.startsWith("../") || parent.startsWith("..\\")) throw new Error("source parent escapes repository");
+  if (stat.isSymbolicLink()) return { entry: [path, reportHash(readlinkSync(file)), 0o120000], size: 0 };
+  if (!stat.isFile()) throw new Error("submodules or non-file sources require separate verification");
+  if (stat.size > 8_000_000) throw new Error("source bytes exceed snapshot limit");
+  const content = readFileSync(file);
+  const after = lstatSync(file);
+  if (stat.mtimeMs !== after.mtimeMs || stat.ctimeMs !== after.ctimeMs || stat.size !== after.size || content.length !== stat.size) throw new Error("source changed during snapshot");
+  return { entry: [path, `sha256:${createHash("sha256").update(content).digest("hex")}`, stat.mode & 0o111], size: stat.size };
+}
+
+/** The running byte total only grows, so checking it after every file (as the walk
+ *  does) and checking the final total reject the same snapshots. */
+function snapshotOf(parts: SnapshotParts): ReportSnapshot {
+  if (parts.sizes.reduce((a, b) => a + b, 0) > 64_000_000) throw new Error("source bytes exceed snapshot limit");
+  return { hash: reportHash(parts.entries), limitations: SNAPSHOT_LIMITATIONS };
+}
+
+function snapshotWithEntries(root: string): { snapshot: ReportSnapshot; parts: SnapshotParts | null } {
   try {
     const base = canonicalReportRoot(root);
     const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
@@ -43,41 +80,82 @@ export function reportSourceSnapshot(root: string): ReportSnapshot {
     const paths = execFileSync("git", ["-C", base, "ls-files", "-z", "--cached", "--others", "--exclude-standard"], { env, timeout: 5_000, maxBuffer: 4_000_000 }).toString("utf8").split("\0").filter(Boolean);
     const sorted = [...new Set(paths)].sort();
     if (sorted.length > 20_000) throw new Error("source file count exceeds snapshot limit");
-    const entries: Array<[string, string | null, number]> = [];
+    const parts: SnapshotParts = { base, entries: [], sizes: [] };
     let bytes = 0;
     for (const path of sorted) {
       if (path.split("/").some(p => p === ".hunch" || p === ".hunch-cache" || p === ".git")) continue;
-      const file = resolve(base, path);
-      const rel = relative(base, file);
-      if (isAbsolute(rel) || rel === ".." || rel.startsWith("../") || rel.startsWith("..\\")) throw new Error("source path escapes repository");
-      let stat;
-      try { stat = lstatSync(file); }
-      catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") { entries.push([path, null, 0]); continue; } throw e; }
-      const parent = relative(base, realpathSync(dirname(file)));
-      if (isAbsolute(parent) || parent === ".." || parent.startsWith("../") || parent.startsWith("..\\")) throw new Error("source parent escapes repository");
-      if (stat.isSymbolicLink()) { entries.push([path, reportHash(readlinkSync(file)), 0o120000]); continue; }
-      if (!stat.isFile()) throw new Error("submodules or non-file sources require separate verification");
-      bytes += stat.size;
-      if (bytes > 64_000_000 || stat.size > 8_000_000) throw new Error("source bytes exceed snapshot limit");
-      const content = readFileSync(file);
-      const after = lstatSync(file);
-      if (stat.mtimeMs !== after.mtimeMs || stat.ctimeMs !== after.ctimeMs || stat.size !== after.size || content.length !== stat.size) throw new Error("source changed during snapshot");
-      entries.push([path, `sha256:${createHash("sha256").update(content).digest("hex")}`, stat.mode & 0o111]);
+      const { entry, size } = snapshotEntry(base, path);
+      bytes += size;
+      if (bytes > 64_000_000) throw new Error("source bytes exceed snapshot limit");
+      parts.entries.push(entry);
+      parts.sizes.push(size);
     }
-    return { hash: reportHash(entries), limitations };
+    return { snapshot: snapshotOf(parts), parts };
   } catch {
-    return { hash: null, limitations: [...limitations, "A complete bounded source snapshot was unavailable; no current-change verification is claimed."] };
+    return { snapshot: { hash: null, limitations: [...SNAPSHOT_LIMITATIONS, SNAPSHOT_UNAVAILABLE] }, parts: null };
+  }
+}
+
+/** File names a memory flush rewrites in the working tree (the grounding docs,
+ *  src/integrations/providers.ts groundingTargets). Everything else it writes is under
+ *  .hunch/, .hunch-cache/ or .git/, which the snapshot excludes. */
+const FLUSH_REWRITTEN_NAMES = new Set(["claude.md", "agents.md", "copilot-instructions.md", "hunch.mdc", "hunch.md"]);
+
+/** `parts` with every entry a flush may have rewritten hashed again, or null where the
+ *  re-hash fails (the caller then hashes fresh). Matching by file name (any directory,
+ *  any case) can only re-hash more paths than were written. */
+function rehashFlushRewrites(parts: SnapshotParts): { parts: SnapshotParts; hash: string | null } | null {
+  try {
+    const next: SnapshotParts = { base: parts.base, entries: [...parts.entries], sizes: [...parts.sizes] };
+    next.entries.forEach(([path], i) => {
+      if (!FLUSH_REWRITTEN_NAMES.has(path.slice(path.lastIndexOf("/") + 1).toLowerCase())) return;
+      const { entry, size } = snapshotEntry(parts.base, path);
+      next.entries[i] = entry;
+      next.sizes[i] = size;
+    });
+    return { parts: next, hash: snapshotOf(next).hash };
+  } catch {
+    return null;
   }
 }
 
 /** The current source of `root` for report readers, as a resolver that also hashes the
  *  sibling worktree a check ran in (its `work_root`). Each tree is hashed at most once. */
 export function currentSource(root: string): (dir?: string) => string | null {
+  return trackedSource(root);
+}
+
+/** A currentSource resolver that can follow a memory flush. `refresh()` makes it answer
+ *  what a fresh currentSource would, when the only tree writes since were a memory
+ *  flush's: the `root` snapshot keeps its path list and has its grounding-doc entries
+ *  hashed again. A `root` snapshot that was unavailable, or whose re-hash fails, is
+ *  dropped and taken fresh on the next read; other trees are always taken fresh. Call
+ *  it after every flush, so each later reader (the next record, the Stop card) sees
+ *  the tree as that flush left it. */
+export interface TrackedSource {
+  (dir?: string): string | null;
+  refresh(): void;
+}
+export function trackedSource(root: string): TrackedSource {
   const seen = new Map<string, string | null>();
-  return (dir = root) => {
-    if (!seen.has(dir)) seen.set(dir, reportSourceSnapshot(dir).hash);
+  let rootParts: SnapshotParts | null = null;
+  const resolver = ((dir = root) => {
+    if (!seen.has(dir)) {
+      const taken = snapshotWithEntries(dir);
+      if (dir === root) rootParts = taken.parts;
+      seen.set(dir, taken.snapshot.hash);
+    }
     return seen.get(dir)!;
+  }) as TrackedSource;
+  resolver.refresh = () => {
+    const rehashed = seen.has(root) && rootParts ? rehashFlushRewrites(rootParts) : null;
+    seen.clear();
+    rootParts = null;
+    if (!rehashed || rehashed.hash === null) return;
+    rootParts = rehashed.parts;
+    seen.set(root, rehashed.hash);
   };
+  return resolver;
 }
 
 /** Evaluate every delivered lesson's DECLARED rule against the files this task

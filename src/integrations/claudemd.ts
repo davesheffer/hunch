@@ -85,6 +85,26 @@ export function renderHunchSection(store: HunchStore, root?: string, existing?: 
 /** Render in an explicit variant, ignoring the env: freshness checks judge a committed
  *  block against a render in the variant it was written in (stamp-driven). */
 export function renderHunchSectionAs(store: HunchStore, root: string | undefined, variant: "lean" | "full"): string {
+  if (!renderMemo || renderMemo.store !== store) return renderSectionFresh(store, root, variant);
+  const key = `${variant}\0${root ?? ""}`;
+  let section = renderMemo.sections.get(key);
+  if (section === undefined) renderMemo.sections.set(key, section = renderSectionFresh(store, root, variant));
+  return section;
+}
+
+/** Set only inside withGroundingRenderMemo: one render per variant for one store. */
+let renderMemo: { store: HunchStore; sections: Map<string, string> } | null = null;
+
+/** Run `fn` with renders of `store` memoized per variant and root. For a caller that
+ *  renders several grounding docs in one synchronous pass while nothing a render reads
+ *  (the store's records, policies, the wiki manifest, the switches) changes. */
+export function withGroundingRenderMemo<T>(store: HunchStore, fn: () => T): T {
+  const outer = renderMemo;
+  renderMemo = { store, sections: new Map() };
+  try { return fn(); } finally { renderMemo = outer; }
+}
+
+function renderSectionFresh(store: HunchStore, root: string | undefined, variant: "lean" | "full"): string {
   const lean = variant === "lean";
   const constraints = store.json
     .loadAll("constraints")
@@ -207,6 +227,16 @@ function pushInvariants(lines: string[], constraints: { severity: string; statem
  *  all user-authored content outside the markers. Shared by CLAUDE.md, AGENTS.md,
  *  and .github/copilot-instructions.md so every assistant gets the same grounding. */
 export function upsertSection(file: string, section: string, fallbackTitle: string, opts?: { force?: boolean }): string {
+  const content = planSection(file, section, fallbackTitle, opts);
+  mkdirSync(dirname(file), { recursive: true }); // e.g. .github/ for copilot-instructions
+  // Atomic: this file carries the USER'S prose around the managed block — a torn
+  // write must not be able to truncate it (issue #43).
+  writeFileAtomic(file, content);
+  return file;
+}
+
+/** The content upsertSection writes, without writing it. */
+export function planSection(file: string, section: string, fallbackTitle: string, opts?: { force?: boolean }): string {
   let content = existsSync(file) ? readFileSync(file, "utf8") : "";
   if (!opts?.force) section = preserveNewerTemplate(content, section);
   const iStart = content.indexOf(START);
@@ -222,16 +252,17 @@ export function upsertSection(file: string, section: string, fallbackTitle: stri
   } else {
     content = `${fallbackTitle}\n\n${section}\n`;
   }
-  mkdirSync(dirname(file), { recursive: true }); // e.g. .github/ for copilot-instructions
-  // Atomic: this file carries the USER'S prose around the managed block — a torn
-  // write must not be able to truncate it (issue #43).
-  writeFileAtomic(file, content);
-  return file;
+  return content;
 }
 
 /** Insert/replace the HUNCH section in CLAUDE.md, preserving everything else. */
 export function updateClaudeMd(root: string, store: HunchStore, opts?: { force?: boolean }): string {
   return upsertSection(join(root, "CLAUDE.md"), renderHunchSection(store, root, readIfExists(join(root, "CLAUDE.md"))), `# ${basename(root)}`, opts);
+}
+
+/** The content updateClaudeMd writes, without writing it. */
+export function planClaudeMd(root: string, store: HunchStore, opts?: { force?: boolean }): string {
+  return planSection(join(root, "CLAUDE.md"), renderHunchSection(store, root, readIfExists(join(root, "CLAUDE.md"))), `# ${basename(root)}`, opts);
 }
 
 /** Cut at the last whitespace at or before `max - 1` chars, so a word is never split. */

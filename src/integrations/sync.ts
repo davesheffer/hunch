@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import type { EntityKind } from "../core/types.js";
 import { readAutoCommitPolicy } from "../core/config.js";
-import { checkedOutBranch, commitAndPushHunch, hunchDirHasChanges, onDefaultBranch, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
+import { checkedOutBranch, commitAndPushHunch, hunchDirHasChanges, lazyMemoryRepoProbe, onDefaultBranch, type FlushGitFacts, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
 import { refreshCommittableGrounding } from "./providers.js";
 import { pinSharedRemote, sharedRemoteFor } from "./sharedRoute.js";
 
@@ -98,8 +98,10 @@ export function flushCapture(
   observe?: GitMemoryObserver,
   /** The kind just written: a memory policy can home kinds differently. */
   kind?: EntityKind,
+  /** Answers the caller already has for this flush (FlushGitFacts). */
+  facts?: FlushGitFacts,
 ): "pushed" | "committed" | "held" | null {
-  return flushStore(store, publicHunchDir, isPrivate, message, remoteOverride, observe, true, kind);
+  return flushStore(store, publicHunchDir, isPrivate, message, remoteOverride, observe, true, kind, facts);
 }
 
 /** Auto-commit a state-contract write (`nuryel_write`, `hunch serve`). A state root is a
@@ -125,6 +127,7 @@ function flushStore(
   observe: GitMemoryObserver | undefined,
   holdOnDefaultBranch: boolean,
   kind?: EntityKind,
+  facts?: FlushGitFacts,
 ): "pushed" | "committed" | "held" | null {
   // Follow the same routing as HunchStore.captureHome: unified ("shared") mode homes
   // EVERY capture in the overlay, so the flush must go there too — one source of truth.
@@ -140,6 +143,8 @@ function flushStore(
     return null;
   }
   if (!store.autoCommit) return null;
+  // One rev-parse answers the commit's layout questions (MemoryRepoProbe), taken on first use.
+  const probe = facts?.probe ?? lazyMemoryRepoProbe(publicHunchDir);
   // A capture commits only where the auto-commit policy allows (by default never onto the
   // default branch: task and capture commits landed on main between the user's own). The
   // record stays on disk; the user's next commit carries it, or the next capture on an
@@ -152,7 +157,7 @@ function flushStore(
   // them into the SAME memory commit — otherwise every capture re-stales the committed
   // counts and the release gate's clean-tree check fails on the next CI index.
   const grounding = refreshCommittableGrounding(dirname(publicHunchDir), store);
-  return commitAndPushHunch(publicHunchDir, message, { push: false, alsoStage: grounding, observe });
+  return commitAndPushHunch(publicHunchDir, message, { push: false, alsoStage: grounding, observe, facts: { ...facts, probe } });
 }
 
 /** What a caller prints for a "held" flush, so a solo user on main is never left
