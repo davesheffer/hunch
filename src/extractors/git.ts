@@ -3462,7 +3462,8 @@ export function commitPatchIds(shas: readonly string[], cwd: string): Map<string
   const valid = exists ? [...exists] : [];
   if (!valid.length) return out;
   let ids: string;
-  const { GIT_DIFF_OPTS: _, ...env } = process.env;
+  const env = { ...process.env };
+  delete env.GIT_DIFF_OPTS; // its -u<n> would override the pinned -U3 and change the patch-id
   try {
     const log = execFileSync("git", ["-c", "core.quotePath=true", "-c", "diff.suppressBlankEmpty=false", "-C", cwd, "log", "--stdin", "--no-walk=unsorted", "--format=%H", "-p", "--no-merges", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers", "--no-color", "--indent-heuristic", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/", "--"],
       { env, input: valid.join("\n") + "\n", maxBuffer: 256 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
