@@ -172,3 +172,18 @@ function cleanupTmp(p: string): void {
     console.warn(`[hunch] temp file left behind (its published target keeps nlink=2 until it is removed): ${p} (${(e as Error).message})`);
   }
 }
+
+/** A rewrite with the same bytes changes nothing anyone reads when the doc is a plain
+ *  file with one link the process owns: the atomic write would only swap the inode.
+ *  A symlink, a hard link, or a foreign owner is rewritten as before (the write
+ *  replaces it with a regular file of this process). */
+export function sameBytesRewriteIsNoop(file: string): boolean {
+  try {
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.nlink !== 1) return false;
+    if (typeof process.getuid === "function" && (stat.uid !== process.getuid() || stat.gid !== process.getgid?.())) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
