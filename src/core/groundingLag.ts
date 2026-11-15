@@ -25,6 +25,7 @@
  * run ahead (missing record). Open findings move both ways (a finding resolved on one
  * branch, a finding recorded on another), so a differing findings count alone is lag.
  */
+import { normalizeEol } from "./eol.js";
 
 const TEMPLATE_RE = /<!-- hunch:template (\d+) -->/;
 
@@ -106,6 +107,9 @@ export type GroundingFreshness =
 /** Classify a committed managed block against the one the graph generates NOW.
  *  Both inputs are block CONTENT (markers stripped, trimmed). */
 export function classifyGroundingBlock(committed: string, generated: string): GroundingFreshness {
+  // EOL-insensitive: a core.autocrlf checkout holds the block in CRLF.
+  committed = normalizeEol(committed);
+  generated = normalizeEol(generated);
   if (committed === generated) return { kind: "fresh" };
   const committedTemplate = groundingTemplate(committed);
   const rendererTemplate = groundingTemplate(generated);
