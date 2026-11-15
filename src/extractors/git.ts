@@ -873,6 +873,11 @@ let afterHoldBackDecisionForTests: (() => void) | null = null;
 export function __setAfterHoldBackDecisionForTests(fn: (() => void) | null): void {
   afterHoldBackDecisionForTests = fn;
 }
+/** Test seam: runs right after the state commit, before a held-back fold. */
+let afterStateCommitForTests: (() => void) | null = null;
+export function __setAfterStateCommitForTests(fn: (() => void) | null): void {
+  afterStateCommitForTests = fn;
+}
 
 export function commitAndPushHunch(hunchDir: string, message: string, opts: HunchCommitOptions): "pushed" | "committed" | null {
   const holdBack = opts && opts.push === false && opts.holdBack && Object.keys(opts.holdBack.entries).length ? opts.holdBack : null;
@@ -1111,6 +1116,8 @@ function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitO
     // One retry after healing a stranded index.lock (issue #53): a lock left by
     // a timeout-killed or crashed git otherwise fails EVERY later flush fast and
     // silently — captures keep reporting success while nothing commits.
+    const parentSha = holdBack && heldBack.length ? headShaWithEnv(hunchDir, env) : "";
+    let stateSha = "";
     for (let attempt = 0; attempt < 2 && !committed; attempt++) {
       const commitStartedAt = Date.now();
       try {
@@ -1124,6 +1131,7 @@ function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitO
           "commit", "--no-gpg-sign", "--only", ...memoryCommitMessageArgs(message, trailers), "--", ...commitPaths,
         ], { stdio: "ignore", env, timeout: commitGitTimeoutMs() });
         committed = true;
+        if (parentSha) stateSha = headShaWithEnv(hunchDir, env);
       } catch (error) {
         // Nothing staged / not a repo stays quiet, as before; only a healed
         // stranded lock earns the single retry.
@@ -1132,28 +1140,59 @@ function commitHunchMemory(hunchDir: string, message: string, opts: HunchCommitO
     }
     if (!committed) return null;
     if (holdBack && heldBack.length) {
+      afterStateCommitForTests?.();
       // `commit --only` re-reads the listed paths' working-tree bytes, so a capture landing
       // after the decision can make HEAD name a held-back record: then commit it too.
       if (headNamesNone(hunchDir, env, heldIds)) holdBack.onResult(heldBack);
       else {
-        let carried = true;
-        for (let index = 0; index < heldBack.length && carried; index += 128) carried = run(["add", "--", ...heldBack.slice(index, index + 128)]);
-        if (carried) {
-          try {
-            execFileSync("git", [
-              "-C", hunchDir,
-              "-c", `core.hooksPath=${hooksDir}`,
-              "-c", "core.autocrlf=false",
-              "-c", "commit.gpgsign=false",
-              "-c", "gc.auto=0",
-              "commit", "--no-gpg-sign", "--only",
-              ...memoryCommitMessageArgs(`${message}\n\n(carries held records the commit above references)`, trailers),
-              "--", ...heldBack,
-            ], { stdio: "ignore", env, timeout: commitGitTimeoutMs() });
-          } catch { carried = false; }
+        // Nothing stays held now, so the grounding docs may count every record (as on the
+        // no-hold path) and ride whichever commit lands the held files.
+        let grounding: string[] = [];
+        if (holdBack.groundingIfNoneHeld) {
+          try { grounding = holdBack.groundingIfNoneHeld(); } catch { /* grounding is best effort */ }
         }
-        if (!carried) console.error(`hunch: held records the state commit in "${hunchDir}" references could not be committed with it; the next flush sweeps them`);
-        holdBack.onResult([]);
+        // Only docs git already tracks can ride: an ignored or vanished doc would make the add
+        // fail and take the held records down with it. Docs never block the held carry.
+        grounding = grounding.filter((file) => run(["ls-files", "--error-unmatch", "--", file]));
+        const carry = [...heldBack, ...grounding];
+        if (foldIntoCommit(hunchDir, env, hooksDir, parentSha, stateSha, carry, message, trailers)) holdBack.onResult([]);
+        else {
+          // The fold could not run (HEAD moved past our commit, it was already on a remote, or a
+          // git step failed): carry them in a follow-up commit, the pre-fold behavior. If the
+          // docs make that fail too, the held records still go alone.
+          const followUp = (paths: string[]): boolean => {
+            let added = true;
+            for (let index = 0; index < paths.length && added; index += 128) added = run(addArgs(paths.slice(index, index + 128)));
+            if (!added) return false;
+            try {
+              execFileSync("git", [
+                "-C", hunchDir,
+                "-c", `core.hooksPath=${hooksDir}`,
+                "-c", "core.autocrlf=false",
+                "-c", "commit.gpgsign=false",
+                "-c", "gc.auto=0",
+                "commit", "--no-gpg-sign", "--only",
+                ...memoryCommitMessageArgs(`${message}\n\n(carries held records the commit above references)`, trailers),
+                "--", ...paths,
+              ], { stdio: "ignore", env, timeout: commitGitTimeoutMs() });
+              return true;
+            } catch { return false; }
+          };
+          // A doc staged outside .hunch that did not land would make every later flush skip
+          // (stagedMemoryPaths refuses foreign staged paths): unstage the docs whenever they
+          // are not committed. Their generated worktree dirt heals on the next refresh.
+          const unstageDocs = (): void => {
+            for (let index = 0; index < grounding.length; index += 128) run(["reset", "-q", "--", ...grounding.slice(index, index + 128)]);
+          };
+          let carried = followUp(carry);
+          if (!carried && grounding.length > 0) {
+            unstageDocs();
+            carried = followUp(heldBack);
+            unstageDocs();
+          }
+          if (!carried) console.error(`hunch: held records the state commit in "${hunchDir}" references could not be committed with it; the next flush sweeps them`);
+          holdBack.onResult([]);
+        }
       }
     }
     if (opts.observe) {
@@ -1239,6 +1278,46 @@ function heldRecordIds(hunchDir: string, path: string): string[] | null {
     if (!Array.isArray(parsed)) return null;
     return parsed.map((entry) => (entry as { id?: unknown } | null)?.id).filter((id): id is string => typeof id === "string" && id !== "");
   } catch { return null; }
+}
+
+/** Fold `paths` (the held-back files and the refreshed grounding docs) into the state
+ *  commit this process just made (`ours`), so HEAD never names a record it lacks and never
+ *  carries stale counts. The commit is rebuilt from a private index and swapped in with a
+ *  compare-and-swap `update-ref`: it applies only while HEAD is still exactly `ours`, a
+ *  one-parent commit on `parentSha` that no remote-tracking ref contains. The user's index is
+ *  pointed at the folded bytes for exactly `paths` BEFORE the swap, so a kill or a refused
+ *  swap leaves staged additions (what the follow-up commits), never a staged deletion.
+ *  Hooks are disabled for every call, as for the state commit. Returns false when any step
+ *  fails or HEAD moved; the caller then carries the paths in a follow-up commit. Never throws. */
+function foldIntoCommit(hunchDir: string, env: NodeJS.ProcessEnv, hooksDir: string, parentSha: string, ours: string, paths: string[], message: string, trailers: string): boolean {
+  const sha = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
+  if (!sha.test(parentSha) || !sha.test(ours)) return false;
+  const g = (args: string[], gitEnv: NodeJS.ProcessEnv): string => execFileSync("git", ["-C", hunchDir, "-c", `core.hooksPath=${hooksDir}`, "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false", "-c", "gc.auto=0", ...args], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: gitEnv, timeout: commitGitTimeoutMs(),
+  }).trim();
+  let scratch = "";
+  try {
+    if (g(["rev-parse", "HEAD"], env) !== ours) return false;
+    const parents = g(["rev-list", "--parents", "-n", "1", ours], env).split(/\s+/);
+    if (parents.length !== 2 || parents[1] !== parentSha) return false;
+    // Never rewrite a commit another process already published (a concurrent push).
+    if (g(["for-each-ref", "--contains", ours, "--format=%(refname)", "refs/remotes"], env) !== "") return false;
+    scratch = mkdtempSync(join(tmpdir(), "hunch-fold-"));
+    const indexEnv = { ...env, GIT_INDEX_FILE: join(scratch, "index") };
+    g(["read-tree", ours], indexEnv);
+    for (let index = 0; index < paths.length; index += 128) g(["add", "--", ...paths.slice(index, index + 128)], indexEnv);
+    const tree = g(["write-tree"], indexEnv);
+    const folded = g(["commit-tree", "--no-gpg-sign", tree, "-p", parentSha, ...memoryCommitMessageArgs(message, trailers)], env);
+    // Index first: exactly `paths`, at the folded commit's bytes; every other entry untouched.
+    for (let index = 0; index < paths.length; index += 128) g(["reset", "-q", folded, "--", ...paths.slice(index, index + 128)], env);
+    // Compare-and-swap: refuses unless HEAD still resolves to `ours`.
+    g(["update-ref", "-m", "hunch: fold held records into the state commit", "HEAD", folded, ours], env);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (scratch) try { rmSync(scratch, { recursive: true, force: true }); } catch { /* temp cleanup is best effort */ }
+  }
 }
 
 /** True only when git proves no HEAD file under hunchDir, and no markdown file anywhere in the

@@ -22,7 +22,9 @@
  * one reference commits everything. A staged manifest.json, an unborn HEAD, or git failing
  * to answer also commits everything. After the commit a `git grep` of HEAD backstops the
  * window between decision and commit: if HEAD names a held-back id (or the grep fails), the
- * held files follow in a second commit. Any doubt is the 1.55.1 sweep-everything behavior,
+ * held files and the refreshed grounding docs are folded into that same commit (a
+ * compare-and-swap rewrite of the unpushed commit; a follow-up commit if HEAD moved, the
+ * commit was published, or a git step failed). Any doubt is the 1.55.1 sweep-everything behavior,
  * and a cross-process lost update on the list only means that behavior.
  * Used by every CLI/MCP path that writes a record.
  */
