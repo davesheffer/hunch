@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { flushCapture } from "../integrations/sync.js";
+import type { FlushGitFacts } from "../extractors/git.js";
 import type { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "./paths.js";
 import { episodeTasks, isEmptyTaskReport, readTaskReport, reportHash, sessionsOverlap, type TaskReport, type TaskSummary } from "./taskReport.js";
@@ -166,9 +167,11 @@ export interface PersistedTaskRecord {
 /** Write (or refresh) the graph record for a finished task. Idempotent on the
  * report hash. A record never changes home once written. Returns null for an
  * open task, an empty report, or when task records are disabled locally. */
-export function persistTaskRecord(root: string, store: HunchStore, taskId: string, options: { flush?: boolean } = {}): PersistedTaskRecord | null {
+export function persistTaskRecord(root: string, store: HunchStore, taskId: string, options: { flush?: boolean; source?: (dir?: string) => string | null } = {}): PersistedTaskRecord | null {
   if (!taskRecordsEnabled(root)) return null;
-  const snapshot = currentSource(root);
+  const snapshot = options.source ?? currentSource(root);
+  // Git answers this record's flush reuses (FlushGitFacts); scoped to this call.
+  const facts: FlushGitFacts = {};
   const own = readTaskReport(root, taskId, snapshot);
   if (own.task.state === "open") return null;
   // The record covers the whole episode: this prompt and the prompts of the
@@ -182,7 +185,7 @@ export function persistTaskRecord(root: string, store: HunchStore, taskId: strin
   // Another session working in the same checkout at the same time leaves the
   // same mtimes: then only commits (attributable by author and time) count.
   const workingTree = !sessionsOverlap(root, reports[0]!.task.session_key, window.from, window.to, reports.map((r) => r.task.task_id));
-  let built = taskRecordFromReports(reports, gitTouchedFiles(root, window.from, window.to, { workingTree }));
+  let built = taskRecordFromReports(reports, gitTouchedFiles(root, window.from, window.to, { workingTree, facts }));
   if (!built) return null;
   let inPrivate = store.hasPrivate ? store.getPrivateRec("tasks", built.id) : undefined;
   let inPublic = store.json.get("tasks", built.id);
@@ -191,7 +194,7 @@ export function persistTaskRecord(root: string, store: HunchStore, taskId: strin
   // episode splits here: this prompt keeps its own record instead of naming
   // private memory in a public one.
   if (inPublic && !inPrivate && taskRecordHome(store, built) === "private" && built.id !== taskId) {
-    built = taskRecordFromReports([own], gitTouchedFiles(root, own.task.started_at, own.task.finished_at, { workingTree }));
+    built = taskRecordFromReports([own], gitTouchedFiles(root, own.task.started_at, own.task.finished_at, { workingTree, facts }));
     if (!built) return null;
     inPrivate = store.hasPrivate ? store.getPrivateRec("tasks", built.id) : undefined;
     inPublic = store.json.get("tasks", built.id);
@@ -204,7 +207,7 @@ export function persistTaskRecord(root: string, store: HunchStore, taskId: strin
   const stored = store.putCapture("tasks", record, home === "private");
   store.reindexTask(stored.id, sourceBefore);
   const flushNow = options.flush ?? taskRecordFlushMode(root) === "each";
-  const flushed = flushNow ? flushCapture(store, hunchPaths(root).hunch, home === "private", `hunch: task ${record.id}`, undefined, undefined, "tasks") : null;
+  const flushed = flushNow ? flushCapture(store, hunchPaths(root).hunch, home === "private", `hunch: task ${record.id}`, undefined, undefined, "tasks", facts) : null;
   // The ranking evaluation follows the corpus: recomputed here, read at delivery. Never blocks a finish.
   refreshRankEval(root, store);
   return { record: stored, home, flushed, changed: true };

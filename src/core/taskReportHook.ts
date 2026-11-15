@@ -248,13 +248,13 @@ export function closeHookTask(root: string, provider: HookProvider, event: Hunch
  * A prompt with no observation at all prints nothing: the empty task row stays
  * in the ledger (hunch task list, the VS Code Contribution view) so "never
  * touched Hunch" remains countable without a five-line notice per prompt. */
-export function stopHookReport(root: string, provider: HookProvider, event: HunchHookInput): { systemMessage: string } | null {
+export function stopHookReport(root: string, provider: HookProvider, event: HunchHookInput, source?: (dir?: string) => string | null): { systemMessage: string } | null {
   if (!reportPresentationEnabled(root)) return null;
   const id = identity(root, provider, event);
   if (!id) return null;
   if (id === "legacy") return { systemMessage: "Hunch hook active. This host version does not provide an exact prompt identifier, so contribution for this response is unverified. Explicit task reports remain available with hunch report." };
   try {
-    const report = readTaskReport(root, id, currentSource(root));
+    const report = readTaskReport(root, id, source ?? currentSource(root));
     if (isEmptyTaskReport(report)) return null;
     // The HTML evidence view is a rendering of the local ledger, generated on
     // demand (`hunch report <id> --html`, or a click in the VS Code view). The
