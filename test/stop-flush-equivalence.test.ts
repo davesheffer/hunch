@@ -14,7 +14,7 @@ import { join } from "node:path";
 import {
   checkedOutBranch, codeHeadOf, commitAndPushHunch, lazyMemoryRepoProbe, onDefaultBranch, probeMemoryRepo,
 } from "../src/extractors/git.js";
-import { publicCommitHold } from "../src/integrations/sync.js";
+import { flushCapture, publicCommitHold } from "../src/integrations/sync.js";
 import { configListingFromZ, HUNCH_COMMIT_SUBJECT, HUNCH_MANAGED_FILES, userEmailFromZ, USER_CONFIG_LISTING } from "../src/core/taskTouched.js";
 import { refreshCommittableGrounding, refreshExistingGrounding, writeAgentsMd, writeCopilotInstructions } from "../src/integrations/providers.js";
 import { updateClaudeMd } from "../src/integrations/claudemd.js";
@@ -162,6 +162,33 @@ test("corrupt or odd ref states: checkedOutBranch, onDefaultBranch and publicCom
     check("unterminated packed-refs");
     writeFileSync(packed, text.slice(0, text.length - 12));
     check("truncated packed-refs");
+  } finally { cleanup(); }
+});
+
+test("a misspelled auto_commit key holds the flush given facts, as main's reader says; the real spelling commits", () => {
+  const { root, hunch, cleanup } = repo("hunch-flush-typo-");
+  const commits = (): number => Number(run(root, "rev-list", "--count", "HEAD"));
+  try {
+    writeFileSync(join(hunch, "config.json"), JSON.stringify({ autoCommit: { branches: ["work"] } }));
+    run(root, "add", "-A");
+    run(root, "commit", "-qm", "chore: config");
+    run(root, "switch", "-q", "-c", "work");
+    const flush = (id: string): ReturnType<typeof flushCapture> => {
+      const store = new HunchStore(hunchPaths(root));
+      try {
+        store.json.ensureDirs();
+        store.json.put("decisions", decision(id, `choice ${id}`));
+        return flushCapture(store, hunch, false, `hunch: capture ${id}`, undefined, undefined, undefined, { probe: lazyMemoryRepoProbe(hunch) });
+      } finally { store.close(); }
+    };
+    const before = commits();
+    assert.match(publicCommitHold(hunch) ?? "", /has a key "autoCommit"; the team setting is spelled "auto_commit"/);
+    assert.equal(flush("dec_typo"), "held", "the invalid policy holds the Stop flush");
+    assert.equal(commits(), before, "no memory commit while the key is misspelled");
+    writeFileSync(join(hunch, "config.json"), JSON.stringify({ auto_commit: { branches: ["work"] } }));
+    assert.equal(publicCommitHold(hunch), null);
+    assert.equal(flush("dec_fixed"), "committed", "the real spelling lists work, so the flush commits");
+    assert.equal(commits(), before + 1);
   } finally { cleanup(); }
 });
 

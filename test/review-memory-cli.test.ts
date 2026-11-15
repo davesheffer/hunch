@@ -18,7 +18,7 @@ test("CLI preview is read-only; apply routes a sourced rule and refuses overwrit
     execFileSync("git", ["init", root], { stdio: "ignore" });
     execFileSync("git", ["-C", root, "remote", "add", "origin", "https://github.com/acme/app.git"]);
     mkdirSync(join(root, ".hunch/constraints"), { recursive: true });
-    writeFileSync(join(root, ".hunch/config.json"), JSON.stringify({ autoCommit: false }));
+    writeFileSync(join(root, ".hunch/local.json"), JSON.stringify({ autoCommit: false }));
     mkdirSync(join(root, "src"));
     writeFileSync(join(root, "src/auth.ts"), "export const auth = true;\n");
     writeFileSync(join(root, "reviews.json"), JSON.stringify([{ id: 1, path: "src/auth.ts", body: "Handle missing tenant.",

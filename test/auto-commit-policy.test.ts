@@ -211,3 +211,62 @@ test("the post-commit `hunch sync` on an unlisted branch makes no commit and lea
   assert.match(sync(), /not auto-committed: branch "feat\/x" is not listed in auto_commit\.branches/, "a manual sync says why");
   assert.equal(commits(), 3);
 });
+
+test("a misspelled top-level auto_commit key fails closed and names the key", t => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "hunch-autocommit-typo-")));
+  t.after(() => cleanupDir(dir));
+  for (const key of ["autoCommit", "auto-commit", "AUTO_COMMIT", "autocommit", "auto_commits"]) {
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ [key]: { branches: ["hunch/ledger"] } }));
+    const policy = readAutoCommitPolicy(dir);
+    assert.equal(policy.kind, "invalid", `${key} is not read as absent`);
+    if (policy.kind === "invalid") {
+      assert.match(policy.problem, new RegExp(`key "${key}"; the team setting is spelled "auto_commit"`));
+      assert.equal(policy.problem.includes('"autoCommit" on/off belongs in .hunch/local.json'), key !== "auto_commits", "the local.json hint only for the autoCommit spelling");
+    }
+  }
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ auto_commit: false, autoCommit: true }));
+  assert.deepEqual(readAutoCommitPolicy(dir), { kind: "off" }, "the real key wins when both are present");
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ autoCommitDefaultBranch: true }));
+  assert.deepEqual(readAutoCommitPolicy(dir), { kind: "default" }, "a longer key is not a near miss");
+});
+
+test("retire-constraint --reason under a non-default hold says the policy held it, not the default branch; doctor shows the policy", t => {
+  isolateEnv(t);
+  const { root, commits } = repo(t, { auto_commit: false });
+  const seed = new HunchStore(hunchPaths(root));
+  try {
+    seed.json.ensureDirs();
+    seed.json.put("constraints", mkConstraint({ id: "con_old", statement: "rule old", scope: ["src/**"] }));
+    seed.json.put("constraints", mkConstraint({ id: "con_two", statement: "rule two", scope: ["src/**"] }));
+  } finally { seed.close(); }
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "seed");
+  git(root, "checkout", "-q", "-b", "feat/x");
+  const env: NodeJS.ProcessEnv = { ...gitEnv, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic" };
+  const run = (...args: string[]) => spawnSync(process.execPath, ["--import", tsxLoaderUrl(), cli, ...args], { cwd: root, env, encoding: "utf8" });
+
+  const retire = run("retire-constraint", "con_old", "--reason", "superseded by the ledger");
+  assert.equal(retire.status, 0, retire.stderr);
+  assert.equal(commits(), 2, "auto_commit false holds the retire commit");
+  assert.match(retire.stderr, /"auto_commit": false/, "the hold's real reason is printed");
+  assert.match(retire.stdout, /--reason is not recorded anywhere: the auto-commit policy held the commit/);
+  assert.doesNotMatch(retire.stdout + retire.stderr, /default branch/, "feat/x is not the default branch");
+
+  const remove = run("remove", "con_two", "--reason", "gone");
+  assert.equal(remove.status, 0, remove.stderr);
+  assert.equal(commits(), 2, "the edit-family move is held too");
+  assert.match(remove.stdout, /--reason is not recorded anywhere: the auto-commit policy held the commit/);
+  assert.doesNotMatch(remove.stdout + remove.stderr, /default branch/);
+
+  const doctor = run("doctor");
+  assert.equal(doctor.status, 0, "the policy line never fails doctor");
+  assert.match(doctor.stdout, /auto-commit: public memory is never auto-committed \(\.hunch\/config\.json "auto_commit": false\)/);
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify(LEDGER));
+  assert.match(run("doctor").stdout, /auto-commit: public memory commits only on hunch\/ledger \(\.hunch\/config\.json auto_commit\.branches\)/);
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ autoCommit: false }));
+  const invalid = run("doctor");
+  assert.equal(invalid.status, 0, "an invalid policy warns; it fails closed, so doctor does not fail");
+  assert.match(invalid.stdout, /auto-commit: ⚠ \.hunch\/config\.json has a key "autoCommit"; .* — public memory is never auto-committed until it is fixed/);
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "advisory" }));
+  assert.doesNotMatch(run("doctor").stdout, /auto-commit:/, "silent at the default policy");
+});

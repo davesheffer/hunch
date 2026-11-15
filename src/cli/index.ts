@@ -106,7 +106,7 @@ import { discoverProjectDna, evaluateProjectDnaMatch, type ProjectDnaArtifact } 
 import { diffProjectDna } from "../core/projectDnaDelta.js";
 import { projectDnaDeliverySupplement } from "../core/projectDnaDelivery.js";
 import { HOOK_SWITCH_ENV, HOOK_SWITCH_NAMES, hookSwitch, ignoredHookSwitchValues, hookConfigProblems, parseHookSwitch, type HookSwitchName } from "../core/hookSwitches.js";
-import { readConfig, writeConfig, writeHookSwitchConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, memoryPolicyProblem, memoryConfigTextProblem, type HunchConfig } from "../core/config.js";
+import { readConfig, readAutoCommitPolicy, writeConfig, writeHookSwitchConfig, parseConfigText, FIRMNESS_LEVELS, isFirmness, type Firmness, workspacesConfig, memoryPolicy, memoryPolicyProblem, memoryConfigTextProblem, type HunchConfig } from "../core/config.js";
 import { readRepoProfile, resolveRepoProfile, removeRepoProfile, repoIdForgetConflict, repoProfileKey, repoIdOf, ensureRepoId, writeRepoProfileOrWarn, repoProfileFile } from "../core/repoProfile.js";
 import { sameCanonical } from "../core/stateCanonical.js";
 import { outwardLinks, unlinkHint } from "../core/worktreeHazards.js";
@@ -428,6 +428,11 @@ function pumpMemoryHome(store: HunchStore, root: string, home: MemoryHome, messa
   if (flush === "held") noteHeld(hunchPaths(root).hunch);
   return flush;
 }
+
+/** `--reason` lives only in the commit body, so a held flush loses it. The hold's actual
+ *  reason (default branch, `auto_commit` false, unlisted branch, unreadable setting) is
+ *  printed by noteHeld; this line must not restate a different one. */
+const REASON_HELD_WARNING = "  ⚠ --reason is not recorded anywhere: the auto-commit policy held the commit (the \"not auto-committed\" note says why), so no commit message captured it.";
 
 const notCommitted = (home: MemoryHome): string => `saved, but not committed: git was busy, or other staged work or a stray file blocked the auto-commit. Check git status${home === "private" ? " in the memory overlay repo" : ""}, then commit it yourself. A later memory change tries again.`;
 
@@ -5286,7 +5291,7 @@ program
     if (opts.reason && !willCommit) {
       console.log("  ⚠ --reason is not recorded anywhere: auto-commit is off, so no commit message captured it.");
     } else if (opts.reason && flush === "held") {
-      console.log("  ⚠ --reason is not recorded anywhere: the commit was held on the default branch, so no commit message captured it.");
+      console.log(REASON_HELD_WARNING);
     }
     store.close();
   });
@@ -5333,7 +5338,7 @@ function runMemoryMove(
     console.log(`✓ ${id} ${verb === "edit" ? "edited" : verb === "link" ? "relinked" : verb === "remove" ? "removed (retired, not deleted)" : "restored"}.`);
     if (uncommitted) console.log(`  ⚠ ${notCommitted(home)}`);
     if (opts.reason && !willCommit) console.log("  ⚠ --reason is not recorded anywhere: auto-commit is off, so no commit message captured it.");
-    else if (opts.reason && flush === "held") console.log("  ⚠ --reason is not recorded anywhere: the commit was held on the default branch, so no commit message captured it.");
+    else if (opts.reason && flush === "held") console.log(REASON_HELD_WARNING);
   } finally {
     store.close();
   }
@@ -7454,6 +7459,12 @@ program
         process.exitCode = 1;
       }
     }
+    // The team auto-commit policy (sync.ts publicCommitHold): silent at the default; a bad
+    // value warns rather than fails, since it fails closed (holds every public commit).
+    const autoCommitPolicy = readAutoCommitPolicy(hunchPaths(root).hunch);
+    if (autoCommitPolicy.kind === "invalid") console.log(`auto-commit: ⚠ ${autoCommitPolicy.problem} — public memory is never auto-committed until it is fixed`);
+    else if (autoCommitPolicy.kind === "off") console.log("auto-commit: public memory is never auto-committed (.hunch/config.json \"auto_commit\": false)");
+    else if (autoCommitPolicy.kind === "branches") console.log(`auto-commit: public memory commits only on ${autoCommitPolicy.branches.length ? autoCommitPolicy.branches.join(", ") : "(no branch)"} (.hunch/config.json auto_commit.branches)`);
     if (typeof rawPolicy?.min_version === "string" && isNewerVersion(rawPolicy.min_version, HUNCH_VERSION)) {
       console.log(`memory policy: ⛔ requires Hunch ${rawPolicy.min_version} or newer (this is ${HUNCH_VERSION}) — upgrade Hunch`);
       process.exitCode = 1;
