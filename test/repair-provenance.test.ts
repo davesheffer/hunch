@@ -150,7 +150,10 @@ test("repair-provenance --range --apply repairs the commit and evidence, commits
     const short = git(f.root, "rev-parse", "--short", f.newRef);
     const d = readDecision(f.decisionFile);
     assert.equal(d.commit, short);
-    assert.deepEqual(d.provenance.evidence, [`commit:${short}`]);
+    // The repaired record carries the NEW commit's patch-id, so a later rebase + gc of it stays repairable.
+    const newPatchId = commitPatchIds([short], f.root).get(short);
+    assert.ok(newPatchId);
+    assert.deepEqual(d.provenance.evidence, [`commit:${short}`, `patch-id:${newPatchId}`]);
     assert.equal(lastSubject(f.root), `hunch: repair 1 commit reference(s) after squash-merge (${f.oldRef}..${f.newRef})`);
     assert.deepEqual(readQueue(f.root), []);
   } finally { f.cleanup(); }
@@ -1151,4 +1154,83 @@ test("a same-patch-id cherry-pick wins over the release commit that merely cover
     assert.ok(run.stdout.includes("same patch-id: identical change"), run.stdout);
     assert.ok(commitPatchIds([orphan, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"], repo.root).has(orphan), "an unresolvable sha does not cost the orphan its patch-id");
   } finally { repo.cleanup(); }
+});
+
+/** A feature commit rebased onto main (a merge queue does this), its branch deleted
+ *  and gc'd: the cited commit object is gone. Two candidates cover the decision's
+ *  files, so only the patch-id recorded at capture can pick the right one. */
+function rebasedAndCollectedFixture(recordPatchId: boolean, overridePatchId?: string): { root: string; base: string; rebased: string; gone: string; cleanup: () => void } {
+  const root = freshRepo("hunch-repair-gc-");
+  try {
+    const commit: CommitFn = (message, files) => {
+      for (const [rel, body] of Object.entries(files)) {
+        mkdirSync(dirname(join(root, rel)), { recursive: true });
+        writeFileSync(join(root, rel), body);
+      }
+      git(root, "add", "-A");
+      git(root, "commit", "-qm", message);
+      return git(root, "rev-parse", "HEAD");
+    };
+    const base = commit("base", { "src/a.ts": "export const a = 1;\n", "CHANGELOG.md": "# Changelog\n" });
+    git(root, "checkout", "-q", "-b", "feature");
+    const gone = commit("feat: a = 2", { "src/a.ts": "export const a = 2;\n" });
+    const patchId = commitPatchIds([gone], root).get(gone)!;
+    assert.ok(patchId, "control: the feature commit has a patch-id before it is collected");
+    git(root, "checkout", "-q", "main");
+    commit("docs", { "docs/x.md": "# x\n" });
+    git(root, "cherry-pick", gone);
+    const rebased = git(root, "rev-parse", "HEAD");
+    commit("release", { "CHANGELOG.md": "# Changelog\n## 1.1\n" });
+    git(root, "branch", "-q", "-D", "feature");
+    git(root, "reflog", "expire", "--expire=now", "--all");
+    git(root, "gc", "-q", "--prune=now");
+    const d = fullDecision("dec_gc", gone, "src/a.ts");
+    if (recordPatchId) d.provenance.evidence.push(`patch-id:${overridePatchId ?? patchId}`);
+    storeDecisions(root, [d]);
+    return { root, base, rebased, gone, cleanup: () => cleanupDir(root) };
+  } catch (error) {
+    cleanupDir(root);
+    throw error;
+  }
+}
+
+test("a rebased-then-gc'd commit is repaired by the patch-id recorded at capture", () => {
+  const f = rebasedAndCollectedFixture(true);
+  try {
+    assert.equal(commitRepairStatus(f.gone, "HEAD", f.root), "missing", "control: the original commit object is gone from a complete clone");
+    const run = runCli(f.root, "repair-provenance", "--range", `${f.base}..HEAD`);
+    assert.equal(run.status, 0, run.stderr);
+    const queued = readActivePendingRepairs(f.root);
+    assert.equal(queued.length, 1, run.stdout);
+    assert.equal(queued[0]!.to, git(f.root, "rev-parse", "--short", f.rebased));
+    assert.ok(run.stdout.includes("same patch-id: identical change"), run.stdout);
+  } finally { f.cleanup(); }
+});
+
+test("without a recorded patch-id a gc'd commit is never guessed at", () => {
+  const f = rebasedAndCollectedFixture(false);
+  try {
+    const run = runCli(f.root, "repair-provenance", "--range", `${f.base}..HEAD`);
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(readActivePendingRepairs(f.root), []);
+  } finally { f.cleanup(); }
+});
+
+test("a shallow clone reports an absent commit as unresolvable, not missing", () => {
+  const f = rebasedAndCollectedFixture(true);
+  const shallow = mkdtempSync(join(tmpdir(), "hunch-repair-shallow-"));
+  try {
+    git(shallow, "clone", "-q", "--depth", "1", `file://${f.root.split("\\").join("/")}`, "c");
+    const clone = join(shallow, "c");
+    assert.equal(commitRepairStatus(f.base, "HEAD", clone), "unresolvable");
+  } finally { cleanupDir(shallow); f.cleanup(); }
+});
+
+test("a gc'd commit whose recorded patch-id matches nothing is never file-guessed, even with one superset candidate", () => {
+  const f = rebasedAndCollectedFixture(true, "f".repeat(40));
+  try {
+    const run = runCli(f.root, "repair-provenance", "--range", `${f.base}..HEAD`);
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(readActivePendingRepairs(f.root), [], run.stdout);
+  } finally { f.cleanup(); }
 });

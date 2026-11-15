@@ -8,7 +8,8 @@
  * and `proposed` until confirmed — advisory and cheap to discard.
  */
 import type { HunchStore } from "../store/hunchStore.js";
-import { commitMeta, commitDiff, headSha, currentBranch } from "../extractors/git.js";
+import { commitMeta, commitDiff, headSha, currentBranch, commitPatchIds, isCompleteRepo } from "../extractors/git.js";
+import { PATCH_ID_PREFIX } from "../core/commitrepair.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
 import { selectProvider, selectEnsemble, selectVerifier, verifyDecisionSafe, DeterministicProvider, UnusableOutputError, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
 import { decisionId, bugId, constraintId } from "../core/ids.js";
@@ -197,6 +198,15 @@ export async function syncCommit(
   // feature-x?" answerable without fragmenting memory per branch). Empty in detached HEAD.
   const branch = currentBranch(root);
   const branchTag = branch ? [`branch:${branch}`] : [];
+  // Record the commit's `git patch-id --stable` at capture time. A rebase or
+  // merge queue rewrites the SHA but keeps the patch-id, and once the original
+  // commit object is gone (branch deleted + gc, or a fresh CI clone that never
+  // fetched it) the patch-id can no longer be recomputed — so repair-provenance
+  // would lose its strong match signal and fall back to file overlap. Rides in
+  // evidence like `commit:` (no schema change, con_947c578b2c).
+  // A shallow clone diffs a boundary commit against the empty tree: wrong id, so record none.
+  const patchId = isCompleteRepo(root) ? commitPatchIds([meta.sha], root).get(meta.sha) : undefined;
+  const patchTag = patchId ? [`${PATCH_ID_PREFIX}${patchId}`] : [];
 
   const components = store.json.loadAll("components");
   const relatedComponents = components
@@ -253,7 +263,7 @@ export async function syncCommit(
     provenance: {
       source: draft.source,
       confidence: draft.confidence,
-      evidence: [`commit:${meta.shortSha}`, synthEvidence, ...branchTag, ...substantiveFiles.slice(0, 8)],
+      evidence: [`commit:${meta.shortSha}`, synthEvidence, ...branchTag, ...substantiveFiles.slice(0, 8), ...patchTag],
       last_verified: new Date().toISOString(), // when the Hunch last re-derived this
     },
     date: meta.date, // the commit date

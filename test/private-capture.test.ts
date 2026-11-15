@@ -10,6 +10,8 @@ import { hunchPaths } from "../src/core/paths.js";
 import type { Bug, Decision } from "../src/core/types.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { captureTestRun, recordFailure, syncCommit } from "../src/synthesis/synthesize.js";
+import { commitPatchIds } from "../src/extractors/git.js";
+import { recordedPatchId } from "../src/core/commitrepair.js";
 
 process.env.HUNCH_SYNTH_PROVIDER = "deterministic";
 
@@ -142,5 +144,26 @@ test("private sync preserves a human-confirmed overlay decision even under --for
     assert.equal(result.status, "skipped");
     assert.match(result.reason ?? "", /human-confirmed/i);
     assert.equal(store.getPrivateRec("decisions", privateDecision.id)?.title, privateDecision.title);
+  } finally { cleanup(); }
+});
+
+test("sync records the commit's patch-id in evidence so provenance survives a rebase + gc", async () => {
+  const { root, store, cleanup } = privateStore();
+  try {
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: root, stdio: "ignore" });
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "Test");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "pricing.ts"), "export const vat = (n: number) => n * 1.17;\n");
+    git("add", "src/pricing.ts");
+    git("commit", "-qm", "feat: add vat pricing helper");
+    const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+    const expected = commitPatchIds([sha], root).get(sha);
+    assert.ok(expected, "control: the commit has a patch-id");
+    const result = await syncCommit(store, root, sha, { private: true, force: true });
+    assert.equal(result.status, "written", result.reason);
+    const saved = store.getPrivateRec("decisions", decisionId(sha));
+    assert.ok(saved, "decision captured");
+    assert.equal(recordedPatchId(saved), expected);
   } finally { cleanup(); }
 });
