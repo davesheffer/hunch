@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { TextDecoder } from "node:util";
 import { MAX_REPO_SOURCE_FILE_BYTES, createRepoFileBufferReader } from "../core/safeRepoFile.js";
 import { compareCodeUnits } from "../core/canonicalOrder.js";
+import { HOOK_LAUNCHER_FILE } from "../core/paths.js";
 import { foreignRepoEnv, gitNullDevice } from "./git.js";
 import { languageFor } from "./languages.js";
 
@@ -145,7 +146,8 @@ function isSafeRelativePath(path: string): boolean {
 }
 
 function isSkippedPath(path: string): boolean {
-  return path.split("/").some((segment) => SKIP_DIRS.has(segment));
+  // Hunch's generated agent-hook launcher is wiring, not user code (only that exact file).
+  return path === HOOK_LAUNCHER_FILE || path.split("/").some((segment) => SKIP_DIRS.has(segment));
 }
 
 export function isIndexedCodePath(path: string): boolean {
@@ -559,7 +561,7 @@ function walkedInventory(root: string, kind: "checkout" | "working"): RepoSource
       if (SKIP_DIRS.has(entry.name)) continue;
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) walk(join(dir, entry.name), path);
-      else if (languageFor(path)) paths.push(path);
+      else if (languageFor(path) && path !== HOOK_LAUNCHER_FILE) paths.push(path);
     }
   };
   walk(root);

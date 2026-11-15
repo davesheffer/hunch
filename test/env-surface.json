@@ -890,5 +890,45 @@
         "title": "globalModuleDirs reads npm_config_global_prefix, then the prefix next to node"
       }
     ]
+  },
+  "npm_config_cache": {
+    "class": "platform",
+    "purpose": "npm cache directory; the generated agent-hook launcher (.claude/hunch-hook-launch.cjs) looks in its _npx cache for the pinned Hunch before falling back to npx",
+    "tests": [
+      {
+        "file": "test/hook-launcher.test.ts",
+        "title": "hook launcher: runs the npx-cached CLI of exactly the pinned version in-process with stdin and exit code (npm_config_cache)"
+      }
+    ]
+  },
+  "npm_config_prefix": {
+    "class": "platform",
+    "purpose": "npm global prefix; the generated agent-hook launcher looks there for the pinned Hunch before falling back to npx",
+    "tests": [
+      {
+        "file": "test/hook-launcher.test.ts",
+        "title": "hook launcher: finds the pinned CLI under the global prefix (npm_config_prefix), and prefers the npx cache over it"
+      }
+    ]
+  },
+  "HUNCH_HOOK_NPX_CLI": {
+    "class": "hunch-config",
+    "purpose": "Path of an npx-cli.js the agent-hook bootstrap and launcher run for their pinned npx fallback instead of npm's own next to node",
+    "tests": [
+      {
+        "file": "test/hook-launcher.test.ts",
+        "title": "hook launcher: nothing installed falls back to npx; a CLI that fails to load falls back too"
+      }
+    ]
+  },
+  "CLAUDE_PROJECT_DIR": {
+    "class": "platform",
+    "purpose": "Project root Claude Code sets for hook commands; the agent-hook bootstrap runs .claude/hunch-hook-launch.cjs from there, or the pinned npx when unset",
+    "tests": [
+      {
+        "file": "test/hook-launcher.test.ts",
+        "title": "the bootstrap hook command runs the launcher or the pinned npx identically in every available shell (CLAUDE_PROJECT_DIR)"
+      }
+    ]
   }
 }

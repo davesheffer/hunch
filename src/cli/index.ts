@@ -89,6 +89,7 @@ import { HOOK_REMINDER } from "../core/hookText.js";
 import { classifyGroundingBlock, groundingVariant, describeGroundingFreshness } from "../core/groundingLag.js";
 import { mergeGroundingFile } from "../core/groundingMerge.js";
 import { writeMcpJson, writeSlashCommands, installClaudeHooks } from "../integrations/scaffold.js";
+import { claudeAgentHookCommand } from "../integrations/hookLauncher.js";
 import { scaffoldProviders, detectAssistants, PROVIDER_ASSISTANTS, regenerateGrounding, refreshExistingGrounding, refreshCommittableGrounding, GROUNDING_DOC_PATHS } from "../integrations/providers.js";
 import { healClaudeConfigCaseSplit } from "../integrations/claudeConfig.js";
 import { formatContext, formatSearchHit, formatStructure } from "../core/format.js";
@@ -660,7 +661,11 @@ program
     // Claude's native hooks run alongside provider-specific hooks below. Every
     // adapter reads firmness at run time, so changing it needs no config rewrite.
     if (opts.agentHooks !== false) {
-      const a = installClaudeHooks(root, `${inv.agentHookShell} hook`);
+      // A published install writes the self-contained bootstrap hook (hookLauncher.ts): the
+      // committed .claude/hunch-hook-launch.cjs when present and ours, else the same pinned npx.
+      // Its lines (commit the launcher, or why it was kept) show in the default summary too.
+      const hookCmd = claudeAgentHookCommand(root, inv, (text) => lines.push({ text, warn: true }));
+      const a = installClaudeHooks(root, hookCmd);
       say(`  ✓ Claude Code agent hooks ${a.action} (firmness: ${firmness} — change with \`hunch firmness <level>\`)`);
     }
 

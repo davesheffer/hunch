@@ -5,6 +5,10 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 
 export const HUNCH_DIR = ".hunch";
 
+/** Repo-relative path of the committed Claude Code hook launcher (src/integrations/hookLauncher.ts);
+ *  here so the indexer can skip it without importing integrations. */
+export const HOOK_LAUNCHER_FILE = ".claude/hunch-hook-launch.cjs";
+
 /** Convert a user- or agent-supplied path/target to forward-slash form. Hunch
  *  stores every path with "/" (git emits it on every OS), so a Windows-style
  *  backslash path would otherwise never match the stored form. Harmless on

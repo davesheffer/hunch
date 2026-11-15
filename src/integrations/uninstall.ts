@@ -12,7 +12,7 @@
  *
  * `.hunch/` holds the engineering memory, so it stays unless `--purge`.
  */
-import { existsSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { parse as parseToml } from "smol-toml";
@@ -22,6 +22,7 @@ import { HUNCH_END, HUNCH_START } from "./claudemd.js";
 import { ciWorkflowYaml } from "./ciAction.js";
 import { assertSafeTopLevelConfigFile, stripManagedGitignore } from "./gitignore.js";
 import { isHunchHookCommand } from "./hookmatch.js";
+import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE } from "./hookLauncher.js";
 import { gitRun, isInside, planHookRemoval, worktreeTops } from "./hooks.js";
 import { ATTR_LINES, targetRepositoryEnv } from "./mergeDriver.js";
 import { antigravityMcpFile, isHunchProviderHook, readJsonObj, TOML_END, TOML_START, windsurfMcpFile } from "./providers.js";
@@ -387,6 +388,21 @@ export function planUninstall(root: string, opts: { purge?: boolean } = {}): Uni
   const commonPointer = common ? join(common, "hunch", "local.json") : "";
   const overlays = new Set([localPointer, commonPointer].filter((f) => f && existsSync(f)).map(pointerOverlay).filter((d): d is string => !!d));
   const inRepoOverlay = existsSync(join(root, ".hunch-private"));
+  // The generated hook launcher is wiring, not memory: remove a marker-owned regular file
+  // with or without --purge.
+  for (const rel of [HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE]) {
+    const launcher = join(root, rel);
+    // A path that is not a readable regular file (a directory, unreadable) is not ours: leave it, as base did.
+    let text: string | null = null;
+    try {
+      if (existsSync(launcher) && lstatSync(launcher).isFile() && !lstatSync(dirname(launcher)).isSymbolicLink()) text = readFileSync(launcher, "utf8");
+    } catch {
+      text = null;
+    }
+    if (text !== null && text.includes(HOOK_LAUNCHER_MARKER)) {
+      p.steps.push({ path: rel, kind: "delete", note: "Hunch's generated agent-hook launcher", run: () => rmSync(launcher, { force: true }) });
+    }
+  }
   if (!purge) {
     if (existsSync(hunchDir)) p.steps.push({ path: ".hunch/", kind: "keep", note: "your engineering memory; `hunch uninstall --purge` deletes it" });
   } else {
