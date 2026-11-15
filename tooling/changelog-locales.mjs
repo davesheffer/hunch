@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "hooks מהירים בלי npx, וקליטות שעוכבו נשארות מחוץ לקומיט",
       "זיהוי שגיאות כתיב במפתח auto_commit ואזהרות מדויקות על קומיט שעוכב",
       "spec-sync אופציונלי, ובחירת ענפים לקומיטים אוטומטיים",
       "hooks קלים יותר כברירת מחדל",
@@ -110,6 +111,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Быстрые хуки без npx, а отложенные записи не попадают в коммит",
       "Распознавание опечаток в ключе auto_commit и точные предупреждения об отложенном коммите",
       "Необязательный spec-sync и выбор веток для автокоммитов",
       "Более лёгкие хуки по умолчанию",
@@ -212,6 +214,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "خطافات أسرع بدون npx، وتبقى الالتقاطات المحجوزة خارج الإيداع",
       "اكتشاف الأخطاء الإملائية في مفتاح auto_commit وتحذيرات دقيقة عند تعليق الإيداع",
       "spec-sync اختياري، واختيار الفروع للإيداعات التلقائية",
       "خطافات أخف افتراضيًا",
@@ -314,6 +317,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Hooks más rápidos sin npx, y las capturas retenidas quedan fuera del commit",
       "Detección de erratas en la clave auto_commit y avisos precisos cuando un commit queda en espera",
       "spec-sync opcional y elección de ramas para los commits automáticos",
       "Hooks más ligeros por defecto",
