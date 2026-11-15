@@ -27,6 +27,7 @@ import { looksLikeCorrection, CORRECTION_NUDGE, stripHostBlocks } from "../core/
 import { roleHasHunchTools } from "../core/subagentrole.js";
 import { HUNCH_VERSION } from "../core/version.js";
 import { registerIntegrationCommands } from "./integrations.js";
+import { recordCliTrace } from "./testTrace.js";
 import { registerTaskReportCommands } from "./taskReport.js";
 import { registerStateCommands } from "./state.js";
 import { DEFAULT_CONFIG as SERVE_DEFAULT_CONFIG_FILE, registerServeCommands } from "./serve.js";
@@ -219,6 +220,8 @@ program.name("hunch").description("Hunch — engineering memory and a determinis
 program.option("--initiator <name>", "bind agent launches to the originating CLI (Claude, Codex, Kimi, or a configured adapter)")
   .option("--cli-config <file>", "explicit local CLI adapter configuration")
   .hook("preAction", (_rootCommand, actionCommand) => {
+    // First, before any later preAction hook can exit (the opt-out gate).
+    recordCliTrace(actionCommand);
     const options = actionCommand.optsWithGlobals();
     // One CLI invocation has one origin. MCP uses request-local AsyncLocalStorage instead.
     if (options.initiator) process.env.HUNCH_INITIATOR = normalizeInitiator(options.initiator);

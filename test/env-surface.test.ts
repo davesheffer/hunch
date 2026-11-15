@@ -10,7 +10,8 @@
  * helper reads (`numEnv("X")`). A read whose name is not a literal (`process.env[key]`,
  * `...rest`) is a dynamic env read and must be listed in DYNAMIC_ALLOW with a reason.
  *
- * Known limits (a source-text heuristic, not a trace; runtime env tracing is the planned fix):
+ * Known limits (a source-text heuristic; CI backs it with tooling/trace-gate.mjs, which fails a
+ * listed variable no traced test run read with a value, #512):
  *  - a test counts when its body names the variable as a string literal anywhere, so a
  *    literal env name inside an unrelated data structure satisfies the gate;
  *  - aliases are found only when assigned directly from process.env in the same file.

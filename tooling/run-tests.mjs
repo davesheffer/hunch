@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** All Git children of the test runner inherit these runtime settings, including
  * commands in temporary repos that do not use the shared fixture helpers. Git
@@ -113,6 +113,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     } else {
       const env = fixtureGitEnv({ HUNCH_SIBLING_WARM: "0", ...process.env, GIT_CONFIG_SYSTEM: config.file, XDG_CONFIG_HOME: configHome });
       for (const key of SHARD_ENV_KEYS) delete env[key];
+      // Execution evidence for tooling/trace-gate.mjs (#512): every Node process of the run,
+      // including spawned CLIs, preloads the trace recorder.
+      if (env.HUNCH_TEST_TRACE) {
+        env.HUNCH_TEST_TRACE = resolve(env.HUNCH_TEST_TRACE);
+        const register = pathToFileURL(join(repoRoot, "tooling", "test-trace-register.mjs")).href;
+        env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(register)}`.trim();
+      }
       const run = spawnSync(process.execPath, [tsx, "--test", ...testArgs], {
         // No detached sibling-warm workers: they would outlive the test and its fixture.
         env, stdio: "inherit", windowsHide: true,
