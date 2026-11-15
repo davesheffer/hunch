@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "בדיקת איות למפתח auto_commit ואזהרות מדויקות על עצירת קומיט",
       "spec-sync אופציונלי, ובחירת ענפים לקומיטים אוטומטיים",
       "hooks קלים יותר כברירת מחדל",
       "דמון hooks אופציונלי ויציב יותר",
@@ -109,6 +110,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Проверка опечаток в auto_commit и точные предупреждения об удержании коммита",
       "Необязательный spec-sync и выбор веток для автокоммитов",
       "Более лёгкие хуки по умолчанию",
       "Более надёжный необязательный демон хуков",
@@ -210,6 +212,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "فحص أخطاء كتابة مفتاح auto_commit وتحذيرات دقيقة عند حجز الإيداع",
       "spec-sync اختياري، واختيار الفروع للإيداعات التلقائية",
       "خطافات أخف افتراضيًا",
       "خادم خطافات اختياري أكثر متانة",
@@ -311,6 +314,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Detección de erratas en auto_commit y avisos precisos de retención",
       "spec-sync opcional y elección de ramas para los commits automáticos",
       "Hooks más ligeros por defecto",
       "Un daemon de hooks opcional más robusto",

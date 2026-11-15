@@ -106,7 +106,18 @@ export function readAutoCommitPolicy(hunchDir: string): AutoCommitPolicy {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { kind: "invalid", problem: ".hunch/config.json is not a JSON object, so auto_commit cannot be read" };
   }
-  return autoCommitPolicyOf((parsed as { auto_commit?: unknown }).auto_commit);
+  const raw = (parsed as { auto_commit?: unknown }).auto_commit;
+  if (raw === undefined) {
+    // A misspelled top-level key (autoCommit, auto-commit, AUTO_COMMIT, auto_commits) would
+    // otherwise read as absent and silently apply the default: fail closed and name the key.
+    // `autoCommit` is also the per-machine on/off switch of .hunch/local.json, so say where it goes.
+    const nearMiss = Object.keys(parsed).find((k) => misspells(k, "auto_commit"));
+    if (nearMiss) {
+      const localHint = spelling(nearMiss) === "autocommit" ? ' (the per-machine "autoCommit" on/off belongs in .hunch/local.json)' : "";
+      return { kind: "invalid", problem: `.hunch/config.json has a key ${JSON.stringify(nearMiss)}; the team setting is spelled "auto_commit"${localHint}` };
+    }
+  }
+  return autoCommitPolicyOf(raw);
 }
 
 export interface MemoryPolicy {
