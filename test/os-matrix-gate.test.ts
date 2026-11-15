@@ -34,6 +34,7 @@ const MAPPING: Record<string, { tests: string[]; via?: RegExp }> = {
   "src/extractors/git.ts": { tests: ["test/fixture-environment.test.ts", "test/git-merge-range.test.ts"] },
   "src/extractors/workspaces.ts": { tests: ["test/workspaces.test.ts", "test/workspace-prune.test.ts"] },
   "src/integrations/claudeConfig.ts": { tests: ["test/claudeconfig.test.ts"] },
+  "src/integrations/hookLauncher.ts": { tests: ["test/hook-launcher.test.ts"] },
   "src/integrations/hooks.ts": { tests: ["test/init-shared-autocommit.test.ts", "test/workspace-ledger.test.ts"] },
   "src/integrations/providers.ts": { tests: ["test/providers.test.ts"] },
   "src/integrations/registry.ts": { tests: ["test/registry.test.ts"] },

@@ -16,6 +16,7 @@ import {
   CLAUDE_HOOK_LAUNCHER_COMMAND, HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, claudeAgentHookCommand, claudeHookLauncherCommand, hookBootstrap, launcherPinOf, renderHookLauncher, writeHookLauncher,
 } from "../src/integrations/hookLauncher.js";
 import { publishedMcpInvocation, shellInvocation } from "../src/cli/invocation.js";
+import { cleanupDir } from "./fixtures.js";
 
 const win = process.platform === "win32";
 const NPX_HOOK = `${shellInvocation(publishedMcpInvocation())} hook`;
@@ -23,7 +24,7 @@ type T = { after: (fn: () => void) => void };
 
 function tmp(t: T): string {
   const dir = mkdtempSync(join(tmpdir(), "hunch-launcher-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => cleanupDir(dir));
   return dir;
 }
 

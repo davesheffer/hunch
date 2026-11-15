@@ -31,10 +31,10 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../core/io.js";
+import { HOOK_LAUNCHER_FILE } from "../core/paths.js";
 import { HUNCH_PACKAGE_NAME, HUNCH_VERSION } from "../core/version.js";
 
-/** Repo-relative path of the launcher. */
-export const HOOK_LAUNCHER_FILE = ".claude/hunch-hook-launch.cjs";
+export { HOOK_LAUNCHER_FILE };
 /** Where shape 1 kept it; a marker-owned file there is removed on re-init and uninstall. */
 export const LEGACY_HOOK_LAUNCHER_FILE = ".hunch/hook-launch.cjs";
 

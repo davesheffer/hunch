@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { TextDecoder } from "node:util";
 import { MAX_REPO_SOURCE_FILE_BYTES, createRepoFileBufferReader } from "../core/safeRepoFile.js";
 import { compareCodeUnits } from "../core/canonicalOrder.js";
-import { HOOK_LAUNCHER_FILE } from "../integrations/hookLauncher.js";
+import { HOOK_LAUNCHER_FILE } from "../core/paths.js";
 import { foreignRepoEnv, gitNullDevice } from "./git.js";
 import { languageFor } from "./languages.js";
 
