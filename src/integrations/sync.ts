@@ -9,15 +9,31 @@
  * committed .hunch/config.json (publicCommitHold): absent or true holds only on the default
  * branch (per-machine opt-in there), false never commits, `{ "branches": [...] }` commits
  * only on those exact branches, and an unreadable setting holds (fail closed). Overlay
- * commits and state-contract writes are outside this policy.
+ * commits and state-contract writes are outside this policy: a state write commits on any
+ * branch. It still must not sweep a capture the policy held, so a hold records what it left
+ * behind: every public .hunch file a capture wrote in this process (the capture-write log in
+ * core/io.ts; state writers never enter it) that is still dirty goes on the clone-local held
+ * list (.hunch-cache/held-captures.json, never committed) with the sha256 of its bytes; a
+ * capture batch that also edited a tracked file is never listed. A state write under an
+ * active hold stages exactly as before, and the decision is made under the commit lock from
+ * what git ACTUALLY staged (commitAndPushHunch's holdBack): it leaves out only a held file
+ * still staged as NEW vs HEAD whose bytes still match the recorded hash, and only when no
+ * other staged file names any held record id (a supersede, a link, a change-ledger entry):
+ * one reference commits everything. A staged manifest.json, an unborn HEAD, or git failing
+ * to answer also commits everything. After the commit a `git grep` of HEAD backstops the
+ * window between decision and commit: if HEAD names a held-back id (or the grep fails), the
+ * held files follow in a second commit. Any doubt is the 1.55.1 sweep-everything behavior,
+ * and a cross-process lost update on the list only means that behavior.
  * Used by every CLI/MCP path that writes a record.
  */
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import type { EntityKind } from "../core/types.js";
 import { readAutoCommitPolicy } from "../core/config.js";
-import { checkedOutBranch, commitAndPushHunch, hunchDirHasChanges, lazyMemoryRepoProbe, onDefaultBranch, type FlushGitFacts, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
+import { checkedOutBranch, commitAndPushHunch, hunchDirChangedPaths, hunchDirHasChanges, lazyMemoryRepoProbe, onDefaultBranch, type FlushGitFacts, type HunchRemoteContract, type GitMemoryObserver } from "../extractors/git.js";
+import { takeCaptureWrites, writeFileAtomic } from "../core/io.js";
 import { refreshCommittableGrounding } from "./providers.js";
 import { pinSharedRemote, sharedRemoteFor } from "./sharedRoute.js";
 
@@ -47,6 +63,8 @@ export function flushMemoryHome(
   // Same hold as flushCapture: the public commit stages all of .hunch/, so it would
   // otherwise sweep a capture that was just reported as held onto a branch the policy holds.
   if (holdsOnDefaultBranch(publicHunchDir)) return heldOrNothing(publicHunchDir);
+  // Not held: whatever captures wrote is swept into this commit, so nothing is left to record.
+  takeCaptureWrites(publicHunchDir);
   const grounding = refreshCommittableGrounding(dirname(publicHunchDir), store);
   return commitAndPushHunch(publicHunchDir, message, { push: false, alsoStage: grounding });
 }
@@ -106,8 +124,14 @@ export function flushCapture(
 
 /** Auto-commit a state-contract write (`nuryel_write`, `hunch serve`). A state root is a
  *  dedicated data repository whose writes commit on whatever branch it serves, so the
- *  capture auto-commit policy (default-branch hold, `auto_commit`) never applies;
- *  outcomes as flushCapture otherwise. */
+ *  capture auto-commit policy (default-branch hold, `auto_commit`) never decides WHETHER it
+ *  commits; outcomes as flushCapture otherwise. It decides only what stays out: a public
+ *  write under an active hold hands the held list to commitAndPushHunch, which under the
+ *  commit lock leaves out only still-new, hash-matching held files that no committed file
+ *  names (see the header), commits everything else, and rewrites the list to what it left
+ *  out. The grounding refresh runs only when nothing ends up held back (held records must
+ *  not be counted in committed docs, as on the hold path). No held list, no active hold, or a private home:
+ *  exactly flushStore. */
 export function flushStateWrite(
   store: HunchStore,
   publicHunchDir: string,
@@ -115,7 +139,80 @@ export function flushStateWrite(
   message: string,
   remoteOverride?: HunchRemoteContract,
 ): "pushed" | "committed" | null {
-  return flushStore(store, publicHunchDir, isPrivate, message, remoteOverride, undefined, false) as "pushed" | "committed" | null;
+  const base = () => flushStore(store, publicHunchDir, isPrivate, message, remoteOverride, undefined, false) as "pushed" | "committed" | null;
+  if (store.captureHome(isPrivate, null) !== "public" || !store.autoCommit) return base();
+  const held = readHeldCaptures(publicHunchDir);
+  if (Object.keys(held).length === 0) return base();
+  if (publicCommitHold(publicHunchDir) === null) return base();
+  // Capture writes nobody held are swept into this commit, as base would sweep them.
+  takeCaptureWrites(publicHunchDir);
+  return commitAndPushHunch(publicHunchDir, message, {
+    push: false,
+    holdBack: {
+      entries: held,
+      groundingIfNoneHeld: () => refreshCommittableGrounding(dirname(publicHunchDir), store),
+      onResult: (still) => writeHeldCaptures(publicHunchDir, Object.fromEntries(still.filter((path) => path in held).map((path) => [path, held[path]!]))),
+    },
+  });
+}
+
+/** Clone-local (gitignored, never committed) list of the public .hunch files a capture hold
+ *  left uncommitted: relative path -> sha256 of the held bytes, or "deleted". */
+function heldCapturesFile(publicHunchDir: string): string {
+  return join(dirname(publicHunchDir), ".hunch-cache", "held-captures.json");
+}
+
+/** Tolerant: a missing or unreadable list is empty. */
+function readHeldCaptures(publicHunchDir: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(readFileSync(heldCapturesFile(publicHunchDir), "utf8")) as { version?: unknown; entries?: unknown } | null;
+    const entries = parsed?.entries;
+    if (parsed?.version !== 1 || !entries || typeof entries !== "object" || Array.isArray(entries)) return {};
+    return Object.fromEntries(Object.entries(entries).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  } catch { return {}; }
+}
+
+/** Best effort, never throws: a lost list only means a later state write takes base behavior. */
+function writeHeldCaptures(publicHunchDir: string, entries: Record<string, string>): void {
+  const file = heldCapturesFile(publicHunchDir);
+  try {
+    if (Object.keys(entries).length === 0) { rmSync(file, { force: true }); return; }
+    mkdirSync(dirname(file), { recursive: true });
+    const sorted = Object.fromEntries(Object.entries(entries).sort(([a], [b]) => a.localeCompare(b)));
+    writeFileAtomic(file, JSON.stringify({ version: 1, entries: sorted }, null, 2) + "\n");
+  } catch { /* best effort */ }
+}
+
+/** sha256 of the file's current bytes, or "deleted" when it is gone. */
+function heldHashOf(publicHunchDir: string, relPath: string): string {
+  try { return createHash("sha256").update(readFileSync(join(publicHunchDir, relPath))).digest("hex"); }
+  catch { return "deleted"; }
+}
+
+/** Put on the held list every public .hunch file a capture wrote in this process (since the
+ *  last commit or hold took the log) that is still untracked, with the hash of its current
+ *  bytes; prune entries no longer untracked. manifest.json is never held (a dirty manifest
+ *  sends a state write to base anyway). Called wherever a
+ *  public capture commit is held. Returns the dirty set it read, or null when it read none
+ *  (nothing logged, or a failure). Never throws. */
+export function recordHeldCaptures(publicHunchDir: string): Set<string> | null {
+  let dirty: Set<string> | null = null;
+  try {
+    const writes = takeCaptureWrites(publicHunchDir).filter((path) => path !== "manifest.json");
+    if (writes.length === 0) return null;
+    const changed = hunchDirChangedPaths(publicHunchDir);
+    if (changed === null) return null;
+    dirty = new Set(changed.all);
+    // Only new (untracked) files can ever stay out of a state commit, so only they are listed.
+    // A batch is atomic: one that also edits or deletes a tracked file (a supersede, a retire)
+    // lists none of its files, so its new records are swept with the edit, as base.
+    const entries: Record<string, string> = {};
+    for (const [path, hash] of Object.entries(readHeldCaptures(publicHunchDir))) if (changed.untracked.has(path)) entries[path] = hash;
+    const touchesTracked = writes.some((path) => dirty!.has(path) && !changed.untracked.has(path));
+    if (!touchesTracked) for (const path of writes) if (changed.untracked.has(path)) entries[path] = heldHashOf(publicHunchDir, path);
+    writeHeldCaptures(publicHunchDir, entries);
+  } catch { /* best effort: an unrecorded hold only means a later state write sweeps it */ }
+  return dirty;
 }
 
 function flushStore(
@@ -153,6 +250,8 @@ function flushStore(
   // HEAD instead of counting a record that `git commit -a` would leave behind; by-hand CLI
   // commands refresh them on disk themselves (publicFlushCommitsGrounding in the CLI).
   if (holdOnDefaultBranch && holdsOnDefaultBranch(publicHunchDir)) return heldOrNothing(publicHunchDir);
+  // Not held: whatever captures wrote is swept into this commit, so nothing is left to record.
+  takeCaptureWrites(publicHunchDir);
   // A public capture changes record counts, so refresh git-clean grounding docs and fold
   // them into the SAME memory commit — otherwise every capture re-stales the committed
   // counts and the release gate's clean-tree check fails on the next CI index.
@@ -167,7 +266,8 @@ export const HELD_ON_DEFAULT_BRANCH = "not auto-committed: the default branch is
 /** A hold reports "held" only when there is something left for the next commit; a clean
  *  .hunch/ is null, as an unheld flush with nothing staged would be. */
 function heldOrNothing(publicHunchDir: string): "held" | null {
-  return hunchDirHasChanges(publicHunchDir) ? "held" : null;
+  const dirty = recordHeldCaptures(publicHunchDir);
+  return (dirty ? dirty.size > 0 : hunchDirHasChanges(publicHunchDir)) ? "held" : null;
 }
 
 /** Whether an automatic public memory commit must be held under the auto-commit policy

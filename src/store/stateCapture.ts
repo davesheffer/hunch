@@ -3,6 +3,7 @@ import type { HunchStore } from "./hunchStore.js";
 import { CaptureRequestSchema, CaptureBatchRequestSchema, STATE_CAPTURE_VERSION, STATE_CAPTURE_BATCH_VERSION, STATE_WRITE_VERSION, assertDerivedState, captureTransform, derivedId, normalizeAssertion, canonicalObjectKey, externalKey, scopePath, stateHash, type CaptureBatchResult, type DerivedState, type WriteResult } from "../core/stateContract.js";
 import { isCredentialFreeValue } from "../core/provenance.js";
 import { StateRefusal, stateHomeFor, writeState, type WriteOptions } from "./stateBinding.js";
+import { withoutCaptureLog } from "../core/io.js";
 
 interface CaptureOptions extends WriteOptions { sourceHashes?: Map<string, string> }
 
@@ -10,6 +11,11 @@ interface CaptureOptions extends WriteOptions { sourceHashes?: Map<string, strin
  * fidelity and deduplication. It does not pretend to prove semantic entailment or relevance.
  * Both bindings hold the partition write lock over lookup AND write. */
 export function captureState(store: HunchStore, input: unknown, opts: CaptureOptions = {}): WriteResult {
+  // State files never enter the capture-write log: a capture hold records only captures.
+  return withoutCaptureLog(() => captureStateUnlogged(store, input, opts));
+}
+
+function captureStateUnlogged(store: HunchStore, input: unknown, opts: CaptureOptions): WriteResult {
   const request = CaptureRequestSchema.parse(input);
   if (!request.principal.grants.some(s => scopePath(s) === scopePath(request.scope))) throw new StateRefusal("outside-grants", "capture scope is outside the principal's grants");
   const { home } = stateHomeFor(store, request.scope);
@@ -53,6 +59,10 @@ export function captureState(store: HunchStore, input: unknown, opts: CaptureOpt
  * Every result has its input index; a refused claim never hides a later valid new detail.
  * A duplicate-only batch performs no record, ledger, index or Git writes. */
 export function captureBatchState(store: HunchStore, input: unknown, opts: WriteOptions = {}): CaptureBatchResult {
+  return withoutCaptureLog(() => captureBatchStateUnlogged(store, input, opts));
+}
+
+function captureBatchStateUnlogged(store: HunchStore, input: unknown, opts: WriteOptions): CaptureBatchResult {
   const request = CaptureBatchRequestSchema.parse(input);
   if (!request.principal.grants.some(s => scopePath(s) === scopePath(request.scope))) throw new StateRefusal("outside-grants", "capture scope is outside the principal's grants");
   if (!request.observations.length && !request.reviews?.length) throw new StateRefusal("malformed", "capture batch must contain observations or reviews");

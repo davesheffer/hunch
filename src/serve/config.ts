@@ -52,7 +52,7 @@ export type ServeConfig = z.infer<typeof ServeConfigSchema>;
 export const PARTITION_GITIGNORE = [
   "# hunch serve partition — derived runtime artifacts (regenerable from .hunch/*.json)",
   ".hunch/*.sqlite", ".hunch/*.sqlite-shm", ".hunch/*.sqlite-wal", ".hunch/*.sqlite-journal",
-  ".hunch/**/*.tmp*", ".hunch/write.lock", ".hunch/.hunch-commit.lock", ".hunch/local.json", ".hunch/events.log", "",
+  ".hunch/**/*.tmp*", ".hunch/write.lock", ".hunch/.hunch-commit.lock", ".hunch/local.json", ".hunch/events.log", ".hunch-cache/", "",
 ].join("\n");
 
 export function hashToken(token: string): string {

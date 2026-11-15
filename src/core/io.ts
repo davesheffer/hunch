@@ -1,8 +1,48 @@
 /** Durable file writes for the Hunch. */
 import { closeSync, fchmodSync, fsyncSync, linkSync, lstatSync, openSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, relative, resolve, isAbsolute } from "node:path";
 
 let counter = 0;
+
+/** Process-global log of files the atomic writers published (or noteFileWrite named), as
+ *  absolute paths. A capture hold reads it (takeCaptureWrites) to record exactly which public
+ *  .hunch files it left uncommitted, so a later state write can leave those out of its commit.
+ *  State writers run inside withoutCaptureLog, so their files never enter it. */
+const captureLog = new Set<string>();
+let captureLogSuppressed = 0;
+
+/** Past this many entries the log is cleared rather than grown, so a long-lived process whose
+ *  writes no hold or commit drains stays bounded. Losing attribution only means a later state
+ *  write sweeps those files: the base behavior. */
+const CAPTURE_LOG_LIMIT = 10000;
+
+/** Log a change to `file` (a write, or a removal made outside the atomic writers). */
+export function noteFileWrite(file: string): void {
+  if (captureLogSuppressed !== 0) return;
+  if (captureLog.size >= CAPTURE_LOG_LIMIT) captureLog.clear();
+  captureLog.add(resolve(file));
+}
+
+/** Run `fn` with the capture-write log suppressed: nothing it writes is logged, even when it
+ *  throws midway. Synchronous only: an async `fn` would resume outside the suppression. */
+export function withoutCaptureLog<T>(fn: () => T): T {
+  captureLogSuppressed++;
+  try { return fn(); } finally { captureLogSuppressed--; }
+}
+
+/** Remove and return the logged writes inside `underDir`, relative to it with forward slashes.
+ *  Entries outside it stay logged. */
+export function takeCaptureWrites(underDir: string): string[] {
+  const base = resolve(underDir);
+  const taken: string[] = [];
+  for (const path of captureLog) {
+    const rel = relative(base, path);
+    if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) continue;
+    captureLog.delete(path);
+    taken.push(rel.replace(/\\/g, "/"));
+  }
+  return taken;
+}
 const renameRetryDelaysMs = [10, 20, 40, 80] as const;
 const renameRetryWaiter = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
@@ -40,6 +80,7 @@ export function writeFileAtomic(file: string, data: string | Uint8Array): void {
     cleanupTmp(tmp);
     throw e;
   }
+  noteFileWrite(file);
   fsyncDirBestEffort(dirname(file));
 }
 
@@ -81,6 +122,7 @@ export function writeFileAtomicIfAbsent(file: string, data: string): boolean {
   writeFileAtomicTmp(tmp, data);
   try {
     linkSync(tmp, file);
+    noteFileWrite(file);
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;

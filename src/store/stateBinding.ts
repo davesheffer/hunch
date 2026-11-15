@@ -3,7 +3,7 @@ import { StateRefusal } from "./stateError.js";
 import { partitionOf, recordScope } from "./statePartition.js";
 import { createStateAccess, type StateAccessOptions } from "./stateAccess.js";
 import { visibilityAllows, type RecordVisibility } from "../core/recordVisibility.js";
-import { writeFileAtomic } from "../core/io.js";
+import { withoutCaptureLog, writeFileAtomic } from "../core/io.js";
 /**
  * nuryel.state/1 bound to the store — the ONE implementation of read / write / subscribe
  * that every transport (MCP today; HTTP, CLI, typed client next) calls. Transport-free:
@@ -623,6 +623,11 @@ function normalizeRecord(facet: StateFacet, scope: Scope, raw: Record<string, un
 /** write — provenance + idempotency in, durability out. A replay returns the original;
  *  a conflict names the incumbent; nothing is ever silently overwritten or duplicated. */
 export function writeState(store: HunchStore, input: unknown, opts: WriteOptions = {}): WriteResult {
+  // State files never enter the capture-write log: a capture hold records only captures.
+  return withoutCaptureLog(() => writeStateUnlogged(store, input, opts));
+}
+
+function writeStateUnlogged(store: HunchStore, input: unknown, opts: WriteOptions): WriteResult {
   const request = WriteRequestSchema.parse(input);
   if (!granted(request.principal, request.scope)) throw new StateRefusal("outside-grants", "scope is outside the principal grants");
   const access = createStateAccess(store, request.principal, { ...opts, requireVisibility: request.record.visibility !== undefined });
