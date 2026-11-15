@@ -17,15 +17,16 @@
  * Every writer MERGES into existing files (preserving other servers / user prose)
  * and is idempotent, so re-running `hunch init` is safe.
  */
-import { readFileSync, existsSync, mkdirSync, lstatSync } from "node:fs";
-import { writeFileAtomic } from "../core/io.js";
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { writeFileAtomic, sameBytesRewriteIsNoop } from "../core/io.js";
 import { homedir } from "node:os";
 import { join, dirname, delimiter } from "node:path";
 import type { HunchStore } from "../store/hunchStore.js";
 import type { Invocation } from "./scaffold.js";
 import type { HookProvider } from "../core/agenthook.js";
 import { isHunchHookCommand } from "./hookmatch.js";
-import { renderHunchSection, stripManagedSection, upsertSection, updateClaudeMd, preserveNewerTemplate, planSection, planClaudeMd, withGroundingRenderMemo } from "./claudemd.js";
+import { renderHunchSection, stripManagedSection, upsertSection, updateClaudeMd, preserveNewerTemplate, planSection, planClaudeMd, withGroundingRenderMemo, writeGroundingFile } from "./claudemd.js";
+import { lineEolAt, withEol } from "../core/eol.js";
 import { gitCleanPaths, headFileContent } from "../extractors/git.js";
 import { parseJsonc } from "../core/jsonc.js";
 import { parse as parseToml } from "smol-toml";
@@ -304,9 +305,7 @@ function ownedSection(file: string, store: HunchStore, root: string, opts?: Grou
  *  grounding in context for every request. Fully managed by Hunch (overwritten). */
 export function writeCursorRule(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".cursor", "rules", "hunch.mdc");
-  const body = cursorRuleBody(root, store, opts);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileAtomic(file, body);
+  writeGroundingFile(file, cursorRuleBody(root, store, opts));
   return file;
 }
 
@@ -338,23 +337,26 @@ export function writeWindsurfGlobalMcp(inv: Invocation, home = homedir()): strin
   return writeJson(file, json);
 }
 
+/** A wholly-owned rule body in the EOL of the existing file's first line (LF for a new file). */
+function ownedEol(file: string, body: string): string {
+  return existsSync(file) ? withEol(body, lineEolAt(readFileSync(file, "utf8"))) : body;
+}
+
 /** Windsurf project rule (.windsurf/rules/hunch.md). `trigger: always_on` keeps the
  *  Hunch grounding in Cascade's context for every request. Fully managed (overwritten). */
 function cursorRuleBody(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".cursor", "rules", "hunch.mdc");
-  return `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${ownedSection(file, store, root, opts)}\n`;
+  return ownedEol(file, `---\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\nalwaysApply: true\n---\n\n${ownedSection(file, store, root, opts)}\n`);
 }
 
 function windsurfRuleBody(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".windsurf", "rules", "hunch.md");
-  return `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${ownedSection(file, store, root, opts)}\n`;
+  return ownedEol(file, `---\ntrigger: always_on\ndescription: Hunch engineering memory — consult the hunch_* MCP tools before editing\n---\n\n${ownedSection(file, store, root, opts)}\n`);
 }
 
 export function writeWindsurfRule(root: string, store: HunchStore, opts?: GroundingWriteOptions): string {
   const file = join(root, ".windsurf", "rules", "hunch.md");
-  const body = windsurfRuleBody(root, store, opts);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileAtomic(file, body);
+  writeGroundingFile(file, windsurfRuleBody(root, store, opts));
   return file;
 }
 
@@ -567,21 +569,6 @@ function groundingPlans(root: string, store: HunchStore): Array<[string, () => s
     [join(".cursor", "rules", "hunch.mdc"), () => cursorRuleBody(root, store)],
     [join(".windsurf", "rules", "hunch.md"), () => windsurfRuleBody(root, store)],
   ];
-}
-
-/** A rewrite with the same bytes changes nothing anyone reads when the doc is a plain
- *  file with one link the process owns: the atomic write would only swap the inode.
- *  A symlink, a hard link, or a foreign owner is rewritten as before (the write
- *  replaces it with a regular file of this process). */
-function sameBytesRewriteIsNoop(file: string): boolean {
-  try {
-    const stat = lstatSync(file);
-    if (!stat.isFile() || stat.nlink !== 1) return false;
-    if (typeof process.getuid === "function" && (stat.uid !== process.getuid() || stat.gid !== process.getgid?.())) return false;
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Self-heal: refresh the Hunch section in each grounding doc that ALREADY exists,
