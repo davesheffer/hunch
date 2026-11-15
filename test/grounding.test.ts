@@ -2,10 +2,10 @@ import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempStore, mkConstraint } from "./helpers.js";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, utimesSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderHunchSection, upsertSection, preserveNewerTemplate, groundingTemplate, GROUNDING_TEMPLATE } from "../src/integrations/claudemd.js";
+import { renderHunchSection, upsertSection, preserveNewerTemplate, groundingTemplate, GROUNDING_TEMPLATE, HUNCH_START, HUNCH_END } from "../src/integrations/claudemd.js";
 import { writeCursorRule, refreshExistingGrounding, regenerateGrounding, refreshCommittableGrounding } from "../src/integrations/providers.js";
 import { execFileSync } from "node:child_process";
 import { parseGroundingCounts, classifyGroundingBlock, describeGroundingFreshness } from "../src/core/groundingLag.js";
@@ -301,4 +301,132 @@ test("Top invariants never clip a blocking statement; others clip at a word boun
   assert.doesNotMatch(clipped, /END_OF_STATEMENT/);
   const words = clipped.slice(0, -1).split(" ");
   assert.ok(["alpha", "beta", "gamma", "delta"].includes(words[words.length - 1]), `ends on a whole word: ${clipped}`);
+});
+
+// A core.autocrlf=true checkout is CRLF: a refresh must keep the doc uniformly CRLF
+// (no mixed endings) and an unchanged refresh must not rewrite it (no EOL-only dirt).
+const lfOnly = (s: string) => !s.includes("\r");
+const crlfOnly = (s: string) => !/[^\r]\n/.test(s) && !s.startsWith("\n");
+
+test("grounding refresh keeps a CRLF doc all-CRLF when the counts change", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const file = join(root, "CLAUDE.md");
+  writeFileSync(file, "# Proj\r\n\r\nUser prose.\r\n");
+  upsertSection(file, renderHunchSection(store, root), "# Proj");
+  const first = readFileSync(file, "utf8");
+  assert.ok(crlfOnly(first), "first upsert emits CRLF");
+  store.json.put("constraints", mkConstraint({ id: "con_eol_one", severity: "warning", statement: "EOL marker" }));
+  assert.deepEqual(refreshExistingGrounding(root, store), ["CLAUDE.md"]);
+  const after = readFileSync(file, "utf8");
+  assert.notEqual(after, first, "counts moved");
+  assert.ok(crlfOnly(after), "still all-CRLF");
+  assert.ok(after.startsWith("# Proj\r\n\r\nUser prose.\r\n"), "user prose kept verbatim");
+});
+
+test("grounding refresh with identical content does not rewrite an LF or CRLF doc", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  for (const eol of ["\n", "\r\n"]) {
+    for (const rel of ["CLAUDE.md", join(".cursor", "rules", "hunch.mdc")]) {
+      const file = join(root, rel);
+      mkdirSync(join(file, ".."), { recursive: true });
+      if (rel === "CLAUDE.md") {
+        writeFileSync(file, `# P${eol}`);
+        upsertSection(file, renderHunchSection(store, root), "# P");
+      } else {
+        writeCursorRule(root, store);
+        writeFileSync(file, readFileSync(file, "utf8").replace(/\r?\n/g, eol));
+      }
+      const before = readFileSync(file, "utf8");
+      assert.ok(eol === "\n" ? lfOnly(before) : crlfOnly(before), `${rel} starts in ${JSON.stringify(eol)}`);
+      const old = new Date(2001, 0, 1);
+      utimesSync(file, old, old);
+      assert.deepEqual(refreshExistingGrounding(root, store).filter((r) => r === rel), [], `${rel} not reported changed`);
+      assert.equal(statSync(file).mtimeMs, old.getTime(), `${rel} not rewritten`);
+      assert.equal(readFileSync(file, "utf8"), before);
+    }
+  }
+});
+
+test("grounding refresh keeps an LF doc LF", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const file = join(root, "AGENTS.md");
+  writeFileSync(file, "# A\n\nProse.\n");
+  upsertSection(file, renderHunchSection(store, root), "# A");
+  store.json.put("constraints", mkConstraint({ id: "con_eol_two", severity: "warning", statement: "EOL marker" }));
+  refreshExistingGrounding(root, store);
+  const after = readFileSync(file, "utf8");
+  assert.ok(lfOnly(after) && after.startsWith("# A\n\nProse.\n"));
+});
+
+const blockOf = (s: string) => s.slice(s.indexOf(HUNCH_START), s.indexOf(HUNCH_END) + HUNCH_END.length);
+const innerOf = (s: string) => s.slice(s.indexOf(HUNCH_START) + HUNCH_START.length, s.indexOf(HUNCH_END)).trim();
+
+test("a refreshed CRLF doc keeps a CRLF block and the freshness check calls it fresh", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const file = join(root, "CLAUDE.md");
+  writeFileSync(file, `# P\r\n\r\n${renderHunchSection(store, root).replace(/\n/g, "\r\n")}\r\n`);
+  store.json.put("constraints", mkConstraint({ id: "con_eol_fresh", severity: "warning", statement: "EOL marker" }));
+  refreshExistingGrounding(root, store);
+  const after = readFileSync(file, "utf8");
+  assert.ok(crlfOnly(after), "block re-emitted in CRLF");
+  assert.equal(classifyGroundingBlock(innerOf(after), innerOf(renderHunchSection(store, root))).kind, "fresh");
+});
+
+test("a refresh keeps mixed-EOL prose byte-for-byte and emits the block in the block's EOL", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const file = join(root, "AGENTS.md");
+  const prose = "# P\r\nlf line\nlone 10%\r20%\r30%\ncrlf line\r\n";
+  writeFileSync(file, `${prose}\r\n${renderHunchSection(store, root).replace(/\n/g, "\r\n")}\r\ntail lf\n`);
+  store.json.put("constraints", mkConstraint({ id: "con_eol_mixed", severity: "warning", statement: "EOL marker" }));
+  assert.deepEqual(refreshExistingGrounding(root, store), ["AGENTS.md"]);
+  const after = readFileSync(file, "utf8");
+  assert.ok(after.startsWith(`${prose}\r\n${HUNCH_START}\r\n`), "prose kept, block CRLF");
+  assert.ok(after.endsWith(`${HUNCH_END}\r\ntail lf\n`), "trailing prose kept");
+  assert.ok(crlfOnly(blockOf(after) + "\r\n"), "block uniformly CRLF");
+  assert.match(after, /EOL marker/);
+});
+
+test("a refresh preserves lone CRs in an LF doc", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const file = join(root, "AGENTS.md");
+  writeFileSync(file, "# P\n10%\r20%\r30%\n");
+  upsertSection(file, renderHunchSection(store, root), "# P");
+  store.json.put("constraints", mkConstraint({ id: "con_eol_cr", severity: "warning", statement: "EOL marker" }));
+  refreshExistingGrounding(root, store);
+  const after = readFileSync(file, "utf8");
+  assert.equal((after.match(/\r/g) ?? []).length, 2);
+  assert.ok(after.startsWith("# P\n10%\r20%\r30%\n\n<!--"));
+});
+
+test("the capture-commit refresh stages nothing on a CRLF checkout whose counts are current", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: root, stdio: "pipe" });
+  git("init", "-q");
+  git("config", "core.autocrlf", "false");
+  const section = renderHunchSection(store, root);
+  for (const rel of ["CLAUDE.md", "AGENTS.md", join(".github", "copilot-instructions.md")]) {
+    mkdirSync(join(root, rel, ".."), { recursive: true });
+    writeFileSync(join(root, rel), `# Doc\r\n\r\n${section}\n`.replace(/\r?\n/g, "\r\n"));
+  }
+  writeCursorRule(root, store);
+  const mdc = join(root, ".cursor", "rules", "hunch.mdc");
+  writeFileSync(mdc, readFileSync(mdc, "utf8").replace(/\n/g, "\r\n"));
+  git("add", "-A");
+  git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--no-verify", "-m", "docs");
+  assert.deepEqual(refreshCommittableGrounding(root, store), []);
+  assert.equal(git("status", "--porcelain").toString(), "");
+});
+
+test("the grounding freshness check is EOL-insensitive", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  const lf = innerOf(renderHunchSection(store, root));
+  assert.equal(classifyGroundingBlock(lf.replace(/\n/g, "\r\n"), lf).kind, "fresh");
 });

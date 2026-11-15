@@ -26,3 +26,16 @@ export function* sourceLines(text: string): Generator<{ content: string; start: 
   }
   yield { content: text.slice(start), start, end: text.length };
 }
+
+/** The terminator ("\r\n" or "\n") of the line containing offset `at`; LF when that
+ *  line has none or ends in a lone CR. Picks the EOL a generated block is emitted in. */
+export function lineEolAt(text: string, at = 0): string {
+  const m = /[\r\n]/.exec(text.slice(at));
+  return m && eolLengthAt(text, at + m.index) === 2 ? "\r\n" : "\n";
+}
+
+/** `text` (generated, so any line breaks are ours) with every line break as `eol`. */
+export function withEol(text: string, eol: string): string {
+  const lf = normalizeEol(text);
+  return eol === "\n" ? lf : lf.replace(/\n/g, eol);
+}
