@@ -979,7 +979,8 @@ program
         onCommit: (commitSha, out) => {
           if (opts.quiet) return;
           if (out.status === "written") console.log(`  ✓ ${commitSha.slice(0, 8)} ${(out.decision?.title ?? "").slice(0, 64)}`);
-          else console.log(`  · ${commitSha.slice(0, 8)} skipped: ${out.reason}`);
+          if (out.status === "written" && out.fallbackReason) console.log(`    ⚠ heuristic draft instead: ${out.fallbackReason}`);
+          else if (out.status !== "written") console.log(`  · ${commitSha.slice(0, 8)} skipped: ${out.reason}`);
         },
       });
       results = ranged.results.map((x) => x.result);
