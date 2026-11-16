@@ -427,6 +427,15 @@ export function denyHookOutput(provider: HookProvider, reason: string): { output
 }
 
 /** Stop-gate output in each native dialect. */
+/** A post-tool reply that must interrupt the agent: the tool already ran, so it asks
+ *  the agent to undo what it did. Claude Code feeds a PostToolUse `decision: "block"`
+ *  reason back to the model; a host with no post-tool block gets the same text as
+ *  context, which informs without stopping. */
+export function postToolBlockOutput(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", reason: string): object | null {
+  if (provider === "claude") return { decision: "block", reason, hookSpecificOutput: { hookEventName: event, additionalContext: reason } };
+  return contextHookOutput(provider, event, reason);
+}
+
 export function stopHookOutput(provider: HookProvider, reason: string): object {
   if (provider === "vscode") return { continue: false, stopReason: reason };
   if (provider === "cursor") return { followup_message: reason };

@@ -29,7 +29,7 @@ import { renderRecalledLine } from "../core/taskReportRender.js";
 import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
-import { contextHookOutput, deliversCommandOutcome, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
+import { contextHookOutput, deliversCommandOutcome, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, postToolBlockOutput, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
 import { PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag } from "../core/pipeline.js";
 import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { nowData } from "../wiki/wiki.js";
@@ -39,6 +39,7 @@ import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
 import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
+import { dirtyFilesSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
@@ -81,6 +82,8 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       // A shell command can edit files without the edit tools ever firing: ground
       // what it wrote now. Every other tool call just moves the baseline.
       let shellGround = "";
+      // strict: a shell write that re-introduced a rejected approach (shellveto.ts).
+      let shellVeto: { target: string; hit: BlockingHit } | null = null;
       let recall: FailureRecall = { text: "", bugs: [] };
       const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
@@ -105,7 +108,14 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
             const written = shellWrittenFiles(root, evt.session_id, evt.agent_id);
             if (written.length) {
               const opened = openStore();
-              if (!stale) shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
+              if (!stale) {
+                // The edit tools' Veto never saw this text: judge what the files gained.
+                if (firmness === "strict") {
+                  try { shellVeto = vetoForWrittenFiles(opened, root, written); } catch { shellVeto = null; }
+                  if (shellVeto) appendEvent(paths, { at: new Date().toISOString(), file: shellVeto.target, ...shellVeto.hit.event });
+                }
+                shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
+              }
             }
           } else {
             // An edit tool wrote known files: move just those baseline entries.
@@ -164,20 +174,43 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           st = checkpoint.state;
           savePipelineState(evt.session_id, st);
           const post = [shellGround, recall.text, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
-          if (post) emitContext(provider, postTool, post);
+          emitPost(provider, postTool, post, shellVeto);
           return;
         }
         savePipelineState(evt.session_id, st);
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        if (post) emitContext(provider, postTool, post);
+        emitPost(provider, postTool, post, shellVeto);
         return;
       }
       if (postTool) {
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        if (post) emitContext(provider, postTool, post);
+        emitPost(provider, postTool, post, shellVeto);
         return;
       }
       if (evt.hook_event_name === "Stop") {
+        // strict: whatever route wrote it (an edit tool, a shell command, a subagent),
+        // a rejected approach still in the working tree holds the turn open. Bounded
+        // like the VERIFY gate (two blocks per turn), then fail-open.
+        if (firmness === "strict" && evt.session_id && pipelineEnabled()) {
+          const st = loadPipelineState(evt.session_id);
+          if (st.blocks < 2) {
+            let found: { target: string; hit: BlockingHit } | null = null;
+            try {
+              const dirty = dirtyFilesSinceHead(root);
+              if (dirty?.length) {
+                const opened = openTeamStore(root, { requireFreshTeamMemory: true });
+                store = opened.store;
+                if (!(opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus))) found = vetoForWrittenFiles(opened.store, root, dirty);
+              }
+            } catch { found = null; }
+            if (found) {
+              savePipelineState(evt.session_id, { ...st, blocks: st.blocks + 1 });
+              appendEvent(paths, { at: new Date().toISOString(), file: found.target, ...found.hit.event });
+              emitStop(provider, shellVetoReason(found.target, found.hit, "stop"));
+              return;
+            }
+          }
+        }
         if (evt.session_id && pipelineEnabled()) {
           const st = loadPipelineState(evt.session_id);
           const verdict = stopVerdict(st, firmness);
@@ -971,6 +1004,17 @@ function emitDeny(provider: HookProvider, reason: string): void {
   if (result.output) process.stdout.write(JSON.stringify(result.output));
   if (result.stderr) process.stderr.write(`${result.stderr}\n`);
   if (result.exitCode !== undefined) process.exitCode = result.exitCode;
+}
+/** A post-tool reply: a shell-write Veto hit interrupts the agent (its reason first,
+ *  the usual grounding after); otherwise the grounding is plain context, if any. */
+function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", text: string, veto: { target: string; hit: BlockingHit } | null): void {
+  if (veto) {
+    const reason = [shellVetoReason(veto.target, veto.hit, "write"), text].filter(Boolean).join("\n\n");
+    const output = postToolBlockOutput(provider, event, reason);
+    if (output) process.stdout.write(JSON.stringify(output));
+    return;
+  }
+  if (text) emitContext(provider, event, text);
 }
 function emitStop(provider: HookProvider, reason: string): void {
   process.stdout.write(JSON.stringify(stopHookOutput(provider, reason)));
