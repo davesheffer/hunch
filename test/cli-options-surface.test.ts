@@ -32,8 +32,8 @@ import { cleanupDir, isolatedCliEnv, tempDir } from "./fixtures.js";
  *  path, or a name whose whole definition is one (a path builder, hunchCliArgs(...), `[tsx, cli]`)
  *  — never a name whose definition merely contains the text "cli".
  *
- *  Known limits (a source-text heuristic, not an execution trace; runtime tracing of the
- *  CLI's parsed argv is the planned fix):
+ *  Known limits (a source-text heuristic; CI backs it with execution evidence: tooling/trace-gate.mjs
+ *  fails an entry whose flag no traced test run actually parsed, #512):
  *   - a hunchCliArgs(...) list that is built but never spawned still counts;
  *   - a parent command's option is satisfied by a block that runs one of its subcommands
  *     with a same-named flag. Keep those entries honest by hand.

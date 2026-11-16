@@ -664,6 +664,16 @@
       }
     ]
   },
+  "HUNCH_TEST_TRACE": {
+    "class": "test-hook",
+    "purpose": "Test-only: a directory where the CLI records the option keys it parsed, for the CI trace gate (#512)",
+    "tests": [
+      {
+        "file": "test/trace-gate.test.ts",
+        "title": "trace register records the CLI's parsed flags keyed like the options registry, and env reads but not env copies"
+      }
+    ]
+  },
   "HUNCH_WORKSPACE_REFRESH": {
     "class": "hunch-config",
     "purpose": "Controls workspace ledger refresh",
