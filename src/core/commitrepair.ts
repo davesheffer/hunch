@@ -47,18 +47,37 @@ export interface CommitRepairPlan {
   records: string[];
 }
 
+/** Evidence prefix for the `git patch-id --stable` recorded when the decision was captured. */
+export const PATCH_ID_PREFIX = "patch-id:";
+
+/** The patch-id recorded in a decision's evidence at capture time, or null. Trusted
+ *  only while the evidence still cites the decision's own commit: a record re-pointed
+ *  at another commit without its evidence would otherwise carry a stale tag. */
+export function recordedPatchId(d: Decision): string | null {
+  if (!d.commit || !d.provenance.evidence.includes(`commit:${d.commit}`)) return null;
+  const hit = d.provenance.evidence.find((e) => e.startsWith(PATCH_ID_PREFIX));
+  const id = hit?.slice(PATCH_ID_PREFIX.length) ?? "";
+  return /^[0-9a-f]{40,64}$/.test(id) ? id : null;
+}
+
 /** True when a scope entry can serve as an exact match key (non-empty, no glob metacharacters). */
 function isExactScope(entry: string): boolean {
   return entry.length > 0 && !/[*?[\]{}]/.test(entry);
 }
 
-/** Live decisions whose cited commit is orphaned (unresolvable/unknown/current are excluded). */
+/** Live decisions whose cited commit is orphaned (unresolvable/unknown/current are excluded).
+ *  A "missing" commit (object gone from a complete clone) counts only when the
+ *  decision recorded its patch-id at capture: that is the one signal still
+ *  available to match it without the object. */
 export function orphanedCommitDecisions(
   decisions: readonly Decision[],
   status: (sha: string) => CommitRepairStatus,
 ): Decision[] {
-  return decisions.filter((d) =>
-    d.status !== "superseded" && d.status !== "rejected" && !!d.commit && status(d.commit) === "orphaned");
+  return decisions.filter((d) => {
+    if (d.status === "superseded" || d.status === "rejected" || !d.commit) return false;
+    const s = status(d.commit);
+    return s === "orphaned" || (s === "missing" && recordedPatchId(d) !== null);
+  });
 }
 
 /** Match each orphaned decision to exactly one candidate. A candidate with the
@@ -68,15 +87,20 @@ export function orphanedCommitDecisions(
  *  whose changed files are a superset of the decision's related_files
  *  (non-empty, no globs) -- needed for a squash of several commits, whose
  *  patch-id never equals any one of them, but weak: shared files like
- *  CHANGELOG.md often have one wrong superset (#450). */
+ *  CHANGELOG.md often have one wrong superset (#450).
+ *  When the orphaned commit object is gone (branch deleted + gc, or a clone
+ *  that never fetched it), its patch-id can't be recomputed; the one recorded
+ *  in evidence at capture time stands in, so a rebase/merge-queue rewrite
+ *  still gets the strong match. */
 export function planCommitRepair(
   orphaned: readonly Decision[],
   candidates: readonly CommitCandidate[],
   patchIdOf: (sha: string) => string | null = () => null,
+  isMissing: (d: Decision) => boolean = () => false,
 ): CommitRepairPlan {
   const rewrites: CommitRewrite[] = [];
   for (const d of orphaned) {
-    const patchId = patchIdOf(d.commit!);
+    const patchId = patchIdOf(d.commit!) ?? recordedPatchId(d);
     if (patchId) {
       const same = candidates.filter((c) => patchIdOf(c.sha) === patchId);
       if (same.length === 1) {
@@ -85,6 +109,9 @@ export function planCommitRepair(
       }
       if (same.length > 1) continue; // ambiguous: never guess
     }
+    // A missing commit's diff can't be inspected, so a file-overlap guess about it
+    // can't be reviewed either: only the patch-id match above is allowed.
+    if (isMissing(d)) continue;
     const scope = (d.related_files ?? []).filter(isExactScope);
     if (scope.length === 0) continue;
     const supersets = candidates.filter((c) => scope.every((f) => c.files.includes(f)));
@@ -190,17 +217,19 @@ export function pickRewrite(plan: CommitRepairPlan, id: string): CommitRewrite |
  * Pure: apply the plan's rewrite to a decision. Returns the same reference when
  * there is no entry or the record moved on (`commit` no longer equals `from`);
  * otherwise a copy with `commit` and the `commit:<from>` evidence moved to `to`
- * (deduped if `to` was already cited).
+ * (deduped if `to` was already cited). The recorded `patch-id:` tag is replaced
+ * with `to`'s patch-id when known, else removed: after a file-match repair onto a
+ * multi-commit squash the old value no longer describes the cited commit.
  */
-export function repairDecisionCommit(d: Decision, plan: CommitRepairPlan): Decision {
+export function repairDecisionCommit(d: Decision, plan: CommitRepairPlan, toPatchId: string | null = null): Decision {
   const entry = pickRewrite(plan, d.id);
   if (!entry || d.commit !== entry.from) return d;
+  const evidence = replaceExact(d.provenance.evidence, `commit:${entry.from}`, `commit:${entry.to}`).values
+    .filter((e) => !e.startsWith(PATCH_ID_PREFIX));
+  if (toPatchId && evidence.includes(`commit:${entry.to}`)) evidence.push(`${PATCH_ID_PREFIX}${toPatchId}`);
   return {
     ...d,
     commit: entry.to,
-    provenance: {
-      ...d.provenance,
-      evidence: replaceExact(d.provenance.evidence, `commit:${entry.from}`, `commit:${entry.to}`).values,
-    },
+    provenance: { ...d.provenance, evidence },
   };
 }

@@ -3459,18 +3459,50 @@ export function commitsExist(shas: readonly string[], cwd: string): Set<string> 
   return found;
 }
 
-export type CommitRepairStatus = "orphaned" | "current" | "unresolvable" | "unknown";
+export type CommitRepairStatus = "orphaned" | "missing" | "current" | "unresolvable" | "unknown";
+
+/** True only when git positively answers that `cwd` is a complete (non-shallow)
+ *  repository. Any error or a shallow clone is false. */
+export function isCompleteRepo(cwd: string): boolean {
+  try {
+    return execFileSync("git", ["rev-parse", "--is-shallow-repository"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5_000 }).trim() === "false";
+  } catch {
+    return false;
+  }
+}
+
+/** True only when NO object in the repository has `commit` as a prefix. A failing
+ *  `cat-file -e` alone can't say that: a stored abbreviation (`%h`) that has become
+ *  ambiguous as the repo grew fails the same way while its commit is still present. */
+function objectAbsent(commit: string, cwd: string): boolean {
+  try {
+    const opts = { cwd, encoding: "utf8" as const, stdio: ["ignore", "pipe", "ignore"] as ["ignore", "pipe", "ignore"], timeout: 5_000 };
+    // Longer than this repo's object names can't name an object: not "absent", just invalid.
+    const format = execFileSync("git", ["rev-parse", "--show-object-format"], opts).trim();
+    if (commit.length > (format === "sha256" ? 64 : 40)) return false;
+    return execFileSync("git", ["rev-parse", `--disambiguate=${commit}`], opts).trim() === "";
+  } catch {
+    return false;
+  }
+}
 
 /** Whether `commit` is reachable from `ref`. Never collapses "no" and "error": only
- *  "orphaned" is repair-eligible. A missing or non-directory cwd is "unresolvable". */
-export function commitRepairStatus(commit: string, ref: string, cwd: string): CommitRepairStatus {
+ *  "orphaned" (and, with a recorded patch-id, "missing") is repair-eligible. A
+ *  missing or non-directory cwd is "unresolvable". "missing" means the commit
+ *  object is absent from a COMPLETE (non-shallow) clone: all of HEAD's history is
+ *  present there, so an absent commit cannot be its ancestor — it was rewritten
+ *  away (rebase/merge queue/squash) and then gc'd or never fetched. A shallow
+ *  clone can't tell that apart from "older than the depth", so it stays
+ *  "unresolvable". */
+export function commitRepairStatus(commit: string, ref: string, cwd: string, opts2: { probeMissing?: boolean } = {}): CommitRepairStatus {
   if (!HEX_COMMIT_RE.test(commit)) return "unresolvable";
   const opts = { cwd, stdio: "ignore" as const, timeout: 5_000 };
   try {
     execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], opts);
   } catch (e) {
     const err = e as { status?: unknown; code?: unknown };
-    if (typeof err.status === "number" || err.code === "ENOENT" || err.code === "ENOTDIR") return "unresolvable";
+    if (err.code === "ENOENT" || err.code === "ENOTDIR") return "unresolvable";
+    if (typeof err.status === "number") return opts2.probeMissing !== false && isCompleteRepo(cwd) && objectAbsent(commit, cwd) ? "missing" : "unresolvable";
     return "unknown";
   }
   try {
@@ -3485,17 +3517,20 @@ export function commitRepairStatus(commit: string, ref: string, cwd: string): Co
  *  reaches the commit. A historical `--range old..new` must not make a commit
  *  that HEAD still reaches look orphaned just because it is newer than `new`
  *  (#450). The first non-orphaned answer wins, so "unknown" is never upgraded. */
-export function commitRepairStatusAgainst(commit: string, refs: readonly string[], cwd: string): CommitRepairStatus {
+export function commitRepairStatusAgainst(commit: string, refs: readonly string[], cwd: string, opts2: { probeMissing?: boolean } = {}): CommitRepairStatus {
   for (const ref of new Set(refs)) {
-    const status = commitRepairStatus(commit, ref, cwd);
+    const status = commitRepairStatus(commit, ref, cwd, opts2);
     if (status !== "orphaned") return status;
   }
   return "orphaned";
 }
 
 /** `git patch-id --stable` of each commit, keyed by the sha exactly as given
- *  (full or abbreviated). Same diff flags as the workspace ledger's squash
- *  check. A merge or empty commit, an unknown sha, or any git failure leaves
+ *  (full or abbreviated). Diff shape is pinned (-U3, no inter-hunk context,
+ *  myers, indent heuristic, short submodule form, a/ b/ prefixes, quoted paths,
+ *  no color, blank context kept, GIT_DIFF_OPTS ignored) so a
+ *  patch-id recorded on one machine compares equal on another under the diff
+ *  configs known to change it. A merge or empty commit, an unknown sha, or any git failure leaves
  *  no entry: a missing patch-id is never a match. One `git log` + one
  *  `git patch-id` process for all of them. */
 export function commitPatchIds(shas: readonly string[], cwd: string): Map<string, string> {
@@ -3506,9 +3541,11 @@ export function commitPatchIds(shas: readonly string[], cwd: string): Map<string
   const valid = exists ? [...exists] : [];
   if (!valid.length) return out;
   let ids: string;
+  const env = { ...process.env };
+  delete env.GIT_DIFF_OPTS; // its -u<n> would override the pinned -U3 and change the patch-id
   try {
-    const log = execFileSync("git", ["-C", cwd, "log", "--stdin", "--no-walk=unsorted", "--format=%H", "-p", "--no-merges", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", "--"],
-      { input: valid.join("\n") + "\n", maxBuffer: 256 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
+    const log = execFileSync("git", ["-c", "core.quotePath=true", "-c", "diff.suppressBlankEmpty=false", "-C", cwd, "log", "--stdin", "--no-walk=unsorted", "--format=%H", "-p", "--no-merges", "--binary", "--full-index", "--no-renames", "--no-ext-diff", "--no-textconv", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers", "--no-color", "--indent-heuristic", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/", "--"],
+      { env, input: valid.join("\n") + "\n", maxBuffer: 256 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
     if (!log.byteLength) return out;
     ids = execFileSync("git", ["-C", cwd, "patch-id", "--stable"], { input: log, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000, stdio: ["pipe", "pipe", "ignore"] });
   } catch {

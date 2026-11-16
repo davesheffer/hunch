@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, mergeRewrites, firstFor,
   liveRewrites, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo,
+  recordedPatchId, PATCH_ID_PREFIX,
 } from "../src/core/commitrepair.js";
 import type { Decision } from "../src/core/types.js";
 import type { CommitCandidate, CommitRepairStatus } from "../src/extractors/git.js";
@@ -241,4 +242,58 @@ test("withheldForUnresolvableTo preserves object identity", () => {
   const out = withheldForUnresolvableTo([a, b], new Set(["ok"]));
   assert.equal(out.applicable[0], a);
   assert.equal(out.withheld[0], b, "the CLI depends on reference identity");
+});
+
+const PID = "a".repeat(40);
+
+test("recordedPatchId reads a well-formed patch-id from evidence, else null", () => {
+  assert.equal(recordedPatchId(D({ id: "a", commit: "s", provenance: { source: "llm_draft", confidence: 0.5, evidence: ["commit:s", `${PATCH_ID_PREFIX}${PID}`] } } as Partial<Decision> & { id: string })), PID);
+  assert.equal(recordedPatchId(D({ id: "b", commit: "s" })), null);
+  assert.equal(recordedPatchId(D({ id: "c", commit: "s", provenance: { source: "llm_draft", confidence: 0.5, evidence: [`${PATCH_ID_PREFIX}not-hex`] } } as Partial<Decision> & { id: string })), null);
+});
+
+test("orphanedCommitDecisions admits a missing commit only when its patch-id was recorded", () => {
+  const withPid = D({ id: "dec_pid", commit: "gone1", provenance: { source: "llm_draft", confidence: 0.5, evidence: ["commit:gone1", `${PATCH_ID_PREFIX}${PID}`] } } as Partial<Decision> & { id: string });
+  const without = D({ id: "dec_nopid", commit: "gone2" });
+  const out = orphanedCommitDecisions([withPid, without], () => "missing");
+  assert.deepEqual(out.map((d) => d.id), ["dec_pid"]);
+});
+
+test("planCommitRepair falls back to the recorded patch-id when the orphan's object is gone", () => {
+  const d = D({ id: "dec_1", commit: "gone", related_files: ["src/a.ts"], provenance: { source: "llm_draft", confidence: 0.5, evidence: ["commit:gone", `${PATCH_ID_PREFIX}${PID}`] } } as Partial<Decision> & { id: string });
+  // Two file-superset candidates: the file fallback alone would be ambiguous.
+  const candidates: CommitCandidate[] = [{ sha: "rebased", files: ["src/a.ts"] }, { sha: "decoy", files: ["src/a.ts", "CHANGELOG.md"] }];
+  const ids: Record<string, string> = { rebased: PID, decoy: "b".repeat(40) };
+  const plan = planCommitRepair([d], candidates, (sha) => ids[sha] ?? null);
+  assert.deepEqual(plan.rewrites, [{ id: "dec_1", from: "gone", to: "rebased" }]);
+});
+
+test("planCommitRepair: a recomputed patch-id still outranks the recorded one", () => {
+  const d = D({ id: "dec_1", commit: "live", related_files: ["src/a.ts"], provenance: { source: "llm_draft", confidence: 0.5, evidence: ["commit:live", `${PATCH_ID_PREFIX}${PID}`] } } as Partial<Decision> & { id: string });
+  const candidates: CommitCandidate[] = [{ sha: "x", files: ["src/a.ts"] }, { sha: "y", files: ["src/a.ts"] }];
+  const ids: Record<string, string> = { live: "c".repeat(40), x: PID, y: "c".repeat(40) };
+  assert.deepEqual(planCommitRepair([d], candidates, (sha) => ids[sha] ?? null).rewrites, [{ id: "dec_1", from: "live", to: "y" }]);
+});
+
+test("planCommitRepair: a missing commit with no patch-id match is never file-guessed", () => {
+  const d = D({ id: "dec_1", commit: "gone", related_files: ["src/a.ts"], provenance: { source: "llm_draft", confidence: 0.5, evidence: ["commit:gone", `${PATCH_ID_PREFIX}${PID}`] } } as Partial<Decision> & { id: string });
+  const candidates: CommitCandidate[] = [{ sha: "unrelated", files: ["src/a.ts"] }];
+  const ids: Record<string, string> = { unrelated: "b".repeat(40) };
+  assert.deepEqual(planCommitRepair([d], candidates, (sha) => ids[sha] ?? null, () => true).rewrites, []);
+  assert.equal(planCommitRepair([d], candidates, (sha) => ids[sha] ?? null, () => false).rewrites.length, 1, "control: a present orphan keeps the file fallback");
+});
+
+test("repairDecisionCommit replaces the patch-id tag with the new commit's, or drops it", () => {
+  const d = D({ id: "dec_1", commit: "old", provenance: { source: "llm_draft", confidence: 0.5, evidence: ["commit:old", `${PATCH_ID_PREFIX}${PID}`] } } as Partial<Decision> & { id: string });
+  const plan = { rewrites: [{ id: "dec_1", from: "old", to: "new" }], records: ["dec_1"] };
+  assert.deepEqual(repairDecisionCommit(d, plan, "d".repeat(40)).provenance.evidence, ["commit:new", `${PATCH_ID_PREFIX}${"d".repeat(40)}`]);
+  assert.deepEqual(repairDecisionCommit(d, plan).provenance.evidence, ["commit:new"]);
+});
+
+test("repairDecisionCommit adds no patch-id tag when the evidence has no commit entry", () => {
+  const d = D({ id: "dec_1", commit: "old" });
+  d.provenance.evidence = [];
+  const out = repairDecisionCommit(d, { rewrites: [{ id: "dec_1", from: "old", to: "new" }], records: ["dec_1"] }, "a".repeat(40));
+  assert.equal(out.commit, "new");
+  assert.ok(!out.provenance.evidence.some((e) => e.startsWith(PATCH_ID_PREFIX)));
 });

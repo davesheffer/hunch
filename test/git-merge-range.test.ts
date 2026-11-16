@@ -69,7 +69,7 @@ test("commitRepairStatus separates current, orphaned and unresolvable", () => {
     git(root, "checkout", "-q", "main");
     assert.equal(commitRepairStatus(base, "main", root), "current");
     assert.equal(commitRepairStatus(feature, "main", root), "orphaned");
-    assert.equal(commitRepairStatus(MISSING, "main", root), "unresolvable");
+    assert.equal(commitRepairStatus(MISSING, "main", root), "missing", "absent from a complete clone");
     assert.equal(commitRepairStatus("not-a-sha", "main", root), "unresolvable");
   } finally { cleanup(); }
 });

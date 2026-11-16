@@ -59,12 +59,12 @@ import {
   extractJson,
   type SynthPreference,
 } from "../synthesis/provider.js";
-import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, fileAtRef, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeFilesOrNull, rangeGateDiff, rangeCommits, revExists, revParse, sameFilesystemEntry, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, mergeRangeChanges, commitsExist, worktreePaths, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
+import { isGitRepo, isGitRepoRoot, sameGitPublication, sameRemoteUrl, canonicalRemoteUrl, repositoryUsesRemote, headSha, isolatedHeadSha, logSince, lastChangeDate, checkFreshnessRevision, teamPullIsFresh, firstCommitForFile, fileAtRef, stagedFiles, workingFiles, commitFiles, asOfDate, stagedGateDiff, workingGateDiff, commitGateDiff, rangeFiles, rangeFilesOrNull, rangeGateDiff, rangeCommits, revExists, revParse, sameFilesystemEntry, commitAndPushHunch, pullHunchStatus, pullHunchStatusDetailed, describePullFailure, syncExistingHunch, gitUntrackCached, gitCommonDir, checkoutCommonDir, separateGitDirCandidate, separateGitDirLink, hooksDir, isLinkedWorktree, mainWorktreeRoot, gitMemoryLog, memoryMoveDiff, revertMemoryMove, pushCurrentBranch, commitChanges, commitRepairStatusAgainst, commitPatchIds, isCompleteRepo, mergeRangeChanges, commitsExist, worktreePaths, type HunchPullStatus, type HunchPullFailureDetail } from "../extractors/git.js";
 import { runbookDraft } from "../core/runbookDraft.js";
 import { parseMemoryLog, type MemoryMove } from "../core/memorylog.js";
 import { memoryFor, type MemoryFor } from "../extractors/featurelog.js";
 import { renamesOf, planRepair, repairDecision, repairConstraint, type RepairPlan } from "../core/repair.js";
-import { orphanedCommitDecisions, planCommitRepair, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
+import { orphanedCommitDecisions, planCommitRepair, recordedPatchId, repairDecisionCommit, pickRewrite, commitRepairReviewHash, mergeRewrites, firstFor, deadRewrites, resolvedRewriteIds, withoutDropped, addDropped, withheldForUnresolvableTo, type CommitRewrite, type DroppedRewrite } from "../core/commitrepair.js";
 import { readPendingRepairs, writePendingRepairs, readDroppedRepairs, writeDroppedRepairs, readActivePendingRepairs, withheldRewrites } from "../core/repairqueue.js";
 import { planPolicyRepair, repairPolicySpec, type PolicyBindingRewrite } from "../constitution/repairPolicies.js";
 import { writeTeamConfig, ensureTeamOverlay, readTeamConfig, isTeamStoreTrusted, teamWiringConsented, trustTeamStore, teamTrustFile, untrustedTeamStoreMessage, safeGitUrl, safeTeamRef, overlayMatchesTeamRemote, advertisedTeamRemoteContract, boundedTeamGitEnv, cloneValidatedTeamOverlay, explicitTeamRemoteContract, teamRemoteContract } from "../integrations/team.js";
@@ -6516,9 +6516,15 @@ program
       const candidates = rangeResolves && !opts.apply && !opts.drop ? mergeRangeChanges(oldRef, newRef, root) : [];
       // Orphaned means HEAD no longer reaches the commit either: a historical
       // --range tip alone would flag every newer, perfectly reachable commit (#450).
-      const orphaned = candidates.length ? orphanedCommitDecisions(decisions, (sha) => commitRepairStatusAgainst(sha, [newRef, "HEAD"], root)) : [];
+      const statusMemo = new Map<string, ReturnType<typeof commitRepairStatusAgainst>>();
+      // Only decisions with a recorded patch-id can act on "missing": skip that probe for the rest.
+      const taggedShas = new Set(decisions.filter((d) => d.commit && recordedPatchId(d) !== null).map((d) => d.commit!));
+      const statusOf = (sha: string) => statusMemo.get(sha) ?? statusMemo.set(sha, commitRepairStatusAgainst(sha, [newRef, "HEAD"], root, { probeMissing: taggedShas.has(sha) })).get(sha)!;
+      const orphaned = candidates.length ? orphanedCommitDecisions(decisions, statusOf) : [];
       const patchIds = orphaned.length ? commitPatchIds([...orphaned.map((d) => d.commit!), ...candidates.map((c) => c.sha)], root) : new Map<string, string>();
-      const freshPlan = candidates.length ? planCommitRepair(orphaned, candidates, (sha) => patchIds.get(sha) ?? null) : { rewrites: [], records: [] };
+      const freshPlan = candidates.length
+        ? planCommitRepair(orphaned, candidates, (sha) => patchIds.get(sha) ?? null, (d) => statusOf(d.commit!) === "missing")
+        : { rewrites: [], records: [] };
       // Always persisted (local-only file): a hook-time detection survives for a later human --apply.
       const freshMatches = withoutDropped(freshPlan.rewrites, dropped);
       if (freshMatches.length) saveQueue(mergeRewrites(freshMatches, queue));
@@ -6588,7 +6594,10 @@ program
           const previewPatchIds = commitPatchIds(toApply.flatMap((r) => [r.from, r.to]), root);
           for (const r of toApply) {
             const reason = stayReason(r);
-            const samePatch = !!previewPatchIds.get(r.from) && previewPatchIds.get(r.from) === previewPatchIds.get(r.to);
+            // A gc'd/never-fetched `from` has no recomputable patch-id: use the one recorded at capture.
+            const recorded = firstFor(decisions, r.id);
+            const fromPatch = previewPatchIds.get(r.from) ?? (recorded ? recordedPatchId(recorded) : null);
+            const samePatch = !!fromPatch && fromPatch === previewPatchIds.get(r.to);
             const label = reason === "invisible" ? "not visible this run — --apply would leave it queued"
               : reason === "withheld" ? "proposed replacement commit doesn't resolve in this repository — --apply would leave it queued"
               : reason === "duplicate" ? "another queued entry for this same decision would be applied instead — --apply would leave this one queued"
@@ -6608,8 +6617,10 @@ program
 
       const homes = new Set<MemoryHome>();
       const appliedIds = new Set<string>();
+      // Shallow clone: boundary commits get a wrong patch-id, so drop the tag rather than record it.
+      const toPatchIds = isCompleteRepo(root) ? commitPatchIds(plan.rewrites.map((r) => r.to), root) : new Map<string, string>();
       for (const d of decisions) {
-        const healed = repairDecisionCommit(d, plan);
+        const healed = repairDecisionCommit(d, plan, toPatchIds.get(pickRewrite(plan, d.id)?.to ?? "") ?? null);
         if (healed === d) continue;
         const home = decisionMemoryHome(store, d.id);
         store.putWhereItLives("decisions", healed);
