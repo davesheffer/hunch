@@ -192,13 +192,21 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
       return;
     }
     // Marker-owned (as bootstrap, init and uninstall treat it) but without a readable pin.
+    const first = report.issues.length;
     const pin = launcherPinOf(text);
     if (pin === null) {
       report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: `carries the ${HOOK_LAUNCHER_MARKER} marker but no readable pin; run hunch integrations repair-pins to regenerate it` });
-      return;
+    } else {
+      recordPins(HOOK_LAUNCHER_FILE, [`@davesheffer/hunch@${pin}`]);
+      if (!launcherIsCurrent(text)) report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: "modified, or written by an older Hunch template; run hunch integrations repair-pins to regenerate it" });
     }
-    recordPins(HOOK_LAUNCHER_FILE, [`@davesheffer/hunch@${pin}`]);
-    if (!launcherIsCurrent(text)) report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: "modified, or written by an older Hunch template; run hunch integrations repair-pins to regenerate it" });
+    // repair-pins never rewrites through a symlink (it skips the launcher), so pointing
+    // at it would loop forever: name the manual fix instead.
+    let linked = false;
+    try { linked = lstatSync(path).isSymbolicLink() || lstatSync(dirname(path)).isSymbolicLink(); } catch { linked = false; }
+    if (linked) for (const issue of report.issues.slice(first)) {
+      issue.detail = issue.detail.replace(/; run hunch integrations repair-pins.*$/, `; it or its directory is a symlink, which repair-pins never writes through: re-create it as a regular file in a real directory (delete it, then run hunch init)`);
+    }
   };
   // Machine-local runtime evidence; an unreadable ledger simply leaves hooks untested.
   let observed: HookObservation[] = [];
@@ -401,7 +409,29 @@ export function repairIntegrationPins(root: string, opts: { skip?: (file: string
     }
   }
   for (const { file, before } of pending) if (readFileSync(join(root, file), "utf8") !== before) throw new Error(`${file} changed during repair; retry`);
-  for (const { file, after } of pending) writeFileAtomic(join(root, file), after);
+  // All-or-nothing: a later write that fails (a read-only launcher, EPERM) must not
+  // leave settings already pointing at a pin the launcher never received.
+  let done = 0;
+  try {
+    for (const { file, after } of pending) { writeFileAtomic(join(root, file), after); done++; }
+  } catch (error) {
+    const failed = pending[done]!.file;
+    const unrestored: string[] = [];
+    const edited: string[] = [];
+    for (const { file, before, after } of pending.slice(0, done).reverse()) {
+      // Restore only our own bytes: a file someone edited since our write is theirs now.
+      try {
+        if (readFileSync(join(root, file), "utf8") !== after) { edited.push(file); continue; }
+        writeFileAtomic(join(root, file), before);
+      } catch { unrestored.push(file); }
+    }
+    const notes = [
+      ...(unrestored.length ? [`could NOT restore ${unrestored.join(", ")}; check them by hand`] : []),
+      ...(edited.length ? [`left ${edited.join(", ")} as edited by someone else after repair wrote it; check them by hand`] : []),
+    ];
+    const state = notes.length ? notes.join("; ") : done ? `restored ${done} already-updated file(s); nothing changed` : "nothing changed";
+    throw new Error(`repair-pins could not write ${failed} (${(error as Error).message}); ${state}`, { cause: error });
+  }
   return pending.map(p => p.file);
 }
 

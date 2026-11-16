@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { commitAndPushHunch } from "../src/extractors/git.js";
 import { isIndexedCodePath } from "../src/extractors/repoSource.js";
 import { isHunchHookCommand } from "../src/integrations/hookmatch.js";
-import { installClaudeHooks } from "../src/integrations/scaffold.js";
+import { installClaudeHooks, writeMcpJson } from "../src/integrations/scaffold.js";
 import { inspectIntegrations, machineLocalIntegrationFiles, repairIntegrationPins } from "../src/integrations/health.js";
 import { applyUninstall, planUninstall } from "../src/integrations/uninstall.js";
 import { HUNCH_VERSION } from "../src/core/version.js";
@@ -88,6 +88,38 @@ test("writeHookLauncher writes the pinned launcher, is idempotent and keeps a fi
   writeFileSync(file, "// mine\n");
   assert.equal(writeHookLauncher(root).action, "kept");
   assert.equal(readFileSync(file, "utf8"), "// mine\n");
+});
+
+test("repair-pins is all-or-nothing: a write that fails mid-way restores every file already written", (t) => {
+  if (!win && process.getuid?.() === 0) return t.skip("root ignores permission bits");
+  const root = tmp(t);
+  // .mcp.json (written first, at the root) gives POSIX a write that succeeds before the
+  // locked one fails, so the rollback runs on every platform.
+  writeMcpJson(root, { command: "npx", args: ["-y", "--package=hunch-exact@npm:@davesheffer/hunch@1.0.0", "hunch"] });
+  installClaudeHooks(root, claudeHookLauncherCommand("1.0.0"));
+  writeHookLauncher(root, "1.0.0");
+  const mcp = join(root, ".mcp.json");
+  const settings = join(root, ".claude", "settings.json");
+  const launcher = join(root, HOOK_LAUNCHER_FILE);
+  const mcpBefore = readFileSync(mcp, "utf8");
+  const before = readFileSync(settings, "utf8");
+  // Windows: a read-only attribute blocks the rename over the launcher only (settings.json
+  // and .mcp.json written first). POSIX rename ignores the file's mode, so lock .claude/:
+  // .mcp.json is written, then settings.json fails.
+  const locked = win ? launcher : dirname(launcher);
+  const failed = (win ? HOOK_LAUNCHER_FILE : ".claude/settings.json").replace(/[.\/]/g, "\\$&");
+  chmodSync(locked, win ? 0o444 : 0o555);
+  try {
+    assert.throws(() => repairIntegrationPins(root), new RegExp(`could not write ${failed}.*restored ${win ? 2 : 1} already-updated file`));
+  } finally {
+    chmodSync(locked, win ? 0o666 : 0o755);
+  }
+  assert.equal(readFileSync(mcp, "utf8"), mcpBefore, ".mcp.json rolled back");
+  assert.equal(readFileSync(settings, "utf8"), before, "settings.json rolled back");
+  assert.equal(launcherPinOf(readFileSync(launcher, "utf8")), "1.0.0");
+  const repaired = repairIntegrationPins(root);
+  assert.ok([".mcp.json", ".claude/settings.json", HOOK_LAUNCHER_FILE].every((f) => repaired.includes(f)), `all repaired once writable: ${repaired}`);
+  assert.notEqual(readFileSync(settings, "utf8"), before);
 });
 
 test("doctor reports a missing or markerless launcher and its pin drift; repair-pins refreshes a marker-owned launcher", (t) => {
@@ -299,6 +331,49 @@ test("repair-pins repairs the bootstrap's pin inside settings.json and regenerat
   for (const entries of Object.values(j.hooks)) for (const e of entries) for (const h of e.hooks) assert.equal(h.command, CLAUDE_HOOK_LAUNCHER_COMMAND);
   assert.equal(readFileSync(file, "utf8"), renderHookLauncher(HUNCH_VERSION));
   assert.deepEqual(inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE), []);
+});
+
+test("a symlinked launcher with a stale pin names the manual fix, never repair-pins it skips", (t) => {
+  const root = tmp(t);
+  installClaudeHooks(root, CLAUDE_HOOK_LAUNCHER_COMMAND);
+  const file = join(root, HOOK_LAUNCHER_FILE);
+  const real = join(root, "real-launch.cjs");
+  writeFileSync(real, renderHookLauncher("1.0.0"));
+  try { symlinkSync(real, file, "file"); } catch (e) {
+    if (win && (e as NodeJS.ErrnoException).code === "EPERM") return t.skip("file symlinks need Developer Mode on Windows");
+    throw e;
+  }
+  const details = () => inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE).map((i) => i.detail);
+  assert.ok(details().length > 0, "drift still reported");
+  const manual = () => {
+    assert.ok(details().length > 0, "drift still reported");
+    for (const d of details()) {
+      assert.doesNotMatch(d, /run hunch integrations repair-pins/, d);
+      assert.match(d, /symlink.*re-create it as a regular file/, d);
+    }
+  };
+  manual();
+  assert.deepEqual(repairIntegrationPins(root).filter((f) => f === HOOK_LAUNCHER_FILE), [], "repair-pins still never writes through it");
+  assert.equal(launcherPinOf(readFileSync(real, "utf8")), "1.0.0");
+  // A marker-owned target with no readable pin takes the same manual route.
+  writeFileSync(real, renderHookLauncher("1.0.0").replace(/^.*const PIN.*$/m, ""));
+  assert.equal(launcherPinOf(readFileSync(real, "utf8")), null);
+  manual();
+});
+
+test("a launcher under a symlinked .claude directory names the manual fix for every issue form", (t) => {
+  const root = tmp(t);
+  const real = join(root, "real-claude");
+  mkdirSync(real);
+  symlinkSync(real, join(root, ".claude"), win ? "junction" : "dir");
+  installClaudeHooks(root, CLAUDE_HOOK_LAUNCHER_COMMAND);
+  const file = join(real, "hunch-hook-launch.cjs");
+  for (const text of [renderHookLauncher("1.0.0"), renderHookLauncher(HUNCH_VERSION).replace(/^.*const PIN.*$/m, ""), `${renderHookLauncher(HUNCH_VERSION)}// edit\n`]) {
+    writeFileSync(file, text);
+    const details = inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE).map((i) => i.detail);
+    assert.ok(details.length > 0, "an issue is reported");
+    for (const d of details) assert.match(d, /symlink, which repair-pins never writes through/, d);
+  }
 });
 
 test("a git-ignored launcher is machine-local, and is never moved while a machine-local settings.json is skipped", (t) => {
