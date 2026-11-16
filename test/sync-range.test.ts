@@ -626,3 +626,19 @@ test("sync --range rejects --samples without --synthesize", () => {
     cleanupDir(root);
   }
 });
+
+test("sync --range prints the heuristic-draft warning when synthesis falls back", () => {
+  const { root, base } = fixture();
+  try {
+    commitFile(root, "feat: fallback feature");
+    const fake = fakeProvider(root);
+    const r = runCliEnv(root, fake.env, "sync", "--range", `${base}..HEAD`, "--synthesize", "--no-commit");
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /\n    ⚠ heuristic draft instead: /, r.stdout);
+    const quiet = runCliEnv(root, fake.env, "sync", "--range", `${base}..HEAD`, "--synthesize", "--force", "--quiet", "--no-commit");
+    assert.equal(quiet.status, 0, quiet.stderr);
+    assert.doesNotMatch(quiet.stdout, /heuristic draft instead/, quiet.stdout);
+  } finally {
+    cleanupDir(root);
+  }
+});
