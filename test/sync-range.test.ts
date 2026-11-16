@@ -139,8 +139,12 @@ test("sync --range skips a rebased duplicate of an already captured commit", () 
     assert.ok(decFile);
     const decId = JSON.parse(readFileSync(join(root, ".hunch/decisions", decFile!), "utf8")).id as string;
     git(root, "checkout", "-q", "main");
+    // Advance main first: a cherry-pick onto x's own parent within the same second
+    // recreates x byte-for-byte (same sha), which is not a rebased duplicate.
+    commitFile(root, "chore: unrelated main commit");
     const before = git(root, "rev-parse", "HEAD");
     git(root, "cherry-pick", x);
+    assert.notEqual(git(root, "rev-parse", "HEAD"), x);
     const r = runCli(root, "sync", "--range", `${before}..HEAD`, "--no-commit");
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, new RegExp(`skipped: rebased duplicate of ${decId}`));
@@ -622,6 +626,22 @@ test("sync --range rejects --samples without --synthesize", () => {
     const r = runCli(root, "sync", "--range", `${base}..HEAD`, "--samples", "2");
     assert.equal(r.status, 1, r.stdout);
     assert.match(r.stderr, /--samples needs --synthesize/, r.stderr);
+  } finally {
+    cleanupDir(root);
+  }
+});
+
+test("sync --range prints the heuristic-draft warning when synthesis falls back", () => {
+  const { root, base } = fixture();
+  try {
+    commitFile(root, "feat: fallback feature");
+    const fake = fakeProvider(root);
+    const r = runCliEnv(root, fake.env, "sync", "--range", `${base}..HEAD`, "--synthesize", "--no-commit");
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /\n    ⚠ heuristic draft instead: /, r.stdout);
+    const quiet = runCliEnv(root, fake.env, "sync", "--range", `${base}..HEAD`, "--synthesize", "--force", "--quiet", "--no-commit");
+    assert.equal(quiet.status, 0, quiet.stderr);
+    assert.doesNotMatch(quiet.stdout, /heuristic draft instead/, quiet.stdout);
   } finally {
     cleanupDir(root);
   }
