@@ -27,6 +27,9 @@ test("footprint: every surface is measured, non-empty, and under its ceiling", a
   // Pin the default (core) toolset so a developer's HUNCH_MCP_TOOLS can't move the numbers.
   const saved = process.env.HUNCH_MCP_TOOLS;
   delete process.env.HUNCH_MCP_TOOLS;
+  // The operating-loop surface is opt-in; measure it here.
+  const savedLoop = process.env.HUNCH_LOOP;
+  process.env.HUNCH_LOOP = "1";
   const { store, root, cleanup } = tempStore();
   try {
     // A FILE target with more records than the budget holds, so the hunch_context
@@ -64,6 +67,7 @@ test("footprint: every surface is measured, non-empty, and under its ceiling", a
   } finally {
     cleanup();
     if (saved !== undefined) process.env.HUNCH_MCP_TOOLS = saved;
+    if (savedLoop !== undefined) process.env.HUNCH_LOOP = savedLoop; else delete process.env.HUNCH_LOOP;
   }
 });
 

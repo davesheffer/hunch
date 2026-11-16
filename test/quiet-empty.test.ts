@@ -55,12 +55,14 @@ function seed(root: string, fill: (store: HunchStore) => void): void {
 }
 
 /** Runs the claude hook in a child; `quiet` sets HUNCH_QUIET_EMPTY through the spawned env. Returns the injected context ("" when silent). */
-function ctx(root: string, quiet: boolean, payload: Record<string, unknown>): string {
+function ctx(root: string, quiet: boolean, payload: Record<string, unknown>, loop: string | null = "1"): string {
   const tmp = join(root, ".tmp");
   mkdirSync(tmp, { recursive: true });
   const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp };
   delete env.HUNCH_PIPELINE;
   env.HUNCH_QUIET_EMPTY = quiet ? "1" : "0";
+  delete env.HUNCH_LOOP;
+  if (loop !== null) env.HUNCH_LOOP = loop;
   const out = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, "hook", "--provider", "claude"], {
     cwd: root, env, input: JSON.stringify({ cwd: root, session_id: "quiet-s", prompt_id: "quiet-p", ...payload }), encoding: "utf8",
   }).trim();
@@ -92,7 +94,30 @@ test("quiet-empty: SessionStart on decisions only drops orientation but keeps th
   assert.ok(off.includes(PIPELINE_LOOP));
   const quiet = ctx(root, true, { hook_event_name: "SessionStart", source: "startup" });
   assert.doesNotMatch(quiet, /Hunch orientation/);
-  assert.ok(quiet.includes(PIPELINE_LOOP), "the verify loop is not memory: quiet mode must keep it");
+  assert.ok(quiet.includes(PIPELINE_LOOP), "the verify loop is not memory: opted in (ctx defaults HUNCH_LOOP=1), quiet mode must keep it");
+});
+
+test("loop switch: SessionStart omits the operating loop by default and carries it under HUNCH_LOOP=1", t => {
+  const root = repo(t);
+  seed(root, (s) => s.json.put("decisions", decision("dec_quiet0002", "Use zebracache for sessions") as never));
+  for (const quiet of [false, true]) {
+    const dflt = ctx(root, quiet, { hook_event_name: "SessionStart", source: "startup" }, null);
+    assert.ok(!dflt.includes("Hunch operating loop"), `loop text absent by default (quiet=${quiet})`);
+    assert.ok(!dflt.includes(PIPELINE_LOOP));
+    const on = ctx(root, quiet, { hook_event_name: "SessionStart", source: "startup" }, "1");
+    assert.ok(on.includes("Hunch operating loop"), `loop text present with HUNCH_LOOP=1 (quiet=${quiet})`);
+  }
+});
+
+test("loop switch: with the loop off, a fresh or quiet SessionStart still delivers the integration warning alone", t => {
+  const root = repo(t);
+  // A floating npx MCP launcher is an integration issue for the claude harness.
+  writeFileSync(join(root, ".mcp.json"), JSON.stringify({ mcpServers: { hunch: { command: "npx", args: ["--package=@davesheffer/hunch", "hunch", "mcp"] } } }));
+  for (const quiet of [false, true]) {
+    const out = ctx(root, quiet, { hook_event_name: "SessionStart", source: "startup" }, null);
+    assert.match(out, /Hunch integration needs attention/, `warning delivered with loop off (quiet=${quiet})`);
+    assert.ok(!out.includes(PIPELINE_LOOP));
+  }
 });
 
 test("quiet-empty: SessionStart with an active constraint still orients under HUNCH_QUIET_EMPTY", t => {

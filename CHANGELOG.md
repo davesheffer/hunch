@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The SessionStart operating loop is now opt-in.** Hunch used to add its six-step operating loop (scope, evidence, change, verify, attack, report) to every session start. In a paired agent benchmark on the bench VM (5 SWE-bench pairs x 2 reps, daemon, lean grounding and quiet hooks on), that text roughly doubled the agent's test runs and turns: without it, cost per session fell from $0.219 to $0.157 and wall time from 54 to 35 s, with first-task accuracy within run-to-run spread. The new `loop` switch turns it back on: `HUNCH_LOOP=1`, `hooks.loop: true` in `.hunch/config.json`, or `hunch switches loop on`. Failure capture, verify obligations and the rest of the pipeline are unchanged, and `HUNCH_PIPELINE=0` still disables everything. `hunch footprint` counts the loop only when it is on.
+
 ## 1.56.0 — 2026-11-15
 
 - **Claude Code hooks no longer start npx on every call.** Each agent hook used to run `npx -y @davesheffer/hunch@<pin> hook`, which costs 2–4 s per call even with the package cached. `hunch init` now writes a small marker-owned launcher, `.claude/hunch-hook-launch.cjs`, and the hook command is a `node -e` bootstrap that runs it. The launcher runs an installed CLI of exactly the pinned version in-process (about 0.5 s per hook call, measured on Windows) and otherwise falls back to the same pinned npx command, so a clone without the launcher is slower, never broken. Commit the launcher so other clones and worktrees get the fast path. `hunch doctor` reports a missing, markerless, legacy or stale launcher, `repair-pins` regenerates it, and `uninstall` removes only a marker-owned one. Upgrading: re-run `hunch init` to switch existing hooks over (#646).

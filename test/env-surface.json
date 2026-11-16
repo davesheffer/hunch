@@ -319,6 +319,20 @@
       }
     ]
   },
+  "HUNCH_LOOP": {
+    "class": "hunch-config",
+    "purpose": "Opt in to the SessionStart operating-loop text (default off)",
+    "tests": [
+      {
+        "file": "test/hook-switches.test.ts",
+        "title": "hook switches: loop is the one switch that defaults off; env or config opts in"
+      },
+      {
+        "file": "test/quiet-empty.test.ts",
+        "title": "loop switch: SessionStart omits the operating loop by default and carries it under HUNCH_LOOP=1"
+      }
+    ]
+  },
   "HUNCH_LEAN_GROUNDING": {
     "class": "hunch-config",
     "purpose": "Lean always-loaded grounding block and compact MCP instructions (default); 0 restores the full block and instructions",

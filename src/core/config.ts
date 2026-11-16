@@ -54,7 +54,7 @@ export interface HunchConfig {
    *  repoIdOf / ensureRepoId. */
   repo_id?: unknown;
   /** Hook-overhead switches shared by the team (src/core/hookSwitches.ts): `lean_grounding`
-   *  (true | false | "preserve"), `quiet_empty`, `daemon`. Absent = on; env overrides. */
+   *  (true | false | "preserve"), `quiet_empty`, `daemon`, `loop` (operating loop; absent = off). The others: absent = on; env overrides. */
   hooks?: Partial<Record<HookSwitchName, HookSwitchValue>>;
   /** On which branches Hunch auto-commits PUBLIC memory (the tracked .hunch/): absent or
    *  true = the default (every branch but the default one, per-machine opt-in there),

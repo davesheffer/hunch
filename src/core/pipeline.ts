@@ -1358,6 +1358,12 @@ export function quietEmptyEnabled(root?: string): boolean {
   return hookSwitch("quiet_empty", root).value === true;
 }
 
+/** The SessionStart operating-loop text (PIPELINE_LOOP). Opt-in, default off: env
+ * HUNCH_LOOP or `.hunch/config.json` hooks.loop turns it on. */
+export function loopEnabled(root?: string): boolean {
+  return pipelineEnabled() && hookSwitch("loop", root).value === true;
+}
+
 /** Load session state; on ANY problem return a fresh state (never throw). */
 export function loadPipelineState(sessionId: string): PipelineState {
   try {

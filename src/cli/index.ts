@@ -5564,7 +5564,7 @@ program
 // ---- switches (hook-overhead switches) ------------------------------------
 program
   .command("switches")
-  .description("Show or set the hook-overhead switches (lean_grounding, quiet_empty, daemon) in .hunch/config.json; env vars override.")
+  .description("Show or set the hook-overhead switches (lean_grounding, quiet_empty, daemon, loop; loop defaults off) in .hunch/config.json; env vars override.")
   .argument("[name]", HOOK_SWITCH_NAMES.join(" | "))
   .argument("[value]", "on | off | default (lean_grounding also: preserve)")
   .option("--json", "print every switch with its value and source as JSON")
