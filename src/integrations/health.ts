@@ -10,7 +10,7 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { readConfig } from "../core/config.js";
 import { hunchPaths } from "../core/paths.js";
 import { readHookObservations, type HookObservation } from "../core/hookObservations.js";
-import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE, isLauncherHookCommand, isLegacyLauncherHookCommand, launcherIsCurrent, launcherPinOf, renderHookLauncher } from "./hookLauncher.js";
+import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE, isLauncherHookCommand, isLegacyLauncherHookCommand, bootstrapRunsLauncher, declaredLauncherPin, launcherIsCurrent, launcherPinOf, ownsLauncherText, renderHookLauncher } from "./hookLauncher.js";
 
 /** Normalized hook events that prove each capability was delivered by the host. */
 const CAPABILITY_EVIDENCE: Record<Exclude<Capability, "mcp">, readonly string[]> = {
@@ -187,11 +187,18 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
       report.notes.push(`${HOOK_LAUNCHER_FILE} is unreadable (${(e as Error).message}), so hooks run the slower pinned npx fallback`);
       return;
     }
-    if (!text.includes(HOOK_LAUNCHER_MARKER)) {
-      report.notes.push(`${HOOK_LAUNCHER_FILE} has no ${HOOK_LAUNCHER_MARKER} marker, so it is yours and hooks run the slower pinned npx fallback; delete it and run hunch init to restore the fast path`);
+    if (!ownsLauncherText(text) && bootstrapRunsLauncher(text)) {
+      // Not Hunch's to rewrite, yet the frozen bootstrap (indexOf marker) runs it on every hook.
+      const declared = declaredLauncherPin(text);
+      if (declared !== null) recordPins(HOOK_LAUNCHER_FILE, [`@davesheffer/hunch@${declared}`]);
+      report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: `mentions ${HOOK_LAUNCHER_MARKER} off its header line, so Hunch will not refresh it, but the hook bootstrap still runs it on every hook${declared !== null ? ` (it pins ${declared})` : ""}; restore the header line (or delete the file) and run hunch init, or remove every ${HOOK_LAUNCHER_MARKER} mention to use the pinned npx fallback` });
       return;
     }
-    // Marker-owned (as bootstrap, init and uninstall treat it) but without a readable pin.
+    if (!ownsLauncherText(text)) {
+      report.notes.push(`${HOOK_LAUNCHER_FILE} has no ${HOOK_LAUNCHER_MARKER} header line, so it is yours and hooks run the slower pinned npx fallback; delete it and run hunch init to restore the fast path`);
+      return;
+    }
+    // Header-owned (as init, repair-pins and uninstall treat it) but without a readable pin.
     const first = report.issues.length;
     const pin = launcherPinOf(text);
     if (pin === null) {
@@ -403,7 +410,7 @@ export function repairIntegrationPins(root: string, opts: { skip?: (file: string
     const before = launcherText;
     const pin = launcherPinOf(before);
     // Marker-owned is enough: a launcher whose pin line was lost is regenerated too.
-    if (before.includes(HOOK_LAUNCHER_MARKER) && (pin !== version || !launcherIsCurrent(before))) {
+    if (ownsLauncherText(before) && (pin !== version || !launcherIsCurrent(before))) {
       if (!exactVersion.test(version)) throw new Error(`refusing non-exact Hunch pin for ${HOOK_LAUNCHER_FILE}`);
       pending.push({ file: HOOK_LAUNCHER_FILE, before, after: renderHookLauncher(version) });
     }

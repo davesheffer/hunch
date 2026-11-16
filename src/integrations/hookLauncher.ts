@@ -6,8 +6,9 @@
  * The hook command is now a self-contained `node -e` bootstrap
  * (claudeHookLauncherCommand). It runs the committed launcher
  * `.claude/hunch-hook-launch.cjs` (next to settings.json, outside the .hunch/
- * memory store, whose auto-commit accepts only memory JSON) when CLAUDE_PROJECT_DIR is set and that file carries
- * the ownership marker; in every other case (variable unset, file missing,
+ * memory store, whose auto-commit accepts only memory JSON) when CLAUDE_PROJECT_DIR is set and that file contains
+ * the marker anywhere (bootstrapRunsLauncher; the shipped shapes are frozen). Hunch itself
+ * treats the file as its own only by the stricter header rule (ownsLauncherText); in every other case (variable unset, file missing,
  * unreadable, markerless, or throwing on load) it runs the pinned npx command
  * itself. So a clone that lacks the launcher is slow, never broken. The bootstrap
  * text avoids every character bash, POSIX sh, PowerShell 5.1 or cmd would expand
@@ -38,8 +39,29 @@ export { HOOK_LAUNCHER_FILE };
 /** Where shape 1 kept it; a marker-owned file there is removed on re-init and uninstall. */
 export const LEGACY_HOOK_LAUNCHER_FILE = ".hunch/hook-launch.cjs";
 
-/** Ownership marker: present means Hunch may rewrite the file and the bootstrap may run it. */
+/** Launcher marker. On the header line (ownsLauncherText) it means Hunch owns the file and may
+ *  rewrite or delete it; anywhere in the file (bootstrapRunsLauncher) the installed bootstrap
+ *  runs it. The two rules differ on purpose: the bootstrap shapes are frozen once shipped. */
 export const HOOK_LAUNCHER_MARKER = "hunch:hook-launcher";
+
+/** Whether the frozen bootstrap shapes run this file: they test `indexOf(marker) >= 0`. */
+export function bootstrapRunsLauncher(text: string): boolean {
+  return text.includes(HOOK_LAUNCHER_MARKER);
+}
+
+/** The `const PIN` a launcher-shaped file declares, owned or not (for drift reporting only). */
+export function declaredLauncherPin(text: string): string | null {
+  return /^const PIN = "([^"]+)";\r?$/m.exec(text)?.[1] ?? null;
+}
+
+/** Whether a launcher file is Hunch's: the marker opens its header comment (the line
+ *  `// hunch:hook-launcher <pin> …`, first or second line, after the shebang). The marker
+ *  quoted anywhere else (a comment in a file the user took over, a string) is not
+ *  ownership, so init, repair-pins and uninstall never rewrite or delete such a file. */
+export function ownsLauncherText(text: string): boolean {
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/, 2);
+  return lines.some((line) => line === `// ${HOOK_LAUNCHER_MARKER}` || line.startsWith(`// ${HOOK_LAUNCHER_MARKER} `));
+}
 
 const npxSpec = (version: string) => `hunch-exact@npm:${HUNCH_PACKAGE_NAME}@${version}`;
 
@@ -181,8 +203,8 @@ else {
 
 /** The pinned version a launcher file carries, or null when it is not ours. */
 export function launcherPinOf(text: string): string | null {
-  if (!text.includes(HOOK_LAUNCHER_MARKER)) return null;
-  return /^const PIN = "([^"]+)";$/m.exec(text)?.[1] ?? null;
+  if (!ownsLauncherText(text)) return null;
+  return declaredLauncherPin(text);
 }
 
 export interface HookLauncherInstall {
@@ -193,7 +215,7 @@ export interface HookLauncherInstall {
 }
 
 /** Write (or refresh) the launcher for `version`. A file without the ownership
- *  marker, or a symlink, is the user's and is kept as is (con_8460b6770f). */
+ *  header (ownsLauncherText), or a symlink, is the user's and is kept as is (con_8460b6770f). */
 export function writeHookLauncher(root: string, version: string = HUNCH_VERSION): HookLauncherInstall {
   const file = join(root, HOOK_LAUNCHER_FILE);
   const next = renderHookLauncher(version);
@@ -203,7 +225,7 @@ export function writeHookLauncher(root: string, version: string = HUNCH_VERSION)
     try { before = readFileSync(file, "utf8"); } catch (e) {
       return { path: file, action: "kept", reason: (e as Error).message };
     }
-    if (!before.includes(HOOK_LAUNCHER_MARKER)) return { path: file, action: "kept" };
+    if (!ownsLauncherText(before)) return { path: file, action: "kept" };
     // A CRLF checkout (core.autocrlf) of the same text is unchanged.
     if (before.replace(/\r\n/g, "\n") === next) return { path: file, action: "unchanged" };
     writeFileAtomic(file, next);
@@ -227,9 +249,20 @@ export function claudeAgentHookCommand(root: string, inv: { installed: boolean; 
   const l = writeHookLauncher(root);
   if (removeLegacyHookLauncher(root)) say(`  ✓ removed the old ${LEGACY_HOOK_LAUNCHER_FILE} (the launcher now lives in ${HOOK_LAUNCHER_FILE})`);
   if (l.action === "kept" && l.reason) say(`  ⚠ kept ${HOOK_LAUNCHER_FILE} as is: it could not be read (${l.reason}), so hooks run the slower pinned npx fallback; fix or remove it and re-run init to restore the fast path`);
-  else if (l.action === "kept") say(`  ⚠ kept your existing ${HOOK_LAUNCHER_FILE} (no ${HOOK_LAUNCHER_MARKER} marker), so hooks run the slower pinned npx fallback; delete it and re-run init to restore the fast path`);
+  else if (l.action === "kept" && launcherKeptButRun(root)) say(`  ⚠ kept ${HOOK_LAUNCHER_FILE} as is: its ${HOOK_LAUNCHER_MARKER} marker is not on the header line, so Hunch will not refresh it, but the hook bootstrap still runs it on every hook; restore the header line (or delete the file) and re-run init, or remove every ${HOOK_LAUNCHER_MARKER} mention to make hooks use the pinned npx fallback`);
+  else if (l.action === "kept") say(`  ⚠ kept your existing ${HOOK_LAUNCHER_FILE} (no ${HOOK_LAUNCHER_MARKER} header line), so hooks run the slower pinned npx fallback; delete it and re-run init to restore the fast path`);
   else if (l.action !== "unchanged") say(`  ✓ ${l.action} ${HOOK_LAUNCHER_FILE}: commit it, or hooks in other clones and worktrees fall back to the slower npx path`);
   return CLAUDE_HOOK_LAUNCHER_COMMAND;
+}
+
+/** A kept launcher the bootstrap still runs (marker present, not on the header line). */
+function launcherKeptButRun(root: string): boolean {
+  try {
+    const file = join(root, HOOK_LAUNCHER_FILE);
+    if (lstatSync(file).isSymbolicLink() || !lstatSync(file).isFile()) return false;
+    const text = readFileSync(file, "utf8");
+    return !ownsLauncherText(text) && bootstrapRunsLauncher(text);
+  } catch { return false; }
 }
 
 /** Delete a marker-owned regular launcher at the shape-1 location; true when one was removed. */
@@ -237,7 +270,7 @@ export function removeLegacyHookLauncher(root: string): boolean {
   const file = join(root, LEGACY_HOOK_LAUNCHER_FILE);
   try {
     if (!existsSync(file) || lstatSync(file).isSymbolicLink() || lstatSync(dirname(file)).isSymbolicLink()) return false;
-    if (!readFileSync(file, "utf8").includes(HOOK_LAUNCHER_MARKER)) return false;
+    if (!ownsLauncherText(readFileSync(file, "utf8"))) return false;
     rmSync(file, { force: true });
     return true;
   } catch { return false; }

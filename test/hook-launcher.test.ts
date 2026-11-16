@@ -13,7 +13,7 @@ import { inspectIntegrations, machineLocalIntegrationFiles, repairIntegrationPin
 import { applyUninstall, planUninstall } from "../src/integrations/uninstall.js";
 import { HUNCH_VERSION } from "../src/core/version.js";
 import {
-  CLAUDE_HOOK_LAUNCHER_COMMAND, HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, claudeAgentHookCommand, claudeHookLauncherCommand, hookBootstrap, launcherPinOf, renderHookLauncher, writeHookLauncher,
+  CLAUDE_HOOK_LAUNCHER_COMMAND, HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, claudeAgentHookCommand, bootstrapRunsLauncher, claudeHookLauncherCommand, hookBootstrap, launcherPinOf, ownsLauncherText, removeLegacyHookLauncher, renderHookLauncher, writeHookLauncher,
 } from "../src/integrations/hookLauncher.js";
 import { publishedMcpInvocation, shellInvocation } from "../src/cli/invocation.js";
 import { cleanupDir } from "./fixtures.js";
@@ -138,7 +138,7 @@ test("doctor reports a missing or markerless launcher and its pin drift; repair-
   assert.deepEqual(launcherIssues(), []);
   writeFileSync(join(root, HOOK_LAUNCHER_FILE), "// mine\n");
   assert.deepEqual(launcherIssues(), [], "a user-owned launcher is a note, never a failure");
-  assert.match(notes(), /no hunch:hook-launcher marker/);
+  assert.match(notes(), /no hunch:hook-launcher header line/);
   assert.equal(repairIntegrationPins(root).includes(HOOK_LAUNCHER_FILE), false, "a markerless launcher is the user's");
 });
 
@@ -517,8 +517,68 @@ test("doctor: a marker-owned launcher without a readable pin is an issue repair-
   assert.deepEqual(issues(), []);
   writeFileSync(file, "// mine, no pin\n");
   assert.deepEqual(issues(), []);
-  assert.match(inspectIntegrations(root, "claude").notes.join("\n"), /no hunch:hook-launcher marker, so it is yours/);
+  assert.match(inspectIntegrations(root, "claude").notes.join("\n"), /no hunch:hook-launcher header line, so it is yours/);
   assert.equal(repairIntegrationPins(root).includes(HOOK_LAUNCHER_FILE), false);
+});
+
+test("#646: ownership is the marker header line, not the marker quoted anywhere in the file", (t) => {
+  const generated = renderHookLauncher("1.0.0");
+  assert.equal(ownsLauncherText(generated), true);
+  assert.equal(ownsLauncherText(generated.replace(/\n/g, "\r\n")), true, "a CRLF checkout is still ours");
+  assert.equal(ownsLauncherText("\uFEFF" + generated), true, "a BOM is still ours");
+  assert.equal(ownsLauncherText(generated.split("\n").slice(1).join("\n")), true, "no shebang: the header is the first line");
+  // The user took the file over (deleted the header, as it says) but the marker is still quoted.
+  const takenOver = generated.split("\n").filter((line) => !line.startsWith("// hunch:hook-launcher")).join("\n")
+    + "// forked from hunch:hook-launcher 1.0.0\nconst NOTE = \"hunch:hook-launcher\";\n";
+  assert.ok(takenOver.includes("hunch:hook-launcher"), "fixture: the marker is still quoted");
+  assert.equal(ownsLauncherText(takenOver), false);
+  assert.equal(launcherPinOf(takenOver), null, "a taken-over file has no pin Hunch reads");
+  assert.equal(ownsLauncherText("// note\n// see hunch:hook-launcher\n"), false, "marker after a non-header comment");
+  assert.equal(ownsLauncherText("#!/usr/bin/env node\n// x\n// hunch:hook-launcher 1.0.0\n"), false, "third line is not the header");
+  assert.equal(ownsLauncherText("// hunch:hook-launcherX 1.0.0\n"), false, "a longer word is not the marker");
+
+  const root = tmp(t);
+  installClaudeHooks(root, CLAUDE_HOOK_LAUNCHER_COMMAND);
+  const file = join(root, HOOK_LAUNCHER_FILE);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, takenOver);
+  assert.equal(writeHookLauncher(root).action, "kept", "init keeps it");
+  assert.equal(repairIntegrationPins(root).includes(HOOK_LAUNCHER_FILE), false, "repair-pins keeps it");
+  // The frozen bootstrap still runs it (marker anywhere), so doctor says so instead of "yours".
+  assert.equal(bootstrapRunsLauncher(takenOver), true);
+  const issues = inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE);
+  assert.ok(issues.some((i) => i.code === "hook-launcher" && /off its header line.*bootstrap still runs it.*pins 1\.0\.0/.test(i.detail)), JSON.stringify(issues));
+  assert.ok(issues.some((i) => i.code === "version-drift"), `its stale pin is still drift-checked: ${JSON.stringify(issues)}`);
+  assert.doesNotMatch(inspectIntegrations(root, "claude").notes.join("\n"), /so it is yours/);
+  const said: string[] = [];
+  claudeAgentHookCommand(root, { installed: true, agentHookShell: "x" }, (line) => said.push(line));
+  assert.match(said.join("\n"), /bootstrap still runs it/);
+  assert.equal(readFileSync(file, "utf8"), takenOver, "init still keeps it");
+  // With every mention gone it is plainly the user's: a note, no issue.
+  writeFileSync(file, "// mine\n");
+  assert.deepEqual(inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE), []);
+  assert.match(inspectIntegrations(root, "claude").notes.join("\n"), /so it is yours/);
+  writeFileSync(file, takenOver);
+  applyUninstall(planUninstall(root));
+  assert.equal(readFileSync(file, "utf8"), takenOver, "plain uninstall keeps it");
+  applyUninstall(planUninstall(root, { purge: true }));
+  assert.equal(readFileSync(file, "utf8"), takenOver, "uninstall --purge keeps it");
+  const legacy = join(root, LEGACY_HOOK_LAUNCHER_FILE);
+  mkdirSync(dirname(legacy), { recursive: true });
+  writeFileSync(legacy, takenOver);
+  assert.equal(removeLegacyHookLauncher(root), false, "the shape-1 cleanup keeps it");
+  assert.equal(readFileSync(legacy, "utf8"), takenOver);
+});
+
+test("#646: the frozen bootstrap runs a file with the marker off its header line, which is why doctor flags it", (t) => {
+  const f = fixture(t);
+  writeFileSync(f.launcher, `process.stdout.write("FORKED"); // forked from ${"hunch:hook-launcher"} 9.9.9\n`);
+  assert.equal(ownsLauncherText(readFileSync(f.launcher, "utf8")), false, "fixture: not header-owned");
+  const r = spawnSync(process.execPath, ["-e", hookBootstrap("9.9.9"), "hook"], { env: f.env, input: "IN", encoding: "utf8", timeout: 30_000 });
+  assert.equal(r.stdout, "FORKED", r.stderr);
+  writeFileSync(f.launcher, `process.stdout.write("FORKED");\n`);
+  const npx = spawnSync(process.execPath, ["-e", hookBootstrap("9.9.9"), "hook"], { env: f.env, input: "IN", encoding: "utf8", timeout: 30_000 });
+  assert.equal(npx.stdout, NPX_OUT, "with no mention it runs the pinned npx fallback");
 });
 
 test("doctor: shape-1 hooks get a legacy-launcher migrate note, not a missing .claude launcher", (t) => {
