@@ -47,7 +47,8 @@ import { assertCompleteRepoScan, assertNoTotalParseFailure, indexRepo, mergeScan
 // Importing this module is free (the addon load is a function call, not a
 // top-level side effect); only `doctor` below actually calls the loader.
 import { isParserLoadError, loadNativeTreeSitter } from "../extractors/nativeTreeSitter.js";
-import { syncCommit, recordFailure, captureTestRun } from "../synthesis/synthesize.js";
+import { syncCommit, recordFailure, captureTestRun, type SyncResult } from "../synthesis/synthesize.js";
+import { rangeCommits as syncRangeCommits, syncRange } from "../synthesis/syncrange.js";
 import { parseTestReport } from "../extractors/testreport.js";
 import {
   readSynthesisPreference,
@@ -907,7 +908,37 @@ program
   .option("--deep", "Deep Synthesis: sample the initiating provider repeatedly; never switch accounts")
   .option("--verify", "Critic pass: audit the draft against its commit, prune unsupported alternatives/consequences, down-weight weak grounding (extra provider call; advisory)")
   .option("--samples <n>", "sample the initiating provider n times and reconcile (default 2 under --deep)")
-  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string }) => {
+  .option("--range <a..b>", "capture every non-merge commit in a range (e.g. ORIG_HEAD..HEAD after a pull or server-side merge); deterministic drafts unless --synthesize")
+  .option("--max <n>", "with --range: capture at most the newest n commits (default 20, max 500)")
+  .option("--synthesize", "with --range: use the configured synthesis provider, like plain sync")
+  .action(async (sha: string | undefined, opts: { fromHook?: boolean; quiet?: boolean; force?: boolean; private?: boolean; overlay?: boolean; commit?: boolean; deep?: boolean; verify?: boolean; samples?: string; range?: string; max?: string; synthesize?: boolean }) => {
+    const quietFail = (msg: string) => { if (opts.quiet) process.exitCode = 1; else fail(msg); };
+    if (opts.range !== undefined && sha) return quietFail("pass either a [sha] or --range, not both");
+    if (opts.range === undefined && (opts.max !== undefined || opts.synthesize)) return quietFail("--max/--synthesize need --range");
+    if (opts.range !== undefined && !opts.synthesize && (opts.deep || opts.verify)) return quietFail("--deep/--verify need --synthesize with --range");
+    if (opts.range !== undefined && !opts.synthesize && opts.samples !== undefined) return quietFail("--samples needs --synthesize with --range");
+    let max = 20;
+    if (opts.max !== undefined) {
+      max = /^\d+$/.test(opts.max) ? Number(opts.max) : NaN;
+      if (!Number.isInteger(max) || max < 1 || max > 500) return quietFail(`--max must be a positive integer up to 500 (got "${opts.max}")`);
+    }
+    // Range mode resolves its commits BEFORE opening the store, so a rejected range
+    // never scaffolds .hunch/ in an uninitialised repo.
+    let rangeShas: { shas: string[]; total: number } | null = null;
+    if (opts.range !== undefined) {
+      const gitRoot = findRoot();
+      if (!isGitRepo(gitRoot)) return quietFail("sync needs a git repo");
+      try {
+        rangeShas = syncRangeCommits(opts.range, gitRoot, max);
+      } catch (e) {
+        return quietFail((e as Error).message);
+      }
+      // An empty range writes nothing, so it must not scaffold .hunch/ either.
+      if (!rangeShas.total) {
+        if (!opts.quiet) console.log(`Range ${opts.range}: no commits.`);
+        return;
+      }
+    }
     const { store, root } = storeFor();
     if (!isGitRepo(root)) return opts.quiet ? undefined : fail("sync needs a git repo");
     // In unified ("shared") mode every capture routes to the overlay — the sync path
@@ -919,36 +950,70 @@ program
     // exact-path bindings they break. Sync defers the repair commit so every
     // touched home is flushed at most once after all capture/review writes.
     // Fail open — a repair error must never take the capture path down.
+    // Range mode is capture-only: renames inside a range are not healed here (no repair,
+    // no binding rewrites). Drift surfaces any stale binding and `hunch repair --apply`
+    // heals it.
     let publicRepairTouched = false;
     let privateRepairTouched = false;
     let repairedBindings = 0;
-    try {
-      const repaired = runRepair(store, root, sha ?? headSha(root), true, { commitMode: "deferred" });
-      if (repaired?.applied) {
-        publicRepairTouched = repaired.publicTouched;
-        privateRepairTouched = repaired.privateTouched;
-        repairedBindings = repaired.plan.rewrites.length + repaired.policyRewrites.length;
-        if (!opts.quiet) console.log(`  ↳ repaired ${repairedBindings} memory binding(s) after rename`);
-      }
-    } catch { /* repair is best-effort; drift still surfaces anything left behind */ }
-    const r = await syncCommit(store, root, sha ?? headSha(root), {
-      force: opts.force,
-      private: toOverlay,
-      // A split-private overlay is sensitive/local by definition. A shared store
-      // is an explicit team policy and may keep its configured synthesis provider.
-      localOnly: toOverlay && store.mode === "private",
-      deep: opts.deep,
-      verify: opts.verify,
-      samples: parseSamples(opts.samples),
-    });
-    const doCommit = opts.commit ?? store.autoCommit;
-    if (r.status === "written") {
-      store.reindex();
-      if (!opts.quiet) console.log(`✓ captured decision ${r.decision?.id} via ${r.provider}: "${r.decision?.title}"`);
-      if (!opts.quiet && r.fallbackReason) console.log(`  ⚠ heuristic draft instead: ${r.fallbackReason}`);
-    } else if (!opts.quiet) {
-      console.log(`· skipped: ${r.reason}`);
+    if (!rangeShas) {
+      try {
+        const repaired = runRepair(store, root, sha ?? headSha(root), true, { commitMode: "deferred" });
+        if (repaired?.applied) {
+          publicRepairTouched = repaired.publicTouched;
+          privateRepairTouched = repaired.privateTouched;
+          repairedBindings = repaired.plan.rewrites.length + repaired.policyRewrites.length;
+          if (!opts.quiet) console.log(`  ↳ repaired ${repairedBindings} memory binding(s) after rename`);
+        }
+      } catch { /* repair is best-effort; drift still surfaces anything left behind */ }
     }
+    let results: SyncResult[];
+    if (opts.range !== undefined && rangeShas) {
+      const ranged = await syncRange(store, root, rangeShas, {
+        force: opts.force,
+        private: toOverlay,
+        localOnly: !opts.synthesize || (toOverlay && store.mode === "private"),
+        deep: opts.deep,
+        verify: opts.verify,
+        samples: parseSamples(opts.samples),
+        onCommit: (commitSha, out) => {
+          if (opts.quiet) return;
+          if (out.status === "written") console.log(`  ✓ ${commitSha.slice(0, 8)} ${(out.decision?.title ?? "").slice(0, 64)}`);
+          else console.log(`  · ${commitSha.slice(0, 8)} skipped: ${out.reason}`);
+        },
+      });
+      results = ranged.results.map((x) => x.result);
+      if (!opts.quiet) {
+        if (ranged.total > ranged.shas.length) console.log(`  ↳ ${ranged.total - ranged.shas.length} older commit(s) not captured (raise --max)`);
+        const w = results.filter((x) => x.status === "written").length;
+        console.log(`Range ${opts.range}: ${w} captured, ${results.length - w} skipped.`);
+      }
+      if (results.some((x) => x.status === "written")) store.reindex();
+    } else {
+      const r = await syncCommit(store, root, sha ?? headSha(root), {
+        force: opts.force,
+        private: toOverlay,
+        // A split-private overlay is sensitive/local by definition. A shared store
+        // is an explicit team policy and may keep its configured synthesis provider.
+        localOnly: toOverlay && store.mode === "private",
+        deep: opts.deep,
+        verify: opts.verify,
+        samples: parseSamples(opts.samples),
+      });
+      results = [r];
+      if (r.status === "written") {
+        store.reindex();
+        if (!opts.quiet) console.log(`✓ captured decision ${r.decision?.id} via ${r.provider}: "${r.decision?.title}"`);
+        if (!opts.quiet && r.fallbackReason) console.log(`  ⚠ heuristic draft instead: ${r.fallbackReason}`);
+      } else if (!opts.quiet) {
+        console.log(`· skipped: ${r.reason}`);
+      }
+    }
+    const doCommit = opts.commit ?? store.autoCommit;
+    const written = results.filter((x) => x.status === "written");
+    const captureMessage = (home: SyncResult[]) => home.length === 1
+      ? `hunch: capture ${home[0]!.decision?.id ?? "decision"}`
+      : `hunch: capture ${home.length} decisions`;
     // The MADR projection tracks the graph automatically once adopted, the way the
     // SQLite index does — a user who ran `hunch export-adr` once never runs it again.
     // Best-effort and last-write-wins-free: a hand-edited file is skipped, not
@@ -1008,9 +1073,10 @@ program
     // each home's artifacts into at most one memory commit.
     // The home syncCommit wrote, not the flag: a memory policy can home decisions in the
     // overlay without --private, and a public commit there would land nothing but grounding.
-    const capturedPrivate = r.status === "written" && r.home === "private";
-    const publicCapture = r.status === "written" && !capturedPrivate;
-    const privateCapture = capturedPrivate;
+    const writtenPublic = written.filter((x) => x.home !== "private");
+    const writtenPrivate = written.filter((x) => x.home === "private");
+    const publicCapture = writtenPublic.length > 0;
+    const privateCapture = writtenPrivate.length > 0;
     const publicNeedsFlush = publicCapture || graphRefreshed || publicRepairTouched;
     // The auto-commit policy hold (publicCommitHold) covers the post-commit hook too. Its
     // baked-in --commit is the installed auto-commit default, so only a --commit typed by
@@ -1019,7 +1085,7 @@ program
     // so `git commit -a` cannot commit counts whose record it leaves untracked.
     const publicHeld = doCommit && publicNeedsFlush && (opts.fromHook || opts.commit === undefined) && holdsOnDefaultBranch(hunchPaths(root).hunch);
     const groundingToStage = publicNeedsFlush && !publicHeld ? refreshCommittableGrounding(root, store) : [];
-    if (!opts.fromHook && (r.status === "written" || graphRefreshed || publicRepairTouched)) {
+    if (!opts.fromHook && (written.length > 0 || graphRefreshed || publicRepairTouched)) {
       const healed = refreshExistingGrounding(root, store);
       const refreshed = [...new Set([...groundingToStage.map((file) => relative(root, file)), ...healed])];
       if (refreshed.length && !opts.quiet) console.log(`  ↳ grounding refreshed: ${refreshed.join(", ")}`);
@@ -1033,7 +1099,7 @@ program
         ? commitAndPushHunch(
             hunchPaths(root).hunch,
             publicCapture
-              ? `hunch: capture ${r.decision?.id ?? "decision"}`
+              ? captureMessage(writtenPublic)
               : graphRefreshed
                 ? "hunch: refresh derived graph and correction reviews"
                 : `hunch: repair ${repairedBindings} binding(s) after rename`,
@@ -1044,7 +1110,7 @@ program
         ? commitAndPushHunch(
             store.privateDir,
             privateCapture
-              ? `hunch: capture ${r.decision?.id ?? "decision"}`
+              ? captureMessage(writtenPrivate)
               : g2Recorded
                 ? `hunch: record ${g2Recorded} G2 shadow observation(s) and correction reviews`
                 : privateCorrectionQueued && graphRefreshed
@@ -1057,11 +1123,14 @@ program
             },
           )
         : null;
-      if (r.status === "written" && !opts.quiet) {
-        const captureResult = capturedPrivate ? privateResult : publicResult;
-        const commitTarget = capturedPrivate ? store.privateDir : hunchPaths(root).hunch;
-        if (captureResult && commitTarget) {
-          console.log(`  ↳ ${captureResult === "pushed" ? "committed + pushed" : "committed"} ${r.decision?.id} (${commitTarget}${capturedPrivate ? "" : " — rides your next push"})`);
+      if (!opts.quiet) {
+        for (const [group, captureResult, commitTarget, isPrivate] of [
+          [writtenPrivate, privateResult, store.privateDir, true],
+          [writtenPublic, publicResult, hunchPaths(root).hunch, false],
+        ] as const) {
+          if (!group.length || !captureResult || !commitTarget) continue;
+          const what = group.length === 1 ? group[0]!.decision?.id : `${group.length} decisions`;
+          console.log(`  ↳ ${captureResult === "pushed" ? "committed + pushed" : "committed"} ${what} (${commitTarget}${isPrivate ? "" : " — rides your next push"})`);
         }
       }
     }

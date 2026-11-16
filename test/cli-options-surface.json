@@ -4025,5 +4025,29 @@
         "title": "cli:new constraint and finding; the human text output names the confirm command"
       }
     ]
+  },
+  "sync --range": {
+    "tests": [
+      {
+        "file": "test/sync-range.test.ts",
+        "title": "sync --range captures substantive commits deterministically and is idempotent"
+      }
+    ]
+  },
+  "sync --max": {
+    "tests": [
+      {
+        "file": "test/sync-range.test.ts",
+        "title": "sync --range --max keeps only the newest commits"
+      }
+    ]
+  },
+  "sync --synthesize": {
+    "tests": [
+      {
+        "file": "test/sync-range.test.ts",
+        "title": "sync --range captures substantive commits deterministically and is idempotent"
+      }
+    ]
   }
 }
