@@ -12,6 +12,7 @@ import { fastHookArgs } from "./hookArgs.js";
 import { runHookDaemon, runHookDaemonHost } from "./hookDaemon.js";
 import { markerFor } from "./optOutGate.js";
 import { clearTrackedStore, trackedStore } from "./teamStore.js";
+import { traceFastHook } from "./testTrace.js";
 
 /** Same as the full CLI's global preAction for `hook` without --initiator; false for an
  *  opted-out repository, which stays silent (the caller exits 0). */
@@ -74,6 +75,7 @@ async function serve(provider: string, payload: string): Promise<void> {
 const argv = process.argv.slice(2);
 const fast = fastHookArgs(argv);
 if (fast) {
+  traceFastHook(argv);
   main(fast.provider).catch((e) => {
     failed(e);
     process.exit(1);

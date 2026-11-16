@@ -18,9 +18,10 @@ import { HunchStore } from "../src/store/hunchStore.js";
 import { SCHEMAS } from "../src/core/types.js";
 import { flushCapture, flushMemoryHome, flushStateWrite, heldNotice, publicCommitHold, HELD_ON_DEFAULT_BRANCH } from "../src/integrations/sync.js";
 import { updateClaudeMd } from "../src/integrations/claudemd.js";
+import { writeAgentsMd } from "../src/integrations/providers.js";
 import { repositoryScope, writeState } from "../src/store/stateBinding.js";
 import { writeManifest } from "../src/core/migrate.js";
-import { __setAfterHoldBackDecisionForTests, commitAndPushHunch } from "../src/extractors/git.js";
+import { __setAfterHoldBackDecisionForTests, __setAfterStateCommitForTests, commitAndPushHunch } from "../src/extractors/git.js";
 
 const cli = resolve("src/cli/index.ts");
 const gitEnv = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
@@ -737,10 +738,13 @@ function nameHeldInWindow(root: string, id: string): () => void {
   };
 }
 
-test("#642 race: a held record a committed file names only after the decision is carried by a follow-up commit", t => {
+test("#642 race: a held record a committed file names only after the decision is folded into that same commit", t => {
   isolateStateEnv(t);
-  const { root, capture } = repo(t, undefined, true);
+  const { root, commits, capture } = groundedRepo(t);
   assert.equal(capture("con_old"), "held");
+  const before = commits();
+  // A user edit outside .hunch must stay out of the fold and stay unstaged.
+  writeFileSync(join(root, "README.md"), "user edit\n");
   assert.match(readFileSync(heldList(root), "utf8"), /con_old/, "fixture: con_old is on the held list");
   __setAfterHoldBackDecisionForTests(nameHeldInWindow(root, "con_old"));
   t.after(() => __setAfterHoldBackDecisionForTests(null));
@@ -749,10 +753,116 @@ test("#642 race: a held record a committed file names only after the decision is
   assert.equal(written.durability, "committed");
   const files = headFiles(root);
   assert.match(git(root, "show", `HEAD:.hunch/commitments/${written.id}.json`), /con_old/, "fixture: HEAD's state record names con_old");
-  assert.ok(files.includes(".hunch/constraints/con_old.json"), "the record HEAD names is in HEAD, via the follow-up commit");
-  assert.match(git(root, "log", "-1", "--format=%B"), /carries held records the commit above references/);
+  assert.ok(files.includes(".hunch/constraints/con_old.json"), "the record HEAD names is in HEAD");
+  assert.equal(commits(), before + 1, "one atomic commit: HEAD never names a record it lacks");
+  assert.doesNotMatch(git(root, "log", "-1", "--format=%B"), /carries held records/);
+  assert.equal(git(root, "status", "--porcelain", "--", ".hunch", ":!.hunch/*.sqlite*"), "", "index matches the folded HEAD: no staged deletion of the held file");
+  assert.ok(git(root, "show", "--name-only", "--format=", "HEAD").split("\n").includes("CLAUDE.md"), "the refreshed grounding docs ride the folded commit");
+  assert.ok(claudeMdClean(root), "the committed CLAUDE.md counts the folded record");
+  assert.equal(git(root, "show", "HEAD:README.md"), "x", "the user's edit is not committed");
+  assert.equal(git(root, "diff", "--cached", "--name-only"), "", "nothing is left staged");
+  assert.equal(git(root, "diff", "--name-only"), "README.md", "the user's edit stays an unstaged worktree change");
   assert.ok(!existsSync(heldList(root)) || !readFileSync(heldList(root), "utf8").includes("con_old"), "con_old is no longer held");
   assertLedgerClosed(root);
+});
+
+test("#642 race: when HEAD moves past the state commit the fold refuses and a follow-up commit carries the held record and the docs", t => {
+  isolateStateEnv(t);
+  const { root, commits, capture } = groundedRepo(t);
+  assert.equal(capture("con_old"), "held");
+  const before = commits();
+  __setAfterHoldBackDecisionForTests(nameHeldInWindow(root, "con_old"));
+  // Another committer lands on top of the state commit before the fold's compare-and-swap.
+  __setAfterStateCommitForTests(() => { git(root, "commit", "-q", "--allow-empty", "-m", "someone else"); });
+  t.after(() => { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); });
+  let written: { id: string; durability: string };
+  try { written = writeCommitment(root, "A", "idem-key-A"); } finally { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); }
+  assert.equal(written.durability, "committed");
+  assert.equal(commits(), before + 3, "state commit, the other commit (never rewritten), the follow-up");
+  assert.equal(git(root, "log", "-1", "--skip=1", "--format=%s"), "someone else", "the other committer's commit is kept as is");
+  assert.match(git(root, "log", "-1", "--format=%B"), /carries held records the commit above references/);
+  assert.ok(headFiles(root).includes(".hunch/constraints/con_old.json"), "the record HEAD names is in HEAD");
+  assert.ok(git(root, "show", "--name-only", "--format=", "HEAD").split("\n").includes("CLAUDE.md"), "the refreshed docs ride the follow-up");
+  assert.ok(claudeMdClean(root), "the committed CLAUDE.md counts the carried record");
+  assert.equal(git(root, "status", "--porcelain", "--", ".hunch", ":!.hunch/*.sqlite*"), "");
+  assertLedgerClosed(root);
+});
+
+test("#648: an ignored, untracked grounding doc never keeps the held record out of HEAD", t => {
+  isolateStateEnv(t);
+  const made = repo(t, undefined, true);
+  const { root, commits, capture } = made;
+  writeFileSync(join(root, "CLAUDE.md"), "# project\n");
+  writeFileSync(join(root, ".gitignore"), readFileSync(join(root, ".gitignore"), "utf8") + "AGENTS.md\n");
+  const seeded = new HunchStore(hunchPaths(root));
+  try { updateClaudeMd(root, seeded); writeAgentsMd(root, seeded); } finally { seeded.close(); }
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "grounding");
+  assert.ok(existsSync(join(root, "AGENTS.md")) && git(root, "ls-files", "--", "AGENTS.md") === "", "fixture: AGENTS.md is on disk, ignored, untracked");
+  assert.equal(capture("con_old"), "held");
+  const before = commits();
+  __setAfterHoldBackDecisionForTests(nameHeldInWindow(root, "con_old"));
+  t.after(() => __setAfterHoldBackDecisionForTests(null));
+  let written: { id: string; durability: string };
+  try { written = writeCommitment(root, "A", "idem-key-A"); } finally { __setAfterHoldBackDecisionForTests(null); }
+  assert.equal(written.durability, "committed");
+  assert.ok(headFiles(root).includes(".hunch/constraints/con_old.json"), "the record HEAD names is in HEAD");
+  assert.equal(commits(), before + 1, "still one folded commit");
+  assert.ok(claudeMdClean(root), "the tracked doc is current");
+  assert.equal(git(root, "diff", "--cached", "--name-only"), "", "nothing is left staged");
+  assertLedgerClosed(root);
+});
+
+test("#648: a state commit amended in the window is never rewritten; the follow-up stacks on it", t => {
+  isolateStateEnv(t);
+  const { root, commits, capture } = groundedRepo(t);
+  assert.equal(capture("con_old"), "held");
+  const before = commits();
+  __setAfterHoldBackDecisionForTests(nameHeldInWindow(root, "con_old"));
+  __setAfterStateCommitForTests(() => { git(root, "commit", "-q", "--amend", "-m", "USER AMENDED MESSAGE"); });
+  t.after(() => { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); });
+  let written: { id: string; durability: string };
+  try { written = writeCommitment(root, "A", "idem-key-A"); } finally { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); }
+  assert.equal(written.durability, "committed");
+  assert.equal(commits(), before + 2, "the amended commit plus the follow-up");
+  assert.equal(git(root, "log", "-1", "--skip=1", "--format=%s"), "USER AMENDED MESSAGE", "the user's amend is kept");
+  assert.ok(headFiles(root).includes(".hunch/constraints/con_old.json"));
+  assert.equal(git(root, "status", "--porcelain", "--", ".hunch", ":!.hunch/*.sqlite*"), "");
+});
+
+test("#648: a state commit a remote-tracking ref already contains is never rewritten", t => {
+  isolateStateEnv(t);
+  const { root, commits, capture } = groundedRepo(t);
+  assert.equal(capture("con_old"), "held");
+  const before = commits();
+  __setAfterHoldBackDecisionForTests(nameHeldInWindow(root, "con_old"));
+  // A concurrent push published the state commit before the fold.
+  __setAfterStateCommitForTests(() => { git(root, "update-ref", "refs/remotes/origin/main", "HEAD"); });
+  t.after(() => { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); });
+  let written: { id: string; durability: string };
+  try { written = writeCommitment(root, "A", "idem-key-A"); } finally { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); }
+  assert.equal(written.durability, "committed");
+  assert.equal(commits(), before + 2, "state commit kept, follow-up on top");
+  assert.equal(git(root, "rev-parse", "HEAD~1"), git(root, "rev-parse", "refs/remotes/origin/main"), "the published commit is still in history");
+  assert.ok(headFiles(root).includes(".hunch/constraints/con_old.json"));
+});
+
+test("#648: when the fold and the follow-up both fail, no grounding doc is left staged and the next write recovers", t => {
+  isolateStateEnv(t);
+  const { root, commits, capture } = groundedRepo(t);
+  assert.equal(capture("con_old"), "held");
+  const before = commits();
+  const lock = join(root, ".git", "refs", "heads", "main.lock");
+  __setAfterHoldBackDecisionForTests(nameHeldInWindow(root, "con_old"));
+  // A stuck ref lock: the fold's compare-and-swap and every follow-up commit fail.
+  __setAfterStateCommitForTests(() => { writeFileSync(lock, ""); });
+  t.after(() => { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); rmSync(lock, { force: true }); });
+  try { writeCommitment(root, "A", "idem-key-A"); } finally { __setAfterHoldBackDecisionForTests(null); __setAfterStateCommitForTests(null); }
+  assert.equal(commits(), before + 1, "only the state commit landed");
+  assert.ok(!git(root, "diff", "--cached", "--name-only").split("\n").includes("CLAUDE.md"), "the doc is not left staged");
+  rmSync(lock, { force: true });
+  assert.equal(writeCommitment(root, "B", "idem-key-B").durability, "committed", "the next write is not wedged");
+  assert.ok(headFiles(root).includes(".hunch/constraints/con_old.json"), "the held record is swept by the next write");
 });
 
 test("#642 race backstop: with no reference in the window the held record stays out and stays held", t => {

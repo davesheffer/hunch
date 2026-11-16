@@ -10,7 +10,7 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { readConfig } from "../core/config.js";
 import { hunchPaths } from "../core/paths.js";
 import { readHookObservations, type HookObservation } from "../core/hookObservations.js";
-import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE, isLauncherHookCommand, isLegacyLauncherHookCommand, launcherIsCurrent, launcherPinOf, renderHookLauncher } from "./hookLauncher.js";
+import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE, isLauncherHookCommand, isLegacyLauncherHookCommand, bootstrapRunsLauncher, declaredLauncherPin, launcherIsCurrent, launcherPinOf, ownsLauncherText, renderHookLauncher } from "./hookLauncher.js";
 
 /** Normalized hook events that prove each capability was delivered by the host. */
 const CAPABILITY_EVIDENCE: Record<Exclude<Capability, "mcp">, readonly string[]> = {
@@ -187,18 +187,33 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
       report.notes.push(`${HOOK_LAUNCHER_FILE} is unreadable (${(e as Error).message}), so hooks run the slower pinned npx fallback`);
       return;
     }
-    if (!text.includes(HOOK_LAUNCHER_MARKER)) {
-      report.notes.push(`${HOOK_LAUNCHER_FILE} has no ${HOOK_LAUNCHER_MARKER} marker, so it is yours and hooks run the slower pinned npx fallback; delete it and run hunch init to restore the fast path`);
+    if (!ownsLauncherText(text) && bootstrapRunsLauncher(text)) {
+      // Not Hunch's to rewrite, yet the frozen bootstrap (indexOf marker) runs it on every hook.
+      const declared = declaredLauncherPin(text);
+      if (declared !== null) recordPins(HOOK_LAUNCHER_FILE, [`@davesheffer/hunch@${declared}`]);
+      report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: `mentions ${HOOK_LAUNCHER_MARKER} off its header line, so Hunch will not refresh it, but the hook bootstrap still runs it on every hook${declared !== null ? ` (it pins ${declared})` : ""}; restore the header line (or delete the file) and run hunch init, or remove every ${HOOK_LAUNCHER_MARKER} mention to use the pinned npx fallback` });
       return;
     }
-    // Marker-owned (as bootstrap, init and uninstall treat it) but without a readable pin.
+    if (!ownsLauncherText(text)) {
+      report.notes.push(`${HOOK_LAUNCHER_FILE} has no ${HOOK_LAUNCHER_MARKER} header line, so it is yours and hooks run the slower pinned npx fallback; delete it and run hunch init to restore the fast path`);
+      return;
+    }
+    // Header-owned (as init, repair-pins and uninstall treat it) but without a readable pin.
+    const first = report.issues.length;
     const pin = launcherPinOf(text);
     if (pin === null) {
       report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: `carries the ${HOOK_LAUNCHER_MARKER} marker but no readable pin; run hunch integrations repair-pins to regenerate it` });
-      return;
+    } else {
+      recordPins(HOOK_LAUNCHER_FILE, [`@davesheffer/hunch@${pin}`]);
+      if (!launcherIsCurrent(text)) report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: "modified, or written by an older Hunch template; run hunch integrations repair-pins to regenerate it" });
     }
-    recordPins(HOOK_LAUNCHER_FILE, [`@davesheffer/hunch@${pin}`]);
-    if (!launcherIsCurrent(text)) report.issues.push({ file: HOOK_LAUNCHER_FILE, code: "hook-launcher", detail: "modified, or written by an older Hunch template; run hunch integrations repair-pins to regenerate it" });
+    // repair-pins never rewrites through a symlink (it skips the launcher), so pointing
+    // at it would loop forever: name the manual fix instead.
+    let linked = false;
+    try { linked = lstatSync(path).isSymbolicLink() || lstatSync(dirname(path)).isSymbolicLink(); } catch { linked = false; }
+    if (linked) for (const issue of report.issues.slice(first)) {
+      issue.detail = issue.detail.replace(/; run hunch integrations repair-pins.*$/, `; it or its directory is a symlink, which repair-pins never writes through: re-create it as a regular file in a real directory (delete it, then run hunch init)`);
+    }
   };
   // Machine-local runtime evidence; an unreadable ledger simply leaves hooks untested.
   let observed: HookObservation[] = [];
@@ -395,13 +410,35 @@ export function repairIntegrationPins(root: string, opts: { skip?: (file: string
     const before = launcherText;
     const pin = launcherPinOf(before);
     // Marker-owned is enough: a launcher whose pin line was lost is regenerated too.
-    if (before.includes(HOOK_LAUNCHER_MARKER) && (pin !== version || !launcherIsCurrent(before))) {
+    if (ownsLauncherText(before) && (pin !== version || !launcherIsCurrent(before))) {
       if (!exactVersion.test(version)) throw new Error(`refusing non-exact Hunch pin for ${HOOK_LAUNCHER_FILE}`);
       pending.push({ file: HOOK_LAUNCHER_FILE, before, after: renderHookLauncher(version) });
     }
   }
   for (const { file, before } of pending) if (readFileSync(join(root, file), "utf8") !== before) throw new Error(`${file} changed during repair; retry`);
-  for (const { file, after } of pending) writeFileAtomic(join(root, file), after);
+  // All-or-nothing: a later write that fails (a read-only launcher, EPERM) must not
+  // leave settings already pointing at a pin the launcher never received.
+  let done = 0;
+  try {
+    for (const { file, after } of pending) { writeFileAtomic(join(root, file), after); done++; }
+  } catch (error) {
+    const failed = pending[done]!.file;
+    const unrestored: string[] = [];
+    const edited: string[] = [];
+    for (const { file, before, after } of pending.slice(0, done).reverse()) {
+      // Restore only our own bytes: a file someone edited since our write is theirs now.
+      try {
+        if (readFileSync(join(root, file), "utf8") !== after) { edited.push(file); continue; }
+        writeFileAtomic(join(root, file), before);
+      } catch { unrestored.push(file); }
+    }
+    const notes = [
+      ...(unrestored.length ? [`could NOT restore ${unrestored.join(", ")}; check them by hand`] : []),
+      ...(edited.length ? [`left ${edited.join(", ")} as edited by someone else after repair wrote it; check them by hand`] : []),
+    ];
+    const state = notes.length ? notes.join("; ") : done ? `restored ${done} already-updated file(s); nothing changed` : "nothing changed";
+    throw new Error(`repair-pins could not write ${failed} (${(error as Error).message}); ${state}`, { cause: error });
+  }
   return pending.map(p => p.file);
 }
 

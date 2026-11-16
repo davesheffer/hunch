@@ -345,7 +345,25 @@ jobs:
           HUNCH_TEST_COMPILED_CLI: "1"
           HUNCH_TEST_SHARD: ${{ matrix.shard }}/4
           HUNCH_TEST_SHARD_MANIFEST: test-shard-manifest.json
+          # Execution evidence for the trace gate in ci-node24 (#512).
+          HUNCH_TEST_TRACE: ${{ runner.temp }}/hunch-trace
         run: npm test
+
+      - name: Merge this shard's execution trace
+        if: ${{ always() }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/hunch-trace" "$RUNNER_TEMP/trace-out"
+          find "$RUNNER_TEMP/hunch-trace" -name 'trace-*.jsonl' -exec cat {} + > "$RUNNER_TEMP/trace-out/trace-shard-${{ matrix.shard }}.jsonl"
+          wc -l "$RUNNER_TEMP/trace-out/trace-shard-${{ matrix.shard }}.jsonl"
+
+      - name: Upload shard execution trace
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-trace-node-24-${{ matrix.shard }}-${{ github.sha }}
+          path: ${{ runner.temp }}/trace-out/trace-shard-${{ matrix.shard }}.jsonl
+          if-no-files-found: error
+          overwrite: true
 
       - name: Upload shard manifest
         if: ${{ always() }}
@@ -394,6 +412,12 @@ jobs:
       - name: Shards cover the suite exactly; the delegated gate passed the rest
         if: env.MEMORY_ONLY != 'true'
         run: node tooling/test-shard.mjs verify-node24 --dir "$RUNNER_TEMP/evidence" --commit "$GITHUB_SHA" --total 4
+
+      - name: Trace gate report, CLI options and env vars exercised (#512, report-only until the baseline is seeded)
+        if: env.MEMORY_ONLY != 'true'
+        # Report-only until tooling/trace-gate-baseline.json is seeded from several green
+        # traced runs; then drop --report-only to make it blocking.
+        run: node tooling/trace-gate.mjs --dir "$RUNNER_TEMP/evidence" --expect-shards 4 --report-only
 
   platform-matrix-safety:
     name: platform-matrix-safety shard (${{ matrix.os }}, ${{ matrix.shard }}/3)

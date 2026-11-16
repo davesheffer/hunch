@@ -11,6 +11,7 @@ import { fastHookArgs } from "./hookArgs.js";
 import { hookDaemonEnabled, tryHookDaemon } from "./hookDaemon.js";
 import { findRoot, realpathNorm } from "../core/paths.js";
 import { markerFor } from "./optOutGate.js";
+import { traceFastHook } from "./testTrace.js";
 
 /** Same hand-over key hookMain.ts reads. */
 const HANDED_INPUT = Symbol.for("hunch.hook.input");
@@ -34,7 +35,10 @@ async function run(): Promise<void> {
       const input = await readInput();
       (globalThis as Record<symbol, unknown>)[HANDED_INPUT] = input;
       // `.hunch/config.json` hooks.daemon: false keeps this repository in-process.
-      if (hookDaemonEnabled(process.env, findRoot(realpathNorm(process.cwd()))) && await tryHookDaemon(fast.provider, input)) return;
+      if (hookDaemonEnabled(process.env, findRoot(realpathNorm(process.cwd()))) && await tryHookDaemon(fast.provider, input)) {
+        traceFastHook(process.argv.slice(2)); // the in-process handler records otherwise
+        return;
+      }
     } catch {
       // Fall through to the in-process handler, which reports its own failures.
     }

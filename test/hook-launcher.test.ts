@@ -1,19 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { commitAndPushHunch } from "../src/extractors/git.js";
 import { isIndexedCodePath } from "../src/extractors/repoSource.js";
 import { isHunchHookCommand } from "../src/integrations/hookmatch.js";
-import { installClaudeHooks } from "../src/integrations/scaffold.js";
+import { installClaudeHooks, writeMcpJson } from "../src/integrations/scaffold.js";
 import { inspectIntegrations, machineLocalIntegrationFiles, repairIntegrationPins } from "../src/integrations/health.js";
 import { applyUninstall, planUninstall } from "../src/integrations/uninstall.js";
 import { HUNCH_VERSION } from "../src/core/version.js";
 import {
-  CLAUDE_HOOK_LAUNCHER_COMMAND, HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, claudeAgentHookCommand, claudeHookLauncherCommand, hookBootstrap, launcherPinOf, renderHookLauncher, writeHookLauncher,
+  CLAUDE_HOOK_LAUNCHER_COMMAND, HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, claudeAgentHookCommand, bootstrapRunsLauncher, claudeHookLauncherCommand, hookBootstrap, launcherPinOf, ownsLauncherText, removeLegacyHookLauncher, renderHookLauncher, writeHookLauncher,
 } from "../src/integrations/hookLauncher.js";
 import { publishedMcpInvocation, shellInvocation } from "../src/cli/invocation.js";
 import { cleanupDir } from "./fixtures.js";
@@ -90,6 +90,38 @@ test("writeHookLauncher writes the pinned launcher, is idempotent and keeps a fi
   assert.equal(readFileSync(file, "utf8"), "// mine\n");
 });
 
+test("repair-pins is all-or-nothing: a write that fails mid-way restores every file already written", (t) => {
+  if (!win && process.getuid?.() === 0) return t.skip("root ignores permission bits");
+  const root = tmp(t);
+  // .mcp.json (written first, at the root) gives POSIX a write that succeeds before the
+  // locked one fails, so the rollback runs on every platform.
+  writeMcpJson(root, { command: "npx", args: ["-y", "--package=hunch-exact@npm:@davesheffer/hunch@1.0.0", "hunch"] });
+  installClaudeHooks(root, claudeHookLauncherCommand("1.0.0"));
+  writeHookLauncher(root, "1.0.0");
+  const mcp = join(root, ".mcp.json");
+  const settings = join(root, ".claude", "settings.json");
+  const launcher = join(root, HOOK_LAUNCHER_FILE);
+  const mcpBefore = readFileSync(mcp, "utf8");
+  const before = readFileSync(settings, "utf8");
+  // Windows: a read-only attribute blocks the rename over the launcher only (settings.json
+  // and .mcp.json written first). POSIX rename ignores the file's mode, so lock .claude/:
+  // .mcp.json is written, then settings.json fails.
+  const locked = win ? launcher : dirname(launcher);
+  const failed = (win ? HOOK_LAUNCHER_FILE : ".claude/settings.json").replace(/[.\/]/g, "\\$&");
+  chmodSync(locked, win ? 0o444 : 0o555);
+  try {
+    assert.throws(() => repairIntegrationPins(root), new RegExp(`could not write ${failed}.*restored ${win ? 2 : 1} already-updated file`));
+  } finally {
+    chmodSync(locked, win ? 0o666 : 0o755);
+  }
+  assert.equal(readFileSync(mcp, "utf8"), mcpBefore, ".mcp.json rolled back");
+  assert.equal(readFileSync(settings, "utf8"), before, "settings.json rolled back");
+  assert.equal(launcherPinOf(readFileSync(launcher, "utf8")), "1.0.0");
+  const repaired = repairIntegrationPins(root);
+  assert.ok([".mcp.json", ".claude/settings.json", HOOK_LAUNCHER_FILE].every((f) => repaired.includes(f)), `all repaired once writable: ${repaired}`);
+  assert.notEqual(readFileSync(settings, "utf8"), before);
+});
+
 test("doctor reports a missing or markerless launcher and its pin drift; repair-pins refreshes a marker-owned launcher", (t) => {
   const root = tmp(t);
   installClaudeHooks(root, CLAUDE_HOOK_LAUNCHER_COMMAND);
@@ -106,7 +138,7 @@ test("doctor reports a missing or markerless launcher and its pin drift; repair-
   assert.deepEqual(launcherIssues(), []);
   writeFileSync(join(root, HOOK_LAUNCHER_FILE), "// mine\n");
   assert.deepEqual(launcherIssues(), [], "a user-owned launcher is a note, never a failure");
-  assert.match(notes(), /no hunch:hook-launcher marker/);
+  assert.match(notes(), /no hunch:hook-launcher header line/);
   assert.equal(repairIntegrationPins(root).includes(HOOK_LAUNCHER_FILE), false, "a markerless launcher is the user's");
 });
 
@@ -301,6 +333,49 @@ test("repair-pins repairs the bootstrap's pin inside settings.json and regenerat
   assert.deepEqual(inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE), []);
 });
 
+test("a symlinked launcher with a stale pin names the manual fix, never repair-pins it skips", (t) => {
+  const root = tmp(t);
+  installClaudeHooks(root, CLAUDE_HOOK_LAUNCHER_COMMAND);
+  const file = join(root, HOOK_LAUNCHER_FILE);
+  const real = join(root, "real-launch.cjs");
+  writeFileSync(real, renderHookLauncher("1.0.0"));
+  try { symlinkSync(real, file, "file"); } catch (e) {
+    if (win && (e as NodeJS.ErrnoException).code === "EPERM") return t.skip("file symlinks need Developer Mode on Windows");
+    throw e;
+  }
+  const details = () => inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE).map((i) => i.detail);
+  assert.ok(details().length > 0, "drift still reported");
+  const manual = () => {
+    assert.ok(details().length > 0, "drift still reported");
+    for (const d of details()) {
+      assert.doesNotMatch(d, /run hunch integrations repair-pins/, d);
+      assert.match(d, /symlink.*re-create it as a regular file/, d);
+    }
+  };
+  manual();
+  assert.deepEqual(repairIntegrationPins(root).filter((f) => f === HOOK_LAUNCHER_FILE), [], "repair-pins still never writes through it");
+  assert.equal(launcherPinOf(readFileSync(real, "utf8")), "1.0.0");
+  // A marker-owned target with no readable pin takes the same manual route.
+  writeFileSync(real, renderHookLauncher("1.0.0").replace(/^.*const PIN.*$/m, ""));
+  assert.equal(launcherPinOf(readFileSync(real, "utf8")), null);
+  manual();
+});
+
+test("a launcher under a symlinked .claude directory names the manual fix for every issue form", (t) => {
+  const root = tmp(t);
+  const real = join(root, "real-claude");
+  mkdirSync(real);
+  symlinkSync(real, join(root, ".claude"), win ? "junction" : "dir");
+  installClaudeHooks(root, CLAUDE_HOOK_LAUNCHER_COMMAND);
+  const file = join(real, "hunch-hook-launch.cjs");
+  for (const text of [renderHookLauncher("1.0.0"), renderHookLauncher(HUNCH_VERSION).replace(/^.*const PIN.*$/m, ""), `${renderHookLauncher(HUNCH_VERSION)}// edit\n`]) {
+    writeFileSync(file, text);
+    const details = inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE).map((i) => i.detail);
+    assert.ok(details.length > 0, "an issue is reported");
+    for (const d of details) assert.match(d, /symlink, which repair-pins never writes through/, d);
+  }
+});
+
 test("a git-ignored launcher is machine-local, and is never moved while a machine-local settings.json is skipped", (t) => {
   const root = tmp(t);
   assert.equal(spawnSync("git", ["init", "-q"], { cwd: root }).status, 0);
@@ -442,8 +517,68 @@ test("doctor: a marker-owned launcher without a readable pin is an issue repair-
   assert.deepEqual(issues(), []);
   writeFileSync(file, "// mine, no pin\n");
   assert.deepEqual(issues(), []);
-  assert.match(inspectIntegrations(root, "claude").notes.join("\n"), /no hunch:hook-launcher marker, so it is yours/);
+  assert.match(inspectIntegrations(root, "claude").notes.join("\n"), /no hunch:hook-launcher header line, so it is yours/);
   assert.equal(repairIntegrationPins(root).includes(HOOK_LAUNCHER_FILE), false);
+});
+
+test("#646: ownership is the marker header line, not the marker quoted anywhere in the file", (t) => {
+  const generated = renderHookLauncher("1.0.0");
+  assert.equal(ownsLauncherText(generated), true);
+  assert.equal(ownsLauncherText(generated.replace(/\n/g, "\r\n")), true, "a CRLF checkout is still ours");
+  assert.equal(ownsLauncherText("\uFEFF" + generated), true, "a BOM is still ours");
+  assert.equal(ownsLauncherText(generated.split("\n").slice(1).join("\n")), true, "no shebang: the header is the first line");
+  // The user took the file over (deleted the header, as it says) but the marker is still quoted.
+  const takenOver = generated.split("\n").filter((line) => !line.startsWith("// hunch:hook-launcher")).join("\n")
+    + "// forked from hunch:hook-launcher 1.0.0\nconst NOTE = \"hunch:hook-launcher\";\n";
+  assert.ok(takenOver.includes("hunch:hook-launcher"), "fixture: the marker is still quoted");
+  assert.equal(ownsLauncherText(takenOver), false);
+  assert.equal(launcherPinOf(takenOver), null, "a taken-over file has no pin Hunch reads");
+  assert.equal(ownsLauncherText("// note\n// see hunch:hook-launcher\n"), false, "marker after a non-header comment");
+  assert.equal(ownsLauncherText("#!/usr/bin/env node\n// x\n// hunch:hook-launcher 1.0.0\n"), false, "third line is not the header");
+  assert.equal(ownsLauncherText("// hunch:hook-launcherX 1.0.0\n"), false, "a longer word is not the marker");
+
+  const root = tmp(t);
+  installClaudeHooks(root, CLAUDE_HOOK_LAUNCHER_COMMAND);
+  const file = join(root, HOOK_LAUNCHER_FILE);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, takenOver);
+  assert.equal(writeHookLauncher(root).action, "kept", "init keeps it");
+  assert.equal(repairIntegrationPins(root).includes(HOOK_LAUNCHER_FILE), false, "repair-pins keeps it");
+  // The frozen bootstrap still runs it (marker anywhere), so doctor says so instead of "yours".
+  assert.equal(bootstrapRunsLauncher(takenOver), true);
+  const issues = inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE);
+  assert.ok(issues.some((i) => i.code === "hook-launcher" && /off its header line.*bootstrap still runs it.*pins 1\.0\.0/.test(i.detail)), JSON.stringify(issues));
+  assert.ok(issues.some((i) => i.code === "version-drift"), `its stale pin is still drift-checked: ${JSON.stringify(issues)}`);
+  assert.doesNotMatch(inspectIntegrations(root, "claude").notes.join("\n"), /so it is yours/);
+  const said: string[] = [];
+  claudeAgentHookCommand(root, { installed: true, agentHookShell: "x" }, (line) => said.push(line));
+  assert.match(said.join("\n"), /bootstrap still runs it/);
+  assert.equal(readFileSync(file, "utf8"), takenOver, "init still keeps it");
+  // With every mention gone it is plainly the user's: a note, no issue.
+  writeFileSync(file, "// mine\n");
+  assert.deepEqual(inspectIntegrations(root, "claude").issues.filter((i) => i.file === HOOK_LAUNCHER_FILE), []);
+  assert.match(inspectIntegrations(root, "claude").notes.join("\n"), /so it is yours/);
+  writeFileSync(file, takenOver);
+  applyUninstall(planUninstall(root));
+  assert.equal(readFileSync(file, "utf8"), takenOver, "plain uninstall keeps it");
+  applyUninstall(planUninstall(root, { purge: true }));
+  assert.equal(readFileSync(file, "utf8"), takenOver, "uninstall --purge keeps it");
+  const legacy = join(root, LEGACY_HOOK_LAUNCHER_FILE);
+  mkdirSync(dirname(legacy), { recursive: true });
+  writeFileSync(legacy, takenOver);
+  assert.equal(removeLegacyHookLauncher(root), false, "the shape-1 cleanup keeps it");
+  assert.equal(readFileSync(legacy, "utf8"), takenOver);
+});
+
+test("#646: the frozen bootstrap runs a file with the marker off its header line, which is why doctor flags it", (t) => {
+  const f = fixture(t);
+  writeFileSync(f.launcher, `process.stdout.write("FORKED"); // forked from ${"hunch:hook-launcher"} 9.9.9\n`);
+  assert.equal(ownsLauncherText(readFileSync(f.launcher, "utf8")), false, "fixture: not header-owned");
+  const r = spawnSync(process.execPath, ["-e", hookBootstrap("9.9.9"), "hook"], { env: f.env, input: "IN", encoding: "utf8", timeout: 30_000 });
+  assert.equal(r.stdout, "FORKED", r.stderr);
+  writeFileSync(f.launcher, `process.stdout.write("FORKED");\n`);
+  const npx = spawnSync(process.execPath, ["-e", hookBootstrap("9.9.9"), "hook"], { env: f.env, input: "IN", encoding: "utf8", timeout: 30_000 });
+  assert.equal(npx.stdout, NPX_OUT, "with no mention it runs the pinned npx fallback");
 });
 
 test("doctor: shape-1 hooks get a legacy-launcher migrate note, not a missing .claude launcher", (t) => {
