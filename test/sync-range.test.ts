@@ -139,8 +139,12 @@ test("sync --range skips a rebased duplicate of an already captured commit", () 
     assert.ok(decFile);
     const decId = JSON.parse(readFileSync(join(root, ".hunch/decisions", decFile!), "utf8")).id as string;
     git(root, "checkout", "-q", "main");
+    // Advance main first: a cherry-pick onto x's own parent within the same second
+    // recreates x byte-for-byte (same sha), which is not a rebased duplicate.
+    commitFile(root, "chore: unrelated main commit");
     const before = git(root, "rev-parse", "HEAD");
     git(root, "cherry-pick", x);
+    assert.notEqual(git(root, "rev-parse", "HEAD"), x);
     const r = runCli(root, "sync", "--range", `${before}..HEAD`, "--no-commit");
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, new RegExp(`skipped: rebased duplicate of ${decId}`));
