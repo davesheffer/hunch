@@ -439,7 +439,7 @@ test("sync --range in a shallow clone does not mint a second decision for an own
   try {
     commitFile(root, "feat: shallow one");
     commitFile(root, "feat: shallow two");
-    rmSync(clone, { recursive: true, force: true });
+    cleanupDir(clone);
     execFileSync("git", ["clone", "-q", "--depth", "2", `file://${root.replace(/\\/g, "/")}`, clone]);
     git(clone, "config", "user.email", "test@example.com");
     git(clone, "config", "user.name", "Test Human");
