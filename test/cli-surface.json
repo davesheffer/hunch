@@ -495,6 +495,30 @@
       }
     ]
   },
+  "lock": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "locks": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "unlock": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
   "index": {
     "tests": [
       {

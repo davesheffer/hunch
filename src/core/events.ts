@@ -27,7 +27,7 @@ import { readStoreArtifact, storeArtifactPath } from "./storeArtifact.js";
 export interface HunchEvent {
   /** ISO instant the gate fired. */
   at: string;
-  kind: "constraint" | "veto" | "conformance" | "drift";
+  kind: "constraint" | "veto" | "conformance" | "drift" | "lock";
   /** Repo-relative file the blocked edit targeted. */
   file: string;
   /** Decision the block enforces (veto/conformance carry this; a bare constraint may not). */
