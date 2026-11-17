@@ -83,10 +83,13 @@ export function fileSha(root: string, rel: string): string | null {
   }
 }
 
-/** A repo-relative file path safe to lock, or null (absolute, escaping, globs, Hunch's own state). */
+/** A repo-relative file path safe to lock, or null (absolute, escaping, globs, Hunch's own
+ *  state). The one exception under .hunch/ is an approved HLD draft (`.hunch/hld/*.json`):
+ *  its answers are part of what the human approved. */
 export function lockablePath(rel: string): string | null {
   const p = safeRepoScope(rel);
-  if (!p || /[*?[\]{}]/.test(p) || p.startsWith(`${HUNCH_DIR}/`)) return null;
+  if (!p || /[*?[\]{}]/.test(p)) return null;
+  if (p.startsWith(`${HUNCH_DIR}/`) && !/^\.hunch\/hld\/[^/]+\.json$/.test(p)) return null;
   return p;
 }
 
