@@ -19,12 +19,13 @@
  *  marker and the hash of its body, so `export-hld --check` can tell a stale projection
  *  from a hand-edited one. Everything rendered is deterministic: no dates, sorted input. */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { extname, isAbsolute, join, posix, relative } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { z } from "zod";
 import { writeFileAtomic } from "./io.js";
-import { HUNCH_DIR, safeRepoScope } from "./paths.js";
+import { fileSha, readLocks } from "./locks.js";
+import { HUNCH_DIR, isRepoFile, realpathNorm, safeRepoScope } from "./paths.js";
 import type { Component, Constraint, Decision, Edge } from "./types.js";
 
 export const HLD_DIR = `${HUNCH_DIR}/hld`;
@@ -48,6 +49,8 @@ export interface ParsedHld {
   /** Prose outside diagrams and code fences, used to see what the text explains. */
   prose: string;
   diagrams: number;
+  /** Diagram lines Hunch could not read; surfaced on import so nothing is dropped silently. */
+  warnings: string[];
 }
 
 export const QUESTION_KINDS = [
@@ -102,11 +105,11 @@ export function parseHld(path: string, text: string): ParsedHld {
   const fallbackTitle = path.split("/").pop()!.replace(/\.[^.]+$/, "");
   if (format === "drawio") {
     const { nodes, edges, pages } = parseDrawio(text);
-    return { format, title: fallbackTitle, nodes, edges, sections: [], prose: "", diagrams: pages };
+    return { format, title: fallbackTitle, nodes, edges, sections: [], prose: "", diagrams: pages, warnings: [] };
   }
   if (format === "mermaid") {
     const g = parseMermaid(text);
-    return { format, title: fallbackTitle, nodes: g.nodes, edges: g.edges, sections: [], prose: "", diagrams: 1 };
+    return { format, title: fallbackTitle, nodes: g.nodes, edges: g.edges, sections: [], prose: "", diagrams: 1, warnings: g.warnings };
   }
   return parseMarkdown(text, fallbackTitle);
 }
@@ -114,7 +117,7 @@ export function parseHld(path: string, text: string): ParsedHld {
 function parseMarkdown(text: string, fallbackTitle: string): ParsedHld {
   const sections: HldSection[] = [];
   const prose: string[] = [];
-  const graphs: Array<{ nodes: HldNode[]; edges: HldEdge[] }> = [];
+  const graphs: Array<{ nodes: HldNode[]; edges: HldEdge[]; warnings: string[] }> = [];
   let fence: { marker: string; lang: string; body: string[] } | null = null;
   for (const line of text.split(/\r?\n/)) {
     if (fence) {
@@ -132,7 +135,7 @@ function parseMarkdown(text: string, fallbackTitle: string): ParsedHld {
   }
   const title = sections.find((s) => s.level === 1)?.heading ?? sections[0]?.heading ?? fallbackTitle;
   const merged = mergeGraphs(graphs);
-  return { format: "markdown", title, nodes: merged.nodes, edges: merged.edges, sections, prose: prose.join("\n"), diagrams: graphs.length };
+  return { format: "markdown", title, nodes: merged.nodes, edges: merged.edges, sections, prose: prose.join("\n"), diagrams: graphs.length, warnings: graphs.flatMap((g) => g.warnings) };
 }
 
 function mergeGraphs(graphs: Array<{ nodes: HldNode[]; edges: HldEdge[] }>): { nodes: HldNode[]; edges: HldEdge[] } {
@@ -149,49 +152,125 @@ function mergeGraphs(graphs: Array<{ nodes: HldNode[]; edges: HldEdge[] }>): { n
 }
 
 const NODE_RE = /^([A-Za-z0-9_][\w.-]*)\s*(?:(\[\[|\[\(|\[\/|\[\\|\(\(\(|\(\(|\(\[|\{\{|\[|\(|\{|>)\s*(.*?)\s*(?:\]\]|\)\]|\/\]|\\\]|\)\)\)|\)\)|\]\)|\}\}|\]|\)|\}))?\s*(?::::[\w-]+)?$/;
-const ARROW_RE = /\s*(<-->|<==>|<-\.->|-->|---|-\.->|-\.-|==>|===|--[xo]|<--|~~~)(?:\|([^|]*)\|)?\s*/;
-const SKIP_RE = /^(graph|flowchart|subgraph|end|classDef|class|style|linkStyle|click|direction|%%|accTitle|accDescr|title)\b/;
+const SKIP_RE = /^(graph|flowchart|subgraph|end|classDef|class|style|linkStyle|click|direction|%%|accTitle|accDescr|title)(?![\w-])/;
+/** Any Mermaid link at one position: optional start head, a variable-length body, optional end head. */
+const LINK_Y = /(<|[ox](?=[-=]))?(-{2,}|={2,}|-\.+-|~{3,})(>|[ox](?=[\s|;&]|$))?/y;
+const DOTTED_OPEN_Y = /-\./y;
+const PIPE_LABEL_Y = /\s*\|([^|]*)\|/y;
+/** How an inline label (`A -- text --> B`) ends, per opener. Each match is a single forward search. */
+const LABEL_END: Record<string, RegExp> = {
+  "--": /-{2,}(?:>|[ox](?=[\s|;&]|$))?/g,
+  "==": /={2,}(?:>|[ox](?=[\s|;&]|$))?/g,
+  "-.": /\.-(?:>|[ox](?=[\s|;&]|$))?/g,
+};
+/** Longer lines are not parsed (a crafted line must not stall the event loop); they are reported. */
+export const MAX_MERMAID_LINE = 2000;
 
 function cleanLabel(raw: string): string {
   return raw.replace(/^["'`]|["'`]$/g, "").replace(/<br\s*\/?>/gi, " ").replace(/#quot;/g, "\"").replace(/\s+/g, " ").trim();
 }
 
-/** Flowchart/graph and sequence diagrams; other Mermaid kinds yield no graph. */
-export function parseMermaid(text: string): { nodes: HldNode[]; edges: HldEdge[] } {
-  const lines = text.split(/\r?\n/).map((l) => l.replace(/%%.*$/, "").trim()).filter(Boolean);
+/** Split one flowchart statement into node texts and the labels of the links between them,
+ *  or null when it cannot be read. One left-to-right pass: shapes (`[...]`, `(...)`, `{...}`,
+ *  `>...]`, quoted text) are skipped whole, so an arrow inside a label is not a link. */
+function splitLinks(line: string): { segments: string[]; labels: string[] } | null {
+  const segments: string[] = [];
+  const labels: string[] = [];
+  let start = 0, depth = 0, quoted = false;
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i]!;
+    if (quoted) { if (ch === "\"") quoted = false; i++; continue; }
+    if (ch === "\"") { quoted = true; i++; continue; }
+    if (depth > 0) {
+      if (ch === "[" || ch === "(" || ch === "{") depth++;
+      else if (ch === "]" || ch === ")" || ch === "}") depth--;
+      i++;
+      continue;
+    }
+    if (ch === "[" || ch === "(" || ch === "{" || (ch === ">" && /\w/.test(line[i - 1] ?? ""))) { depth = 1; i++; continue; }
+    if (ch === "]" || ch === ")" || ch === "}") return null;
+    // o/x as a start head only after whitespace (`A o--o B`), never as the end of an id
+    if ((ch === "o" || ch === "x") && !/\s/.test(line[i - 1] ?? "")) { i++; continue; }
+    LINK_Y.lastIndex = i;
+    const link = LINK_Y.exec(line);
+    let opener: string | null = null;
+    let end = i;
+    if (link) {
+      const plain = !link[1] && !link[3];
+      if (plain && (link[2] === "--" || link[2] === "==")) opener = link[2];
+      else end = LINK_Y.lastIndex;
+    } else {
+      DOTTED_OPEN_Y.lastIndex = i;
+      if (DOTTED_OPEN_Y.exec(line)) opener = "-.";
+    }
+    if (!link && !opener) { i++; continue; }
+    let label = "";
+    if (opener) {
+      const re = LABEL_END[opener]!;
+      re.lastIndex = i + 2;
+      const close = re.exec(line);
+      if (!close) return null;
+      label = line.slice(i + 2, close.index).replace(/\.+$/, "");
+      end = re.lastIndex;
+    }
+    PIPE_LABEL_Y.lastIndex = end;
+    const pipe = PIPE_LABEL_Y.exec(line);
+    if (pipe) { label = pipe[1]!; end = PIPE_LABEL_Y.lastIndex; }
+    segments.push(line.slice(start, i));
+    labels.push(cleanLabel(label));
+    start = i = end;
+  }
+  if (depth > 0 || quoted) return null;
+  segments.push(line.slice(start));
+  return { segments, labels };
+}
+
+/** Flowchart/graph and sequence diagrams; other Mermaid kinds yield no graph. Lines that
+ *  cannot be read are returned as warnings, never dropped silently. */
+export function parseMermaid(text: string): { nodes: HldNode[]; edges: HldEdge[]; warnings: string[] } {
+  let lines = text.split(/\r?\n/).map((l) => l.replace(/%%.*$/, "").trim()).filter(Boolean);
+  // YAML front matter (`---` ... `---`) before the diagram kind
+  if (lines[0] === "---") {
+    const close = lines.indexOf("---", 1);
+    lines = close < 0 ? [] : lines.slice(close + 1);
+  }
+  const warnings: string[] = [];
   const kind = (lines[0] ?? "").split(/\s+/)[0]!.toLowerCase();
-  if (kind === "sequencediagram") return parseSequence(lines.slice(1));
-  if (kind !== "graph" && kind !== "flowchart") return { nodes: [], edges: [] };
+  if (kind === "sequencediagram") return { ...parseSequence(lines.slice(1)), warnings };
+  if (kind !== "graph" && kind !== "flowchart") {
+    if (kind) warnings.push(`Mermaid "${kind.slice(0, 40)}" diagrams are not read; only flowchart/graph and sequenceDiagram`);
+    return { nodes: [], edges: [], warnings };
+  }
   const nodes = new Map<string, HldNode>();
   const edges: HldEdge[] = [];
-  const node = (token: string): string[] => token.split(/\s*&\s*/).flatMap((part) => {
-    const m = NODE_RE.exec(part.trim());
-    if (!m) return [];
-    const id = m[1]!;
-    const label = m[3] ? cleanLabel(m[3]) : "";
-    const prev = nodes.get(id);
-    if (!prev) nodes.set(id, { id, label: label || id });
-    else if (label && prev.label === prev.id) prev.label = label;
-    return [id];
-  });
-  for (const raw of lines.slice(1)) {
-    if (SKIP_RE.test(raw)) continue;
-    // `A -- text --> B` / `A -. text .-> B` / `A == text ==> B` carry the label inline.
-    const line = raw
-      .replace(/\s--\s+([^>|-][^>|]*?)\s+-->\s*/g, " -->|$1| ")
-      .replace(/\s-\.\s+([^>|]+?)\s+\.->\s*/g, " -.->|$1| ")
-      .replace(/\s==\s+([^>|]+?)\s+==>\s*/g, " ==>|$1| ");
-    const parts = line.split(ARROW_RE);
-    // split with 2 capture groups: [node, arrow, label, node, arrow, label, node...]
-    let prev: string[] = node(parts[0]!.replace(/;$/, ""));
-    for (let i = 1; i + 2 < parts.length; i += 3) {
-      const label = cleanLabel(parts[i + 1] ?? "");
-      const next = node((parts[i + 2] ?? "").replace(/;$/, ""));
-      for (const a of prev) for (const b of next) edges.push({ from: a, to: b, label });
-      prev = next;
+  const node = (token: string): string[] | null => {
+    const ids: string[] = [];
+    for (const part of token.replace(/;$/, "").split("&")) {
+      // collapsed whitespace keeps NODE_RE's lazy label match linear
+      const m = NODE_RE.exec(part.replace(/\s+/g, " ").trim());
+      if (!m) return null;
+      const id = m[1]!;
+      const label = m[3] ? cleanLabel(m[3]) : "";
+      const prev = nodes.get(id);
+      if (!prev) nodes.set(id, { id, label: label || id });
+      else if (label && prev.label === prev.id) prev.label = label;
+      ids.push(id);
+    }
+    return ids;
+  };
+  const unread = (line: string) => warnings.push(`unread Mermaid line: ${line.length > 120 ? `${line.slice(0, 120)}…` : line}`);
+  for (const line of lines.slice(1)) {
+    if (SKIP_RE.test(line)) continue;
+    if (line.length > MAX_MERMAID_LINE) { warnings.push(`Mermaid line longer than ${MAX_MERMAID_LINE} characters not read: ${line.slice(0, 80)}…`); continue; }
+    const split = splitLinks(line);
+    const groups = split?.segments.map(node);
+    if (!split || !groups || groups.some((g) => !g)) { unread(line); continue; }
+    for (let i = 0; i < split.labels.length; i++) {
+      for (const a of groups[i]!) for (const b of groups[i + 1]!) edges.push({ from: a, to: b, label: split.labels[i]! });
     }
   }
-  return { nodes: [...nodes.values()], edges };
+  return { nodes: [...nodes.values()], edges, warnings };
 }
 
 function parseSequence(lines: string[]): { nodes: HldNode[]; edges: HldEdge[] } {
@@ -351,7 +430,8 @@ export function detectGaps(parsed: ParsedHld, components: readonly Component[]):
     const uncovered = live.filter((c) => !covered.has(c.id)).map((c) => c.name).sort();
     if (parsed.nodes.length && uncovered.length) {
       const list = uncovered.length > 12 ? `${uncovered.slice(0, 12).join(", ")} and ${uncovered.length - 12} more` : uncovered.join(", ");
-      ask("uncovered-components", "uncovered", `These components exist in the code but not in the design: ${list}. Out of scope, or missing from the design?`);
+      // the subject carries the full list, so a different set of uncovered components is a new question
+      ask("uncovered-components", `uncovered: ${uncovered.join(", ")}`, `These components exist in the code but not in the design: ${list}. Out of scope, or missing from the design?`);
     }
   }
   return out;
@@ -359,15 +439,41 @@ export function detectGaps(parsed: ParsedHld, components: readonly Component[]):
 
 // ---- drafts ------------------------------------------------------------------
 
+/** The draft file for a canonical source path. A readable slug plus a hash of the exact path,
+ *  so `payments.md`, `payments.mmd`, `Payments.md` and `hld-payments.md` never share a draft.
+ *  (Drafts written before the hash suffix are not read; HLD import was unreleased then.) */
 export function draftPath(source: string): string {
-  const slug = source.toLowerCase().replace(/\.[^./]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "hld";
-  return `${HLD_DIR}/${slug}.json`;
+  const slug = source.toLowerCase().replace(/\.[^./]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100) || "hld";
+  return `${HLD_DIR}/${slug}-${createHash("sha256").update(source).digest("hex").slice(0, 10)}.json`;
 }
 
+/** True for `.hunch` itself or anything under it, in any letter case (case-insensitive filesystems). */
+export function isHunchPath(rel: string): boolean {
+  const p = rel.toLowerCase();
+  return p === HUNCH_DIR || p.startsWith(`${HUNCH_DIR}/`);
+}
+
+/** Lexical form of a source path: repo-relative, POSIX-normalized (`a//b`, `a/./b` collapse),
+ *  never a glob, never under .hunch/. Use `canonicalSource` when the file system is at hand. */
 export function sourcePath(rel: string): string | null {
-  const p = safeRepoScope(rel);
-  if (!p || /[*?[\]{}]/.test(p) || p.startsWith(`${HUNCH_DIR}/`)) return null;
+  const scoped = safeRepoScope(rel);
+  if (!scoped || /[*?[\]{}]/.test(scoped)) return null;
+  const p = posix.normalize(scoped);
+  if (p === "." || p === ".." || p.startsWith("../") || p.endsWith("/") || isAbsolute(p) || isHunchPath(p)) return null;
   return p;
+}
+
+/** The one canonical form of a source path, used for the draft, its answers, its approval and
+ *  its lock: lexically normalized, then (for an existing file) its real path inside the repo, so
+ *  a case variant on Windows or a `docs/./x.md` spelling names the same file the hook checks.
+ *  Null for anything that is not a file inside the repo (including a symlink pointing out). */
+export function canonicalSource(root: string, rel: string): string | null {
+  const p = sourcePath(rel);
+  if (!p) return null;
+  const abs = join(root, p);
+  if (!existsSync(abs)) return p;
+  if (!isRepoFile(root, p)) return null;
+  return sourcePath(relative(realpathNorm(root), realpathSync.native(abs)).replace(/\\/g, "/"));
 }
 
 export function readDraft(root: string, source: string): HldDraft | null {
@@ -375,7 +481,26 @@ export function readDraft(root: string, source: string): HldDraft | null {
   if (!existsSync(file)) return null;
   const parsed = DraftSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
   if (!parsed.success) throw new Error(`${draftPath(source)} is not a valid HLD draft; restore it from git or re-import`);
+  if (parsed.data.source !== source) throw new Error(`${draftPath(source)} belongs to ${parsed.data.source}, not ${source}; restore it from git or re-import`);
   return parsed.data;
+}
+
+export type HldApproval = "draft" | "approved" | "unverified";
+
+/** Whether a draft is approved, derived from the lock registry rather than trusted from the
+ *  draft's own `status` field (which anyone can type): both the source and the draft must be
+ *  locked, and the locked hashes must match the current bytes and the approved source hash. */
+export function approvalState(root: string, draft: HldDraft): HldApproval {
+  if (draft.status !== "approved" || !draft.approved) return "draft";
+  const reg = readLocks(root);
+  if (reg.corrupt) return "unverified";
+  const src = reg.locks.find((l) => l.path === draft.source);
+  const answers = reg.locks.find((l) => l.path === draftPath(draft.source));
+  const ok = !!src && !!answers
+    && src.sha256 === draft.approved.source_sha256 && draft.approved.source_sha256 === draft.source_sha256
+    && fileSha(root, draft.source) === src.sha256
+    && fileSha(root, draftPath(draft.source)) === answers.sha256;
+  return ok ? "approved" : "unverified";
 }
 
 export function listDrafts(root: string): HldDraft[] {
@@ -397,6 +522,7 @@ export function writeDraft(root: string, draft: HldDraft): void {
 
 export function sourceSha(root: string, source: string): string {
   const abs = join(root, source);
+  if (!isRepoFile(root, source)) throw new Error(`${source} is not a file inside the repository`);
   const st = statSync(abs);
   if (!st.isFile()) throw new Error(`${source} is not a file`);
   if (st.size > MAX_SOURCE_BYTES) throw new Error(`${source} is larger than ${MAX_SOURCE_BYTES} bytes`);
@@ -409,8 +535,8 @@ export interface ImportResult { draft: HldDraft; parsed: ParsedHld; carried: num
  *  over from a previous draft (same question id), so re-importing an edited design only
  *  asks what is new. Refuses an approved draft unless the caller has a human's say-so. */
 export function importHld(root: string, rel: string, components: readonly Component[], opts: { reopen?: boolean; at?: string } = {}): ImportResult {
-  const source = sourcePath(rel);
-  if (!source) throw new Error(`cannot import ${rel}: give a repo-relative file path outside ${HUNCH_DIR}/`);
+  const source = canonicalSource(root, rel);
+  if (!source) throw new Error(`cannot import ${rel}: give a repo-relative file inside the repository and outside ${HUNCH_DIR}/`);
   if (!existsSync(join(root, source))) throw new Error(`${source} does not exist`);
   const sha = sourceSha(root, source);
   const text = readFileSync(join(root, source), "utf8");
@@ -492,6 +618,8 @@ export interface ExportInput {
   decisions: readonly Decision[];
   constraints: readonly Constraint[];
   drafts: readonly HldDraft[];
+  /** Verified approval per draft (`approvalState`); without it a draft's own status is used. */
+  approval?: (draft: HldDraft) => HldApproval;
 }
 
 function mmLabel(s: string): string {
@@ -535,8 +663,9 @@ export function renderHldBody(input: ExportInput): string {
   const sevRank = { blocking: 0, warning: 1, advisory: 2 } as const;
   const constraints = input.constraints.filter((c) => inForce(c as { valid_to?: string | null })).slice()
     .sort((a, b) => sevRank[a.severity] - sevRank[b.severity] || a.statement.localeCompare(b.statement));
-  const approved = input.drafts.filter((d) => d.status === "approved").slice().sort((a, b) => a.source.localeCompare(b.source));
-  const pending = input.drafts.filter((d) => d.status !== "approved").slice().sort((a, b) => a.source.localeCompare(b.source));
+  const state = (d: HldDraft): HldApproval => input.approval ? input.approval(d) : d.status === "approved" ? "approved" : "draft";
+  const approved = input.drafts.filter((d) => state(d) === "approved").slice().sort((a, b) => a.source.localeCompare(b.source));
+  const pending = input.drafts.filter((d) => state(d) !== "approved").slice().sort((a, b) => a.source.localeCompare(b.source));
 
   const out: string[] = [`# ${input.title} — High-Level Design`, ""];
   out.push("> Generated by Hunch from the project's engineering memory. The graph is the source of truth: change a decision, constraint or approved design there and re-run `hunch export-hld`. Hand edits are detected (`hunch export-hld --check`) and never silently overwritten.", "");
@@ -591,10 +720,24 @@ export function renderHldBody(input: ExportInput): string {
 
   if (pending.length) {
     out.push("## 7. Designs under review", "");
-    for (const d of pending) out.push(`- \`${d.source}\`: ${openCount(d)} of ${d.questions.length} question(s) open`);
+    for (const d of pending) {
+      out.push(state(d) === "unverified"
+        ? `- \`${d.source}\`: approval unverified (no matching lock in \`.hunch/locks.json\`)`
+        : `- \`${d.source}\`: ${openCount(d)} of ${d.questions.length} question(s) open`);
+    }
     out.push("");
   }
   return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
+}
+
+/** A title that does not depend on where the repository is checked out (a renamed clone or a
+ *  CI directory must render the same document): package.json's name, else a fixed string. */
+export function exportTitle(root: string): string {
+  try {
+    const name = (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { name?: unknown }).name;
+    if (typeof name === "string" && name.trim() && name.length <= 120 && !/[\r\n]/.test(name)) return name.trim();
+  } catch { /* no or unreadable package.json */ }
+  return "Project";
 }
 
 export function bodyHash(body: string): string {
@@ -610,8 +753,10 @@ export type ExportState = "absent" | "fresh" | "stale" | "edited" | "foreign";
 
 /** How an existing file relates to a fresh render: missing, up to date, behind the graph,
  *  hand-edited after generation, or not ours at all (no marker: never overwritten). */
-export function exportState(existing: string | null, fresh: string): ExportState {
-  if (existing === null) return "absent";
+export function exportState(raw: string | null, fresh: string): ExportState {
+  if (raw === null) return "absent";
+  // a BOM or CRLF line endings (an editor, git autocrlf) are not a hand edit
+  const existing = raw.replace(/^﻿/, "").replace(/\r\n/g, "\n");
   const nl = existing.indexOf("\n");
   const first = nl < 0 ? existing : existing.slice(0, nl);
   if (!first.startsWith(HLD_MARKER_PREFIX)) return "foreign";

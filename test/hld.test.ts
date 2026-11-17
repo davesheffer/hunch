@@ -2,16 +2,16 @@ import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { hunchPaths } from "../src/core/paths.js";
+import { hunchPaths, hunchPathsForDir } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { SCHEMAS } from "../src/core/types.js";
 import {
-  answerQuestion, approveDraft, detectGaps, draftPath, exportState, grillingProtocol, importHld, nextQuestion,
-  openCount, parseHld, readDraft, renderHld, renderHldBody, sourceSha, writeDraft, type ExportInput,
+  answerQuestion, approvalState, approveDraft, canonicalSource, detectGaps, draftPath, exportState, exportTitle, grillingProtocol, importHld, nextQuestion,
+  openCount, parseHld, parseMermaid, readDraft, renderHld, renderHldBody, sourceSha, writeDraft, type ExportInput,
 } from "../src/core/hld.js";
 import { readLocks, setLock } from "../src/core/locks.js";
 import { tsxLoaderUrl } from "./helpers.js";
@@ -105,7 +105,7 @@ test("import, answer, re-import keeps answers; approval needs every answer and t
   const { root } = repo(t);
   const { draft } = importHld(root, SRC, []);
   writeDraft(root, draft);
-  assert.equal(draftPath(SRC), ".hunch/hld/docs-hld-payments.json");
+  assert.match(draftPath(SRC), /^\.hunch\/hld\/docs-hld-payments-[a-f0-9]{10}\.json$/);
   assert.match(grillingProtocol(draft), /ONE question at a time/);
   assert.match(grillingProtocol(draft), /Never answer a question yourself/);
   const first = nextQuestion(draft)!;
@@ -181,6 +181,7 @@ test("cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-h
   for (const id of rest) run("hld-answer", SRC, "--question", id, "--skip");
   const shown = JSON.parse(run("hld", SRC, "--json").out) as { questions: Array<{ answer: { text: string; via: string } | null }> };
   assert.equal(shown.questions[0]!.answer!.text, "The ledger of charges");
+  assert.equal(shown.questions[0]!.answer!.via, "agent", "an answer typed without a terminal is not stamped as the human's");
   assert.equal(shown.questions.filter((q) => !q.answer).length, 0);
   const approve = run("hld-approve", SRC, "--reviewed-by", "agent");
   assert.notEqual(approve.code, 0);
@@ -215,4 +216,137 @@ test("hook: an approved draft is locked like its source", t => {
     input: JSON.stringify({ cwd: root, session_id: "s-hld", hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: join(root, draftPath(SRC)), old_string: "skipped", new_string: "made up" } }),
   }).trim();
   assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "deny");
+});
+
+function runCli(root: string, args: string[], env: NodeJS.ProcessEnv = {}) {
+  try {
+    return { code: 0, out: execFileSync(process.execPath, ["--import", tsxLoaderUrl(), cli, ...args], { cwd: root, encoding: "utf8", env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] }) };
+  } catch (e) {
+    const err = e as { status: number; stdout: string; stderr: string };
+    return { code: err.status, out: `${err.stdout}${err.stderr}` };
+  }
+}
+
+test("regression: one canonical source path for import, draft and lock (//, ./, case)", t => {
+  const { root } = repo(t);
+  assert.equal(importHld(root, "docs//hld/./payments.md", []).draft.source, SRC);
+  assert.equal(canonicalSource(root, "docs/./hld//payments.md"), SRC);
+  assert.equal(canonicalSource(root, ".HUNCH/hld/x.json"), null);
+  if (existsSync(join(root, "DOCS/HLD/PAYMENTS.MD"))) assert.equal(canonicalSource(root, "DOCS/HLD/Payments.md"), SRC, "case variant on a case-insensitive file system");
+});
+
+test("regression: draft slugs never collide and a draft for another source is refused", t => {
+  const { root } = repo(t);
+  const names = ["docs/hld/payments.md", "docs/hld/payments.mmd", "docs/hld/Payments.md", "docs/hld-payments.md", "docs/日本.md", "docs/中文.md"];
+  assert.equal(new Set(names.map(draftPath)).size, names.length);
+  const { draft } = importHld(root, SRC, []);
+  writeDraft(root, draft);
+  const other = "docs/hld/other.md";
+  writeFileSync(join(root, draftPath(other)), readFileSync(join(root, draftPath(SRC))));
+  assert.throws(() => readDraft(root, other), /belongs to docs\/hld\/payments\.md/);
+});
+
+test("regression: approval is derived from the lock registry, not the draft's own status", t => {
+  const { root } = repo(t);
+  let { draft } = importHld(root, SRC, []);
+  for (const q of draft.questions) draft = answerQuestion(draft, q.id, { skip: true, via: "cli" });
+  const forged = approveDraft(draft, sourceSha(root, SRC), "dave", "2026-11-17T10:00:00Z");
+  writeDraft(root, forged);
+  assert.equal(approvalState(root, forged), "unverified", "status:approved typed into the JSON is not an approval");
+  const input: ExportInput = { title: "t", components: [], edges: [], decisions: [], constraints: [], drafts: [forged], approval: (d) => approvalState(root, d) };
+  assert.ok(!renderHldBody(input).includes("approved by dave"));
+  assert.match(renderHldBody(input), /approval unverified/);
+  assert.throws(() => setLock(root, SRC, { kind: "hld", approvedBy: "dave", expectSha: "sha256:" + "0".repeat(64) }), /changed after it was reviewed/);
+  setLock(root, SRC, { kind: "hld", approvedBy: "dave" });
+  setLock(root, draftPath(SRC), { kind: "hld", approvedBy: "dave" });
+  assert.equal(approvalState(root, forged), "approved");
+  assert.match(renderHldBody(input), /approved by dave/);
+  writeFileSync(join(root, SRC), DOC + "\nmore\n");
+  assert.equal(approvalState(root, forged), "unverified", "changed bytes void the approval");
+});
+
+test("regression: hld-approve checks the lock registry before anything else", t => {
+  const { root } = repo(t);
+  let { draft } = importHld(root, SRC, []);
+  for (const q of draft.questions) draft = answerQuestion(draft, q.id, { skip: true, via: "cli" });
+  writeDraft(root, draft);
+  writeFileSync(join(root, ".hunch", "locks.json"), "{ not json");
+  const r = runCli(root, ["hld-approve", SRC, "--reviewed-by", "dave"]);
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /not a valid lock registry/);
+  assert.equal(readDraft(root, SRC)!.status, "draft");
+});
+
+test("regression: export --check ignores CRLF/BOM and the checkout directory name", t => {
+  const { root } = repo(t);
+  const input: ExportInput = { title: "t", components: [], edges: [], decisions: [], constraints: [], drafts: [] };
+  const doc = renderHld(input);
+  assert.equal(exportState(`﻿${doc.replace(/\n/g, "\r\n")}`, doc), "fresh");
+  assert.equal(exportTitle(root), "Project");
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "shop" }));
+  assert.equal(exportTitle(root), "shop");
+});
+
+test("regression: private overlay components never reach the committed draft", t => {
+  const { root } = repo(t);
+  const priv = realpathSync(mkdtempSync(join(tmpdir(), "hunch-hld-priv-")));
+  t.after(() => cleanupDir(priv));
+  const ps = new HunchStore(hunchPathsForDir(priv));
+  ps.json.ensureDirs();
+  ps.json.put("components", component("Secretvault", ["src/secretvault/**"]));
+  ps.close();
+  const r = runCli(root, ["import-hld", SRC], { HUNCH_PRIVATE_DIR: priv });
+  assert.equal(r.code, 0, r.out);
+  assert.ok(!readFileSync(join(root, draftPath(SRC)), "utf8").includes("Secretvault"));
+});
+
+test("regression: Mermaid links of every shape are read, and unread lines are reported", () => {
+  const g = parseMermaid([
+    "---", "title: x", "---", "flowchart LR",
+    "A-- text -->B", "B ---> C", "C --text--> D", "D --xyz--> E", "end-user --> api", "E -..-> F", "F ===> G", "G o--o H", "H x--x I",
+    "I -. later .-> J", "J -->|\"q\"| K[\"a --> b\"]", "what is this )",
+  ].join("\n"));
+  const edges = g.edges.map((e) => `${e.from}>${e.to}:${e.label}`);
+  assert.deepEqual(edges, ["A>B:text", "B>C:", "C>D:text", "D>E:xyz", "end-user>api:", "E>F:", "F>G:", "G>H:", "H>I:", "I>J:later", "J>K:q"]);
+  assert.ok(!g.nodes.some((n) => n.id === "xyz"), "an inline label is not a node");
+  assert.equal(g.nodes.find((n) => n.id === "K")!.label, "a --> b");
+  assert.equal(g.warnings.length, 1);
+  assert.match(g.warnings[0]!, /what is this/);
+  assert.match(parseHld("a.md", "# A\n```mermaid\nflowchart LR\n  a -- b\n```\n").warnings[0]!, /unread Mermaid line/);
+});
+
+test("regression: a 200KB Mermaid line parses in under a second", () => {
+  const line = `A -- ${"x ".repeat(100_000)}`;
+  const started = performance.now();
+  const g = parseMermaid(`flowchart LR\n${line}\n`);
+  assert.ok(performance.now() - started < 1000, `took ${performance.now() - started}ms`);
+  assert.equal(g.warnings.length, 1);
+  const many = `A -- ${"x -".repeat(600)}\n`.repeat(200);
+  const t2 = performance.now();
+  parseMermaid(`flowchart LR\n${many}`);
+  assert.ok(performance.now() - t2 < 1000, "many long lines stay linear");
+});
+
+test("regression: export never writes into .hunch/ in any letter case", t => {
+  const { root } = repo(t);
+  const r = runCli(root, ["export-hld", ".HUNCH/decisions/hld.json"]);
+  assert.notEqual(r.code, 0);
+  assert.ok(!existsSync(join(root, ".hunch/decisions/hld.json")));
+  assert.ok(!existsSync(join(root, ".HUNCH/decisions/hld.json")));
+});
+
+test("regression: import refuses an in-repo symlink to a file outside the repository", t => {
+  const { root } = repo(t);
+  const outside = realpathSync(mkdtempSync(join(tmpdir(), "hunch-hld-out-")));
+  t.after(() => cleanupDir(outside));
+  writeFileSync(join(outside, "secret.md"), DOC);
+  try { symlinkSync(join(outside, "secret.md"), join(root, "docs/hld/link.md"), "file"); } catch { t.skip("symlinks not permitted here"); return; }
+  assert.throws(() => importHld(root, "docs/hld/link.md", []), /inside the repository/);
+  assert.throws(() => sourceSha(root, "docs/hld/link.md"), /inside the repository/);
+});
+
+test("regression: the uncovered-components question changes id with the component set", () => {
+  const p = parseHld("a.mmd", "flowchart LR\n  x --> y");
+  const id = (names: string[]) => detectGaps(p, names.map((n) => component(n, [`src/${n.toLowerCase()}/**`]))).find((q) => q.kind === "uncovered-components")!.id;
+  assert.notEqual(id(["Alpha", "Beta"]), id(["Alpha", "Gamma"]));
 });

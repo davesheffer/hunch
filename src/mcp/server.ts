@@ -1,5 +1,5 @@
 import { conventionSupplements } from '../core/conventionDelivery.js';
-import { answerQuestion as answerHldQuestion, grillingProtocol as hldGrillingProtocol, importHld, listDrafts as listHldDrafts, openCount as hldOpenCount, readDraft as readHldDraft, sourcePath as hldSourcePath, sourceSha as hldSourceSha, writeDraft as writeHldDraft } from "../core/hld.js";
+import { answerQuestion as answerHldQuestion, approvalState as hldApprovalState, canonicalSource as hldCanonicalSource, grillingProtocol as hldGrillingProtocol, importHld, listDrafts as listHldDrafts, openCount as hldOpenCount, readDraft as readHldDraft, sourceSha as hldSourceSha, writeDraft as writeHldDraft } from "../core/hld.js";
 import { fieldCitationText } from "../core/fieldProvenance.js";
 import { canonicalJson } from "../constitution/canonical.js";
 import { siblingGrounding } from "../core/siblingfix.js";
@@ -2294,14 +2294,16 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         if (action === "status" && !file) {
           const drafts = listHldDrafts(root);
           if (!drafts.length) return ok("No HLD drafts. Import one with hunch_hld(action:\"import\", file).");
-          return ok(drafts.map((d) => `${d.source} [${d.status}] ${hldOpenCount(d)}/${d.questions.length} open`).join("\n"));
+          return ok(drafts.map((d) => `${d.source} [${hldApprovalState(root, d) === "unverified" ? "approval unverified" : hldApprovalState(root, d)}] ${hldOpenCount(d)}/${d.questions.length} open`).join("\n"));
         }
-        const source = file ? hldSourcePath(repoRelativeTarget(file, root)) : null;
+        const source = file ? hldCanonicalSource(root, repoRelativeTarget(file, root)) : null;
         if (!source) return invalid("give file: a repo-relative HLD file outside .hunch/");
         if (action === "import") {
-          const { draft, carried } = importHld(root, source, store.recs("components"));
+          // PUBLIC components only: question text is persisted in the committed draft
+          const { draft, carried, parsed } = importHld(root, source, store.json.loadAll("components"));
           writeHldDraft(root, draft);
-          return ok(`${carried ? `${carried} earlier answer(s) carried over.\n` : ""}${hldGrillingProtocol(draft)}`);
+          const unread = parsed.warnings.length ? `Diagram lines Hunch could not read (tell the human):\n${parsed.warnings.map((w) => `- ${w}`).join("\n")}\n\n` : "";
+          return ok(`${unread}${carried ? `${carried} earlier answer(s) carried over.\n` : ""}${hldGrillingProtocol(draft)}`);
         }
         if (action === "answer") {
           if (!question_id) return invalid("answer needs question_id");

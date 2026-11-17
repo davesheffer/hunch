@@ -16,7 +16,7 @@
 import "./preflight.js"; // MUST stay the first import — Node-version gate before node:sqlite loads
 import { chmodSync, existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, rmdirSync, symlinkSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
-import { join, relative, dirname, basename, resolve, isAbsolute } from "node:path";
+import { join, relative, dirname, basename, resolve, isAbsolute, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
@@ -171,7 +171,7 @@ import { ADR_DIR_CANDIDATES, ADR_FILE_RE, mapAdrCorpus } from "../extractors/adr
 import { confirmCommand, countersignConstraint, countersignDecision } from "../core/countersign.js";
 import { LOCK_KINDS, LOCKS_FILE, fileSha, lockFor, lockablePath, readLocks, removeLock, setLock, verifyLocks, type LockKind } from "../core/locks.js";
 import { createInterface } from "node:readline/promises";
-import { DEFAULT_HLD_EXPORT, answerQuestion as answerHldQuestion, approveDraft as approveHldDraft, draftPath as hldDraftPath, exportState as hldExportState, importHld, listDrafts as listHldDrafts, nextQuestion as nextHldQuestion, openCount as hldOpenCount, readDraft as readHldDraft, renderHld, sourcePath as hldSourcePath, sourceSha as hldSourceSha, writeDraft as writeHldDraft, type HldDraft, type HldQuestion } from "../core/hld.js";
+import { DEFAULT_HLD_EXPORT, answerQuestion as answerHldQuestion, approvalState as hldApprovalState, approveDraft as approveHldDraft, canonicalSource as hldCanonicalSource, draftPath as hldDraftPath, exportState as hldExportState, exportTitle as hldExportTitle, importHld, isHunchPath, listDrafts as listHldDrafts, nextQuestion as nextHldQuestion, openCount as hldOpenCount, readDraft as readHldDraft, renderHld, sourceSha as hldSourceSha, writeDraft as writeHldDraft, type HldDraft, type HldQuestion } from "../core/hld.js";
 import { applyImportedAdrReview, carryImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, isImportedAdrDecision, pendingImportedAdrReviews } from "../core/importReview.js";
 import { exportMadrCorpus, isRegenerableMadr } from "../integrations/madrExport.js";
 import { buildMadrManifest, writeMadrManifest, refreshMadrCorpus } from "../integrations/madrManifest.js";
@@ -4520,7 +4520,11 @@ program
 
 // ---- HLD import / grilling / export (core/hld.ts) ---------------------------
 function hldTarget(file: string, root: string): string | null {
-  return hldSourcePath(repoRelativeTarget(resolve(file), root));
+  return hldCanonicalSource(root, repoRelativeTarget(resolve(file), root));
+}
+
+function printHldWarnings(warnings: readonly string[], toStderr = false): void {
+  for (const w of warnings) (toStderr ? console.error : console.log)(`  ⚠ ${w}`);
 }
 
 function printQuestion(q: HldQuestion): void {
@@ -4550,12 +4554,14 @@ program
         }
         reopen = true;
       }
-      const { draft, carried } = importHld(root, target, store.recs("components"), { reopen: reopen || !!opts.dryRun });
+      // PUBLIC components only: question text is persisted in the committed draft
+      const { draft, carried, parsed } = importHld(root, target, store.json.loadAll("components"), { reopen: reopen || !!opts.dryRun });
       if (!opts.dryRun) {
         if (reopen) { removeLock(root, target); removeLock(root, hldDraftPath(target)); }
         writeHldDraft(root, draft);
       }
-      if (opts.json) { console.log(JSON.stringify(draft, null, 2)); return; }
+      if (opts.json) { printHldWarnings(parsed.warnings, true); console.log(JSON.stringify(draft, null, 2)); return; }
+      printHldWarnings(parsed.warnings);
       const open = hldOpenCount(draft);
       console.log(`✓ ${opts.dryRun ? "dry run: parsed" : "imported"} ${target} (${draft.format}): ${draft.nodes.length} component(s), ${draft.edges.length} connection(s), ${draft.questions.length} question(s)${carried ? `, ${carried} answer(s) carried over` : ""}`);
       if (opts.dryRun) { for (const q of draft.questions) printQuestion(q); return; }
@@ -4586,16 +4592,21 @@ program
     try {
       if (!file) {
         const drafts = listHldDrafts(root);
-        if (opts.json) { console.log(JSON.stringify(drafts.map((d) => ({ source: d.source, status: d.status, questions: d.questions.length, open: hldOpenCount(d) })), null, 2)); return; }
+        if (opts.json) { console.log(JSON.stringify(drafts.map((d) => ({ source: d.source, status: hldApprovalState(root, d), questions: d.questions.length, open: hldOpenCount(d) })), null, 2)); return; }
         if (!drafts.length) { console.log("No HLD drafts. Import one with: hunch import-hld <file>"); return; }
-        for (const d of drafts) console.log(`${d.status === "approved" ? "✓" : "…"} ${d.source}  [${d.status}] ${hldOpenCount(d)}/${d.questions.length} open${d.approved ? `  approved by ${d.approved.by} ${d.approved.at.slice(0, 10)}` : ""}`);
+        for (const d of drafts) {
+          const state = hldApprovalState(root, d);
+          const label = state === "unverified" ? "approval unverified" : state;
+          console.log(`${state === "approved" ? "✓" : state === "unverified" ? "⚠" : "…"} ${d.source}  [${label}] ${hldOpenCount(d)}/${d.questions.length} open${state === "approved" && d.approved ? `  approved by ${d.approved.by} ${d.approved.at.slice(0, 10)}` : ""}`);
+        }
         return;
       }
       const target = hldTarget(file, root);
       const draft = target ? readHldDraft(root, target) : null;
       if (!draft) return fail(`no HLD draft for ${file}; import it with: hunch import-hld ${file}`);
       if (opts.json) { console.log(JSON.stringify(draft, null, 2)); return; }
-      console.log(`${draft.source} — "${draft.title}" [${draft.status}] ${draft.nodes.length} component(s), ${draft.edges.length} connection(s), ${hldOpenCount(draft)}/${draft.questions.length} question(s) open`);
+      const state = hldApprovalState(root, draft);
+      console.log(`${draft.source} — "${draft.title}" [${state === "unverified" ? "approval unverified" : state}] ${draft.nodes.length} component(s), ${draft.edges.length} connection(s), ${hldOpenCount(draft)}/${draft.questions.length} question(s) open`);
       for (const q of draft.questions) printQuestion(q);
     } catch (e) {
       return fail((e as Error).message);
@@ -4617,7 +4628,9 @@ program
       const draft = target ? readHldDraft(root, target) : null;
       if (!draft) return fail(`no HLD draft for ${file}; import it with: hunch import-hld ${file}`);
       if (!opts.skip && !answer.join(" ").trim()) return fail("give the answer text, or --skip");
-      const next = answerHldQuestion(draft, questionId, { text: answer.join(" "), skip: !!opts.skip, via: "cli" });
+      // Only an interactive terminal is the human typing; any other caller (an agent's shell) is recorded as the assistant.
+      const via = process.stdin.isTTY && process.stdout.isTTY ? "cli" : "agent";
+      const next = answerHldQuestion(draft, questionId, { text: answer.join(" "), skip: !!opts.skip, via });
       writeHldDraft(root, next);
       const q = nextHldQuestion(next);
       console.log(`✓ ${opts.skip ? "skipped" : "answered"} ${questionId}; ${hldOpenCount(next)} open`);
@@ -4639,14 +4652,20 @@ program
       const target = hldTarget(file, root);
       const draft = target ? readHldDraft(root, target) : null;
       if (!draft) return fail(`no HLD draft for ${file}; import it with: hunch import-hld ${file}`);
-      const approved = approveHldDraft(draft, hldSourceSha(root, draft.source), opts.reviewedBy);
+      if (draft.source !== target) return fail(`${hldDraftPath(target!)} belongs to ${draft.source}, not ${target}`);
+      if (readLocks(root).corrupt) return fail(`${LOCKS_FILE} is not a valid lock registry; restore it from git first`);
+      const reviewedSha = hldSourceSha(root, draft.source);
+      const approved = approveHldDraft(draft, reviewedSha, opts.reviewedBy);
       console.log(`${draft.source} — "${draft.title}": ${draft.nodes.length} component(s), ${draft.edges.length} connection(s)`);
       for (const q of draft.questions) printQuestion(q);
       const agentAnswers = draft.questions.filter((q) => q.answer?.via === "agent").length;
       const question = `\nApprove this design and its ${draft.questions.length} answer(s) as ${opts.reviewedBy}?${agentAnswers ? ` (${agentAnswers} answer(s) were recorded by your coding assistant; check they are what you said)` : ""}\nBoth ${draft.source} and ${hldDraftPath(draft.source)} will be locked.`;
       if (!(await confirmHuman(question))) return fail("not approved: `hunch hld-approve` needs a human to confirm in an interactive terminal");
+      // re-check after the prompt: the registry must still be writable and the source the bytes the human reviewed
+      if (readLocks(root).corrupt) return fail(`${LOCKS_FILE} is not a valid lock registry; restore it from git first`);
+      if (hldSourceSha(root, draft.source) !== reviewedSha) return fail(`${draft.source} changed while it was being reviewed; run hld-approve again`);
       writeHldDraft(root, approved);
-      setLock(root, draft.source, { kind: draft.format === "markdown" ? "hld" : "diagram", approvedBy: opts.reviewedBy, note: "approved HLD" });
+      setLock(root, draft.source, { kind: draft.format === "markdown" ? "hld" : "diagram", approvedBy: opts.reviewedBy, note: "approved HLD", expectSha: reviewedSha });
       setLock(root, hldDraftPath(draft.source), { kind: "hld", approvedBy: opts.reviewedBy, note: `answers for ${draft.source}` });
       console.log(`✓ approved and locked ${draft.source}`);
       console.log(`Commit ${hldDraftPath(draft.source)} and ${LOCKS_FILE}, then run \`hunch export-hld\` to refresh the standard HLD.`);
@@ -4666,10 +4685,16 @@ program
     const { store, root } = storeFor();
     try {
       const target = safeRepoScope(toPosixTarget(file));
-      if (!target || target.startsWith(".hunch/")) return fail(`cannot export to ${file}: give a repo-relative path outside .hunch/`);
+      // case-insensitive and by resolved path: `.HUNCH/x` is the store on Windows/macOS
+      const intoStore = (t: string) => {
+        const rel = relative(realpathNorm(join(root, ".hunch")), realpathNorm(join(root, t)));
+        return isHunchPath(t) || !rel || !(rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel));
+      };
+      if (!target || intoStore(target)) return fail(`cannot export to ${file}: give a repo-relative path outside .hunch/`);
       // PUBLIC store only: the document is committable, so overlay records never reach it.
       const fresh = renderHld({
-        title: basename(root),
+        title: hldExportTitle(root),
+        approval: (d) => hldApprovalState(root, d),
         components: store.json.loadAll("components"),
         edges: store.json.loadAll("edges"),
         decisions: store.json.loadAll("decisions"),
