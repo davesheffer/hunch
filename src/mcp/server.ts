@@ -2316,7 +2316,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         if (!draft) return invalid(`no draft for ${source}; call hunch_hld(action:"import", file:"${source}") first`);
         if (action === "next" || action === "status") return ok(hldGrillingProtocol(draft, hldApprovalState(root, draft)));
         if (!question_id) return invalid("answer needs question_id");
-        if (draft.status === "approved") return refused(`${source} is approved and locked; only a human reopens it (hunch import-hld ${source} in a terminal).`);
+        // Any lock on the source or the draft (or a corrupt registry) blocks, whatever the draft's status says.
+        const block = hldReimportBlock(root, source, draft);
+        if (block) return refused(`${block.message} Answers cannot be recorded.`);
         if (hldSourceSha(root, source) !== draft.source_sha256) return refused(`${source} changed since it was imported; re-import it first (hunch_hld action:"import").`);
         const next = answerHldQuestion(draft, question_id, { text: answer, skip: !!skip, via: "agent" });
         writeHldDraft(root, next);

@@ -4630,6 +4630,9 @@ program
       const draft = target ? readHldDraft(root, target) : null;
       if (!draft) return fail(`no HLD draft for ${file}; import it with: hunch import-hld ${file}`);
       if (!opts.skip && !answer.join(" ").trim()) return fail("give the answer text, or --skip");
+      // A locked draft/source (or corrupt registry) is never rewritten by an answer; a human unlocks or reopens it first.
+      const block = hldReimportBlock(root, draft.source, draft);
+      if (block) return fail(`${block.message} Answers cannot be recorded.`);
       // Only an interactive terminal is the human typing; any other caller (an agent's shell) is recorded as the assistant.
       const via = process.stdin.isTTY && process.stdout.isTTY ? "cli" : "agent";
       const next = answerHldQuestion(draft, questionId, { text: answer.join(" "), skip: !!opts.skip, via });

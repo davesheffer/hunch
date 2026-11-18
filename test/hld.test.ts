@@ -480,3 +480,59 @@ test("regression (round 4): reimportBlock kinds", t => {
   assert.equal(corrupt?.kind, "registry-corrupt");
   assert.match(corrupt!.message, /git checkout -- \.hunch\/locks\.json/);
 });
+
+async function mcpHld(root: string, args: Record<string, unknown>): Promise<string> {
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+  const { buildServer } = await import("../src/mcp/server.js");
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "hld-test", version: "1" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  try {
+    const res = await client.callTool({ name: "hunch_hld", arguments: { action: "answer", file: SRC, ...args } });
+    return (res.content as Array<{ text: string }>)[0]!.text;
+  } finally { await client.close(); await server.close(); }
+}
+
+test("regression: answering a locked draft at status draft is refused (MCP and CLI), nothing written", async t => {
+  const { root } = repo(t);
+  const { draft } = importHld(root, SRC, []);
+  writeDraft(root, draft);
+  const qid = draft.questions[0]!.id;
+  setLock(root, SRC, { kind: "hld", approvedBy: "dave" });
+  setLock(root, draftPath(SRC), { kind: "hld", approvedBy: "dave" });
+  const file = join(root, draftPath(SRC));
+  const before = readFileSync(file);
+  assert.equal(readDraft(root, SRC)!.status, "draft");
+  const text = await mcpHld(root, { question_id: qid, answer: "agent overwrite" });
+  assert.match(text, /^Refused:/);
+  assert.deepEqual(readFileSync(file), before, "MCP answer left the draft bytes alone");
+  const r = runCli(root, ["hld-answer", SRC, "--question", qid, "agent", "overwrite"]);
+  assert.notEqual(r.code, 0, r.out);
+  assert.match(r.out, /hunch unlock|interactive terminal/);
+  assert.deepEqual(readFileSync(file), before, "CLI answer left the draft bytes alone");
+});
+
+test("regression: a corrupt lock registry refuses an MCP answer", async t => {
+  const { root } = repo(t);
+  const { draft } = importHld(root, SRC, []);
+  writeDraft(root, draft);
+  writeFileSync(join(root, ".hunch", "locks.json"), "<<<<<<< HEAD\n");
+  const file = join(root, draftPath(SRC));
+  const before = readFileSync(file);
+  const text = await mcpHld(root, { question_id: draft.questions[0]!.id, answer: "x" });
+  assert.match(text, /^Refused:/);
+  assert.match(text, /git checkout -- \.hunch\/locks\.json/);
+  assert.deepEqual(readFileSync(file), before);
+});
+
+test("control: an unlocked draft still records an answer", async t => {
+  const { root } = repo(t);
+  const { draft } = importHld(root, SRC, []);
+  writeDraft(root, draft);
+  const qid = draft.questions[0]!.id;
+  const text = await mcpHld(root, { question_id: qid, answer: "a real answer" });
+  assert.match(text, /^Recorded /);
+  assert.equal(readDraft(root, SRC)!.questions.find((q) => q.id === qid)!.answer!.text, "a real answer");
+});
