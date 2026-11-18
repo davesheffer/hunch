@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { parseAdrMarkdown, mapAdrCorpus, adrDecisionId, ADR_FILE_RE, UNDATED_ADR_DATE } from "../src/extractors/adrImport.js";
 import { HunchStore } from "../src/store/hunchStore.js";
+import { applyImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, pendingImportedAdrReviews } from "../src/core/importReview.js";
 import { hunchPaths } from "../src/core/paths.js";
 
 const MADR_ACCEPTED = `---
@@ -376,4 +377,67 @@ test("ids derive from the file path, so re-import updates instead of duplicating
   assert.equal(store.json.loadAll("decisions").length, 1, "re-import is an update, not a duplicate");
   store.close();
   cleanupDir(root);
+});
+
+// #664: MADR 2.x keeps metadata as header bullets under the title, not in
+// frontmatter or a `## Status` section.
+const MADR2_BULLETS = `# 0001. Use Kafka for events
+
+- Status: accepted
+- Date: 2026-10-20
+- Deciders: alice
+
+## Context and Problem Statement
+
+Services need durable async events.
+
+## Decision Outcome
+
+Chosen option: "Kafka", because replay matters.
+`;
+
+test("MADR 2 header bullet status is read (#664)", () => {
+  const p = parseAdrMarkdown(MADR2_BULLETS, "docs/adr/0001-use-kafka.md")!;
+  assert.equal(p.statusRaw, "accepted");
+  assert.equal(p.status, "accepted");
+  assert.equal(p.title, "Use Kafka for events");
+
+  const starBold = MADR2_BULLETS.replace("- Status: accepted", "* **Status:** accepted");
+  assert.equal(parseAdrMarkdown(starBold, "docs/adr/0001-use-kafka.md")!.status, "accepted");
+
+  const rejected = MADR2_BULLETS.replace("- Status: accepted", "- status: Rejected");
+  assert.equal(parseAdrMarkdown(rejected, "docs/adr/0001-use-kafka.md")!.status, "rejected");
+
+  const superseded = MADR2_BULLETS.replace("- Status: accepted", "- Status: superseded by [ADR-0005](0005-use-pulsar.md)");
+  const sp = parseAdrMarkdown(superseded, "docs/adr/0001-use-kafka.md")!;
+  assert.equal(sp.status, "superseded");
+  assert.deepEqual(sp.supersededByNumbers, [5]);
+});
+
+test("a Status bullet below the first section heading is not header metadata", () => {
+  const text = `# 0001. Something\n\n## Context\n\n- Status: accepted (of the upstream ticket)\n`;
+  const p = parseAdrMarkdown(text, "docs/adr/0001-something.md")!;
+  assert.equal(p.statusRaw, "");
+  assert.equal(p.status, "proposed");
+});
+
+test("frontmatter and ## Status still win over a header bullet", () => {
+  const fm = `---\nstatus: rejected\n---\n${MADR2_BULLETS}`;
+  assert.equal(parseAdrMarkdown(fm, "docs/adr/0001-use-kafka.md")!.status, "rejected");
+  const section = MADR2_BULLETS.replace("## Context and Problem Statement", "## Status\n\nProposed\n\n## Context and Problem Statement");
+  assert.equal(parseAdrMarkdown(section, "docs/adr/0001-use-kafka.md")!.status, "proposed");
+});
+
+test("an accepted MADR 2 ADR is pending review and can be approved (#664)", () => {
+  const d = mapAdrCorpus([{ relPath: "docs/adr/0001-use-kafka.md", text: MADR2_BULLETS }]).decisions[0]!;
+  assert.equal(d.status, "accepted");
+  assert.ok(d.provenance.evidence.includes("status: accepted"));
+  assert.deepEqual(pendingImportedAdrReviews([d]).map((x) => x.id), [d.id]);
+  const approved = applyImportedAdrReview(d, {
+    disposition: "approve",
+    expectedSourceHash: importedAdrSourceHash(d)!,
+    expectedReviewHash: importedAdrReviewHash(d),
+    reviewer: "alice",
+  });
+  assert.deepEqual(pendingImportedAdrReviews([approved]), []);
 });
