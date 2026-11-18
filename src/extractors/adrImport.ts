@@ -204,6 +204,22 @@ function adrRefNumbers(text: string): number[] {
   return [...out];
 }
 
+/** MADR 2.x and many hand-written ADRs keep metadata as a bullet list between
+ * the `#` title and the first section heading (`- Status: accepted`,
+ * `* **Status:** accepted`). Read the status from that header block only, so a
+ * "Status:" bullet deeper in the body is never mistaken for metadata. */
+function headerBulletStatus(body: string): string | undefined {
+  const lines = body.split(/\r?\n/);
+  const title = lines.findIndex((l) => /^#\s+/.test(l));
+  for (let i = title + 1; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (/^#{1,6}\s/.test(line)) break;
+    const m = /^\s*[-*+]\s+[*_]{0,2}status[*_]{0,2}\s*:\s*[*_]{0,2}\s*(.+?)\s*$/i.exec(line);
+    if (m) return m[1]!.replace(/[*_]+$/, "").trim() || undefined;
+  }
+  return undefined;
+}
+
 function mapStatus(raw: string): ParsedAdr["status"] {
   const s = raw.toLowerCase();
   // MADR permits a bare `deprecated` lifecycle with no replacement relation.
@@ -218,8 +234,8 @@ function mapStatus(raw: string): ParsedAdr["status"] {
   return "proposed";
 }
 
-/** Parse one ADR markdown file (MADR 3.x/4 frontmatter style or Nygard heading
- *  style). Returns null when the filename doesn't follow NNNN-slug.md. */
+/** Parse one ADR markdown file (MADR 3.x/4 frontmatter style, MADR 2.x header
+ *  bullets, or Nygard heading style). Returns null when the filename doesn't follow NNNN-slug.md. */
 export function parseAdrMarkdown(text: string, relPath: string): ParsedAdr | null {
   const base = relPath.split("/").pop() ?? relPath;
   const nameMatch = ADR_FILE_RE.exec(base);
@@ -238,7 +254,11 @@ export function parseAdrMarkdown(text: string, relPath: string): ParsedAdr | nul
 
   const secs = sections(body);
   const statusSection = sectionOf(secs, "Status");
-  const statusRaw = frontmatterField(fm, "status") ?? statusSection.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0] ?? "";
+  const statusRaw =
+    frontmatterField(fm, "status") ??
+    statusSection.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0] ??
+    headerBulletStatus(body) ??
+    "";
   const status = mapStatus(statusRaw);
   const date = frontmatterField(fm, "date");
 
