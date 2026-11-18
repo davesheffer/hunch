@@ -4719,7 +4719,11 @@ program
       }
       if (state === "foreign") return fail(`${target} is a hand-written file (no hunch:generated marker); export to another path`);
       if (state === "edited" && !opts.force) return fail(`${target} was edited by hand since it was generated; move the change into the graph, or overwrite it with --force`);
-      if (lockFor(readLocks(root).locks, target)) return fail(`${target} is locked; a human unlocks it first (hunch unlock ${target})`);
+      // blocked by ANY lock naming this file: raw spelling, canonical spelling (`docs//x/./HLD.md`,
+      // a case variant), or a lock whose own path canonicalizes here (a case-only rename)
+      const canon = hldCanonicalSource(root, target) ?? target;
+      const held = readLocks(root).locks.find((l) => l.path === target || l.path === canon || (hldCanonicalSource(root, l.path) ?? l.path) === canon);
+      if (held) return fail(`${held.path} is locked; a human unlocks it first (hunch unlock ${held.path})`);
       if (state === "fresh") { console.log(`✓ ${target} already matches the graph`); return; }
       mkdirSync(dirname(abs), { recursive: true });
       writeFileAtomic(abs, fresh);

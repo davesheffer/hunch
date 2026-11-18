@@ -21,6 +21,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { extname, isAbsolute, join, posix, relative } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { inflateRawSync } from "node:zlib";
 import { z } from "zod";
 import { writeFileAtomic } from "./io.js";
@@ -159,8 +160,9 @@ const DOTTED_OPEN_Y = /-\./y;
 const PIPE_LABEL_Y = /\s*\|([^|]*)\|/y;
 /** How an inline label (`A -- text --> B`) ends, per opener. Each match is a single forward search. */
 const LABEL_END: Record<string, RegExp> = {
-  "--": /-{2,}(?:>|[ox](?=[\s|;&]|$))?/g,
-  "==": /={2,}(?:>|[ox](?=[\s|;&]|$))?/g,
+  // only an arrow tail ends a label (`-->`, `---`, `--x`, `--o`); a bare `--` is label text
+  "--": /-{2,}(?:>|[ox](?=[\s|;&]|$))|-{3,}/g,
+  "==": /={2,}(?:>|[ox](?=[\s|;&]|$))|={3,}/g,
   "-.": /\.-(?:>|[ox](?=[\s|;&]|$))?/g,
 };
 /** Longer lines are not parsed (a crafted line must not stall the event loop); they are reported. */
@@ -499,17 +501,38 @@ export function approvalState(root: string, draft: HldDraft): HldApproval {
   const ok = !!src && !!answers
     && src.sha256 === draft.approved.source_sha256 && draft.approved.source_sha256 === draft.source_sha256
     && fileSha(root, draft.source) === src.sha256
-    && fileSha(root, draftPath(draft.source)) === answers.sha256;
+    && lockedDraftMatches(root, draft, answers.sha256);
   return ok ? "approved" : "unverified";
 }
 
+/** The draft we were GIVEN must be the one whose bytes are locked, not merely share a source:
+ *  the canonical file's exact bytes must hash to the lock, and its parsed content must equal
+ *  the given draft (compared parsed, so a human's reformatting does not void an approval). */
+function lockedDraftMatches(root: string, draft: HldDraft, lockedSha: string): boolean {
+  try {
+    const bytes = readFileSync(join(root, draftPath(draft.source)));
+    if (`sha256:${createHash("sha256").update(bytes).digest("hex")}` !== lockedSha) return false;
+    const locked = DraftSchema.safeParse(JSON.parse(bytes.toString("utf8")));
+    return locked.success && isDeepStrictEqual(locked.data, DraftSchema.parse(draft));
+  } catch {
+    return false;
+  }
+}
+
+function serializedDraft(draft: HldDraft): string {
+  return `${JSON.stringify(DraftSchema.parse(draft), null, 2)}\n`;
+}
+
+
+/** Every draft stored under its own canonical file name. A file whose name is not
+ *  `draftPath(source)` (a copy, a forgery, a pre-hash-suffix draft) is never a draft. */
 export function listDrafts(root: string): HldDraft[] {
   const dir = join(root, HLD_DIR);
   if (!existsSync(dir)) return [];
   const out: HldDraft[] = [];
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
     const parsed = DraftSchema.safeParse(JSON.parse(readFileSync(join(dir, f), "utf8")));
-    if (parsed.success) out.push(parsed.data);
+    if (parsed.success && draftPath(parsed.data.source) === `${HLD_DIR}/${f}`) out.push(parsed.data);
   }
   return out;
 }
@@ -517,7 +540,7 @@ export function listDrafts(root: string): HldDraft[] {
 export function writeDraft(root: string, draft: HldDraft): void {
   const file = join(root, draftPath(draft.source));
   mkdirSync(join(root, HLD_DIR), { recursive: true });
-  writeFileAtomic(file, `${JSON.stringify(DraftSchema.parse(draft), null, 2)}\n`);
+  writeFileAtomic(file, serializedDraft(draft));
 }
 
 export function sourceSha(root: string, source: string): string {
@@ -542,8 +565,15 @@ export function importHld(root: string, rel: string, components: readonly Compon
   const text = readFileSync(join(root, source), "utf8");
   const parsed = parseHld(source, text);
   const previous = readDraft(root, source);
+  // Refuse on ANY sign of an approval, verified or not: a failing verification (source edited
+  // after approval, a broken registry) must never let an agent overwrite the human's answers.
+  const reg = readLocks(root);
+  const lockedHere = reg.corrupt || reg.locks.some((l) => l.path === source || l.path === draftPath(source));
   if (previous?.status === "approved" && !opts.reopen) {
     throw new Error(`${source} is an approved, locked HLD (approved by ${previous.approved!.by}). Only a human reopens it, by running \`hunch import-hld ${source}\` in a terminal.`);
+  }
+  if (lockedHere && !opts.reopen) {
+    throw new Error(`${source} has an approval lock in .hunch/locks.json${reg.corrupt ? " (the registry is unreadable)" : ""}. Only a human reopens it, by running \`hunch import-hld ${source}\` in a terminal.`);
   }
   const answers = new Map((previous?.questions ?? []).filter((q) => q.answer).map((q) => [q.id, q.answer!]));
   let carried = 0;
@@ -590,7 +620,7 @@ export function approveDraft(draft: HldDraft, currentSha: string, by: string, at
 }
 
 /** The interrogation protocol an agent follows for one draft. */
-export function grillingProtocol(draft: HldDraft): string {
+export function grillingProtocol(draft: HldDraft, approval: HldApproval = "draft"): string {
   const q = nextQuestion(draft);
   const done = draft.questions.length - openCount(draft);
   const head = [
@@ -602,7 +632,8 @@ export function grillingProtocol(draft: HldDraft): string {
     "3. Record each answer with hunch_hld(action:\"answer\", file, question_id, answer) — the human's words, not a summary that adds facts. Use skip:true only when the human says to skip.",
     "4. When every question is answered, tell the human to approve it in a terminal: hunch hld-approve " + draft.source + " --reviewed-by <name>. Approval locks the design; you cannot approve it.",
   ];
-  if (draft.status === "approved") return `${draft.source} is approved by ${draft.approved!.by} and locked. Nothing to ask.`;
+  if (approval === "approved") return `${draft.source} is approved by ${draft.approved!.by} and locked. Nothing to ask.`;
+  if (draft.status === "approved") return `${draft.source} claims approval, but its locks do not match (approval unverified). Only a human re-approves it in a terminal: hunch import-hld ${draft.source}, then hunch hld-approve.`;
   if (!q) return `${head.join("\n")}\n\nAll questions are answered. Ask the human to review and approve: hunch hld-approve ${draft.source} --reviewed-by <name>`;
   return `${head.join("\n")}\n\nNext question (${q.id}, ${q.kind}):\n${q.question}`;
 }

@@ -2,7 +2,7 @@ import { cleanupDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { deflateRawSync } from "node:zlib";
@@ -11,7 +11,7 @@ import { HunchStore } from "../src/store/hunchStore.js";
 import { SCHEMAS } from "../src/core/types.js";
 import {
   answerQuestion, approvalState, approveDraft, canonicalSource, detectGaps, draftPath, exportState, exportTitle, grillingProtocol, importHld, nextQuestion,
-  openCount, parseHld, parseMermaid, readDraft, renderHld, renderHldBody, sourceSha, writeDraft, type ExportInput,
+  listDrafts, openCount, parseHld, parseMermaid, readDraft, renderHld, renderHldBody, sourceSha, writeDraft, type ExportInput,
 } from "../src/core/hld.js";
 import { readLocks, setLock } from "../src/core/locks.js";
 import { tsxLoaderUrl } from "./helpers.js";
@@ -124,6 +124,9 @@ test("import, answer, re-import keeps answers; approval needs every answer and t
   const approved = approveDraft(all, sourceSha(root, SRC), "dave");
   writeDraft(root, approved);
   assert.throws(() => answerQuestion(approved, first.id, { text: "x", via: "agent" }), /approved and locked/);
+  assert.throws(() => importHld(root, SRC, []), /Only a human reopens it/, "refused even before any lock exists");
+  setLock(root, SRC, { kind: "hld", approvedBy: "dave" });
+  setLock(root, draftPath(SRC), { kind: "hld", approvedBy: "dave" });
   assert.throws(() => importHld(root, SRC, []), /Only a human reopens it/);
   assert.ok(importHld(root, SRC, [], { reopen: true }).draft.status === "draft");
 });
@@ -349,4 +352,95 @@ test("regression: the uncovered-components question changes id with the componen
   const p = parseHld("a.mmd", "flowchart LR\n  x --> y");
   const id = (names: string[]) => detectGaps(p, names.map((n) => component(n, [`src/${n.toLowerCase()}/**`]))).find((q) => q.kind === "uncovered-components")!.id;
   assert.notEqual(id(["Alpha", "Beta"]), id(["Alpha", "Gamma"]));
+});
+
+function lockedApproval(root: string) {
+  let { draft } = importHld(root, SRC, []);
+  for (const q of draft.questions) draft = answerQuestion(draft, q.id, { text: "real answer", via: "cli" });
+  const approved = approveDraft(draft, sourceSha(root, SRC), "dave", "2026-11-17T10:00:00Z");
+  writeDraft(root, approved);
+  setLock(root, SRC, { kind: "hld", approvedBy: "dave" });
+  setLock(root, draftPath(SRC), { kind: "hld", approvedBy: "dave" });
+  return approved;
+}
+
+test("regression (round 2): a second draft file copying an approved draft is not approved", t => {
+  const { root } = repo(t);
+  const approved = lockedApproval(root);
+  const forged = { ...approved, questions: approved.questions.map((q) => ({ ...q, answer: { ...q.answer!, text: "forged answer" } })) };
+  writeFileSync(join(root, ".hunch", "hld", "zzz-agent.json"), `${JSON.stringify(forged, null, 2)}\n`);
+  const drafts = listDrafts(root);
+  assert.equal(drafts.length, 1, "only the canonical draft file is a draft");
+  assert.ok(!JSON.stringify(drafts).includes("forged answer"));
+  assert.equal(approvalState(root, approved), "approved");
+  assert.equal(approvalState(root, forged), "unverified", "the given draft's own bytes must be the locked ones");
+});
+
+test("regression (round 2): a bare -- inside an inline label is label text", () => {
+  const edges = (s: string) => parseMermaid(`flowchart LR\n${s}`).edges.map((e) => `${e.from}>${e.to}:${e.label}`);
+  assert.deepEqual(edges("A -- a--b --> C"), ["A>C:a--b"]);
+  assert.deepEqual(edges("A -- text -- more --> B"), ["A>B:text -- more"]);
+  assert.deepEqual(edges("A == x==y ==> B"), ["A>B:x==y"]);
+  assert.deepEqual(edges("A -- t --- B"), ["A>B:t"]);
+  assert.deepEqual(edges("A -- t --x B"), ["A>B:t"]);
+});
+
+test("regression (round 2): a forged approved draft without locks is not reported as locked", t => {
+  const { root } = repo(t);
+  let { draft } = importHld(root, SRC, []);
+  for (const q of draft.questions) draft = answerQuestion(draft, q.id, { skip: true, via: "cli" });
+  const forged = approveDraft(draft, sourceSha(root, SRC), "dave");
+  writeDraft(root, forged);
+  assert.doesNotMatch(grillingProtocol(forged, approvalState(root, forged)), /and locked\. Nothing to ask/);
+  assert.match(grillingProtocol(forged, approvalState(root, forged)), /approval unverified/);
+  assert.throws(() => importHld(root, SRC, []), /Only a human reopens it/, "an approved-status draft that fails verification is still not agent-reimportable");
+});
+
+test("regression (round 2): export-hld honours a lock under any spelling of the target", t => {
+  const { root } = repo(t);
+  assert.equal(runCli(root, ["export-hld", "docs/gen/HLD.md"]).code, 0);
+  const out = join(root, "docs/gen/HLD.md");
+  writeFileSync(out, readFileSync(out, "utf8").replace("High-Level Design", "HLD (edited)"));
+  setLock(root, "docs/gen/HLD.md", { kind: "doc", approvedBy: "dave" });
+  const before = readFileSync(out, "utf8");
+  const r = runCli(root, ["export-hld", "docs//gen/./HLD.md", "--force"]);
+  assert.notEqual(r.code, 0, r.out);
+  assert.match(r.out, /is locked/);
+  assert.equal(readFileSync(out, "utf8"), before);
+});
+
+test("regression (round 3): a genuine approval whose source was edited is still not agent-reimportable", t => {
+  const { root } = repo(t);
+  const approved = lockedApproval(root);
+  assert.equal(approvalState(root, approved), "approved");
+  writeFileSync(join(root, SRC), `${DOC}
+edited after approval
+`);
+  assert.equal(approvalState(root, approved), "unverified");
+  assert.throws(() => importHld(root, SRC, []), /Only a human reopens it/);
+  writeFileSync(join(root, ".hunch", "locks.json"), "<<<<<<< conflict");
+  assert.throws(() => importHld(root, SRC, []), /Only a human reopens it/);
+});
+
+test("regression (round 3): a reformatted, re-locked draft stays approved", t => {
+  const { root } = repo(t);
+  const approved = lockedApproval(root);
+  writeFileSync(join(root, draftPath(SRC)), JSON.stringify(approved));
+  setLock(root, draftPath(SRC), { kind: "hld", approvedBy: "dave" });
+  assert.equal(approvalState(root, approved), "approved");
+});
+
+test("regression (round 3): export-hld stays blocked after a case-only rename of a locked file", t => {
+  const { root } = repo(t);
+  assert.equal(runCli(root, ["export-hld", "docs/gen/HLD.md"]).code, 0);
+  if (!existsSync(join(root, "docs/gen/hld.md"))) { t.skip("case-sensitive file system"); return; }
+  const out = join(root, "docs/gen/HLD.md");
+  writeFileSync(out, readFileSync(out, "utf8").replace("High-Level Design", "HLD (edited)"));
+  setLock(root, "docs/gen/HLD.md", { kind: "doc", approvedBy: "dave" });
+  renameSync(join(root, "docs/gen/HLD.md"), join(root, "docs/gen/hld.md"));
+  const before = readFileSync(join(root, "docs/gen/hld.md"), "utf8");
+  const r = runCli(root, ["export-hld", "docs/gen/HLD.md", "--force"]);
+  assert.notEqual(r.code, 0, r.out);
+  assert.match(r.out, /is locked/);
+  assert.equal(readFileSync(join(root, "docs/gen/hld.md"), "utf8"), before);
 });
