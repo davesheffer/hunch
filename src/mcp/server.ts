@@ -1,5 +1,5 @@
 import { conventionSupplements } from '../core/conventionDelivery.js';
-import { answerQuestion as answerHldQuestion, approvalState as hldApprovalState, canonicalSource as hldCanonicalSource, grillingProtocol as hldGrillingProtocol, importHld, listDrafts as listHldDrafts, openCount as hldOpenCount, readDraft as readHldDraft, sourceSha as hldSourceSha, writeDraft as writeHldDraft } from "../core/hld.js";
+import { answerQuestion as answerHldQuestion, approvalState as hldApprovalState, canonicalSource as hldCanonicalSource, grillingProtocol as hldGrillingProtocol, importHld, reimportBlock as hldReimportBlock, listDrafts as listHldDrafts, openCount as hldOpenCount, readDraft as readHldDraft, sourceSha as hldSourceSha, writeDraft as writeHldDraft } from "../core/hld.js";
 import { fieldCitationText } from "../core/fieldProvenance.js";
 import { canonicalJson } from "../constitution/canonical.js";
 import { siblingGrounding } from "../core/siblingfix.js";
@@ -2299,6 +2299,9 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const source = file ? hldCanonicalSource(root, repoRelativeTarget(file, root)) : null;
         if (!source) return invalid("give file: a repo-relative HLD file outside .hunch/");
         if (action === "import") {
+          // agents never reopen: any approval or lock refuses (matched on kind, not message text)
+          const block = hldReimportBlock(root, source, readHldDraft(root, source));
+          if (block) return refused(block.message);
           // PUBLIC components only: question text is persisted in the committed draft
           const { draft, carried, parsed } = importHld(root, source, store.json.loadAll("components"));
           writeHldDraft(root, draft);

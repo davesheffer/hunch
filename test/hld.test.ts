@@ -10,7 +10,7 @@ import { hunchPaths, hunchPathsForDir } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { SCHEMAS } from "../src/core/types.js";
 import {
-  answerQuestion, approvalState, approveDraft, canonicalSource, detectGaps, draftPath, exportState, exportTitle, grillingProtocol, importHld, nextQuestion,
+  answerQuestion, reimportBlock, approvalState, approveDraft, canonicalSource, detectGaps, draftPath, exportState, exportTitle, grillingProtocol, importHld, nextQuestion,
   listDrafts, openCount, parseHld, parseMermaid, readDraft, renderHld, renderHldBody, sourceSha, writeDraft, type ExportInput,
 } from "../src/core/hld.js";
 import { readLocks, setLock } from "../src/core/locks.js";
@@ -419,7 +419,7 @@ edited after approval
   assert.equal(approvalState(root, approved), "unverified");
   assert.throws(() => importHld(root, SRC, []), /Only a human reopens it/);
   writeFileSync(join(root, ".hunch", "locks.json"), "<<<<<<< conflict");
-  assert.throws(() => importHld(root, SRC, []), /Only a human reopens it/);
+  assert.throws(() => importHld(root, SRC, []), /git checkout -- \.hunch\/locks\.json/);
 });
 
 test("regression (round 3): a reformatted, re-locked draft stays approved", t => {
@@ -443,4 +443,40 @@ test("regression (round 3): export-hld stays blocked after a case-only rename of
   assert.notEqual(r.code, 0, r.out);
   assert.match(r.out, /is locked/);
   assert.equal(readFileSync(join(root, "docs/gen/hld.md"), "utf8"), before);
+});
+
+test("regression (round 4): a lock without an approved draft still reaches the human, never an agent", async t => {
+  const { root } = repo(t);
+  assert.equal(reimportBlock(root, SRC, null), null);
+  setLock(root, SRC, { kind: "hld", approvedBy: "dave" });
+  assert.equal(reimportBlock(root, SRC, null)?.kind, "locked", "a source-only lock with no draft");
+  const r = runCli(root, ["import-hld", SRC]);
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /interactive terminal|hunch unlock/);
+  assert.doesNotMatch(r.out, /by running `hunch import-hld/, "never tells the user to run the command they just ran");
+  assert.ok(!existsSync(join(root, draftPath(SRC))), "no draft written");
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+  const { buildServer } = await import("../src/mcp/server.js");
+  const server = buildServer(root);
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "hld-test", version: "1" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  // closed here, not in t.after: the repo cleanup registered first would run while the store is open
+  let res;
+  try { res = await client.callTool({ name: "hunch_hld", arguments: { action: "import", file: SRC } }); } finally { await client.close(); await server.close(); }
+  assert.match((res.content as Array<{ text: string }>)[0]!.text, /^Refused:/);
+  assert.ok(!existsSync(join(root, draftPath(SRC))));
+});
+
+test("regression (round 4): reimportBlock kinds", t => {
+  const { root } = repo(t);
+  let { draft } = importHld(root, SRC, []);
+  for (const q of draft.questions) draft = answerQuestion(draft, q.id, { skip: true, via: "cli" });
+  const approved = approveDraft(draft, sourceSha(root, SRC), "dave");
+  assert.equal(reimportBlock(root, SRC, approved)?.kind, "approved");
+  writeFileSync(join(root, ".hunch", "locks.json"), "<<<<<<< HEAD\n");
+  const corrupt = reimportBlock(root, SRC, approved);
+  assert.equal(corrupt?.kind, "registry-corrupt");
+  assert.match(corrupt!.message, /git checkout -- \.hunch\/locks\.json/);
 });

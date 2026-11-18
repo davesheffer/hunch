@@ -552,6 +552,28 @@ export function sourceSha(root: string, source: string): string {
   return `sha256:${createHash("sha256").update(readFileSync(abs)).digest("hex")}`;
 }
 
+export interface ReimportBlock { kind: "approved" | "locked" | "registry-corrupt"; message: string }
+
+/** Why a (re-)import must not run without a human, or null. Any sign of an approval counts,
+ *  verified or not: a failing verification (source edited after approval, a broken registry)
+ *  must never let an agent overwrite the human's answers. "approved" and "locked" can be
+ *  reopened by a human confirming in an interactive terminal; "registry-corrupt" never. */
+export function reimportBlock(root: string, source: string, previous: HldDraft | null): ReimportBlock | null {
+  const reg = readLocks(root);
+  if (reg.corrupt) {
+    return { kind: "registry-corrupt", message: `.hunch/locks.json is not a valid lock registry, so ${source} cannot be re-imported. Restore it from git (\`git checkout -- .hunch/locks.json\`) or resolve its merge conflict first.` };
+  }
+  const locked = reg.locks.filter((l) => l.path === source || l.path === draftPath(source)).map((l) => l.path);
+  const release = locked.length ? ` To release it instead, a human runs ${locked.map((p) => `\`hunch unlock ${p} --reviewed-by <name>\``).join(" and ")}.` : "";
+  if (previous?.status === "approved") {
+    return { kind: "approved", message: `${source} is an approved HLD (approved by ${previous.approved?.by ?? "unknown"}). Only a human reopens it, by confirming in an interactive terminal; agents cannot.${release}` };
+  }
+  if (locked.length) {
+    return { kind: "locked", message: `${source} is locked as an approved design. Only a human reopens it, by confirming in an interactive terminal; agents cannot.${release}` };
+  }
+  return null;
+}
+
 export interface ImportResult { draft: HldDraft; parsed: ParsedHld; carried: number; previous: HldDraft | null }
 
 /** Parse a source and build its draft. Answers to questions that still apply are carried
@@ -565,16 +587,8 @@ export function importHld(root: string, rel: string, components: readonly Compon
   const text = readFileSync(join(root, source), "utf8");
   const parsed = parseHld(source, text);
   const previous = readDraft(root, source);
-  // Refuse on ANY sign of an approval, verified or not: a failing verification (source edited
-  // after approval, a broken registry) must never let an agent overwrite the human's answers.
-  const reg = readLocks(root);
-  const lockedHere = reg.corrupt || reg.locks.some((l) => l.path === source || l.path === draftPath(source));
-  if (previous?.status === "approved" && !opts.reopen) {
-    throw new Error(`${source} is an approved, locked HLD (approved by ${previous.approved!.by}). Only a human reopens it, by running \`hunch import-hld ${source}\` in a terminal.`);
-  }
-  if (lockedHere && !opts.reopen) {
-    throw new Error(`${source} has an approval lock in .hunch/locks.json${reg.corrupt ? " (the registry is unreadable)" : ""}. Only a human reopens it, by running \`hunch import-hld ${source}\` in a terminal.`);
-  }
+  const block = reimportBlock(root, source, previous);
+  if (block && (block.kind === "registry-corrupt" || !opts.reopen)) throw new Error(block.message);
   const answers = new Map((previous?.questions ?? []).filter((q) => q.answer).map((q) => [q.id, q.answer!]));
   let carried = 0;
   const questions = detectGaps(parsed, components).map((q) => {

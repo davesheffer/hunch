@@ -171,7 +171,7 @@ import { ADR_DIR_CANDIDATES, ADR_FILE_RE, mapAdrCorpus } from "../extractors/adr
 import { confirmCommand, countersignConstraint, countersignDecision } from "../core/countersign.js";
 import { LOCK_KINDS, LOCKS_FILE, fileSha, lockFor, lockablePath, readLocks, removeLock, setLock, verifyLocks, type LockKind } from "../core/locks.js";
 import { createInterface } from "node:readline/promises";
-import { DEFAULT_HLD_EXPORT, answerQuestion as answerHldQuestion, approvalState as hldApprovalState, approveDraft as approveHldDraft, canonicalSource as hldCanonicalSource, draftPath as hldDraftPath, exportState as hldExportState, exportTitle as hldExportTitle, importHld, isHunchPath, listDrafts as listHldDrafts, nextQuestion as nextHldQuestion, openCount as hldOpenCount, readDraft as readHldDraft, renderHld, sourceSha as hldSourceSha, writeDraft as writeHldDraft, type HldDraft, type HldQuestion } from "../core/hld.js";
+import { DEFAULT_HLD_EXPORT, answerQuestion as answerHldQuestion, approvalState as hldApprovalState, approveDraft as approveHldDraft, canonicalSource as hldCanonicalSource, draftPath as hldDraftPath, exportState as hldExportState, exportTitle as hldExportTitle, importHld, isHunchPath, reimportBlock as hldReimportBlock, listDrafts as listHldDrafts, nextQuestion as nextHldQuestion, openCount as hldOpenCount, readDraft as readHldDraft, renderHld, sourceSha as hldSourceSha, writeDraft as writeHldDraft, type HldDraft, type HldQuestion } from "../core/hld.js";
 import { applyImportedAdrReview, carryImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, isImportedAdrDecision, pendingImportedAdrReviews } from "../core/importReview.js";
 import { exportMadrCorpus, isRegenerableMadr } from "../integrations/madrExport.js";
 import { buildMadrManifest, writeMadrManifest, refreshMadrCorpus } from "../integrations/madrManifest.js";
@@ -4548,9 +4548,11 @@ program
       let previous: HldDraft | null = null;
       try { previous = readHldDraft(root, target); } catch (e) { return fail((e as Error).message); }
       let reopen = false;
-      if (previous?.status === "approved" && !opts.dryRun) {
-        if (!(await confirmHuman(`${target} was approved by ${previous.approved!.by} and is locked. Reopen it for review? Its locks are released until it is approved again.`))) {
-          return fail("not reopened: reopening an approved HLD needs a human to confirm in an interactive terminal");
+      const block = hldReimportBlock(root, target, previous);
+      if (block && !opts.dryRun) {
+        if (block.kind === "registry-corrupt") return fail(block.message);
+        if (!(await confirmHuman(`${target} is ${block.kind === "approved" ? `approved by ${previous?.approved?.by ?? "unknown"}` : "locked"}. Reopen it for review? Its locks are released until it is approved again.`))) {
+          return fail(`not reopened: ${block.message}`);
         }
         reopen = true;
       }
