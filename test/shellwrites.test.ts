@@ -287,6 +287,31 @@ test("strict: a git mv of a file with a committed forbidden import is not blamed
   assert.doesNotMatch(raw, /"decision":"block"/);
 });
 
+test("strict: a git mv into a sub-root with diff.relative=true is not blamed on the move", t => {
+  const top = repo(t);
+  const root = join(top, "pkg");
+  mkdirSync(join(root, "src"), { recursive: true });
+  mkdirSync(join(top, "other"));
+  writeFileSync(join(root, "src", "a.ts"), "export const a = 1;\n");
+  writeFileSync(join(top, "other", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "strict" }));
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  store.json.put("constraints", mkConstraint({ id: "con_nolodash", statement: "never use lodash", scope: ["**/*.ts"], severity: "blocking", forbids: { deps: ["lodash"], symbols: [], patterns: [] } }));
+  store.reindex(); store.close();
+  execFileSync("git", ["-C", top, "add", "-A"]);
+  execFileSync("git", ["-C", top, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "pkg"]);
+  execFileSync("git", ["-C", top, "config", "diff.relative", "true"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  execFileSync("git", ["-C", top, "mv", "other/b.ts", "pkg/src/b2.ts"]);
+  const at = new Date(Date.now() + 2000);
+  utimesSync(join(root, "src", "b2.ts"), at, at);
+  const raw = hook(root, { hook_event_name: "PostToolUse", session_id: s });
+  assert.doesNotMatch(raw, /"decision":"block"/);
+});
+
 test("strict: a git mv that also appends a forbidden import still blocks the added line", t => {
   const root = lodashRepo(t, "strict");
   writeFileSync(join(root, "src", "[id].ts"), 'import _ from "lodash";\nexport const b = 1;\n');
