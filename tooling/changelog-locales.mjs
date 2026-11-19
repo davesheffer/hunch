@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "בדיקות staged מהירות בקומיטים גדולים",
       "קליטת קומיטים שדילגו על ה-hook, ומקור שניתן לתקן אחרי rebase",
       "hooks מהירים בלי npx, וקליטות שעוכבו נשארות מחוץ לקומיט",
       "זיהוי שגיאות כתיב במפתח auto_commit ואזהרות מדויקות על קומיט שעוכב",
@@ -112,6 +113,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Быстрые проверки staged для больших коммитов",
       "Захват коммитов, прошедших мимо хука, и восстановимое происхождение после rebase",
       "Быстрые хуки без npx, а отложенные записи не попадают в коммит",
       "Распознавание опечаток в ключе auto_commit и точные предупреждения об отложенном коммите",
@@ -216,6 +218,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "فحوصات staged سريعة للإيداعات الكبيرة",
       "التقاط الإيداعات التي تجاوزت الخطاف، ومصدر قابل للإصلاح بعد rebase",
       "خطافات أسرع بدون npx، وتبقى الالتقاطات المحجوزة خارج الإيداع",
       "اكتشاف الأخطاء الإملائية في مفتاح auto_commit وتحذيرات دقيقة عند تعليق الإيداع",
@@ -320,6 +323,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Comprobaciones staged rápidas en commits grandes",
       "Captura de commits que se saltaron el hook, y procedencia reparable tras un rebase",
       "Hooks más rápidos sin npx, y las capturas retenidas quedan fuera del commit",
       "Detección de erratas en la clave auto_commit y avisos precisos cuando un commit queda en espera",
