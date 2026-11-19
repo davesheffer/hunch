@@ -3,7 +3,8 @@
  * the hook-only bundle (hookMain.ts) can run it without loading the whole CLI.
  * MUST NOT import ./index.js (directly or transitively).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { beginHookInvocation } from "../core/hookMemo.js";
 import { join, relative, dirname, resolve, isAbsolute } from "node:path";
 import { hunchPaths, findRoot, toPosixTarget, isDir, repoRelativeTarget } from "../core/paths.js";
@@ -18,7 +19,8 @@ import { taskSelectionSupplements } from "../core/taskDelivery.js";
 import { buildTaskRankingQuery } from "../core/taskQuery.js";
 import { buildDeliveryEnvelope, deliveryDedupeInput } from "../core/delivery.js";
 import { readConfig } from "../core/config.js";
-import { blockingInScope, vetoInScope, proposedEditLines, type BlockingHit } from "../core/hookpolicy.js";
+import { effectiveForbids } from "../core/constraintmatch.js";
+import { blockingInScope, vetoInScope, proposedEditLines, shellWriteViolation, type BlockingHit } from "../core/hookpolicy.js";
 import { appendEvent } from "../core/events.js";
 import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjections, saveTaskSelection, taskSelectionEnabled } from "../core/hookcache.js";
 import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, promptPaths, selectForTask } from "../core/taskSelection.js";
@@ -29,7 +31,7 @@ import { renderRecalledLine } from "../core/taskReportRender.js";
 import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
-import { contextHookOutput, deliversCommandOutcome, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
+import { contextHookOutput, postToolBlockOutput, deliversCommandOutcome, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
 import { PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag } from "../core/pipeline.js";
 import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { nowData } from "../wiki/wiki.js";
@@ -81,6 +83,9 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       // A shell command can edit files without the edit tools ever firing: ground
       // what it wrote now. Every other tool call just moves the baseline.
       let shellGround = "";
+      // A shell write that breaks a content-matched blocking invariant: strict
+      // blocks it back to the model; looser modes still name the violation.
+      let shellBlock = "";
       let recall: FailureRecall = { text: "", bugs: [] };
       const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
@@ -105,7 +110,22 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
             const written = shellWrittenFiles(root, evt.session_id, evt.agent_id);
             if (written.length) {
               const opened = openStore();
-              if (!stale) shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
+              if (!stale) {
+                // Checked on every write (the grounding below is served once): a
+                // repeated violation is still a violation. Fail-open on its own.
+                try {
+                  const denials = shellWriteViolations(root, opened, written);
+                  if (denials.length) {
+                    shellBlock = denials.map((d) => d.hit.reason).join("\n");
+                    // The catch-log counts actual blocks only (core/events.ts), and a
+                    // failed log write never costs the block itself.
+                    if (firmness === "strict" && provider === "claude" && postTool === "PostToolUse") {
+                      try { for (const d of denials) appendEvent(paths, { at: new Date().toISOString(), file: d.target, ...d.hit.event }); } catch { /* log only */ }
+                    }
+                  }
+                } catch { shellBlock = ""; }
+                shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
+              }
             }
           } else {
             // An edit tool wrote known files: move just those baseline entries.
@@ -164,17 +184,17 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           st = checkpoint.state;
           savePipelineState(evt.session_id, st);
           const post = [shellGround, recall.text, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
-          if (post) emitContext(provider, postTool, post);
+          emitPost(provider, postTool, post, shellBlock, firmness === "strict");
           return;
         }
         savePipelineState(evt.session_id, st);
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        if (post) emitContext(provider, postTool, post);
+        emitPost(provider, postTool, post, shellBlock, firmness === "strict");
         return;
       }
       if (postTool) {
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        if (post) emitContext(provider, postTool, post);
+        emitPost(provider, postTool, post, shellBlock, firmness === "strict");
         return;
       }
       if (evt.hook_event_name === "Stop") {
@@ -652,6 +672,122 @@ function shellWriteGrounding(root: string, store: HunchStore, provider: HookProv
   return `Hunch: this shell command wrote ${grounded.join(", ")}${more}. Edits made outside the Edit/Write tools skip the pre-edit grounding, so it arrives now: re-check the change against it before relying on it.${sibling}\n\n${parts.join("\n\n")}`;
 }
 
+/** Content-matched blocking violations in what a shell command wrote. Only files a
+ *  content-matched blocking invariant covers are read, and git runs only for a
+ *  file whose current text trips one (most shell writes cost no process at all).
+ *  Bounded: beyond the cap, covered files are not checked, and git shares one
+ *  wall-clock budget per command: past it a file gets no verdict (fail-open),
+ *  so the hook stays well inside the host's timeout. */
+const MAX_SHELL_CHECKED = 50;
+const MAX_SHELL_CHECKED_BYTES = 1_000_000;
+const SHELL_GIT_BUDGET_MS = 4_000;
+interface GitBudget { deadline: number; renames?: Map<string, string> | null; prefix?: string }
+function shellWriteViolations(root: string, store: HunchStore, written: readonly string[]): Array<{ target: string; hit: BlockingHit }> {
+  const out: Array<{ target: string; hit: BlockingHit }> = [];
+  const budget: GitBudget = { deadline: Date.now() + SHELL_GIT_BUDGET_MS };
+  let checked = 0;
+  for (const target of written) {
+    if (!store.checkConstraints(target).some((c) => c.severity === "blocking" && effectiveForbids(c))) continue;
+    if (++checked > MAX_SHELL_CHECKED) break;
+    const abs = join(root, target);
+    let text: string;
+    try {
+      const st = statSync(abs);
+      if (!st.isFile() || st.size > MAX_SHELL_CHECKED_BYTES) continue;
+      text = readFileSync(abs, "utf8");
+    } catch { continue; } // deleted or unreadable: nothing was added
+    const hit = shellWriteViolation(store, target, text.split(/\r?\n/), () => addedSinceHead(root, target, text, budget));
+    if (hit) out.push({ target, hit });
+  }
+  return out;
+}
+
+const GIT_QUIET_ENV = { GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", LC_ALL: "C", LANGUAGE: "C" };
+/** `status` is the git child's exit code; null when it never exited normally
+ *  (killed, timeout, spawn error, ENOBUFS) or the budget ran out: unclassified. */
+function gitText(root: string, args: string[], budget: GitBudget): { ok: true; out: string } | { ok: false; err: string; status: number | null } {
+  const remaining = budget.deadline - Date.now();
+  if (remaining <= 0) return { ok: false, err: "", status: null }; // out of budget: unclassified, so no verdict
+  try {
+    return { ok: true, out: execFileSync("git", ["-C", root, ...args], {
+      encoding: "utf8", timeout: Math.min(2_000, remaining), maxBuffer: 8_000_000, stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...GIT_QUIET_ENV },
+    }) };
+  } catch (e) {
+    const stderr = (e as { stderr?: unknown }).stderr;
+    const status = (e as { status?: unknown }).status;
+    return { ok: false, err: typeof stderr === "string" ? stderr : "", status: typeof status === "number" ? status : null };
+  }
+}
+
+/** The staged rename source of `target` (a `git mv`), or null. The rename map
+ *  is the same for every file of one command: read once per budget. Paths are
+ *  toplevel-relative (no `--relative`), so a move from outside the Hunch root
+ *  into it still finds its source; `target` is looked up under the root's prefix. */
+function renameSource(root: string, target: string, budget: GitBudget): string | null {
+  if (budget.renames === undefined) {
+    budget.renames = null;
+    const p = gitText(root, ["rev-parse", "--show-prefix"], budget);
+    const r = p.ok ? gitText(root, ["-c", "diff.relative=false", "diff", "--cached", "-M", "--name-status", "-z", "HEAD"], budget) : p;
+    if (p.ok && r.ok) {
+      budget.prefix = p.out.trim();
+      const map = new Map<string, string>();
+      const f = r.out.split("\u0000");
+      for (let i = 0; i < f.length; i++) {
+        if (/^[RC]\d*$/.test(f[i]!)) {
+          if (f[i + 1] && f[i + 2]) map.set(f[i + 2]!, f[i + 1]!);
+          i += 2;
+        } else i++;
+      }
+      budget.renames = map;
+    }
+  }
+  return budget.renames?.get((budget.prefix ?? "") + target) ?? null;
+}
+
+/** Lines `text` has that the file's committed version does not: a violation
+ *  already in HEAD is not this command's. Git failures are classified by exit
+ *  status, not message text: a failed `cat-file` with status 128 is probed
+ *  further (HEAD itself missing = unborn, all lines; path absent from HEAD =
+ *  new file, all lines unless it is a staged rename, whose source is then the
+ *  baseline; path present but not a blob = no verdict); any other status is no
+ *  verdict. null when git cannot say (timeout, oversized blob, redirected repo):
+ *  no verdict rather than blaming committed lines. A leading BOM is ignored on
+ *  both sides. Multiset difference, so a duplicated forbidden line still counts. */
+function addedSinceHead(root: string, target: string, text: string, budget: GitBudget): string[] | null {
+  // A redirected git (GIT_DIR & co.) may answer for another repository: no verdict.
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE || process.env.GIT_INDEX_FILE) return null;
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+  // cat-file, not show: `show` falls back to pathspec mode for a missing path with
+  // glob characters (`[id].ts`) and exits 0 with nothing — a false "all new".
+  let shown = gitText(root, ["cat-file", "blob", `HEAD:./${target}`], budget);
+  if (!shown.ok) {
+    // Classified by exit status (128 = fatal object/revision error), not stderr text:
+    // the messages differ across git versions.
+    if (shown.status !== 128) return null;
+    const head = gitText(root, ["rev-parse", "-q", "--verify", "HEAD^{commit}"], budget);
+    if (!head.ok) return head.status === 1 ? lines : null; // 1 = unborn HEAD
+    const inHead = gitText(root, ["rev-parse", "-q", "--verify", `HEAD:./${target}`], budget);
+    if (inHead.ok) return null; // in HEAD but not a blob (directory, gitlink)
+    if (inHead.status !== 1) return null;
+    // Absent from HEAD: a staged rename's source is the baseline.
+    const source = renameSource(root, target, budget);
+    // An unread rename map (failed or over budget) cannot say this is a new file.
+    if (budget.renames === null) return null;
+    if (!source) return lines;
+    shown = gitText(root, ["cat-file", "blob", `HEAD:${source}`], budget);
+    if (!shown.ok) return null;
+  }
+  const before = shown.out.replace(/^\uFEFF/, "");
+  const left = new Map<string, number>();
+  for (const l of before.split(/\r?\n/)) left.set(l, (left.get(l) ?? 0) + 1);
+  return lines.filter((l) => {
+    const n = left.get(l) ?? 0;
+    if (n > 0) { left.set(l, n - 1); return false; }
+    return true;
+  });
+}
+
 /** Score the store against this prompt once per task (taskSelection.ts) and keep
  *  the selected ids — never the prompt — for the task's file grounding. Returns
  *  the short prompt-time list, or "" when nothing clears the threshold (silence).
@@ -965,6 +1101,16 @@ function emitContext(
   }
   const output = contextHookOutput(provider, event, text);
   if (output) process.stdout.write(JSON.stringify(provider === "claude" && systemMessage ? { ...output, systemMessage } : output));
+}
+/** Post-tool output: a shell-write violation blocks (strict) or leads the context. */
+function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", context: string, violation: string, block: boolean): void {
+  if (violation && block) {
+    const output = postToolBlockOutput(provider, event, violation, context);
+    if (output) process.stdout.write(JSON.stringify(output));
+    return;
+  }
+  const text = [violation, context].filter(Boolean).join("\n\n");
+  if (text) emitContext(provider, event, text);
 }
 function emitDeny(provider: HookProvider, reason: string): void {
   const result = denyHookOutput(provider, reason);

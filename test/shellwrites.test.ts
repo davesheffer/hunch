@@ -196,3 +196,129 @@ test("a git-redirecting environment (GIT_DIR, GIT_WORK_TREE, GIT_PREFIX) still r
   write(join(root, "src", "a.ts"), "export const a = 2;\n", 3);
   assert.deepEqual(shellWrittenFiles(root, s), ["src/a.ts"]);
 });
+
+// ---- a shell write that breaks a content-matched BLOCKING invariant ----
+function lodashRepo(t: { after: (f: () => void) => void }, firmness: string): string {
+  const root = repo(t);
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness }));
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  store.json.put("constraints", mkConstraint({ id: "con_nolodash", statement: "never use lodash", scope: ["**/*.ts"], severity: "blocking", forbids: { deps: ["lodash"], symbols: [], patterns: [] } }));
+  store.reindex(); store.close();
+  return root;
+}
+function shellRun(root: string, s: string, path: string, text: string, ahead: number): string {
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(path, ".."), { recursive: true });
+  write(path, text, ahead);
+  return hook(root, { hook_event_name: "PostToolUse", session_id: s });
+}
+
+test("strict: a shell command that writes a forbidden import is blocked back to the model, naming the invariant", t => {
+  const root = lodashRepo(t, "strict");
+  const s = session();
+  const out = JSON.parse(shellRun(root, s, join(root, "src", "app", "x.ts"), 'import _ from "lodash";\n', 1));
+  assert.equal(out.decision, "block");
+  assert.match(out.reason, /src\/app\/x\.ts/);
+  assert.match(out.reason, /never use lodash/);
+  assert.match(out.reason, /con_nolodash/);
+  assert.match(out.reason, /\+import lodash/);
+});
+
+test("strict: every shell write of a forbidden import blocks, even after the file's grounding was served", t => {
+  const root = lodashRepo(t, "strict");
+  const s = session();
+  assert.equal(JSON.parse(shellRun(root, s, join(root, "src", "a.ts"), 'import _ from "lodash";\nexport const a = 2;\n', 1)).decision, "block");
+  assert.equal(JSON.parse(shellRun(root, s, join(root, "src", "a.ts"), 'import _ from "lodash/groupBy";\nexport const a = 3;\n', 2)).decision, "block");
+});
+
+test("strict: a shell write that keeps the invariant is not blocked", t => {
+  const root = lodashRepo(t, "strict");
+  const s = session();
+  const raw = shellRun(root, s, join(root, "src", "a.ts"), '// we avoid "lodash" here\nexport const a = 2;\n', 1);
+  assert.doesNotMatch(raw, /"decision":"block"/);
+});
+
+test("strict: a forbidden import already committed is not blamed on an unrelated shell write", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "legacy"]);
+  const s = session();
+  const raw = shellRun(root, s, join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 2;\n', 1);
+  assert.doesNotMatch(raw, /"decision":"block"/);
+});
+
+test("advisory: a shell write of a forbidden import is reported as a violation, not blocked", t => {
+  const root = lodashRepo(t, "advisory");
+  const s = session();
+  const raw = shellRun(root, s, join(root, "src", "a.ts"), 'import _ from "lodash";\n', 1);
+  assert.doesNotMatch(raw, /"decision":"block"/);
+  const out = JSON.parse(raw);
+  assert.match(out.hookSpecificOutput.additionalContext, /break a BLOCKING invariant[\s\S]*never use lodash/);
+});
+
+test("strict: a git mv of a glob-named route file ([id].ts) with a committed forbidden import is not blamed on the move", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "[id].ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "route"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(root, "src", "old"));
+  execFileSync("git", ["-C", root, "mv", "src/[id].ts", "src/old/[id].ts"]);
+  const at = new Date(Date.now() + 2000);
+  utimesSync(join(root, "src", "old", "[id].ts"), at, at);
+  const raw = hook(root, { hook_event_name: "PostToolUse", session_id: s });
+  assert.doesNotMatch(raw, /"decision":"block"/);
+});
+
+test("strict: a git mv of a file with a committed forbidden import is not blamed on the move", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "legacy"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(root, "src", "old"));
+  execFileSync("git", ["-C", root, "mv", "src/b.ts", "src/old/b.ts"]);
+  const at = new Date(Date.now() + 2000);
+  utimesSync(join(root, "src", "old", "b.ts"), at, at);
+  const raw = hook(root, { hook_event_name: "PostToolUse", session_id: s });
+  assert.doesNotMatch(raw, /"decision":"block"/);
+});
+
+test("strict: a git mv that also appends a forbidden import still blocks the added line", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "[id].ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "route"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(root, "src", "old"));
+  execFileSync("git", ["-C", root, "mv", "src/[id].ts", "src/old/[id].ts"]);
+  write(join(root, "src", "old", "[id].ts"), 'import _ from "lodash";\nexport const b = 1;\nimport g from "lodash/groupBy";\n', 2);
+  const out = JSON.parse(hook(root, { hook_event_name: "PostToolUse", session_id: s }));
+  assert.equal(out.decision, "block");
+});
+
+test("strict: in a repository with no commit yet, a shell write of a forbidden import blocks", t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "hunch-shellwrites-")));
+  t.after(() => cleanupDir(root));
+  execFileSync("git", ["-C", root, "init", "-q"]);
+  mkdirSync(join(root, ".hunch"));
+  writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "strict" }));
+  const store = new HunchStore(hunchPaths(root));
+  store.json.ensureDirs();
+  store.json.put("constraints", mkConstraint({ id: "con_nolodash", statement: "never use lodash", scope: ["**/*.ts"], severity: "blocking", forbids: { deps: ["lodash"], symbols: [], patterns: [] } }));
+  store.reindex(); store.close();
+  const out = JSON.parse(shellRun(root, session(), join(root, "src", "x.ts"), 'import _ from "lodash";\n', 1));
+  assert.equal(out.decision, "block");
+});
+
+test("strict: a BOM added or dropped by a rewrite does not make a committed forbidden import new", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "b.ts"), "\uFEFF" + 'import _ from "lodash";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "bom"]);
+  const raw = shellRun(root, session(), join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 2;\n', 1);
+  assert.doesNotMatch(raw, /"decision":"block"/);
+});

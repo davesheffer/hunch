@@ -426,6 +426,17 @@ export function denyHookOutput(provider: HookProvider, reason: string): { output
   };
 }
 
+/** PostToolUse output that feeds `reason` back to the model as a block: the tool
+ * already ran, so the host cannot undo it, but Claude Code's documented
+ * `decision: "block"` makes the model act on the reason now. Other hosts have no
+ * verified post-tool block field, so they receive the reason as context. */
+export function postToolBlockOutput(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", reason: string, context: string): object | null {
+  if (provider === "claude" && event === "PostToolUse") {
+    return { decision: "block", reason, ...(context ? { hookSpecificOutput: { hookEventName: event, additionalContext: context } } : {}) };
+  }
+  return contextHookOutput(provider, event, [reason, context].filter(Boolean).join("\n\n"));
+}
+
 /** Stop-gate output in each native dialect. */
 export function stopHookOutput(provider: HookProvider, reason: string): object {
   if (provider === "vscode") return { continue: false, stopReason: reason };
