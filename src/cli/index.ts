@@ -4452,23 +4452,29 @@ program
   .description("Lock human-approved design files (HLD, diagrams, ADRs): their exact bytes are bound to your approval in .hunch/locks.json, and Hunch's hooks deny agents any change to them. Re-running on a changed file approves its new contents. Interactive terminal only.")
   .argument("<files...>", "repo-relative files to lock")
   .requiredOption("--reviewed-by <name>", "who approves these exact contents")
-  .option("--kind <kind>", `what the file is: ${LOCK_KINDS.join(" | ")}`, "hld")
+  .option("--kind <kind>", `what the file is: ${LOCK_KINDS.join(" | ")} (default: the existing lock's kind, else hld)`)
   .option("--note <text>", "optional note stored with the lock")
-  .action(async (files: string[], opts: { reviewedBy: string; kind: string; note?: string }) => {
+  .action(async (files: string[], opts: { reviewedBy: string; kind?: string; note?: string }) => {
     const root = findRoot();
-    if (!(LOCK_KINDS as readonly string[]).includes(opts.kind)) return fail(`--kind must be one of ${LOCK_KINDS.join(", ")}`);
+    if (opts.kind !== undefined && !(LOCK_KINDS as readonly string[]).includes(opts.kind)) return fail(`--kind must be one of ${LOCK_KINDS.join(", ")}`);
     const targets = files.map((f) => repoRelativeTarget(resolve(f), root));
     const bad = targets.filter((t) => !lockablePath(t) || !fileSha(root, t));
     if (bad.length) return fail(`not lockable (missing, outside the repo, a glob, or under .hunch/): ${bad.join(", ")}`);
     const reg = readLocks(root);
     if (reg.corrupt) return fail(`${LOCKS_FILE} is not a valid lock registry; restore it from git first`);
-    const changes = targets.filter((t) => lockFor(reg.locks, t)?.sha256 !== fileSha(root, t));
+    // A changed --kind or --note is an update too, not "nothing to do".
+    const changes = targets.filter((t) => {
+      const existing = lockFor(root, reg.locks, t);
+      return !existing || existing.sha256 !== fileSha(root, t) || (opts.kind !== undefined && existing.kind !== opts.kind) || (opts.note !== undefined && existing.note !== opts.note);
+    });
     if (!changes.length) { console.log("✓ already locked with these exact contents — nothing to do"); return; }
-    const relocks = changes.filter((t) => lockFor(reg.locks, t));
+    const relocks = changes.filter((t) => lockFor(root, reg.locks, t));
     const question = `Approve and lock ${changes.length} file(s) as ${opts.reviewedBy}?${relocks.length ? ` (re-approves new contents of ${relocks.join(", ")})` : ""}\n  ${changes.join("\n  ")}\nAgents will be denied any change to them.`;
     if (!(await confirmHuman(question))) return fail("not locked: `hunch lock` needs a human to confirm in an interactive terminal");
     for (const t of changes) {
-      const { lock, previous } = setLock(root, t, { kind: opts.kind as LockKind, approvedBy: opts.reviewedBy, note: opts.note });
+      const existing = lockFor(root, reg.locks, t);
+      const kind = (opts.kind ?? existing?.kind ?? "hld") as LockKind;
+      const { lock, previous } = setLock(root, existing?.path ?? t, { kind, approvedBy: opts.reviewedBy, note: opts.note ?? existing?.note });
       console.log(`✓ ${previous ? "re-approved" : "locked"} ${lock.path} (${lock.sha256.slice(0, 19)}…)`);
     }
     console.log(`Commit ${LOCKS_FILE} so the lock applies to everyone.`);
@@ -4484,7 +4490,7 @@ program
     const target = repoRelativeTarget(resolve(file), root);
     const reg = readLocks(root);
     if (reg.corrupt) return fail(`${LOCKS_FILE} is not a valid lock registry; restore it from git first`);
-    const lock = lockFor(reg.locks, target);
+    const lock = lockFor(root, reg.locks, target);
     if (!lock) return fail(`${target} is not locked`);
     if (!(await confirmHuman(`Unlock ${lock.path} (approved by ${lock.approved_by}) as ${opts.reviewedBy}? Agents will be able to change it.`))) {
       return fail("not unlocked: `hunch unlock` needs a human to confirm in an interactive terminal");
