@@ -40,7 +40,7 @@ import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
 import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
 import { dirtyFilesSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
-import { isRegistryPath, lockDenyReason, lockFor, lockProblemReason, readLocks, verifyLocks } from "../core/locks.js";
+import { LOCKS_FILE, canonicalTarget, headLocks, isRegistryPath, lockChangesSince, lockDenyReason, lockFor, lockProblemReason, lockSnapshot, lockStillBad, readLocks, saveLockPre, snapshotForRoot, takeLockPre, verifyLocks, type Lock, type LockProblem } from "../core/locks.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
@@ -87,6 +87,8 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       let shellVeto: { target: string; hit: BlockingHit } | null = null;
       // A shell command changed a human-approved locked file (core/locks.ts).
       let lockBlock: string | null = null;
+      // Paths the hooks have blamed on the agent this session (null: leave the stored list as is).
+      let lockAttrNext: string[] | null = null;
       let recall: FailureRecall = { text: "", bugs: [] };
       const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
@@ -129,9 +131,33 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           }
         } catch { shellGround = ""; }
         // Locked design files: a shell command is the one route the pre-edit deny can't see.
-        if (shell) {
+        // Measured against the snapshot taken before the command (or, for an edit tool,
+        // at turn start), so a forged registry + commit inside one command is still caught
+        // and a human's re-lock between turns is not blamed on the agent. Paths already blamed
+        // stay in the check (pipeline lockAttributed) until they match their approval again.
+        const editTool = !shell && (EDIT_TOOLS.has(evt.tool_name ?? "") || !!evt.tool_input?.patch_files?.length);
+        if (shell || editTool) {
           try {
-            const problems = verifyLocks(root, { sinceHead: true });
+            let problems: LockProblem[] = [];
+            if (shell) {
+              // This agent's own pre-command snapshot, consumed once; none (or another
+              // checkout's) -> this turn's baseline -> the HEAD comparison.
+              const pst = evt.session_id && pipelineEnabled() ? loadPipelineState(evt.session_id) : null;
+              const pre = snapshotForRoot(root, evt.session_id ? takeLockPre(root, evt.session_id, evt.agent_id) : null)
+                ?? snapshotForRoot(root, pst?.lockTurn);
+              problems = pre ? lockChangesSince(root, pre) : verifyLocks(root, { sinceHead: true });
+              if (pst) {
+                problems = mergeLockProblems(problems, lockStillBad(root, pst.lockAttributed ?? []));
+                lockAttrNext = lockPaths(problems);
+              }
+            } else {
+              // Edit tools: file problems only. Their registry writes are denied pre-edit;
+              // a shell's registry change is reported by that shell's PostToolUse and Stop.
+              const pst = evt.session_id && pipelineEnabled() ? loadPipelineState(evt.session_id) : null;
+              const turn = snapshotForRoot(root, pst?.lockTurn);
+              if (turn) problems = lockChangesSince(root, turn).filter((p) => p.kind === "modified" || p.kind === "missing");
+              if (pst && problems.length) lockAttrNext = lockPaths(problems, pst.lockAttributed);
+            }
             if (problems.length) {
               lockBlock = lockProblemReason(problems, "write");
               for (const p of problems) appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: p.path });
@@ -155,6 +181,7 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       if (postTool && evt.session_id && pipelineEnabled()) {
         let st = loadPipelineState(evt.session_id);
         if (recall.bugs.length) st = { ...st, recalled: [...st.recalled, ...recall.bugs.map((id) => `${recallScope}${id}`)] };
+        if (lockAttrNext) st = { ...st, lockAttributed: lockAttrNext };
         const before = st;
         let activity: Parameters<typeof proofCheckpoint>[2] | null = null;
         let lessonNote = "";
@@ -205,11 +232,18 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         // Bounded like the other Stop gates (two blocks per turn), then fail-open.
         if (evt.session_id && pipelineEnabled()) {
           const st = loadPipelineState(evt.session_id);
-          if (st.blocks < 2) {
-            let problems: ReturnType<typeof verifyLocks> = [];
-            try { problems = verifyLocks(root, { sinceHead: true }); } catch { problems = []; }
+          // Own budget: a lock block never spends the VERIFY/veto Stop budget.
+          if ((st.lockBlocks ?? 0) < 2) {
+            let problems: LockProblem[] = [];
+            try {
+              const turn = snapshotForRoot(root, st.lockTurn);
+              problems = turn ? lockChangesSince(root, turn) : verifyLocks(root, { sinceHead: true });
+              problems = mergeLockProblems(problems, lockStillBad(root, st.lockAttributed ?? []));
+              // Everything blamed earlier matches again: forget it.
+              if (!problems.length && st.lockAttributed?.length) savePipelineState(evt.session_id, { ...st, lockAttributed: [] });
+            } catch { problems = []; }
             if (problems.length) {
-              savePipelineState(evt.session_id, { ...st, blocks: st.blocks + 1 });
+              savePipelineState(evt.session_id, { ...st, lockBlocks: (st.lockBlocks ?? 0) + 1, lockAttributed: lockPaths(problems) });
               for (const p of problems) appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: p.path });
               emitStop(provider, lockProblemReason(problems, "stop"));
               return;
@@ -332,7 +366,9 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         // Pipeline turn bookkeeping (fresh block budget) + the one nag that must
         // repeat: edits from an earlier turn still unverified.
         if (evt.session_id && pipelineEnabled()) {
-          const st = onPrompt(loadPipelineState(evt.session_id));
+          let st = onPrompt(loadPipelineState(evt.session_id));
+          // Lock baseline for this turn: anything the human changed before it is theirs.
+          try { st = { ...st, lockTurn: lockSnapshot(root) }; } catch { /* no lock baseline: Stop falls back to HEAD */ }
           savePipelineState(evt.session_id, st);
           if (!st.verifyAfterEdit || st.obligations.some((item) => item.status !== "satisfied")) {
             parts.push(unverifiedNag(st));
@@ -531,8 +567,46 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       // before it (a parallel tool call, another process, a host that skipped the
       // last PostToolUse) is not this command's to be blamed for.
       if (evt.tool_name === "Bash" || evt.tool_name === "PowerShell") {
+        // Lock baseline first, in this agent's own scratch file (PostToolUse falls back to HEAD without it).
+        if (evt.session_id) {
+          try { saveLockPre(root, evt.session_id, evt.agent_id, lockSnapshot(root)); } catch { /* falls back to HEAD */ }
+        }
         refreshShellBaseline(root, evt.session_id, evt.agent_id);
         return;
+      }
+
+      // Locked design files (core/locks.ts): a human-approved HLD/diagram/ADR, or the lock
+      // registry itself, is never edited by an agent — in every firmness but off. Checked on
+      // the RAW tool paths (resolved against the event's cwd), before editTargets drops
+      // `..` spellings that still land inside the repo.
+      {
+        const base = evt.cwd ? resolve(root, evt.cwd) : root;
+        const inRepo = rawEditPaths(evt.tool_input).map((p) => resolve(base, p)).filter((abs) => canonicalTarget(root, abs) !== null);
+        if (inRepo.length) {
+          const absent = !existsSync(join(root, LOCKS_FILE));
+          const reg = absent ? { locks: [], corrupt: false } : readLocks(root);
+          // A corrupt or deleted registry protects what this turn's baseline saw plus what HEAD
+          // approved; corrupt with neither known refuses every edit. The turn baseline comes
+          // first, so git is spawned only for a corrupt registry, or a deleted one whose
+          // baseline did not see a usable registry (none at turn start -> no spawn).
+          let head: ReturnType<typeof headLocks> = null;
+          let turnLocks: Lock[] | null = null;
+          if ((reg.corrupt || absent) && evt.session_id && pipelineEnabled()) {
+            const turn = snapshotForRoot(root, loadPipelineState(evt.session_id).lockTurn);
+            if (turn?.registry === "ok") turnLocks = turn.locks;
+            if (turn && turn.registry === "corrupt" && absent) head = headLocks(root);
+          }
+          if (reg.corrupt) head = headLocks(root);
+          const locks = reg.corrupt || absent ? [...(turnLocks ?? []), ...(head ?? []).filter((h) => !turnLocks?.some((l) => l.path === h.path))] : reg.locks;
+          const locked = reg.corrupt && !head && !turnLocks?.length ? inRepo[0]
+            : inRepo.find((abs) => isRegistryPath(root, abs) || lockFor(root, locks, abs));
+          if (locked) {
+            const target = canonicalTarget(root, locked) ?? locked;
+            appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: target });
+            emitDeny(provider, lockDenyReason(target, lockFor(root, locks, locked), reg.corrupt));
+            return;
+          }
+        }
       }
 
       const targets = editTargets(root, evt.tool_input);
@@ -541,17 +615,6 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       if (!targets.length) {
         if (routed.ungrounded) emitContext(provider, "PreToolUse", routed.ungrounded);
         return;
-      }
-      // Locked design files (core/locks.ts): a human-approved HLD/diagram/ADR, or the lock
-      // registry itself, is never edited by an agent — in every firmness but off.
-      {
-        const reg = readLocks(root);
-        const locked = targets.find((t) => isRegistryPath(t.target) || lockFor(reg.locks, t.target));
-        if (locked) {
-          appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: locked.target });
-          emitDeny(provider, lockDenyReason(locked.target, lockFor(reg.locks, locked.target)));
-          return;
-        }
       }
 
       // Grounding below stays about the first in-repo file; the strict gate checks every target.
@@ -1009,6 +1072,14 @@ function fileGrounding(root: string, store: HunchStore, provider: HookProvider, 
 /** Host tools that write exactly the files named in their input. */
 const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
+/** Every path an edit tool's input names, unfiltered (apply_patch headers and Move-to
+ *  destinations, else `file_path`). */
+function rawEditPaths(input: HunchToolInput | undefined): string[] {
+  return input?.patch_files?.length
+    ? input.patch_files.flatMap((f) => (f.moved_to ? [f.path, f.moved_to] : [f.path]))
+    : input?.file_path ? [input.file_path] : [];
+}
+
 function editTargets(root: string, input: HunchToolInput | undefined): Array<{ abs: string; target: string; lines: string[] }> {
   const raw = input?.patch_files?.length
     ? input.patch_files.flatMap((f) => (f.moved_to ? [f.path, f.moved_to] : [f.path]).map((abs) => ({ abs, lines: f.added_lines })))
@@ -1047,6 +1118,18 @@ function emitDeny(provider: HookProvider, reason: string): void {
 }
 /** A post-tool reply: a shell-write Veto hit interrupts the agent (its reason first,
  *  the usual grounding after); otherwise the grounding is plain context, if any. */
+/** Problems from the delta check plus those still standing from earlier blames, one per kind and path. */
+function mergeLockProblems(a: LockProblem[], b: LockProblem[]): LockProblem[] {
+  const out = [...a];
+  for (const p of b) if (!out.some((q) => q.kind === p.kind && q.path === p.path)) out.push(p);
+  return out;
+}
+
+/** The blamed paths to remember (bounded), after `prior`'s when given. */
+function lockPaths(problems: readonly LockProblem[], prior: readonly string[] = []): string[] {
+  return [...new Set([...prior, ...problems.map((p) => p.path)])].slice(-200);
+}
+
 function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", text: string, veto: { target: string; hit: BlockingHit } | null, lockBlock: string | null = null): void {
   if (veto || lockBlock) {
     const reason = [lockBlock, veto ? shellVetoReason(veto.target, veto.hit, "write") : "", text].filter(Boolean).join("\n\n");

@@ -22,6 +22,7 @@
  * disposable, and single-writer), mirroring hookcache.ts. Failure posture is
  * con_03a0b94b2e: any error → do nothing, exit clean. Kill switch: HUNCH_PIPELINE=0.
  */
+import { validLockSnapshot, type LockSnapshot } from "./locks.js";
 import { hookSwitch } from "./hookSwitches.js";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -208,6 +209,12 @@ export interface PipelineState {
   blocks: number;
   /** Pre-edit evidence denials THIS turn; bounded separately from Stop. */
   probeBlocks: number;
+  /** Locked-file Stop blocks THIS turn; bounded separately so they never spend `blocks`. */
+  lockBlocks?: number;
+  /** Lock baseline taken at the start of the turn (UserPromptSubmit). */
+  lockTurn?: LockSnapshot;
+  /** Locked paths the hooks already blamed on the agent; re-checked at every Stop until they match again. Not reset per turn. */
+  lockAttributed?: string[];
   /** Domains activated by edited paths, e.g. { backend: true }. */
   domains: Record<string, boolean>;
   editedFiles: string[];
@@ -1030,7 +1037,7 @@ function verifyPattern(state: PipelineState, profiles = DEFAULT_PROFILES): RegEx
 // ------------------------------------------------------- state transitions
 /** New user prompt: fresh block budget. */
 export function onPrompt(state: PipelineState): PipelineState {
-  return { ...state, turn: state.turn + 1, blocks: 0, probeBlocks: 0 };
+  return { ...state, turn: state.turn + 1, blocks: 0, probeBlocks: 0, lockBlocks: 0 };
 }
 
 /** Edit/Write/MultiEdit landed on `path`. */
@@ -1367,6 +1374,9 @@ export function loadPipelineState(sessionId: string): PipelineState {
     state.proofReminderActivity = Number.isSafeInteger(raw.proofReminderActivity) && raw.proofReminderActivity! >= 0 ? raw.proofReminderActivity! : 0;
     state.proofReminders = Number.isSafeInteger(raw.proofReminders) && raw.proofReminders! >= 0 ? raw.proofReminders! : 0;
     state.probeBlocks = Number.isSafeInteger(raw.probeBlocks) && raw.probeBlocks! >= 0 ? raw.probeBlocks! : 0;
+    state.lockBlocks = Number.isSafeInteger(raw.lockBlocks) && raw.lockBlocks! >= 0 ? raw.lockBlocks! : undefined;
+    state.lockTurn = validLockSnapshot(raw.lockTurn);
+    state.lockAttributed = Array.isArray(raw.lockAttributed) ? raw.lockAttributed.filter((p): p is string => typeof p === "string").slice(-200) : undefined;
     state.lessons = (Array.isArray(raw.lessons) ? raw.lessons : []).filter((l): l is PendingLesson => !!l && typeof l === "object"
       && typeof l.id === "string" && typeof l.file === "string" && typeof l.symbol === "string" && typeof l.sibling === "string"
       && typeof l.siblingFile === "string" && typeof l.change === "string" && Array.isArray(l.callers)
