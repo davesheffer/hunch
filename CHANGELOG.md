@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.57.1 — 2026-11-19
+
+- **`hunch check --staged` is fast again on large staged sets.** The staged path read every staged blob with its own `git cat-file` process, so a commit staging a few hundred files spent minutes in the pre-commit check. Staged blobs are now read in batches, as commit and base checks already were: 258 staged files take 4 git processes instead of one per file, and a measured staged check fell from 154 s to 10 s with identical output. A staged blob git cannot read is reported as `blob could not be read`, and a batch that fails falls back to reading each file on its own (#666).
+
 ## 1.57.0 — 2026-11-19
 
 - **`hunch sync --range a..b` captures commits that landed without a hook.** Server-side merges, merge queues and the GitHub web UI land commits that never ran a local post-commit hook, so their decisions were never captured. `hunch sync --range <a..b> [--max n] [--synthesize] [--force]` captures every non-merge commit in the range, oldest first. Drafts are deterministic and local by default; `--synthesize` uses the configured subscription provider as plain sync does, and prints `⚠ heuristic draft instead: <reason>` under a commit whose draft fell back (#660). `--max` defaults to 20 (capped at 500) and keeps the newest commits, reporting how many older ones it left out. A commit that a decision in either memory home already names is skipped, even with `--force`, and an unowned commit whose patch-id matches a decision on an unrelated commit is skipped as a cherry-picked duplicate. A malformed or empty range exits 1 without creating `.hunch/`. Range mode only captures: it does not heal renames inside the range (run `hunch repair --apply` for that), and a decision stored with a commit abbreviated to fewer than 7 characters is not recognized as owning it. Plain `hunch sync [sha]` is unchanged (#656).
