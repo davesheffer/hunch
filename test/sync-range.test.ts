@@ -231,9 +231,12 @@ test("sync --range does not call a cherry-pick with its own decision a rebased d
     const x = commitFile(root, "feat: picked feature");
     assert.equal(runCli(root, "sync", x, "--no-commit").status, 0);
     git(root, "checkout", "-q", "main");
+    // Advance main first: a same-second cherry-pick onto x's own parent recreates x's sha.
+    commitFile(root, "chore: unrelated main commit");
     const before = git(root, "rev-parse", "HEAD");
     git(root, "cherry-pick", x);
     const xp = git(root, "rev-parse", "HEAD");
+    assert.notEqual(xp, x);
     const single = runCli(root, "sync", xp, "--no-commit");
     assert.equal(single.status, 0, single.stderr);
     assert.equal(decisionFiles(root).length, 2);
@@ -353,9 +356,12 @@ test("sync --range: an untagged own decision beats a tagged non-ancestor twin", 
     const x = commitFile(root, "feat: twin feature");
     assert.equal(runCli(root, "sync", x, "--no-commit").status, 0);
     git(root, "checkout", "-q", "main");
+    // Advance main first: a same-second cherry-pick onto x's own parent recreates x's sha.
+    commitFile(root, "chore: unrelated main commit");
     const before = git(root, "rev-parse", "HEAD");
     git(root, "cherry-pick", x);
     const xp = git(root, "rev-parse", "HEAD");
+    assert.notEqual(xp, x);
     assert.equal(runCli(root, "sync", xp, "--no-commit").status, 0);
     stripPatchIds(root, (d) => !!d.commit && xp.startsWith(d.commit));
     const r = runCli(root, "sync", "--range", `${before}..HEAD`, "--no-commit");

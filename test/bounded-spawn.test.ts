@@ -30,10 +30,14 @@ setTimeout(() => {}, 60000);
 `;
 }
 
+// writeFileSync creates the file before it writes the pid, so the file can exist
+// and still be empty; poll until it holds a pid, not merely until it exists.
+const readPid = (pidFile: string): number => (existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0);
+
 async function waitForPid(pidFile: string): Promise<number> {
   const deadline = Date.now() + 5_000;
-  while (!existsSync(pidFile) && Date.now() < deadline) await sleep(25);
-  const pid = Number(readFileSync(pidFile, "utf8"));
+  while (!(readPid(pidFile) > 0) && Date.now() < deadline) await sleep(25);
+  const pid = readPid(pidFile);
   assert.ok(pid > 0, "grandchild pid recorded");
   return pid;
 }

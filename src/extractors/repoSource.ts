@@ -288,7 +288,9 @@ function checkedGitBlobs(
     const line = lines[index] ?? "";
     const match = line.match(/^([0-9a-f]{40,64}) ([a-z]+) ([0-9]+)$/i);
     const size = match ? Number(match[3]) : Number.NaN;
-    if (!match || match[1]!.toLowerCase() !== candidate.oid || match[2] !== "blob"
+    if (line.toLowerCase() === `${candidate.oid} missing`) {
+      rejected.push(issueEntry(candidate.path, candidate.mode, "read_failed", `${candidate.path} blob could not be read`));
+    } else if (!match || match[1]!.toLowerCase() !== candidate.oid || match[2] !== "blob"
       || !Number.isSafeInteger(size) || size < 0) {
       rejected.push(issueEntry(
         candidate.path,
@@ -341,15 +343,8 @@ function readGitBlobBatch(root: string, batch: CheckedGitBlob[]): RepoSourceRead
     if (cursor !== raw.length) throw new Error("Git blob batch returned trailing bytes");
     return results;
   } catch {
-    return batch.map((candidate) => ({
-      source: null,
-      mode: candidate.mode,
-      issue: {
-        path: candidate.path,
-        code: "read_failed",
-        detail: `${candidate.path} blob could not be read`,
-      },
-    }));
+    // One bad object must not fail its healthy batch-mates: re-read each alone.
+    return batch.map((candidate) => gitBlobEntry(root, candidate.path, candidate.mode, candidate.oid).read());
   }
 }
 
@@ -442,6 +437,7 @@ function stagedInventory(root: string): RepoSourceInventory {
     grouped.set(row.path, rows);
   }
   const entries: RepoSourceEntry[] = [];
+  const blobCandidates: GitBlobCandidate[] = [];
   for (const path of [...grouped.keys()].sort(compareCodeUnits)) {
     const rows = grouped.get(path)!;
     if (rows.some((row) => row.invalidUtf8)) {
@@ -465,9 +461,14 @@ function stagedInventory(root: string): RepoSourceInventory {
     } else if (!ORDINARY_BLOB_MODES.has(row.mode)) {
       entries.push(issueEntry(path, row.mode, "unsafe_mode", `${path} uses unsupported Git mode ${row.mode}`));
     } else {
-      entries.push(gitBlobEntry(root, path, row.mode, row.oid));
+      blobCandidates.push({ path, mode: row.mode, oid: row.oid });
     }
   }
+  // One batch-check plus bounded cat-file batches, as for exact trees: a
+  // per-file gitBlobEntry cost three Git spawns per indexed path (#666).
+  const checked = checkedGitBlobs(root, blobCandidates);
+  entries.push(...checked.rejected, ...batchedGitBlobEntries(root, checked.readable));
+  entries.sort((left, right) => compareCodeUnits(left.path, right.path));
   return { identity: { kind: "staged" }, entries };
 }
 
