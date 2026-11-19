@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { beginHookInvocation } from "../core/hookMemo.js";
 import { join, relative, dirname, resolve, isAbsolute } from "node:path";
-import { hunchPaths, findRoot, toPosixTarget, isDir, repoRelativeTarget } from "../core/paths.js";
+import { hunchPaths, type HunchPaths, findRoot, toPosixTarget, isDir, repoRelativeTarget } from "../core/paths.js";
 import { looksLikeCorrection, CORRECTION_NUDGE, stripHostBlocks } from "../core/correction.js";
 import { roleHasHunchTools } from "../core/subagentrole.js";
 import { integrationSessionWarning } from "../integrations/health.js";
@@ -29,8 +29,8 @@ import { renderRecalledLine } from "../core/taskReportRender.js";
 import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
-import { contextHookOutput, deliversCommandOutcome, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, postToolBlockOutput, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
-import { PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag } from "../core/pipeline.js";
+import { contextHookOutput, deliversCommandOutcome, deliversPostToolBlock, deliversPostToolEvent, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, postToolBlockOutput, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
+import { MAX_SHELL_WRITTEN, PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag, type PipelineState } from "../core/pipeline.js";
 import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { nowData } from "../wiki/wiki.js";
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, relevantEscalations, type Escalation } from "../core/escalations.js";
@@ -39,7 +39,7 @@ import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
 import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
-import { dirtyFilesSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
+import { filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
@@ -84,6 +84,8 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       let shellGround = "";
       // strict: a shell write that re-introduced a rejected approach (shellveto.ts).
       let shellVeto: { target: string; hit: BlockingHit } | null = null;
+      // What this shell command wrote (Hunch-root-relative): the Stop-time Veto's only input.
+      let shellWritten: string[] = [];
       let recall: FailureRecall = { text: "", bugs: [] };
       const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
@@ -106,13 +108,13 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         try {
           if (shell) {
             const written = shellWrittenFiles(root, evt.session_id, evt.agent_id);
+            shellWritten = written;
             if (written.length) {
               const opened = openStore();
               if (!stale) {
                 // The edit tools' Veto never saw this text: judge what the files gained.
                 if (firmness === "strict") {
                   try { shellVeto = vetoForWrittenFiles(opened, root, written); } catch { shellVeto = null; }
-                  if (shellVeto) appendEvent(paths, { at: new Date().toISOString(), file: shellVeto.target, ...shellVeto.hit.event });
                 }
                 shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
               }
@@ -142,6 +144,14 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       if (postTool && evt.session_id && pipelineEnabled()) {
         let st = loadPipelineState(evt.session_id);
         if (recall.bugs.length) st = { ...st, recalled: [...st.recalled, ...recall.bugs.map((id) => `${recallScope}${id}`)] };
+        if (shellWritten.length) {
+          const abs = shellWritten.map((f) => resolve(root, f).replace(/\\/g, "/"));
+          const fold = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+          const fresh = new Set(abs.map(fold));
+          st = { ...st, shellWritten: [...(st.shellWritten ?? []).filter((f) => !fresh.has(fold(f))), ...abs].slice(-MAX_SHELL_WRITTEN) };
+        }
+        // A host that cannot show a post-tool block was never told: nothing to log.
+        if (shellVeto && deliversPostToolBlock(provider)) st = logVeto(paths, st, shellVeto);
         const before = st;
         let activity: Parameters<typeof proofCheckpoint>[2] | null = null;
         let lessonNote = "";
@@ -183,30 +193,37 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         return;
       }
       if (postTool) {
+        if (shellVeto && deliversPostToolBlock(provider)) appendEvent(paths, { at: new Date().toISOString(), file: shellVeto.target, ...shellVeto.hit.event });
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
         emitPost(provider, postTool, post, shellVeto);
         return;
       }
       if (evt.hook_event_name === "Stop") {
-        // strict: whatever route wrote it (an edit tool, a shell command, a subagent),
-        // a rejected approach still in the working tree holds the turn open. Bounded
-        // like the VERIFY gate (two blocks per turn), then fail-open.
+        // strict: a rejected approach a shell command of THIS session wrote, still in
+        // the working tree, holds the turn open. Only the session's own shell writes are
+        // judged (edit-tool writes met the pre-edit Veto; a human's uncommitted work is
+        // never judged). Its own bound of two blocks per turn, apart from VERIFY's.
         if (firmness === "strict" && evt.session_id && pipelineEnabled()) {
           const st = loadPipelineState(evt.session_id);
-          if (st.blocks < 2) {
+          const base = resolve(root).replace(/\\/g, "/").replace(/\/$/, "");
+          // win32 paths are case-insensitive: one root may arrive spelled two ways.
+          const fold = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+          // A host with no post-tool event never says what its shell wrote: judge
+          // every file that differs from HEAD instead, as before shell tracking.
+          const tree = !deliversPostToolEvent(provider);
+          let written = tree ? [] : (st.shellWritten ?? []).filter((f) => fold(f).startsWith(fold(`${base}/`))).map((f) => f.slice(base.length + 1));
+          if ((st.vetoBlocks ?? 0) < 2 && (tree || written.length)) {
             let found: { target: string; hit: BlockingHit } | null = null;
             try {
-              const dirty = dirtyFilesSinceHead(root);
-              if (dirty?.length) {
-                const opened = openTeamStore(root, { requireFreshTeamMemory: true });
-                store = opened.store;
-                if (!(opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus))) found = vetoForWrittenFiles(opened.store, root, dirty);
-              }
+              if (tree) written = filesChangedSinceHead(root) ?? [];
+              if (!written.length) throw new Error("nothing changed"); // no team-store open for an empty tree
+              const opened = openTeamStore(root, { requireFreshTeamMemory: true });
+              store = opened.store;
+              if (!(opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus))) found = vetoForWrittenFiles(opened.store, root, written, undefined, { newestFirst: !tree });
             } catch { found = null; }
             if (found) {
-              savePipelineState(evt.session_id, { ...st, blocks: st.blocks + 1 });
-              appendEvent(paths, { at: new Date().toISOString(), file: found.target, ...found.hit.event });
-              emitStop(provider, shellVetoReason(found.target, found.hit, "stop"));
+              savePipelineState(evt.session_id, { ...logVeto(paths, st, found), vetoBlocks: (st.vetoBlocks ?? 0) + 1 });
+              emitStop(provider, shellVetoReason(found.target, found.hit, tree ? "tree" : "stop"));
               return;
             }
           }
@@ -1005,12 +1022,19 @@ function emitDeny(provider: HookProvider, reason: string): void {
   if (result.stderr) process.stderr.write(`${result.stderr}\n`);
   if (result.exitCode !== undefined) process.exitCode = result.exitCode;
 }
+/** Log a Veto hit to events.log once per decision, file and turn. */
+function logVeto(paths: HunchPaths, st: PipelineState, veto: { target: string; hit: BlockingHit }): PipelineState {
+  const key = `${veto.hit.event.decision ?? ""}:${veto.target}`;
+  const logged = st.vetoLogged ?? [];
+  if (logged.includes(key)) return st;
+  appendEvent(paths, { at: new Date().toISOString(), file: veto.target, ...veto.hit.event });
+  return { ...st, vetoLogged: [...logged, key] };
+}
 /** A post-tool reply: a shell-write Veto hit interrupts the agent (its reason first,
  *  the usual grounding after); otherwise the grounding is plain context, if any. */
 function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", text: string, veto: { target: string; hit: BlockingHit } | null): void {
   if (veto) {
-    const reason = [shellVetoReason(veto.target, veto.hit, "write"), text].filter(Boolean).join("\n\n");
-    const output = postToolBlockOutput(provider, event, reason);
+    const output = postToolBlockOutput(provider, event, shellVetoReason(veto.target, veto.hit, "write"), text);
     if (output) process.stdout.write(JSON.stringify(output));
     return;
   }

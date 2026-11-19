@@ -33,6 +33,16 @@ export function deliversCommandOutcome(provider: HookProvider): boolean {
   return COMMAND_OUTCOME[provider];
 }
 
+/** Whether a provider's installed hooks include a post-tool event at all.
+ * Antigravity's (PreInvocation, PreToolUse on edit tools, Stop) do not, so what
+ * its shell wrote is never observed. A Record, so a new provider must declare it. */
+const POST_TOOL_EVENT: Record<HookProvider, boolean> = {
+  claude: true, codex: true, vscode: true, windsurf: true, cursor: true, antigravity: false,
+};
+export function deliversPostToolEvent(provider: HookProvider): boolean {
+  return POST_TOOL_EVENT[provider];
+}
+
 export type HunchHookEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "UserPromptSubmit" | "SessionStart" | "SubagentStart" | "PreCompact" | "Stop";
 
 /** One file section of a Codex `apply_patch` payload. */
@@ -426,16 +436,27 @@ export function denyHookOutput(provider: HookProvider, reason: string): { output
   };
 }
 
-/** Stop-gate output in each native dialect. */
 /** A post-tool reply that must interrupt the agent: the tool already ran, so it asks
  *  the agent to undo what it did. Claude Code feeds a PostToolUse `decision: "block"`
- *  reason back to the model; a host with no post-tool block gets the same text as
- *  context, which informs without stopping. */
-export function postToolBlockOutput(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", reason: string): object | null {
-  if (provider === "claude") return { decision: "block", reason, hookSpecificOutput: { hookEventName: event, additionalContext: reason } };
-  return contextHookOutput(provider, event, reason);
+ *  reason back to the model, with any other grounding as context (the reason is not
+ *  repeated there); a host with no post-tool block gets both as context, which
+ *  informs without stopping. */
+export function postToolBlockOutput(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", reason: string, context = ""): object | null {
+  if (provider === "claude") {
+    // A failed tool's PostToolUseFailure carries no block reason to the model: the reason goes in context too.
+    const text = event === "PostToolUseFailure" ? [reason, context].filter(Boolean).join("\n\n") : context;
+    return text ? { decision: "block", reason, hookSpecificOutput: { hookEventName: event, additionalContext: text } } : { decision: "block", reason };
+  }
+  return contextHookOutput(provider, event, [reason, context].filter(Boolean).join("\n\n"));
 }
 
+/** Whether postToolBlockOutput reaches the agent at all: Windsurf takes no
+ *  post-tool output and Antigravity's post-tool reply carries no text. */
+export function deliversPostToolBlock(provider: HookProvider): boolean {
+  return provider !== "windsurf" && provider !== "antigravity";
+}
+
+/** Stop-gate output in each native dialect. */
 export function stopHookOutput(provider: HookProvider, reason: string): object {
   if (provider === "vscode") return { continue: false, stopReason: reason };
   if (provider === "cursor") return { followup_message: reason };
