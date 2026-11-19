@@ -340,7 +340,7 @@ test("220 deleted tracked files with long paths do not stop the check", t => {
   for (let i = 0; i < 220; i++) writeFileSync(join(dir, `file-${String(i).padStart(3, "0")}-${"x".repeat(20)}.ts`), `export const v${i} = ${i};\n`);
   writeFileSync(join(root, "src", "users", "other.ts"), "export const o = 1;\n");
   sh(root, "add", "-A"); sh(root, "commit", "-q", "-m", "many");
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true }); // rmSync-ok: deletes committed files as the scenario under test
   writeFileSync(join(root, "src", "users", "other.ts"), "export const o = 1;\nconst s = localStorage.getItem('s');\n");
   assert.equal(vetoForWrittenFiles(store, root, ["src/users/other.ts"])?.target, "src/users/other.ts");
 });
