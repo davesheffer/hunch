@@ -494,6 +494,16 @@
     "purpose": "RRF weight for semantic results",
     "todo": "no test exercises this read yet (pre-existing gap when the gate landed)"
   },
+  "HUNCH_SHELL_VETO_BUDGET_MS": {
+    "class": "hunch-config",
+    "purpose": "Wall-clock budget in ms for the strict shell-write Veto's git checks before it fails open (default 5000)",
+    "tests": [
+      {
+        "file": "test/shellveto.test.ts",
+        "title": "vetoForWrittenFiles: HUNCH_SHELL_VETO_BUDGET_MS=1 fails open on a write that hits under a large budget"
+      }
+    ]
+  },
   "HUNCH_SIBLING_WARM": {
     "class": "hunch-config",
     "purpose": "Set to 0 to stop the pre-edit hook spawning the detached sibling-fix cache warm worker (the test runner sets it)",

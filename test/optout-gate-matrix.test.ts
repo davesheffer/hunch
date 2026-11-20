@@ -68,6 +68,8 @@ const EXPECTED: Record<string, Kind> = {
   "experiment followup <file>": "input",
   "experiment stop <file>": "input",
   "import-adr <dir>": "input",
+  "lock <files>": "input",
+  "unlock <file>": "input",
   "derive-rules <path>": "input",
   "sibling-warm <file>": "input",
   "export-adr <dir>": "output",

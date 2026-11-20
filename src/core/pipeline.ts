@@ -206,6 +206,14 @@ export interface PipelineState {
   soulInjected: boolean;
   /** Stop blocks issued THIS turn (reset on every user prompt). */
   blocks: number;
+  /** Shell-write Veto Stop blocks THIS turn (strict; see core/shellveto.ts). Own
+   *  bound, so a Veto never spends the VERIFY gate's blocks. Optional: older state. */
+  vetoBlocks?: number;
+  /** Absolute POSIX paths this session's shell commands wrote: the only files the
+   *  Stop-time shell Veto judges (a human's own uncommitted work never is). */
+  shellWritten?: string[];
+  /** `<decision>:<file>` Veto hits already logged to events.log THIS turn. */
+  vetoLogged?: string[];
   /** Pre-edit evidence denials THIS turn; bounded separately from Stop. */
   probeBlocks: number;
   /** Domains activated by edited paths, e.g. { backend: true }. */
@@ -1030,7 +1038,7 @@ function verifyPattern(state: PipelineState, profiles = DEFAULT_PROFILES): RegEx
 // ------------------------------------------------------- state transitions
 /** New user prompt: fresh block budget. */
 export function onPrompt(state: PipelineState): PipelineState {
-  return { ...state, turn: state.turn + 1, blocks: 0, probeBlocks: 0 };
+  return { ...state, turn: state.turn + 1, blocks: 0, probeBlocks: 0, vetoBlocks: 0, vetoLogged: [] };
 }
 
 /** Edit/Write/MultiEdit landed on `path`. */
@@ -1365,6 +1373,9 @@ export function loopEnabled(root?: string): boolean {
 }
 
 /** Load session state; on ANY problem return a fresh state (never throw). */
+/** Session shell-written paths kept for the Stop-time Veto. */
+export const MAX_SHELL_WRITTEN = 500;
+
 export function loadPipelineState(sessionId: string): PipelineState {
   try {
     const raw = JSON.parse(readFileSync(stateFile(sessionId), "utf8")) as Partial<PipelineState>;
@@ -1373,6 +1384,9 @@ export function loadPipelineState(sessionId: string): PipelineState {
     state.proofReminderActivity = Number.isSafeInteger(raw.proofReminderActivity) && raw.proofReminderActivity! >= 0 ? raw.proofReminderActivity! : 0;
     state.proofReminders = Number.isSafeInteger(raw.proofReminders) && raw.proofReminders! >= 0 ? raw.proofReminders! : 0;
     state.probeBlocks = Number.isSafeInteger(raw.probeBlocks) && raw.probeBlocks! >= 0 ? raw.probeBlocks! : 0;
+    state.vetoBlocks = Number.isSafeInteger(raw.vetoBlocks) && raw.vetoBlocks! >= 0 ? raw.vetoBlocks! : 0;
+    state.shellWritten = (Array.isArray(raw.shellWritten) ? raw.shellWritten : []).filter((f): f is string => typeof f === "string").slice(-MAX_SHELL_WRITTEN);
+    state.vetoLogged = (Array.isArray(raw.vetoLogged) ? raw.vetoLogged : []).filter((k): k is string => typeof k === "string");
     state.lessons = (Array.isArray(raw.lessons) ? raw.lessons : []).filter((l): l is PendingLesson => !!l && typeof l === "object"
       && typeof l.id === "string" && typeof l.file === "string" && typeof l.symbol === "string" && typeof l.sibling === "string"
       && typeof l.siblingFile === "string" && typeof l.change === "string" && Array.isArray(l.callers)
