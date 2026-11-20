@@ -5886,7 +5886,8 @@ program
       for (const p of problems) console.log(`⚠ ${p}`);
       for (const r of rows) {
         const shown = r.name === "lean_grounding" && r.source === "default" ? "auto" : r.value === true ? "on" : r.value === false ? "off" : r.value;
-        const note = r.name === "lean_grounding" && r.source === "default" ? "; lean for new blocks, existing blocks keep their form" : "";
+        const note = r.name === "lean_grounding" && r.source === "default" ? "; lean for new blocks, existing blocks keep their form"
+          : r.name === "loop" && r.value === true && !pipelineEnabled() ? "; inactive: HUNCH_PIPELINE=0 disables the pipeline" : "";
         console.log(`${r.name.padEnd(15)} ${String(shown).padEnd(9)} (${r.source === "env" ? `env ${r.env}` : r.source === "config" ? ".hunch/config.json" : "default"}${note})`);
         for (const bad of r.ignored) console.log(`  ⚠ ignored unrecognized value ${bad}; use on/off${r.name === "lean_grounding" ? "/preserve" : ""}`);
       }

@@ -10,7 +10,7 @@ import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { refreshShellBaseline } from "../src/core/shellwrites.js";
 import { HOOK_REMINDER } from "../src/core/hookText.js";
-import { PIPELINE_LOOP, quietEmptyEnabled } from "../src/core/pipeline.js";
+import { PIPELINE_LOOP, VERIFY_CUE, quietEmptyEnabled } from "../src/core/pipeline.js";
 
 const cli = resolve("src/cli/index.ts");
 const prov = { source: "human_confirmed", confidence: 1, evidence: [] } as const;
@@ -215,4 +215,28 @@ test("quiet-empty: a PostToolUse shell write of an unanchored file adds no groun
   };
   assert.doesNotMatch(shell(false, "quiet-shell-off", 5), /RETIRED|Keep module/);
   assert.doesNotMatch(shell(true, "quiet-shell-on", 10), /this shell command wrote/);
+});
+
+test("verify cue: with the loop off, the first product edit of a session gets one verify line; loop on gets none", t => {
+  const root = repo(t);
+  seed(root, () => {});
+  const edit = (session: string, file: string, loop: string | null) => ctx(root, false, {
+    hook_event_name: "PostToolUse", session_id: session, tool_name: "Edit",
+    tool_input: { file_path: join(root, "src", file), old_string: "1", new_string: "2" },
+  }, loop);
+  const off = `cue-off-${process.pid}-${Date.now()}`;
+  assert.ok(edit(off, "a.ts", null).includes(VERIFY_CUE), "first product edit with the loop off carries the cue");
+  assert.ok(!edit(off, "b.ts", null).includes(VERIFY_CUE), "the cue fires once per session");
+  const on = `cue-on-${process.pid}-${Date.now()}`;
+  assert.ok(!edit(on, "a.ts", "1").includes(VERIFY_CUE), "loop on: the SessionStart loop already carries VERIFY");
+  const failed = `cue-fail-${process.pid}-${Date.now()}`;
+  assert.ok(!ctx(root, false, { hook_event_name: "PostToolUseFailure", session_id: failed, tool_name: "Edit",
+    tool_input: { file_path: join(root, "src", "a.ts"), old_string: "1", new_string: "2" } }, null).includes(VERIFY_CUE),
+    "a failed edit gets no cue");
+  assert.ok(edit(failed, "a.ts", null).includes(VERIFY_CUE), "a failed edit does not use up the cue");
+  const docs = `cue-docs-${process.pid}-${Date.now()}`;
+  writeFileSync(join(root, "docs", "n.md"), "x\n");
+  assert.ok(!ctx(root, false, { hook_event_name: "PostToolUse", session_id: docs, tool_name: "Edit",
+    tool_input: { file_path: join(root, "docs", "n.md"), old_string: "x", new_string: "y" } }, null).includes(VERIFY_CUE),
+    "a non-product edit gets no cue");
 });

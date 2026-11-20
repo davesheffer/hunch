@@ -30,7 +30,7 @@ import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, s
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, deliversCommandOutcome, deliversPostToolBlock, deliversPostToolEvent, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, postToolBlockOutput, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
-import { MAX_SHELL_WRITTEN, PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, loopEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag, type PipelineState } from "../core/pipeline.js";
+import { MAX_SHELL_WRITTEN, PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, loopEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag, verifyCue, type PipelineState } from "../core/pipeline.js";
 import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { nowData } from "../wiki/wiki.js";
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, relevantEscalations, type Escalation } from "../core/escalations.js";
@@ -168,6 +168,7 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         const before = st;
         let activity: Parameters<typeof proofCheckpoint>[2] | null = null;
         let lessonNote = "";
+        let cueNote = "";
         if (/^(Edit|Write|MultiEdit)$/.test(evt.tool_name ?? "")) {
           // A Codex apply_patch touches every file it lists (and each Move-to
           // destination); the Stop gate must see all of them, not only the first.
@@ -195,8 +196,16 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         if (activity) {
           const checkpoint = proofCheckpoint(before, st, activity);
           st = checkpoint.state;
+          // Loop off: one verify line on the session's first product edit. Not on a
+          // failed edit (nothing landed), and not when the proof checkpoint already speaks.
+          if (activity.kind === "edit" && !checkpoint.reminder && postTool !== "PostToolUseFailure"
+            && evt.tool_outcome?.status !== "failure" && !loopEnabled(root)) {
+            const cue = verifyCue(before, st);
+            st = cue.state;
+            cueNote = cue.cue;
+          }
           savePipelineState(evt.session_id, st);
-          const post = [shellGround, recall.text, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
+          const post = [shellGround, recall.text, lessonNote, cueNote, checkpoint.reminder].filter(Boolean).join("\n\n");
           emitPost(provider, postTool, post, shellVeto, lockBlock);
           return;
         }
