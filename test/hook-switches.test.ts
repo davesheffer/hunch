@@ -13,7 +13,7 @@ import { MCP_INSTRUCTIONS, MCP_INSTRUCTIONS_LEAN, mcpInstructions } from "../src
 
 const NAMES = ["HUNCH_LEAN_GROUNDING", "HUNCH_QUIET_EMPTY", "HUNCH_HOOK_DAEMON", "HUNCH_LOOP"] as const;
 
-/** Run with the three switch env vars cleared, then set from `env`; restored after. */
+/** Run with the switch env vars cleared, then set from `env`; restored after. */
 function withEnv<T>(env: Partial<Record<(typeof NAMES)[number], string>>, fn: () => T): T {
   const prior = Object.fromEntries(NAMES.map((n) => [n, process.env[n]]));
   for (const n of NAMES) delete process.env[n];

@@ -104,6 +104,7 @@ test("loop switch: SessionStart omits the operating loop by default and carries 
     const dflt = ctx(root, quiet, { hook_event_name: "SessionStart", source: "startup" }, null);
     assert.ok(!dflt.includes("Hunch operating loop"), `loop text absent by default (quiet=${quiet})`);
     assert.ok(!dflt.includes(PIPELINE_LOOP));
+    if (!quiet) assert.match(dflt, /Hunch orientation/, "loop off must not silence the orientation block");
     const on = ctx(root, quiet, { hook_event_name: "SessionStart", source: "startup" }, "1");
     assert.ok(on.includes("Hunch operating loop"), `loop text present with HUNCH_LOOP=1 (quiet=${quiet})`);
   }

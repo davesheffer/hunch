@@ -504,6 +504,9 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           // (hooks.loop / HUNCH_LOOP) since the 2026-11-16 gap1 bench: the loop text roughly
           // doubled test runs per session; loop off = -28% cost, -35% wall, first-task
           // accuracy within run-to-run spread. When on, it rides session start here too.
+          // History: dropping it in quiet mode once removed the only post-edit verify cue
+          // (pylint-6528 bench lost runs to crashing patches never re-run); unverifiedNag
+          // is the remaining cue, and only fires on a later prompt.
           if (quietEmptyEnabled(root) && !actionableEsc.length
             && !s.advisoryRecs("constraints").some((c) => c.status === "active")
             && !s.advisoryRecs("bugs").length

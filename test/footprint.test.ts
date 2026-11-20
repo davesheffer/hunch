@@ -64,6 +64,11 @@ test("footprint: every surface is measured, non-empty, and under its ceiling", a
     assert.ok(detail.content_chars! > 0 && detail.structured_chars! > 0);
     const budgetChars = detail.budget_tokens! * 4;
     assert.ok(context.chars <= budgetChars * 1.25, `hunch_context shows ${context.chars} chars for a ${budgetChars}-char budget`);
+
+    // Loop off (the default): the loop surface is not counted.
+    delete process.env.HUNCH_LOOP;
+    const off = await measureFootprint(root, { target: "src/context.ts" });
+    assert.ok(!off.surfaces.some(s => s.id === "hook.session.pipeline_loop"), "loop surface counted with the loop off");
   } finally {
     cleanup();
     if (saved !== undefined) process.env.HUNCH_MCP_TOOLS = saved;

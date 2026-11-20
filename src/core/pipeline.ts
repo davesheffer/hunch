@@ -14,7 +14,7 @@
  *
  * Firmness mapping (no new knob):
  *   off      → pipeline inert
- *   advisory → inject the loop at SessionStart + nag on unverified edits; no blocks
+ *   advisory → nag on unverified edits (+ the SessionStart loop when hooks.loop / HUNCH_LOOP is on); no blocks
  *   firm     → + Stop gate (max 2 blocks per turn)
  *   strict   → same as firm (strict's extra bite lives in the pre-edit deny gate)
  *
