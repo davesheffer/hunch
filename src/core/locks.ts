@@ -83,10 +83,13 @@ export function fileSha(root: string, rel: string): string | null {
   }
 }
 
-/** A repo-relative file path safe to lock, or null (absolute, escaping, globs, Hunch's own state). */
+/** A repo-relative file path safe to lock, or null (absolute, escaping, globs, Hunch's own
+ *  state). The one exception under .hunch/ is an approved HLD draft (`.hunch/hld/*.json`):
+ *  its answers are part of what the human approved. */
 export function lockablePath(rel: string): string | null {
   const p = safeRepoScope(rel);
-  if (!p || /[*?[\]{}]/.test(p) || p.startsWith(`${HUNCH_DIR}/`)) return null;
+  if (!p || /[*?[\]{}]/.test(p)) return null;
+  if (p.startsWith(`${HUNCH_DIR}/`) && !/^\.hunch\/hld\/[^/]+\.json$/.test(p)) return null;
   return p;
 }
 
@@ -165,11 +168,13 @@ export function lockProblemReason(problems: readonly LockProblem[], when: "write
 }
 
 /** Add or re-approve a lock for a file's current bytes. Returns the previous lock when one existed. */
-export function setLock(root: string, rel: string, input: { kind: LockKind; approvedBy: string; note?: string; at?: string }): { lock: Lock; previous: Lock | null } {
+export function setLock(root: string, rel: string, input: { kind: LockKind; approvedBy: string; note?: string; at?: string; expectSha?: string }): { lock: Lock; previous: Lock | null } {
   const path = lockablePath(rel);
   if (!path) throw new Error(`cannot lock ${rel}: give a repo-relative file path outside ${HUNCH_DIR}/`);
   const sha = fileSha(root, path);
   if (!sha) throw new Error(`cannot lock ${path}: not a readable file (or larger than ${MAX_LOCKED_BYTES} bytes)`);
+  // the caller showed the human specific bytes; lock exactly those or nothing
+  if (input.expectSha && sha !== input.expectSha) throw new Error(`cannot lock ${path}: it changed after it was reviewed; review it again`);
   const approvedBy = input.approvedBy.trim();
   if (!approvedBy || approvedBy.length > 128 || /[\r\n]/.test(approvedBy)) throw new Error("--reviewed-by must be a 1-128 character name");
   const reg = readLocks(root);

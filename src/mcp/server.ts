@@ -1,4 +1,5 @@
 import { conventionSupplements } from '../core/conventionDelivery.js';
+import { answerQuestion as answerHldQuestion, approvalState as hldApprovalState, canonicalSource as hldCanonicalSource, grillingProtocol as hldGrillingProtocol, importHld, reimportBlock as hldReimportBlock, listDrafts as listHldDrafts, openCount as hldOpenCount, readDraft as readHldDraft, sourceSha as hldSourceSha, writeDraft as writeHldDraft } from "../core/hld.js";
 import { fieldCitationText } from "../core/fieldProvenance.js";
 import { canonicalJson } from "../constitution/canonical.js";
 import { siblingGrounding } from "../core/siblingfix.js";
@@ -2269,6 +2270,63 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         L.push(`   → ${e.resolution}`, "");
       }
       return ok(L.join("\n"));
+    },
+  );
+
+  // -- hunch_hld (HLD import + one-question-at-a-time grilling) --------------
+  server.registerTool(
+    "hunch_hld",
+    {
+      title: "Import and grill a high-level design",
+      description:
+        "Bring a high-level design (Markdown with Mermaid, a .mmd file, or a draw.io diagram) into Hunch and close its gaps with the human. action:\"import\" parses it deterministically and returns the questions protocol plus the first question; \"next\" returns the next open question; \"answer\" records the HUMAN's answer to one question (never your own guess; skip:true only when the human says to skip); \"status\" lists drafts or shows one. Ask ONE question at a time. Approval is human-only, in a terminal: hunch hld-approve <file> --reviewed-by <name>, which locks the design.",
+      inputSchema: {
+        action: z.enum(["import", "next", "answer", "status"]),
+        file: z.string().max(1024).optional().describe("repo-relative HLD file (required except for status)"),
+        question_id: z.string().regex(/^q_[a-f0-9]{8}$/).optional().describe("for answer: the question being answered"),
+        answer: z.string().max(4000).optional().describe("for answer: the human's answer, in their words"),
+        skip: z.boolean().optional().describe("for answer: the human chose to skip this question"),
+        cwd: cwdHintField,
+      },
+    },
+    async ({ action, file, question_id, answer, skip }): Promise<ToolResult> => {
+      try {
+        if (action === "status" && !file) {
+          const drafts = listHldDrafts(root);
+          if (!drafts.length) return ok("No HLD drafts. Import one with hunch_hld(action:\"import\", file).");
+          return ok(drafts.map((d) => `${d.source} [${hldApprovalState(root, d) === "unverified" ? "approval unverified" : hldApprovalState(root, d)}] ${hldOpenCount(d)}/${d.questions.length} open`).join("\n"));
+        }
+        const source = file ? hldCanonicalSource(root, repoRelativeTarget(file, root)) : null;
+        if (!source) return invalid("give file: a repo-relative HLD file outside .hunch/");
+        if (action === "import") {
+          // agents never reopen: any approval or lock refuses (matched on kind, not message text)
+          const block = hldReimportBlock(root, source, readHldDraft(root, source));
+          if (block) return refused(block.message);
+          // PUBLIC components only: question text is persisted in the committed draft
+          const { draft, carried, parsed } = importHld(root, source, store.json.loadAll("components"));
+          writeHldDraft(root, draft);
+          const unread = parsed.warnings.length ? `Diagram lines Hunch could not read (tell the human):\n${parsed.warnings.map((w) => `- ${w}`).join("\n")}\n\n` : "";
+          return ok(`${unread}${carried ? `${carried} earlier answer(s) carried over.\n` : ""}${hldGrillingProtocol(draft)}`);
+        }
+        if (action === "answer") {
+          if (!question_id) return invalid("answer needs question_id");
+          if (!skip && !answer?.trim()) return invalid("answer needs the human's answer text, or skip:true when the human chose to skip");
+        }
+        const draft = readHldDraft(root, source);
+        if (!draft) return invalid(`no draft for ${source}; call hunch_hld(action:"import", file:"${source}") first`);
+        if (action === "next" || action === "status") return ok(hldGrillingProtocol(draft, hldApprovalState(root, draft)));
+        if (!question_id) return invalid("answer needs question_id");
+        // Any lock on the source or the draft (or a corrupt registry) blocks, whatever the draft's status says.
+        const block = hldReimportBlock(root, source, draft);
+        if (block) return refused(`${block.message} Answers cannot be recorded.`);
+        if (hldSourceSha(root, source) !== draft.source_sha256) return refused(`${source} changed since it was imported; re-import it first (hunch_hld action:"import").`);
+        const next = answerHldQuestion(draft, question_id, { text: answer, skip: !!skip, via: "agent" });
+        writeHldDraft(root, next);
+        return ok(`Recorded ${question_id}.\n\n${hldGrillingProtocol(next)}`);
+      } catch (e) {
+        const message = (e as Error).message;
+        return /approved, locked|approved and locked/.test(message) ? refused(message) : invalid(message);
+      }
     },
   );
 

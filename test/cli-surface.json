@@ -495,6 +495,46 @@
       }
     ]
   },
+  "import-hld": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-answer": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-approve": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "export-hld": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
   "lock": {
     "tests": [
       {

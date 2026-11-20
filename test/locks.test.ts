@@ -73,6 +73,9 @@ test("lockablePath refuses globs, escapes and Hunch's own state", () => {
   assert.equal(lockablePath("../outside.md"), null);
   assert.equal(lockablePath(".hunch/locks.json"), null);
   assert.equal(lockablePath("./docs/hld/a.md"), "docs/hld/a.md");
+  assert.equal(lockablePath(".hunch/hld/payments.json"), ".hunch/hld/payments.json", "an approved HLD draft is lockable");
+  assert.equal(lockablePath(".hunch/hld/nested/x.json"), null);
+  assert.equal(lockablePath(".hunch/decisions/dec_x.json"), null);
 });
 
 test("a tampered registry is reported, never read as 'nothing locked'", t => {

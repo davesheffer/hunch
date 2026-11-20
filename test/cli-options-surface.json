@@ -1372,6 +1372,78 @@
       }
     ]
   },
+  "import-hld --dry-run": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "import-hld --json": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld --json": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-answer --skip": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-answer --question": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-approve --reviewed-by": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "export-hld --check": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "export-hld --dry-run": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "export-hld --force": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
   "lock --kind": {
     "tests": [
       {
