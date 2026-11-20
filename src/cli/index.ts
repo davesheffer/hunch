@@ -169,6 +169,8 @@ import { kindOfId, editRecord, linkRecord, removeRecord, restoreRecord, unsign, 
 import { NEW_KINDS, isNewKind, newRecord } from "../core/memoryNew.js";
 import { ADR_DIR_CANDIDATES, ADR_FILE_RE, mapAdrCorpus } from "../extractors/adrImport.js";
 import { confirmCommand, countersignConstraint, countersignDecision } from "../core/countersign.js";
+import { LOCK_KINDS, LOCKS_FILE, fileSha, lockFor, lockablePath, readLocks, removeLock, setLock, verifyLocks, type LockKind } from "../core/locks.js";
+import { createInterface } from "node:readline/promises";
 import { applyImportedAdrReview, carryImportedAdrReview, importedAdrReviewHash, importedAdrSourceHash, isImportedAdrDecision, pendingImportedAdrReviews } from "../core/importReview.js";
 import { exportMadrCorpus, isRegenerableMadr } from "../integrations/madrExport.js";
 import { buildMadrManifest, writeMadrManifest, refreshMadrCorpus } from "../integrations/madrManifest.js";
@@ -4429,6 +4431,90 @@ program
     if (r.bug.lineage.recurrence_of) console.log(`  ↳ recurrence of ${r.bug.lineage.recurrence_of}`);
     if (r.constraint) console.log(`  ↳ promoted constraint ${r.constraint.id} [${r.constraint.severity}]: ${r.constraint.statement}`);
     store.close();
+  });
+
+// ---- lock / unlock / locks (human-approved, immutable design files — core/locks.ts) --
+/** Approving or releasing a locked file is a human act: refuse without an interactive
+ *  terminal, so an agent's shell can never approve its own change. */
+async function confirmHuman(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(`${question} [y/N] `)).trim().toLowerCase();
+    return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
+program
+  .command("lock")
+  .description("Lock human-approved design files (HLD, diagrams, ADRs): their exact bytes are bound to your approval in .hunch/locks.json, and Hunch's hooks deny agents any change to them. Re-running on a changed file approves its new contents. Interactive terminal only.")
+  .argument("<files...>", "repo-relative files to lock")
+  .requiredOption("--reviewed-by <name>", "who approves these exact contents")
+  .option("--kind <kind>", `what the file is: ${LOCK_KINDS.join(" | ")}`, "hld")
+  .option("--note <text>", "optional note stored with the lock")
+  .action(async (files: string[], opts: { reviewedBy: string; kind: string; note?: string }) => {
+    const root = findRoot();
+    if (!(LOCK_KINDS as readonly string[]).includes(opts.kind)) return fail(`--kind must be one of ${LOCK_KINDS.join(", ")}`);
+    const targets = files.map((f) => repoRelativeTarget(resolve(f), root));
+    const bad = targets.filter((t) => !lockablePath(t) || !fileSha(root, t));
+    if (bad.length) return fail(`not lockable (missing, outside the repo, a glob, or under .hunch/): ${bad.join(", ")}`);
+    const reg = readLocks(root);
+    if (reg.corrupt) return fail(`${LOCKS_FILE} is not a valid lock registry; restore it from git first`);
+    const changes = targets.filter((t) => lockFor(reg.locks, t)?.sha256 !== fileSha(root, t));
+    if (!changes.length) { console.log("✓ already locked with these exact contents — nothing to do"); return; }
+    const relocks = changes.filter((t) => lockFor(reg.locks, t));
+    const question = `Approve and lock ${changes.length} file(s) as ${opts.reviewedBy}?${relocks.length ? ` (re-approves new contents of ${relocks.join(", ")})` : ""}\n  ${changes.join("\n  ")}\nAgents will be denied any change to them.`;
+    if (!(await confirmHuman(question))) return fail("not locked: `hunch lock` needs a human to confirm in an interactive terminal");
+    for (const t of changes) {
+      const { lock, previous } = setLock(root, t, { kind: opts.kind as LockKind, approvedBy: opts.reviewedBy, note: opts.note });
+      console.log(`✓ ${previous ? "re-approved" : "locked"} ${lock.path} (${lock.sha256.slice(0, 19)}…)`);
+    }
+    console.log(`Commit ${LOCKS_FILE} so the lock applies to everyone.`);
+  });
+
+program
+  .command("unlock")
+  .description("Release a locked design file so it can be edited again. Interactive terminal only.")
+  .argument("<file>", "repo-relative locked file")
+  .requiredOption("--reviewed-by <name>", "who releases the lock")
+  .action(async (file: string, opts: { reviewedBy: string }) => {
+    const root = findRoot();
+    const target = repoRelativeTarget(resolve(file), root);
+    const reg = readLocks(root);
+    if (reg.corrupt) return fail(`${LOCKS_FILE} is not a valid lock registry; restore it from git first`);
+    const lock = lockFor(reg.locks, target);
+    if (!lock) return fail(`${target} is not locked`);
+    if (!(await confirmHuman(`Unlock ${lock.path} (approved by ${lock.approved_by}) as ${opts.reviewedBy}? Agents will be able to change it.`))) {
+      return fail("not unlocked: `hunch unlock` needs a human to confirm in an interactive terminal");
+    }
+    removeLock(root, lock.path);
+    console.log(`✓ unlocked ${lock.path}. Commit ${LOCKS_FILE} before handing work back to an agent.`);
+  });
+
+program
+  .command("locks")
+  .description("List locked design files and verify each still matches its approved bytes. --check exits non-zero on any mismatch (CI / pre-commit gate).")
+  .option("--check", "exit non-zero if any locked file changed, went missing, or the registry is invalid")
+  .option("--json", "machine-readable output")
+  .action((opts: { check?: boolean; json?: boolean }) => {
+    const root = findRoot();
+    const reg = readLocks(root);
+    const problems = verifyLocks(root);
+    if (opts.json) {
+      console.log(JSON.stringify({ locks: reg.locks.map((l) => ({ ...l, status: problems.find((p) => p.path === l.path)?.kind ?? "ok" })), registry: reg.corrupt ? "invalid" : "ok" }, null, 2));
+    } else if (reg.corrupt) {
+      console.log(`✗ ${LOCKS_FILE} is not a valid lock registry`);
+    } else if (!reg.locks.length) {
+      console.log("No locked files. Lock an approved HLD with: hunch lock <file> --reviewed-by <you>");
+    } else {
+      for (const l of reg.locks) {
+        const status = problems.find((p) => p.path === l.path)?.kind;
+        console.log(`${status ? "✗" : "✓"} ${l.path}  [${l.kind}] approved by ${l.approved_by} ${l.approved_at.slice(0, 10)}${status ? `  — ${status.toUpperCase()}` : ""}`);
+      }
+    }
+    if (opts.check && problems.length) process.exitCode = 1;
   });
 
 // ---- import-adr (MADR/Nygard corpus import — the MADR bridge, import half) --

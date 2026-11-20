@@ -40,6 +40,7 @@ import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
 import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
 import { filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
+import { isRegistryPath, lockDenyReason, lockFor, lockProblemReason, readLocks, verifyLocks } from "../core/locks.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
@@ -86,6 +87,8 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       let shellVeto: { target: string; hit: BlockingHit } | null = null;
       // What this shell command wrote (Hunch-root-relative): the Stop-time Veto's only input.
       let shellWritten: string[] = [];
+      // A shell command changed a human-approved locked file (core/locks.ts).
+      let lockBlock: string | null = null;
       let recall: FailureRecall = { text: "", bugs: [] };
       const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
@@ -127,6 +130,16 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
             else refreshShellBaseline(root, evt.session_id, evt.agent_id);
           }
         } catch { shellGround = ""; }
+        // Locked design files: a shell command is the one route the pre-edit deny can't see.
+        if (shell) {
+          try {
+            const problems = verifyLocks(root, { sinceHead: true });
+            if (problems.length) {
+              lockBlock = lockProblemReason(problems, "write");
+              for (const p of problems) appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: p.path });
+            }
+          } catch { lockBlock = null; }
+        }
         // A failed check that matches a recorded bug says so; anything else stays silent.
         if (shell && evt.tool_outcome?.status === "failure" && evt.tool_outcome.output) {
           try {
@@ -184,21 +197,36 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           st = checkpoint.state;
           savePipelineState(evt.session_id, st);
           const post = [shellGround, recall.text, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
-          emitPost(provider, postTool, post, shellVeto);
+          emitPost(provider, postTool, post, shellVeto, lockBlock);
           return;
         }
         savePipelineState(evt.session_id, st);
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        emitPost(provider, postTool, post, shellVeto);
+        emitPost(provider, postTool, post, shellVeto, lockBlock);
         return;
       }
       if (postTool) {
         if (shellVeto && deliversPostToolBlock(provider)) appendEvent(paths, { at: new Date().toISOString(), file: shellVeto.target, ...shellVeto.hit.event });
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        emitPost(provider, postTool, post, shellVeto);
+        emitPost(provider, postTool, post, shellVeto, lockBlock);
         return;
       }
       if (evt.hook_event_name === "Stop") {
+        // Locked design files: whatever route changed one, the turn can't end on it.
+        // Bounded like the other Stop gates (two blocks per turn), then fail-open.
+        if (evt.session_id && pipelineEnabled()) {
+          const st = loadPipelineState(evt.session_id);
+          if (st.blocks < 2) {
+            let problems: ReturnType<typeof verifyLocks> = [];
+            try { problems = verifyLocks(root, { sinceHead: true }); } catch { problems = []; }
+            if (problems.length) {
+              savePipelineState(evt.session_id, { ...st, blocks: st.blocks + 1 });
+              for (const p of problems) appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: p.path });
+              emitStop(provider, lockProblemReason(problems, "stop"));
+              return;
+            }
+          }
+        }
         // strict: a rejected approach a shell command of THIS session wrote, still in
         // the working tree, holds the turn open. Only the session's own shell writes are
         // judged (edit-tool writes met the pre-edit Veto; a human's uncommitted work is
@@ -531,6 +559,18 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         if (routed.ungrounded) emitContext(provider, "PreToolUse", routed.ungrounded);
         return;
       }
+      // Locked design files (core/locks.ts): a human-approved HLD/diagram/ADR, or the lock
+      // registry itself, is never edited by an agent — in every firmness but off.
+      {
+        const reg = readLocks(root);
+        const locked = targets.find((t) => isRegistryPath(t.target) || lockFor(reg.locks, t.target));
+        if (locked) {
+          appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: locked.target });
+          emitDeny(provider, lockDenyReason(locked.target, lockFor(reg.locks, locked.target)));
+          return;
+        }
+      }
+
       // Grounding below stays about the first in-repo file; the strict gate checks every target.
       const { abs, target } = targets[0]!;
 
@@ -1032,9 +1072,10 @@ function logVeto(paths: HunchPaths, st: PipelineState, veto: { target: string; h
 }
 /** A post-tool reply: a shell-write Veto hit interrupts the agent (its reason first,
  *  the usual grounding after); otherwise the grounding is plain context, if any. */
-function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", text: string, veto: { target: string; hit: BlockingHit } | null): void {
-  if (veto) {
-    const output = postToolBlockOutput(provider, event, shellVetoReason(veto.target, veto.hit, "write"), text);
+function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", text: string, veto: { target: string; hit: BlockingHit } | null, lockBlock: string | null = null): void {
+  if (veto || lockBlock) {
+    const reason = [lockBlock, veto ? shellVetoReason(veto.target, veto.hit, "write") : ""].filter(Boolean).join("\n\n");
+    const output = postToolBlockOutput(provider, event, reason, text);
     if (output) process.stdout.write(JSON.stringify(output));
     return;
   }
