@@ -14,7 +14,7 @@
  *
  * Firmness mapping (no new knob):
  *   off      → pipeline inert
- *   advisory → inject the loop at SessionStart + nag on unverified edits; no blocks
+ *   advisory → nag on unverified edits (+ the SessionStart loop when hooks.loop / HUNCH_LOOP is on); no blocks
  *   firm     → + Stop gate (max 2 blocks per turn)
  *   strict   → same as firm (strict's extra bite lives in the pre-edit deny gate)
  *
@@ -1364,6 +1364,12 @@ export function pipelineEnabled(): boolean {
  * hookSwitches.ts). Read at call time, never at module load (a hook may run in a daemon). */
 export function quietEmptyEnabled(root?: string): boolean {
   return hookSwitch("quiet_empty", root).value === true;
+}
+
+/** The SessionStart operating-loop text (PIPELINE_LOOP). Opt-in, default off: env
+ * HUNCH_LOOP or `.hunch/config.json` hooks.loop turns it on. */
+export function loopEnabled(root?: string): boolean {
+  return pipelineEnabled() && hookSwitch("loop", root).value === true;
 }
 
 /** Load session state; on ANY problem return a fresh state (never throw). */

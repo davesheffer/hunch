@@ -1,11 +1,11 @@
 /**
- * Hook-overhead switches: lean grounding, quiet-empty hooks and the hook daemon.
+ * Hook-overhead switches: lean grounding, quiet-empty hooks, the hook daemon and the operating loop.
  * Each resolves, highest first:
- *   1. the env var (HUNCH_LEAN_GROUNDING / HUNCH_QUIET_EMPTY / HUNCH_HOOK_DAEMON):
+ *   1. the env var (HUNCH_LEAN_GROUNDING / HUNCH_QUIET_EMPTY / HUNCH_HOOK_DAEMON / HUNCH_LOOP):
  *      1/true/on or 0/false/off; lean grounding also takes "preserve";
  *   2. `.hunch/config.json` → `hooks.<name>` (committed, so a whole team shares it):
  *      true/false; `lean_grounding` also takes "preserve";
- *   3. the default: on.
+ *   3. the default: on, except `loop` (the SessionStart operating-loop text): off.
  * An unrecognized value at any level is ignored and the next level decides.
  * "preserve" keeps a committed grounding block in the variant it was written in.
  *
@@ -16,18 +16,19 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-export type HookSwitchName = "lean_grounding" | "quiet_empty" | "daemon";
+export type HookSwitchName = "lean_grounding" | "quiet_empty" | "daemon" | "loop";
 export type HookSwitchValue = boolean | "preserve";
 export interface HookSwitchSetting {
   value: HookSwitchValue;
   source: "env" | "config" | "default";
 }
 
-export const HOOK_SWITCH_NAMES: readonly HookSwitchName[] = ["lean_grounding", "quiet_empty", "daemon"];
+export const HOOK_SWITCH_NAMES: readonly HookSwitchName[] = ["lean_grounding", "quiet_empty", "daemon", "loop"];
 export const HOOK_SWITCH_ENV: Readonly<Record<HookSwitchName, string>> = {
   lean_grounding: "HUNCH_LEAN_GROUNDING",
   quiet_empty: "HUNCH_QUIET_EMPTY",
   daemon: "HUNCH_HOOK_DAEMON",
+  loop: "HUNCH_LOOP",
 };
 
 interface ConfigHooksRead { hooks: Record<string, unknown> | null; problems: string[] }
@@ -111,7 +112,8 @@ export function hookSwitch(name: HookSwitchName, root?: string, env: NodeJS.Proc
   // Literal names, so the env-surface gate can see each read.
   const raw = name === "lean_grounding" ? env.HUNCH_LEAN_GROUNDING
     : name === "quiet_empty" ? env.HUNCH_QUIET_EMPTY
-    : env.HUNCH_HOOK_DAEMON;
+    : name === "daemon" ? env.HUNCH_HOOK_DAEMON
+    : env.HUNCH_LOOP;
   const fromEnv = parseHookSwitch(name, raw);
   if (fromEnv !== undefined) return { value: fromEnv, source: "env" };
   if (root) {
@@ -119,7 +121,7 @@ export function hookSwitch(name: HookSwitchName, root?: string, env: NodeJS.Proc
     const fromConfig = hooks ? parseHookSwitch(name, hooks[name]) : undefined;
     if (fromConfig !== undefined) return { value: fromConfig, source: "config" };
   }
-  return { value: true, source: "default" };
+  return { value: name !== "loop", source: "default" };
 }
 
 /** Values set for a switch that no level recognized (so the next level decided), as
@@ -128,7 +130,8 @@ export function ignoredHookSwitchValues(name: HookSwitchName, root?: string, env
   const out: string[] = [];
   const raw = name === "lean_grounding" ? env.HUNCH_LEAN_GROUNDING
     : name === "quiet_empty" ? env.HUNCH_QUIET_EMPTY
-    : env.HUNCH_HOOK_DAEMON;
+    : name === "daemon" ? env.HUNCH_HOOK_DAEMON
+    : env.HUNCH_LOOP;
   if (raw !== undefined && raw.trim() !== "" && parseHookSwitch(name, raw) === undefined) out.push(`${HOOK_SWITCH_ENV[name]}=${JSON.stringify(raw)}`);
   const hooks = root ? configHooks(root) : null;
   if (hooks && hooks[name] !== undefined && parseHookSwitch(name, hooks[name]) === undefined) out.push(`.hunch/config.json hooks.${name}=${JSON.stringify(hooks[name])}`);

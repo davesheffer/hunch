@@ -30,7 +30,7 @@ import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, s
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
 import { contextHookOutput, deliversCommandOutcome, deliversPostToolBlock, deliversPostToolEvent, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, postToolBlockOutput, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
-import { MAX_SHELL_WRITTEN, PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag, type PipelineState } from "../core/pipeline.js";
+import { MAX_SHELL_WRITTEN, PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, loopEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag, type PipelineState } from "../core/pipeline.js";
 import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { nowData } from "../wiki/wiki.js";
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, relevantEscalations, type Escalation } from "../core/escalations.js";
@@ -500,24 +500,31 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           // so its orientation event keeps asking every actionable entry.
           const actionableEsc = deliversPromptEvent(provider) ? [] : (await actionableEscalationsWithAnchors(paths.root, s)).actionable;
           // Quiet mode (default on; hookSwitches.ts quiet_empty): no live constraint, bug or finding and nothing to
-          // ask means there is nothing to orient on. The operating loop is not memory:
-          // it still rides session start with the execution obligations, as on the
-          // fresh-graph path below. Dropping it removed the only post-edit verify cue,
-          // and the pylint-6528 bench lost runs to crashing patches never re-run.
+          // ask means there is nothing to orient on. The operating loop is opt-in
+          // (hooks.loop / HUNCH_LOOP) since the 2026-11-16 gap1 bench: the loop text roughly
+          // doubled test runs per session; loop off = -28% cost, -35% wall, first-task
+          // accuracy within run-to-run spread. When on, it rides session start here too.
+          // History: dropping it in quiet mode once removed the only post-edit verify cue
+          // (pylint-6528 bench lost runs to crashing patches never re-run); unverifiedNag
+          // is the remaining cue, and only fires on a later prompt.
           if (quietEmptyEnabled(root) && !actionableEsc.length
             && !s.advisoryRecs("constraints").some((c) => c.status === "active")
             && !s.advisoryRecs("bugs").length
             && !s.advisoryRecs("findings").some((f) => f.triage === "open")) {
-            const quietStart = [pipelineEnabled() ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
-            if (quietStart) emitContext(provider, "SessionStart", quietStart);
+            const quietStart = [loopEnabled(root) ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
+            // With the pipeline on, the integration warning still goes out on its own.
+            if (quietStart || pipelineEnabled()) emitContext(provider, "SessionStart", quietStart);
             return;
           }
           if (!decisions.length && !actionableEsc.length) {
-            // A fresh graph with nothing to raise has nothing to orient on, but the
-            // operating loop is still delivered. A queued commit-repair escalation
+            // A fresh graph with nothing to raise has nothing to orient on; only the
+            // integration warning, the opt-in loop and the obligations brief go out. A queued commit-repair escalation
             // (checked against the full store) is enough reason NOT to bail here
             // even when the visible decisions list is empty.
-            if (pipelineEnabled()) emitContext(provider, "SessionStart", [PIPELINE_LOOP, controllerBrief].filter(Boolean).join("\n\n"));
+            if (pipelineEnabled()) {
+              const freshStart = [loopEnabled(root) ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
+              emitContext(provider, "SessionStart", freshStart);
+            }
             return;
           }
           const L: string[] = [];
@@ -527,9 +534,9 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
             L.push(`⚖ ${actionableEsc.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${actionableEsc.map((e) => e.question).join(" · ")}`);
           }
           L.push("Orient further: hunch_context(task) · hunch_structure() · `hunch now`.");
-          // The operating loop rides session start — guaranteed delivery, once
+          // When opted in, the operating loop rides session start, once
           // (the zod bench showed ambient skills are read in ~0% of sessions).
-          if (pipelineEnabled()) L.push("", PIPELINE_LOOP);
+          if (loopEnabled(root)) L.push("", PIPELINE_LOOP);
           if (controllerBrief) L.push("", controllerBrief);
           const orientation = L.join("\n");
           // Antigravity's nearest equivalent is PreInvocation, which can fire
@@ -1050,8 +1057,11 @@ function emitContext(
   systemMessage?: string,
 ): void {
   if (event === "SessionStart") {
+    // The warning goes out even when nothing else does (loop off, quiet or fresh
+    // graph); it used to ride on the always-present loop text.
     const warning = integrationSessionWarning(findRoot(), provider);
-    if (warning) text = `${warning}\n\n${text}`;
+    if (warning) text = text ? `${warning}\n\n${text}` : warning;
+    if (!text) return;
   }
   const output = contextHookOutput(provider, event, text);
   if (output) process.stdout.write(JSON.stringify(provider === "claude" && systemMessage ? { ...output, systemMessage } : output));
