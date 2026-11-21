@@ -44,7 +44,14 @@ export function writeMcpJson(root: string, inv: Invocation): string {
   return file;
 }
 
+// Every command is user-triggered (`/capture`, `/heal`, ...). Claude Code lists
+// model-invocable commands as skills in every turn's prompt (~270 tokens for these
+// seven, measured on the SWE-bench lane), and the MCP tools and their instructions
+// already cover what the model would reach for; `disable-model-invocation` keeps
+// the slash command working and drops it from that listing. The trade: the model
+// no longer loads these bodies by itself; it calls the MCP tools directly.
 const WHY_CMD = `---
+disable-model-invocation: true
 description: Explain why a file or symbol is the way it is, from Hunch
 ---
 Use the \`hunch_why\` MCP tool on **$ARGUMENTS** (a file path or symbol name).
@@ -59,6 +66,7 @@ say so plainly and suggest running \`hunch index\` or \`hunch backfill\`.
 `;
 
 const FIX_CMD = `---
+disable-model-invocation: true
 description: Fix a bug grounded in Hunch (past root causes, constraints, blast radius)
 ---
 We are fixing: **$ARGUMENTS**
@@ -72,6 +80,7 @@ Follow the Hunch-grounded workflow (DESIGN §5) — do NOT skip the memory looku
 `;
 
 const FRAGILE_CMD = `---
+disable-model-invocation: true
 description: Report the most fragile parts of this codebase, with evidence
 ---
 Ask Hunch for the fragility ranking (run \`hunch fragile\` or query Hunch),
@@ -81,6 +90,7 @@ Avoid generic advice — every claim must cite a Hunch record or metric.
 `;
 
 const CAPTURE_CMD = `---
+disable-model-invocation: true
 description: Capture an engineering decision into Hunch's graph via a grilling interview (topic, rationale, rejected alternatives)
 ---
 Capture the decision for **$ARGUMENTS** into Hunch's graph.
@@ -94,6 +104,7 @@ Capture the decision for **$ARGUMENTS** into Hunch's graph.
 `;
 
 const WORKTREES_CMD = `---
+disable-model-invocation: true
 description: Which worktrees and branches are open on which machine, what is merged and deletable — from Hunch's workspace ledger, not from git spelunking
 ---
 Answer **$ARGUMENTS** (default: "what is open, and what can I delete?") from the workspace ledger.
@@ -105,6 +116,7 @@ Answer **$ARGUMENTS** (default: "what is open, and what can I delete?") from the
 `;
 
 const AUDIT_CMD = `---
+disable-model-invocation: true
 description: Run an audit and record what it finds into Hunch as findings (observed gaps, no code change)
 ---
 Audit **$ARGUMENTS** and record what you find into Hunch's graph.
@@ -118,13 +130,14 @@ Audit **$ARGUMENTS** and record what you find into Hunch's graph.
 `;
 
 const HEAL_CMD = `---
+disable-model-invocation: true
 description: Reconcile docs/code with Hunch's decision graph (doc≠graph drift), never rewriting prose silently
 ---
 Reconcile decision-grounding drift for **$ARGUMENTS** (or the whole repo).
 
 1. Run \`hunch drift\` (or \`hunch heal\`) to list doc≠graph **anchor-stale** sections — a file still anchored to a superseded decision while a current one exists. Only explicit topic anchors fire; never a semantic guess.
 2. For each, assume the DOC is stale first (Heal A). Propose an edit bringing the file to the CURRENT decision; show it as a diff and wait for my confirm. Never rewrite prose silently.
-3. Only if I explicitly say "the DECISION is stale, not the doc" (Heal B): run /capture to record a superseding decision, then return to step 2 — the prose re-derives from the new decision as a separate confirm.
+3. Only if I explicitly say "the DECISION is stale, not the doc" (Heal B): call \`hunch_capture_decision\` (the /capture interview) to record a superseding decision, then return to step 2 — the prose re-derives from the new decision as a separate confirm.
 4. Report: healed (Heal A), superseded (Heal B), skipped. Never touch the graph except via an explicit Heal B capture.
 `;
 

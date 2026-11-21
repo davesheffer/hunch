@@ -346,6 +346,20 @@ test("a burst of 20 concurrent calls returns 20 answers", async () => {
   for (const [i, r] of results.entries()) assert.ok(!(r instanceof Error) && !r.isError && text(r).length > 0, `burst call ${i}`);
 });
 
+test("hunch_check_constraints: a comma-separated changed-file list reports each path's rules once", async () => {
+  const res = await call(mcp.client, "hunch_check_constraints", { scope: "README.md, src/orders.ts,\nsrc/orders.ts" });
+  assert.ok(!(res instanceof Error) && !res.isError);
+  const t = text(res);
+  assert.ok(t.includes(ctx.constraintId), `blocking rule on src/orders.ts reported: ${t}`);
+  assert.equal(t.split(ctx.constraintId).length - 1, 1, "listed once despite the repeated path");
+  for (const scope of ["src/orders.ts,", "src/orders.ts, src/orders.ts", "src/orders.ts\n", " src/orders.ts "]) {
+    const one = await call(mcp.client, "hunch_check_constraints", { scope });
+    assert.ok(!(one instanceof Error) && text(one).includes(ctx.constraintId), `${JSON.stringify(scope)} still reports the rule`);
+  }
+  const none = await call(mcp.client, "hunch_check_constraints", { scope: "README.md, docs/nothing.md" });
+  assert.ok(!(none instanceof Error) && /^No constraints/.test(text(none)));
+});
+
 test("server survives client disconnect: a second client reconnects and sees the persisted writes", async () => {
   const pid = mcp.transport.pid;
   await mcp.client.close();

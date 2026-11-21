@@ -1729,16 +1729,26 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
   );
 
   // -- hunch_check_constraints ---------------------------------------------
+  const SEVERITY_RANK: Record<string, number> = { blocking: 3, warning: 2, advisory: 1 };
   server.registerTool(
     "hunch_check_constraints",
     {
       title: "Check invariants in scope",
       description:
         "Return constraints whose scope matches a glob/path, sorted by severity. Call this BEFORE editing code to avoid breaking intentional invariants. Returns each constraint's id, severity, enforcement, statement, and rationale. Not for who-depends-on-this (hunch_get_dependents) or invariants reachable only through dependents (hunch_blast_radius).",
-      inputSchema: { scope: z.string().describe("A path or glob, e.g. src/auth/** or src/auth/session.ts") },
+      inputSchema: { scope: z.string().describe("A path or glob, e.g. src/auth/** or src/auth/session.ts; several may be comma-separated") },
     },
     async ({ scope }): Promise<ToolResult> => {
-      const cons = store.checkConstraints(scope);
+      // A changed-file list ("a.ts, b.ts") used to match as ONE literal path and
+      // report "No constraints" even when a blocking rule covered a.ts.
+      // The whole string is always tried too, so a path that itself holds a comma
+      // keeps matching as before.
+      const parts = [...new Set([scope, scope.trim(), ...scope.split(/[,\r\n]/).map((s) => s.trim())].filter(Boolean))];
+      const seen = new Set<string>();
+      const cons = (parts.length ? parts : [scope])
+        .flatMap((p) => store.checkConstraints(p))
+        .filter((c) => !seen.has(c.id) && !!seen.add(c.id))
+        .sort((a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0));
       if (!cons.length) return ok(`No constraints in scope "${scope}".`);
       const lines = cons.map((c) => `• ${c.id} [${c.severity}/${c.enforcement}] ${c.statement}\n    rationale: ${c.rationale}${provLine(c)}`);
       return ok(`Constraints affecting "${scope}":\n\n${lines.join("\n")}`);
@@ -2712,7 +2722,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           if (decisionSubstanceChanged(existing!, rec)) {
             return refused(
               `Decision ${id} is human-confirmed and this write changes its content; refusing to keep the human's signature on unconfirmed text, so nothing was written. ` +
-                "Record the change through /capture so the human confirms it in the client prompt.",
+                "Record the change through hunch_capture_decision (or the human's /capture) so the human confirms it in the client prompt.",
             );
           }
           // Same substance: the human's record already says this. Rewriting it would only
@@ -2724,7 +2734,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         if (supersededIncumbent && !humanSigned && supersededIncumbent.provenance.source.split("+").includes("human_confirmed")) {
           return refused(
             `Decision ${supersededIncumbent.id} is human-confirmed; an unconfirmed write cannot supersede it, so nothing was written. ` +
-              "Record the change through /capture so the human confirms it in the client prompt.",
+              "Record the change through hunch_capture_decision (or the human's /capture) so the human confirms it in the client prompt.",
           );
         }
         const tier = humanSigned || existingIsHuman ? "human_confirmed" : "agent_recorded";

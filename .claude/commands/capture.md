@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Capture an engineering decision into Hunch's graph via a grilling interview (topic, rationale, rejected alternatives)
 ---
 Capture the decision for **$ARGUMENTS** into Hunch's graph.

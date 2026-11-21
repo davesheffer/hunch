@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Run an audit and record what it finds into Hunch as findings (observed gaps, no code change)
 ---
 Audit **$ARGUMENTS** and record what you find into Hunch's graph.
