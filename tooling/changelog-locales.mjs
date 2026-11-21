@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "כתיבות דרך ה-shell תחת ה-Veto, HLD ננעלים, ולולאת סשן אופציונלית",
       "בדיקות staged מהירות בקומיטים גדולים",
       "קליטת קומיטים שדילגו על ה-hook, ומקור שניתן לתקן אחרי rebase",
       "hooks מהירים בלי npx, וקליטות שעוכבו נשארות מחוץ לקומיט",
@@ -113,6 +114,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Записи через shell под Veto, блокируемые HLD и необязательный цикл сессии",
       "Быстрые проверки staged для больших коммитов",
       "Захват коммитов, прошедших мимо хука, и восстановимое происхождение после rebase",
       "Быстрые хуки без npx, а отложенные записи не попадают в коммит",
@@ -218,6 +220,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "كتابات الـ shell تحت Veto، وHLD قابلة للقفل، وحلقة جلسة اختيارية",
       "فحوصات staged سريعة للإيداعات الكبيرة",
       "التقاط الإيداعات التي تجاوزت الخطاف، ومصدر قابل للإصلاح بعد rebase",
       "خطافات أسرع بدون npx، وتبقى الالتقاطات المحجوزة خارج الإيداع",
@@ -323,6 +326,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Escrituras por shell bajo el Veto, HLD bloqueables y un bucle de sesión opcional",
       "Comprobaciones staged rápidas en commits grandes",
       "Captura de commits que se saltaron el hook, y procedencia reparable tras un rebase",
       "Hooks más rápidos sin npx, y las capturas retenidas quedan fuera del commit",

@@ -107,6 +107,10 @@
 
     <div class="clog">
       <div class="clog-group">
+        <div class="clog-date">Nov 21, 2026</div>
+        <div class="clog-row"><span class="rel-tag">v1.58.0</span><span class="clog-t"><b>Shell writes under the Veto, lockable HLDs, and an opt-in session loop</b> — the Veto Guard and blocking invariants now cover files written through the shell, approved HLDs and diagrams can be locked by hash, <code>hunch import-hld</code> turns a design into one standard HLD, and the SessionStart operating loop is opt-in.</span></div>
+      </div>
+      <div class="clog-group">
         <div class="clog-date">Nov 19, 2026</div>
         <div class="clog-row"><span class="rel-tag">v1.57.1</span><span class="clog-t"><b>Fast staged checks on large commits</b> — <code>hunch check --staged</code> reads staged files in batches instead of one git process per file, so a pre-commit check over hundreds of staged files takes seconds, not minutes.</span></div>
         <div class="clog-row"><span class="rel-tag">v1.57.0</span><span class="clog-t"><b>Backfill commits that skipped the hook, and repairable rebased provenance</b> — <code>hunch sync --range a..b</code> captures commits from merge queues and the web UI, decisions record a patch-id so rebased and garbage-collected commits stay repairable, and grounding docs keep their CRLF line endings.</span></div>
