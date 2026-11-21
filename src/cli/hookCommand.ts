@@ -39,7 +39,7 @@ import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
 import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
-import { filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
+import { constraintForWrittenFiles, filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
 import { isRegistryPath, lockDenyReason, lockFor, lockProblemReason, readLocks, verifyLocks } from "../core/locks.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
@@ -115,11 +115,19 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
             if (written.length) {
               const opened = openStore();
               if (!stale) {
-                // The edit tools' Veto never saw this text: judge what the files gained.
+                // The edit tools' Veto and invariant gate never saw this text: judge
+                // what the files gained. Each check fails open on its own.
                 if (firmness === "strict") {
                   try { shellVeto = vetoForWrittenFiles(opened, root, written); } catch { shellVeto = null; }
                 }
-                shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
+                let broken: { target: string; hit: BlockingHit } | null = null;
+                if (!shellVeto) {
+                  try { broken = constraintForWrittenFiles(opened, root, written); } catch { broken = null; }
+                }
+                // strict interrupts the agent; looser modes name the violation as context.
+                if (firmness === "strict") shellVeto = shellVeto ?? broken;
+                const note = broken && firmness !== "strict" ? shellVetoReason(broken.target, broken.hit, "write") : "";
+                shellGround = [note, shellWriteGrounding(root, opened, provider, evt, written, processRoot)].filter(Boolean).join("\n\n");
               }
             }
           } else {
@@ -247,7 +255,10 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
               if (!written.length) throw new Error("nothing changed"); // no team-store open for an empty tree
               const opened = openTeamStore(root, { requireFreshTeamMemory: true });
               store = opened.store;
-              if (!(opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus))) found = vetoForWrittenFiles(opened.store, root, written, undefined, { newestFirst: !tree });
+              if (!(opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus))) {
+                try { found = vetoForWrittenFiles(opened.store, root, written, undefined, { newestFirst: !tree }); } catch { found = null; }
+                if (!found) found = constraintForWrittenFiles(opened.store, root, written, undefined, { newestFirst: !tree });
+              }
             } catch { found = null; }
             if (found) {
               savePipelineState(evt.session_id, { ...logVeto(paths, st, found), vetoBlocks: (st.vetoBlocks ?? 0) + 1 });
@@ -1074,7 +1085,7 @@ function emitDeny(provider: HookProvider, reason: string): void {
 }
 /** Log a Veto hit to events.log once per decision, file and turn. */
 function logVeto(paths: HunchPaths, st: PipelineState, veto: { target: string; hit: BlockingHit }): PipelineState {
-  const key = `${veto.hit.event.decision ?? ""}:${veto.target}`;
+  const key = `${veto.hit.event.decision ?? veto.hit.event.constraint ?? ""}:${veto.target}`;
   const logged = st.vetoLogged ?? [];
   if (logged.includes(key)) return st;
   appendEvent(paths, { at: new Date().toISOString(), file: veto.target, ...veto.hit.event });

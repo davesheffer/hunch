@@ -4,6 +4,7 @@
  *  real HunchStore, and so the model-facing refusal text lives in one audited
  *  place. Mirrors the `hunch check` direct/near logic, blocking-severity only. */
 import type { HunchStore } from "../store/hunchStore.js";
+import type { Constraint } from "./types.js";
 import { effectiveForbids, matchForbids, importedDeps } from "./constraintmatch.js";
 
 export interface BlockingHit {
@@ -53,6 +54,35 @@ export function blockingInScope(store: HunchStore, file: string, proposedAddedLi
     }
   }
   return null;
+}
+
+/** Do `lines`, already written to `file` outside the edit tools, break a
+ *  CONTENT-MATCHED blocking invariant? Only content matchers apply: the write is a
+ *  fact, and a scope-only invariant cannot tell a breaking write from a harmless one
+ *  (that file still gets the scope grounding). The shell-write counterpart of the
+ *  pre-edit gate, judged by shellveto.ts on the lines a file gained against HEAD, so
+ *  a violation already committed is never blamed on the write. Like the Veto's text,
+ *  the reason names the invariant and never a way around it. */
+export function constraintInLines(store: HunchStore, file: string, lines: string[], only: (c: Constraint) => boolean = () => true): BlockingHit | null {
+  if (!lines.length) return null;
+  let deps: Set<string> | undefined;
+  for (const c of store.checkConstraints(file)) {
+    if (c.severity !== "blocking" || !only(c)) continue;
+    const forbids = effectiveForbids(c);
+    if (!forbids) continue;
+    const m = matchForbids(forbids, (deps ??= importedDeps(lines)), lines);
+    if (!m) continue;
+    return {
+      reason: `Hunch: ${file} now has uncommitted lines that break a BLOCKING invariant — "${c.statement}" (${c.id}; ${m.evidence.join(", ")}). Remove them unless this change is meant to modify that invariant; if you did not add them, ask the user.`,
+      event: { kind: "constraint", constraint: c.id },
+    };
+  }
+  return null;
+}
+
+/** Whether a content-matched blocking invariant covers `file` at all (no file read). */
+export function forbidsCover(store: HunchStore, file: string): boolean {
+  return store.checkConstraints(file).some((c) => c.severity === "blocking" && !!effectiveForbids(c));
 }
 
 /** Return a BlockingHit if the proposed added lines for `file` re-introduce an
