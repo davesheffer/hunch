@@ -5,15 +5,15 @@ import { readFileSync, utimesSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tempStore, tsxLoaderUrl } from "./helpers.js";
 import { hookConfigProblems, hookSwitch, parseHookSwitch } from "../src/core/hookSwitches.js";
-import { quietEmptyEnabled } from "../src/core/pipeline.js";
+import { loopEnabled, quietEmptyEnabled } from "../src/core/pipeline.js";
 import { leanGroundingEnabled, resolveGroundingVariant, renderHunchSection, renderHunchSectionAs, updateClaudeMd } from "../src/integrations/claudemd.js";
 import { hookDaemonEnabled } from "../src/cli/hookDaemon.js";
 import { groundingVariant } from "../src/core/groundingLag.js";
 import { MCP_INSTRUCTIONS, MCP_INSTRUCTIONS_LEAN, mcpInstructions } from "../src/mcp/server.js";
 
-const NAMES = ["HUNCH_LEAN_GROUNDING", "HUNCH_QUIET_EMPTY", "HUNCH_HOOK_DAEMON"] as const;
+const NAMES = ["HUNCH_LEAN_GROUNDING", "HUNCH_QUIET_EMPTY", "HUNCH_HOOK_DAEMON", "HUNCH_LOOP"] as const;
 
-/** Run with the three switch env vars cleared, then set from `env`; restored after. */
+/** Run with the switch env vars cleared, then set from `env`; restored after. */
 function withEnv<T>(env: Partial<Record<(typeof NAMES)[number], string>>, fn: () => T): T {
   const prior = Object.fromEntries(NAMES.map((n) => [n, process.env[n]]));
   for (const n of NAMES) delete process.env[n];
@@ -36,7 +36,7 @@ function writeHooks(root: string, hooks: unknown): void {
   utimesSync(file, t, t);
 }
 
-test("hook switches: every switch defaults on, with no env and no config", (t) => {
+test("hook switches: every switch but loop defaults on, with no env and no config", (t) => {
   const { root, cleanup } = tempStore();
   t.after(cleanup);
   withEnv({}, () => {
@@ -47,6 +47,25 @@ test("hook switches: every switch defaults on, with no env and no config", (t) =
     assert.equal(leanGroundingEnabled(root), true);
     assert.equal(hookDaemonEnabled(process.env, root), true);
     assert.equal(mcpInstructions(root), MCP_INSTRUCTIONS_LEAN);
+  });
+});
+
+test("hook switches: loop is the one switch that defaults off; env or config opts in", (t) => {
+  const { root, cleanup } = tempStore();
+  t.after(cleanup);
+  withEnv({}, () => {
+    assert.deepEqual(hookSwitch("loop", root), { value: false, source: "default" });
+    assert.equal(loopEnabled(root), false);
+  });
+  withEnv({ HUNCH_LOOP: "1" }, () => {
+    assert.deepEqual(hookSwitch("loop", root), { value: true, source: "env" });
+    assert.equal(loopEnabled(root), true);
+  });
+  writeHooks(root, { loop: true });
+  withEnv({}, () => {
+    assert.deepEqual(hookSwitch("loop", root), { value: true, source: "config" });
+    assert.equal(loopEnabled(root), true);
+    assert.deepEqual(hookConfigProblems(root), []);
   });
 });
 
@@ -145,7 +164,7 @@ test("hunch switches: shows sources, sets and resets a switch in .hunch/config.j
   for (const n of NAMES) delete env[n];
   const run = (...args: string[]) => execFileSync(process.execPath, ["--import", tsxLoaderUrl(), resolve("src/cli/index.ts"), "switches", ...args], { cwd: root, env, encoding: "utf8" });
   const shown = JSON.parse(run("--json")) as { switches: { name: string; value: unknown; source: string }[] };
-  assert.deepEqual(shown.switches.map((s) => [s.name, s.value, s.source]), [["lean_grounding", true, "default"], ["quiet_empty", true, "default"], ["daemon", true, "default"]]);
+  assert.deepEqual(shown.switches.map((s) => [s.name, s.value, s.source]), [["lean_grounding", true, "default"], ["quiet_empty", true, "default"], ["daemon", true, "default"], ["loop", false, "default"]]);
   run("daemon", "off");
   run("lean_grounding", "preserve");
   let cfg = JSON.parse(readFileSync(join(root, ".hunch", "config.json"), "utf8"));

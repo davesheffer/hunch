@@ -39,7 +39,7 @@ function fixture(t: { after: (f: () => void) => void }) {
   mkdirSync(join(root, ".hunch"), { recursive: true });
   spawnSync("git", ["init", "-q"], { cwd: root });
   const log = join(base, "daemon.log");
-  const env = { ...process.env, HUNCH_HOOK_DAEMON: "1", HUNCH_HOOK_DAEMON_LOG: log, LOCALAPPDATA: join(base, "local"), TMPDIR: base, TEMP: base, TMP: base };
+  const env = { ...process.env, HUNCH_HOOK_DAEMON: "1", HUNCH_LOOP: "1", HUNCH_HOOK_DAEMON_LOG: log, LOCALAPPDATA: join(base, "local"), TMPDIR: base, TEMP: base, TMP: base };
   // Daemons a test already saw exit: their pids may belong to other processes by now.
   const reaped = new Set<number>();
   t.after(() => {

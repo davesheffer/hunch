@@ -495,6 +495,70 @@
       }
     ]
   },
+  "import-hld": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-answer": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-approve": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "export-hld": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "lock": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "locks": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "unlock": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
   "index": {
     "tests": [
       {

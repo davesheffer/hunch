@@ -11,7 +11,7 @@ import { buildServer } from "../mcp/server.js";
 import { renderHunchSectionAs, resolveGroundingVariant } from "../integrations/claudemd.js";
 import { HunchStore } from "../store/hunchStore.js";
 import { hunchPaths } from "./paths.js";
-import { PIPELINE_LOOP } from "./pipeline.js";
+import { PIPELINE_LOOP, loopEnabled } from "./pipeline.js";
 import { HOOK_REMINDER } from "./hookText.js";
 import { taskInstruction } from "./taskReportHook.js";
 
@@ -167,7 +167,7 @@ export async function measureFootprint(root: string, opts: { target?: string } =
     store.close();
   }
 
-  surfaces.push(surface("hook.session.pipeline_loop", PIPELINE_LOOP.length));
+  if (loopEnabled(root)) surfaces.push(surface("hook.session.pipeline_loop", PIPELINE_LOOP.length));
   surfaces.push(surface("hook.prompt.reminder", HOOK_REMINDER.length));
   // Every prompt gets a task instruction: full once per session, compact after.
   // Measured for a host whose stop hook closes the task, with a fixed installed

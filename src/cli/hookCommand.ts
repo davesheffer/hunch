@@ -3,11 +3,10 @@
  * the hook-only bundle (hookMain.ts) can run it without loading the whole CLI.
  * MUST NOT import ./index.js (directly or transitively).
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { beginHookInvocation } from "../core/hookMemo.js";
 import { join, relative, dirname, resolve, isAbsolute } from "node:path";
-import { hunchPaths, findRoot, toPosixTarget, isDir, repoRelativeTarget } from "../core/paths.js";
+import { hunchPaths, type HunchPaths, findRoot, toPosixTarget, isDir, repoRelativeTarget } from "../core/paths.js";
 import { looksLikeCorrection, CORRECTION_NUDGE, stripHostBlocks } from "../core/correction.js";
 import { roleHasHunchTools } from "../core/subagentrole.js";
 import { integrationSessionWarning } from "../integrations/health.js";
@@ -19,8 +18,7 @@ import { taskSelectionSupplements } from "../core/taskDelivery.js";
 import { buildTaskRankingQuery } from "../core/taskQuery.js";
 import { buildDeliveryEnvelope, deliveryDedupeInput } from "../core/delivery.js";
 import { readConfig } from "../core/config.js";
-import { effectiveForbids } from "../core/constraintmatch.js";
-import { blockingInScope, vetoInScope, proposedEditLines, shellWriteViolation, type BlockingHit } from "../core/hookpolicy.js";
+import { blockingInScope, vetoInScope, proposedEditLines, type BlockingHit } from "../core/hookpolicy.js";
 import { appendEvent } from "../core/events.js";
 import { clearTaskSelection, injectionMode, loadTaskSelection, resetSessionInjections, saveTaskSelection, taskSelectionEnabled } from "../core/hookcache.js";
 import { isBareFollowUp, isFilterableSelectionId, liveSelectionRecords, promptPaths, selectForTask } from "../core/taskSelection.js";
@@ -31,8 +29,8 @@ import { renderRecalledLine } from "../core/taskReportRender.js";
 import { closeHookTask, hookReportTaskId, isNotificationPrompt, nativeHookCwd, settleHookSession, startHookReport, stopHookReport, observeHookDenial } from "../core/taskReportHook.js";
 import { persistTaskRecord } from "../core/taskRecord.js";
 import { recordHookObservation } from "../core/hookObservations.js";
-import { contextHookOutput, postToolBlockOutput, deliversCommandOutcome, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
-import { PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag } from "../core/pipeline.js";
+import { contextHookOutput, deliversCommandOutcome, deliversPostToolBlock, deliversPostToolEvent, deliversPromptEvent, denyHookOutput, hookProvider, normalizeHookEvent, postToolBlockOutput, stopHookOutput, type HookProvider, type HunchHookEvent, type HunchHookInput, type HunchToolInput } from "../core/agenthook.js";
+import { MAX_SHELL_WRITTEN, PIPELINE_LOOP, armExecutionObligations, beforeEditProbeVerdict, compileExecutableProbes, environmentExecutableProbes, environmentExecutionObligations, executionObligationBrief, isProductPath, loadPipelineState, onCommand, onEdit, onPrompt, onSkill, pipelineEnabled, loopEnabled, quietEmptyEnabled, proofCheckpoint, savePipelineState, stopVerdict, onLessonsDelivered, lessonReminder, unverifiedNag, type PipelineState } from "../core/pipeline.js";
 import { recallFailures, type FailureRecall } from "../core/failureRecall.js";
 import { nowData } from "../wiki/wiki.js";
 import { pendingEscalations, policyEscalations, commitRepairEscalations, actionableEscalations, relevantEscalations, type Escalation } from "../core/escalations.js";
@@ -41,6 +39,8 @@ import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
 import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
+import { constraintForWrittenFiles, filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
+import { isRegistryPath, lockDenyReason, lockFor, lockProblemReason, readLocks, verifyLocks } from "../core/locks.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
 
@@ -83,9 +83,12 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       // A shell command can edit files without the edit tools ever firing: ground
       // what it wrote now. Every other tool call just moves the baseline.
       let shellGround = "";
-      // A shell write that breaks a content-matched blocking invariant: strict
-      // blocks it back to the model; looser modes still name the violation.
-      let shellBlock = "";
+      // strict: a shell write that re-introduced a rejected approach (shellveto.ts).
+      let shellVeto: { target: string; hit: BlockingHit } | null = null;
+      // What this shell command wrote (Hunch-root-relative): the Stop-time Veto's only input.
+      let shellWritten: string[] = [];
+      // A shell command changed a human-approved locked file (core/locks.ts).
+      let lockBlock: string | null = null;
       let recall: FailureRecall = { text: "", bugs: [] };
       const recallScope = `${evt.agent_id ?? "main"}:`;
       if (postTool) {
@@ -108,23 +111,23 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         try {
           if (shell) {
             const written = shellWrittenFiles(root, evt.session_id, evt.agent_id);
+            shellWritten = written;
             if (written.length) {
               const opened = openStore();
               if (!stale) {
-                // Checked on every write (the grounding below is served once): a
-                // repeated violation is still a violation. Fail-open on its own.
-                try {
-                  const denials = shellWriteViolations(root, opened, written);
-                  if (denials.length) {
-                    shellBlock = denials.map((d) => d.hit.reason).join("\n");
-                    // The catch-log counts actual blocks only (core/events.ts), and a
-                    // failed log write never costs the block itself.
-                    if (firmness === "strict" && provider === "claude" && postTool === "PostToolUse") {
-                      try { for (const d of denials) appendEvent(paths, { at: new Date().toISOString(), file: d.target, ...d.hit.event }); } catch { /* log only */ }
-                    }
-                  }
-                } catch { shellBlock = ""; }
-                shellGround = shellWriteGrounding(root, opened, provider, evt, written, processRoot);
+                // The edit tools' Veto and invariant gate never saw this text: judge
+                // what the files gained. Each check fails open on its own.
+                if (firmness === "strict") {
+                  try { shellVeto = vetoForWrittenFiles(opened, root, written); } catch { shellVeto = null; }
+                }
+                let broken: { target: string; hit: BlockingHit } | null = null;
+                if (!shellVeto) {
+                  try { broken = constraintForWrittenFiles(opened, root, written); } catch { broken = null; }
+                }
+                // strict interrupts the agent; looser modes name the violation as context.
+                if (firmness === "strict") shellVeto = shellVeto ?? broken;
+                const note = broken && firmness !== "strict" ? shellVetoReason(broken.target, broken.hit, "write") : "";
+                shellGround = [note, shellWriteGrounding(root, opened, provider, evt, written, processRoot)].filter(Boolean).join("\n\n");
               }
             }
           } else {
@@ -135,6 +138,16 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
             else refreshShellBaseline(root, evt.session_id, evt.agent_id);
           }
         } catch { shellGround = ""; }
+        // Locked design files: a shell command is the one route the pre-edit deny can't see.
+        if (shell) {
+          try {
+            const problems = verifyLocks(root, { sinceHead: true });
+            if (problems.length) {
+              lockBlock = lockProblemReason(problems, "write");
+              for (const p of problems) appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: p.path });
+            }
+          } catch { lockBlock = null; }
+        }
         // A failed check that matches a recorded bug says so; anything else stays silent.
         if (shell && evt.tool_outcome?.status === "failure" && evt.tool_outcome.output) {
           try {
@@ -152,6 +165,14 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       if (postTool && evt.session_id && pipelineEnabled()) {
         let st = loadPipelineState(evt.session_id);
         if (recall.bugs.length) st = { ...st, recalled: [...st.recalled, ...recall.bugs.map((id) => `${recallScope}${id}`)] };
+        if (shellWritten.length) {
+          const abs = shellWritten.map((f) => resolve(root, f).replace(/\\/g, "/"));
+          const fold = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+          const fresh = new Set(abs.map(fold));
+          st = { ...st, shellWritten: [...(st.shellWritten ?? []).filter((f) => !fresh.has(fold(f))), ...abs].slice(-MAX_SHELL_WRITTEN) };
+        }
+        // A host that cannot show a post-tool block was never told: nothing to log.
+        if (shellVeto && deliversPostToolBlock(provider)) st = logVeto(paths, st, shellVeto);
         const before = st;
         let activity: Parameters<typeof proofCheckpoint>[2] | null = null;
         let lessonNote = "";
@@ -184,20 +205,68 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           st = checkpoint.state;
           savePipelineState(evt.session_id, st);
           const post = [shellGround, recall.text, lessonNote, checkpoint.reminder].filter(Boolean).join("\n\n");
-          emitPost(provider, postTool, post, shellBlock, firmness === "strict");
+          emitPost(provider, postTool, post, shellVeto, lockBlock);
           return;
         }
         savePipelineState(evt.session_id, st);
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        emitPost(provider, postTool, post, shellBlock, firmness === "strict");
+        emitPost(provider, postTool, post, shellVeto, lockBlock);
         return;
       }
       if (postTool) {
+        if (shellVeto && deliversPostToolBlock(provider)) appendEvent(paths, { at: new Date().toISOString(), file: shellVeto.target, ...shellVeto.hit.event });
         const post = [shellGround, recall.text].filter(Boolean).join("\n\n");
-        emitPost(provider, postTool, post, shellBlock, firmness === "strict");
+        emitPost(provider, postTool, post, shellVeto, lockBlock);
         return;
       }
       if (evt.hook_event_name === "Stop") {
+        // Locked design files: whatever route changed one, the turn can't end on it.
+        // Bounded like the other Stop gates (two blocks per turn), then fail-open.
+        if (evt.session_id && pipelineEnabled()) {
+          const st = loadPipelineState(evt.session_id);
+          if (st.blocks < 2) {
+            let problems: ReturnType<typeof verifyLocks> = [];
+            try { problems = verifyLocks(root, { sinceHead: true }); } catch { problems = []; }
+            if (problems.length) {
+              savePipelineState(evt.session_id, { ...st, blocks: st.blocks + 1 });
+              for (const p of problems) appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: p.path });
+              emitStop(provider, lockProblemReason(problems, "stop"));
+              return;
+            }
+          }
+        }
+        // strict: a rejected approach a shell command of THIS session wrote, still in
+        // the working tree, holds the turn open. Only the session's own shell writes are
+        // judged (edit-tool writes met the pre-edit Veto; a human's uncommitted work is
+        // never judged). Its own bound of two blocks per turn, apart from VERIFY's.
+        if (firmness === "strict" && evt.session_id && pipelineEnabled()) {
+          const st = loadPipelineState(evt.session_id);
+          const base = resolve(root).replace(/\\/g, "/").replace(/\/$/, "");
+          // win32 paths are case-insensitive: one root may arrive spelled two ways.
+          const fold = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+          // A host with no post-tool event never says what its shell wrote: judge
+          // every file that differs from HEAD instead, as before shell tracking.
+          const tree = !deliversPostToolEvent(provider);
+          let written = tree ? [] : (st.shellWritten ?? []).filter((f) => fold(f).startsWith(fold(`${base}/`))).map((f) => f.slice(base.length + 1));
+          if ((st.vetoBlocks ?? 0) < 2 && (tree || written.length)) {
+            let found: { target: string; hit: BlockingHit } | null = null;
+            try {
+              if (tree) written = filesChangedSinceHead(root) ?? [];
+              if (!written.length) throw new Error("nothing changed"); // no team-store open for an empty tree
+              const opened = openTeamStore(root, { requireFreshTeamMemory: true });
+              store = opened.store;
+              if (!(opened.teamPullStatus && !teamPullIsFresh(opened.teamPullStatus))) {
+                try { found = vetoForWrittenFiles(opened.store, root, written, undefined, { newestFirst: !tree }); } catch { found = null; }
+                if (!found) found = constraintForWrittenFiles(opened.store, root, written, undefined, { newestFirst: !tree });
+              }
+            } catch { found = null; }
+            if (found) {
+              savePipelineState(evt.session_id, { ...logVeto(paths, st, found), vetoBlocks: (st.vetoBlocks ?? 0) + 1 });
+              emitStop(provider, shellVetoReason(found.target, found.hit, tree ? "tree" : "stop"));
+              return;
+            }
+          }
+        }
         if (evt.session_id && pipelineEnabled()) {
           const st = loadPipelineState(evt.session_id);
           const verdict = stopVerdict(st, firmness);
@@ -442,24 +511,31 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           // so its orientation event keeps asking every actionable entry.
           const actionableEsc = deliversPromptEvent(provider) ? [] : (await actionableEscalationsWithAnchors(paths.root, s)).actionable;
           // Quiet mode (default on; hookSwitches.ts quiet_empty): no live constraint, bug or finding and nothing to
-          // ask means there is nothing to orient on. The operating loop is not memory:
-          // it still rides session start with the execution obligations, as on the
-          // fresh-graph path below. Dropping it removed the only post-edit verify cue,
-          // and the pylint-6528 bench lost runs to crashing patches never re-run.
+          // ask means there is nothing to orient on. The operating loop is opt-in
+          // (hooks.loop / HUNCH_LOOP) since the 2026-11-16 gap1 bench: the loop text roughly
+          // doubled test runs per session; loop off = -28% cost, -35% wall, first-task
+          // accuracy within run-to-run spread. When on, it rides session start here too.
+          // History: dropping it in quiet mode once removed the only post-edit verify cue
+          // (pylint-6528 bench lost runs to crashing patches never re-run); unverifiedNag
+          // is the remaining cue, and only fires on a later prompt.
           if (quietEmptyEnabled(root) && !actionableEsc.length
             && !s.advisoryRecs("constraints").some((c) => c.status === "active")
             && !s.advisoryRecs("bugs").length
             && !s.advisoryRecs("findings").some((f) => f.triage === "open")) {
-            const quietStart = [pipelineEnabled() ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
-            if (quietStart) emitContext(provider, "SessionStart", quietStart);
+            const quietStart = [loopEnabled(root) ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
+            // With the pipeline on, the integration warning still goes out on its own.
+            if (quietStart || pipelineEnabled()) emitContext(provider, "SessionStart", quietStart);
             return;
           }
           if (!decisions.length && !actionableEsc.length) {
-            // A fresh graph with nothing to raise has nothing to orient on, but the
-            // operating loop is still delivered. A queued commit-repair escalation
+            // A fresh graph with nothing to raise has nothing to orient on; only the
+            // integration warning, the opt-in loop and the obligations brief go out. A queued commit-repair escalation
             // (checked against the full store) is enough reason NOT to bail here
             // even when the visible decisions list is empty.
-            if (pipelineEnabled()) emitContext(provider, "SessionStart", [PIPELINE_LOOP, controllerBrief].filter(Boolean).join("\n\n"));
+            if (pipelineEnabled()) {
+              const freshStart = [loopEnabled(root) ? PIPELINE_LOOP : "", controllerBrief].filter(Boolean).join("\n\n");
+              emitContext(provider, "SessionStart", freshStart);
+            }
             return;
           }
           const L: string[] = [];
@@ -469,9 +545,9 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
             L.push(`⚖ ${actionableEsc.length} decision(s) need YOUR call — ASK the user inline (don't queue): ${actionableEsc.map((e) => e.question).join(" · ")}`);
           }
           L.push("Orient further: hunch_context(task) · hunch_structure() · `hunch now`.");
-          // The operating loop rides session start — guaranteed delivery, once
+          // When opted in, the operating loop rides session start, once
           // (the zod bench showed ambient skills are read in ~0% of sessions).
-          if (pipelineEnabled()) L.push("", PIPELINE_LOOP);
+          if (loopEnabled(root)) L.push("", PIPELINE_LOOP);
           if (controllerBrief) L.push("", controllerBrief);
           const orientation = L.join("\n");
           // Antigravity's nearest equivalent is PreInvocation, which can fire
@@ -501,6 +577,18 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
         if (routed.ungrounded) emitContext(provider, "PreToolUse", routed.ungrounded);
         return;
       }
+      // Locked design files (core/locks.ts): a human-approved HLD/diagram/ADR, or the lock
+      // registry itself, is never edited by an agent — in every firmness but off.
+      {
+        const reg = readLocks(root);
+        const locked = targets.find((t) => isRegistryPath(t.target) || lockFor(reg.locks, t.target));
+        if (locked) {
+          appendEvent(paths, { at: new Date().toISOString(), kind: "lock", file: locked.target });
+          emitDeny(provider, lockDenyReason(locked.target, lockFor(reg.locks, locked.target)));
+          return;
+        }
+      }
+
       // Grounding below stays about the first in-repo file; the strict gate checks every target.
       const { abs, target } = targets[0]!;
 
@@ -670,122 +758,6 @@ function shellWriteGrounding(root: string, store: HunchStore, provider: HookProv
   const more = written.length > MAX_SHELL_GROUNDED ? ` (${written.length - MAX_SHELL_GROUNDED} more written file(s) not checked)` : "";
   const sibling = parts.some((p) => p.startsWith(SIBLING_HEADING)) ? " It starts with a fix a same-shaped function elsewhere received and this file's copy never did: resolve it before you finish." : "";
   return `Hunch: this shell command wrote ${grounded.join(", ")}${more}. Edits made outside the Edit/Write tools skip the pre-edit grounding, so it arrives now: re-check the change against it before relying on it.${sibling}\n\n${parts.join("\n\n")}`;
-}
-
-/** Content-matched blocking violations in what a shell command wrote. Only files a
- *  content-matched blocking invariant covers are read, and git runs only for a
- *  file whose current text trips one (most shell writes cost no process at all).
- *  Bounded: beyond the cap, covered files are not checked, and git shares one
- *  wall-clock budget per command: past it a file gets no verdict (fail-open),
- *  so the hook stays well inside the host's timeout. */
-const MAX_SHELL_CHECKED = 50;
-const MAX_SHELL_CHECKED_BYTES = 1_000_000;
-const SHELL_GIT_BUDGET_MS = 4_000;
-interface GitBudget { deadline: number; renames?: Map<string, string> | null; prefix?: string }
-function shellWriteViolations(root: string, store: HunchStore, written: readonly string[]): Array<{ target: string; hit: BlockingHit }> {
-  const out: Array<{ target: string; hit: BlockingHit }> = [];
-  const budget: GitBudget = { deadline: Date.now() + SHELL_GIT_BUDGET_MS };
-  let checked = 0;
-  for (const target of written) {
-    if (!store.checkConstraints(target).some((c) => c.severity === "blocking" && effectiveForbids(c))) continue;
-    if (++checked > MAX_SHELL_CHECKED) break;
-    const abs = join(root, target);
-    let text: string;
-    try {
-      const st = statSync(abs);
-      if (!st.isFile() || st.size > MAX_SHELL_CHECKED_BYTES) continue;
-      text = readFileSync(abs, "utf8");
-    } catch { continue; } // deleted or unreadable: nothing was added
-    const hit = shellWriteViolation(store, target, text.split(/\r?\n/), () => addedSinceHead(root, target, text, budget));
-    if (hit) out.push({ target, hit });
-  }
-  return out;
-}
-
-const GIT_QUIET_ENV = { GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", LC_ALL: "C", LANGUAGE: "C" };
-/** `status` is the git child's exit code; null when it never exited normally
- *  (killed, timeout, spawn error, ENOBUFS) or the budget ran out: unclassified. */
-function gitText(root: string, args: string[], budget: GitBudget): { ok: true; out: string } | { ok: false; err: string; status: number | null } {
-  const remaining = budget.deadline - Date.now();
-  if (remaining <= 0) return { ok: false, err: "", status: null }; // out of budget: unclassified, so no verdict
-  try {
-    return { ok: true, out: execFileSync("git", ["-C", root, ...args], {
-      encoding: "utf8", timeout: Math.min(2_000, remaining), maxBuffer: 8_000_000, stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...GIT_QUIET_ENV },
-    }) };
-  } catch (e) {
-    const stderr = (e as { stderr?: unknown }).stderr;
-    const status = (e as { status?: unknown }).status;
-    return { ok: false, err: typeof stderr === "string" ? stderr : "", status: typeof status === "number" ? status : null };
-  }
-}
-
-/** The staged rename source of `target` (a `git mv`), or null. The rename map
- *  is the same for every file of one command: read once per budget. Paths are
- *  toplevel-relative (no `--relative`), so a move from outside the Hunch root
- *  into it still finds its source; `target` is looked up under the root's prefix. */
-function renameSource(root: string, target: string, budget: GitBudget): string | null {
-  if (budget.renames === undefined) {
-    budget.renames = null;
-    const p = gitText(root, ["rev-parse", "--show-prefix"], budget);
-    const r = p.ok ? gitText(root, ["-c", "diff.relative=false", "diff", "--cached", "-M", "--name-status", "-z", "HEAD"], budget) : p;
-    if (p.ok && r.ok) {
-      budget.prefix = p.out.trim();
-      const map = new Map<string, string>();
-      const f = r.out.split("\u0000");
-      for (let i = 0; i < f.length; i++) {
-        if (/^[RC]\d*$/.test(f[i]!)) {
-          if (f[i + 1] && f[i + 2]) map.set(f[i + 2]!, f[i + 1]!);
-          i += 2;
-        } else i++;
-      }
-      budget.renames = map;
-    }
-  }
-  return budget.renames?.get((budget.prefix ?? "") + target) ?? null;
-}
-
-/** Lines `text` has that the file's committed version does not: a violation
- *  already in HEAD is not this command's. Git failures are classified by exit
- *  status, not message text: a failed `cat-file` with status 128 is probed
- *  further (HEAD itself missing = unborn, all lines; path absent from HEAD =
- *  new file, all lines unless it is a staged rename, whose source is then the
- *  baseline; path present but not a blob = no verdict); any other status is no
- *  verdict. null when git cannot say (timeout, oversized blob, redirected repo):
- *  no verdict rather than blaming committed lines. A leading BOM is ignored on
- *  both sides. Multiset difference, so a duplicated forbidden line still counts. */
-function addedSinceHead(root: string, target: string, text: string, budget: GitBudget): string[] | null {
-  // A redirected git (GIT_DIR & co.) may answer for another repository: no verdict.
-  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE || process.env.GIT_INDEX_FILE) return null;
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
-  // cat-file, not show: `show` falls back to pathspec mode for a missing path with
-  // glob characters (`[id].ts`) and exits 0 with nothing — a false "all new".
-  let shown = gitText(root, ["cat-file", "blob", `HEAD:./${target}`], budget);
-  if (!shown.ok) {
-    // Classified by exit status (128 = fatal object/revision error), not stderr text:
-    // the messages differ across git versions.
-    if (shown.status !== 128) return null;
-    const head = gitText(root, ["rev-parse", "-q", "--verify", "HEAD^{commit}"], budget);
-    if (!head.ok) return head.status === 1 ? lines : null; // 1 = unborn HEAD
-    const inHead = gitText(root, ["rev-parse", "-q", "--verify", `HEAD:./${target}`], budget);
-    if (inHead.ok) return null; // in HEAD but not a blob (directory, gitlink)
-    if (inHead.status !== 1) return null;
-    // Absent from HEAD: a staged rename's source is the baseline.
-    const source = renameSource(root, target, budget);
-    // An unread rename map (failed or over budget) cannot say this is a new file.
-    if (budget.renames === null) return null;
-    if (!source) return lines;
-    shown = gitText(root, ["cat-file", "blob", `HEAD:${source}`], budget);
-    if (!shown.ok) return null;
-  }
-  const before = shown.out.replace(/^\uFEFF/, "");
-  const left = new Map<string, number>();
-  for (const l of before.split(/\r?\n/)) left.set(l, (left.get(l) ?? 0) + 1);
-  return lines.filter((l) => {
-    const n = left.get(l) ?? 0;
-    if (n > 0) { left.set(l, n - 1); return false; }
-    return true;
-  });
 }
 
 /** Score the store against this prompt once per task (taskSelection.ts) and keep
@@ -1096,27 +1068,39 @@ function emitContext(
   systemMessage?: string,
 ): void {
   if (event === "SessionStart") {
+    // The warning goes out even when nothing else does (loop off, quiet or fresh
+    // graph); it used to ride on the always-present loop text.
     const warning = integrationSessionWarning(findRoot(), provider);
-    if (warning) text = `${warning}\n\n${text}`;
+    if (warning) text = text ? `${warning}\n\n${text}` : warning;
+    if (!text) return;
   }
   const output = contextHookOutput(provider, event, text);
   if (output) process.stdout.write(JSON.stringify(provider === "claude" && systemMessage ? { ...output, systemMessage } : output));
-}
-/** Post-tool output: a shell-write violation blocks (strict) or leads the context. */
-function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", context: string, violation: string, block: boolean): void {
-  if (violation && block) {
-    const output = postToolBlockOutput(provider, event, violation, context);
-    if (output) process.stdout.write(JSON.stringify(output));
-    return;
-  }
-  const text = [violation, context].filter(Boolean).join("\n\n");
-  if (text) emitContext(provider, event, text);
 }
 function emitDeny(provider: HookProvider, reason: string): void {
   const result = denyHookOutput(provider, reason);
   if (result.output) process.stdout.write(JSON.stringify(result.output));
   if (result.stderr) process.stderr.write(`${result.stderr}\n`);
   if (result.exitCode !== undefined) process.exitCode = result.exitCode;
+}
+/** Log a Veto hit to events.log once per decision, file and turn. */
+function logVeto(paths: HunchPaths, st: PipelineState, veto: { target: string; hit: BlockingHit }): PipelineState {
+  const key = `${veto.hit.event.decision ?? veto.hit.event.constraint ?? ""}:${veto.target}`;
+  const logged = st.vetoLogged ?? [];
+  if (logged.includes(key)) return st;
+  appendEvent(paths, { at: new Date().toISOString(), file: veto.target, ...veto.hit.event });
+  return { ...st, vetoLogged: [...logged, key] };
+}
+/** A post-tool reply: a shell-write Veto hit interrupts the agent (its reason first,
+ *  the usual grounding after); otherwise the grounding is plain context, if any. */
+function emitPost(provider: HookProvider, event: "PostToolUse" | "PostToolUseFailure", text: string, veto: { target: string; hit: BlockingHit } | null, lockBlock: string | null = null): void {
+  if (veto || lockBlock) {
+    const reason = [lockBlock, veto ? shellVetoReason(veto.target, veto.hit, "write") : ""].filter(Boolean).join("\n\n");
+    const output = postToolBlockOutput(provider, event, reason, text);
+    if (output) process.stdout.write(JSON.stringify(output));
+    return;
+  }
+  if (text) emitContext(provider, event, text);
 }
 function emitStop(provider: HookProvider, reason: string): void {
   process.stdout.write(JSON.stringify(stopHookOutput(provider, reason)));

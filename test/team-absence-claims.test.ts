@@ -43,6 +43,7 @@ const CLASSIFICATION: Record<string, string> = {
   hunch_policy_proof: "checked",
   hunch_policy_evaluate: "checked",
   hunch_review_imported_adr: "absence-only: imported ADRs are created by CLI import, not by any MCP tool",
+  hunch_hld: "exempt: question_id names a question inside the HLD draft file in the working tree, not a team-memory record",
   hunch_capture_decision: "exempt: topic is a proposal for the interview; writes nothing and reads no record",
   hunch_record_correction: "exempt: write; source_decision is only validated against the public home",
   nuryel_records: "exempt: nuryel.state/1 contract; ids resolve against the served partition's grants and ledger, not the team-memory pull",

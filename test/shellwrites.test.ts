@@ -9,6 +9,7 @@ import { mkConstraint, tsxLoaderUrl } from "./helpers.js";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { refreshShellBaseline, shellWrittenFiles } from "../src/core/shellwrites.js";
+import { constraintForWrittenFiles } from "../src/core/shellveto.js";
 
 function repo(t: { after: (f: () => void) => void }): string {
   // Real path: the hook keys baselines by the root it resolves (macOS tmpdir is a /private symlink).
@@ -287,13 +288,14 @@ test("strict: a git mv of a file with a committed forbidden import is not blamed
   assert.doesNotMatch(raw, /"decision":"block"/);
 });
 
-test("strict: a git mv into a sub-root with diff.relative=true is not blamed on the move", t => {
+function subRootRepo(t: { after: (f: () => void) => void }): { top: string; root: string } {
   const top = repo(t);
   const root = join(top, "pkg");
-  mkdirSync(join(root, "src"), { recursive: true });
+  mkdirSync(join(root, "src", "legacy"), { recursive: true });
   mkdirSync(join(top, "other"));
   writeFileSync(join(root, "src", "a.ts"), "export const a = 1;\n");
-  writeFileSync(join(top, "other", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  writeFileSync(join(root, "src", "legacy", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  writeFileSync(join(top, "other", "c.ts"), 'import _ from "lodash";\nexport const c = 1;\n');
   mkdirSync(join(root, ".hunch"));
   writeFileSync(join(root, ".hunch", "config.json"), JSON.stringify({ firmness: "strict" }));
   const store = new HunchStore(hunchPaths(root));
@@ -303,13 +305,125 @@ test("strict: a git mv into a sub-root with diff.relative=true is not blamed on 
   execFileSync("git", ["-C", top, "add", "-A"]);
   execFileSync("git", ["-C", top, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "pkg"]);
   execFileSync("git", ["-C", top, "config", "diff.relative", "true"]);
+  return { top, root };
+}
+
+test("strict: a git mv inside a sub-root with diff.relative=true is not blamed on the move", t => {
+  const { top, root } = subRootRepo(t);
   const s = session();
   hook(root, { hook_event_name: "PreToolUse", session_id: s });
-  execFileSync("git", ["-C", top, "mv", "other/b.ts", "pkg/src/b2.ts"]);
+  execFileSync("git", ["-C", top, "mv", "pkg/src/legacy/b.ts", "pkg/src/b2.ts"]);
   const at = new Date(Date.now() + 2000);
   utimesSync(join(root, "src", "b2.ts"), at, at);
   const raw = hook(root, { hook_event_name: "PostToolUse", session_id: s });
   assert.doesNotMatch(raw, /"decision":"block"/);
+});
+
+test("strict: a file moved into the Hunch root from outside it brings its forbidden import in as new", t => {
+  const { top, root } = subRootRepo(t);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  execFileSync("git", ["-C", top, "mv", "other/c.ts", "pkg/src/c.ts"]);
+  const at = new Date(Date.now() + 2000);
+  utimesSync(join(root, "src", "c.ts"), at, at);
+  const out = JSON.parse(hook(root, { hook_event_name: "PostToolUse", session_id: s }));
+  assert.equal(out.decision, "block");
+});
+
+test("strict: a git mv then an unrelated edit is judged against the rename source, not as a new file", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\nexport const c = 2;\nexport const d = 3;\n');
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "legacy"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(root, "src", "old"));
+  execFileSync("git", ["-C", root, "mv", "src/b.ts", "src/old/b.ts"]);
+  write(join(root, "src", "old", "b.ts"), 'import _ from "lodash";\nexport const b = 10;\nexport const c = 2;\nexport const d = 3;\n', 2);
+  const raw = hook(root, { hook_event_name: "PostToolUse", session_id: s });
+  assert.doesNotMatch(raw, /"decision":"block"/);
+});
+
+test("strict: a pure git mv into a second rule's scope is not blamed on the first rule's committed import", t => {
+  const root = lodashRepo(t, "strict");
+  const store = new HunchStore(hunchPaths(root));
+  store.json.put("constraints", mkConstraint({ id: "con_noaxios", statement: "never use axios", scope: ["src/api/**"], severity: "blocking", forbids: { deps: ["axios"], symbols: [], patterns: [] } }));
+  store.reindex(); store.close();
+  mkdirSync(join(root, "src", "util"));
+  writeFileSync(join(root, "src", "util", "x.ts"), 'import _ from "lodash";\nexport const x = 1;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "legacy"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(root, "src", "api"));
+  execFileSync("git", ["-C", root, "mv", "src/util/x.ts", "src/api/x.ts"]);
+  const at = new Date(Date.now() + 2000);
+  utimesSync(join(root, "src", "api", "x.ts"), at, at);
+  assert.doesNotMatch(hook(root, { hook_event_name: "PostToolUse", session_id: s }), /"decision":"block"/);
+});
+
+test("strict: moving a legacy file aside and writing a clean file at its old path blames neither", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "legacy"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(root, "src", "legacy"));
+  execFileSync("git", ["-C", root, "mv", "src/b.ts", "src/legacy/b.ts"]);
+  const at = new Date(Date.now() + 2000);
+  utimesSync(join(root, "src", "legacy", "b.ts"), at, at);
+  write(join(root, "src", "b.ts"), "export const b = 2;\n", 2);
+  assert.doesNotMatch(hook(root, { hook_event_name: "PostToolUse", session_id: s }), /"decision":"block"/);
+});
+
+test("strict: a legacy file moved aside, replaced and then staged (git add -A) is still judged against its source", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "legacy"]);
+  mkdirSync(join(root, "src", "legacy"));
+  execFileSync("git", ["-C", root, "mv", "src/b.ts", "src/legacy/b.ts"]);
+  writeFileSync(join(root, "src", "b.ts"), "export const b = 2;\n");
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  const store = new HunchStore(hunchPaths(root));
+  t.after(() => store.close());
+  assert.equal(constraintForWrittenFiles(store, root, ["src/b.ts", "src/legacy/b.ts"]), null);
+  // The staged copy baselines only what its source held: a line added to it still breaks the rule.
+  writeFileSync(join(root, "src", "legacy", "b.ts"), 'import _ from "lodash";\nimport q from "lodash/fp";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  assert.equal(constraintForWrittenFiles(store, root, ["src/b.ts", "src/legacy/b.ts"])?.target, "src/legacy/b.ts");
+});
+
+test("a git-redirecting environment gives the invariant check no verdict (another repository's HEAD is not this write's baseline)", t => {
+  const root = lodashRepo(t, "strict");
+  const other = repo(t);
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\n');
+  const store = new HunchStore(hunchPaths(root));
+  t.after(() => store.close());
+  assert.equal(constraintForWrittenFiles(store, root, ["src/b.ts"])?.target, "src/b.ts");
+  const prior = process.env.GIT_DIR;
+  t.after(() => { if (prior === undefined) delete process.env.GIT_DIR; else process.env.GIT_DIR = prior; });
+  process.env.GIT_DIR = join(other, ".git");
+  assert.equal(constraintForWrittenFiles(store, root, ["src/b.ts"]), null);
+});
+
+test("strict: a file moved into a rule's scope brings that rule's forbidden import in as new", t => {
+  const root = lodashRepo(t, "strict");
+  const store = new HunchStore(hunchPaths(root));
+  store.json.put("constraints", mkConstraint({ id: "con_noaxios", statement: "never use axios", scope: ["src/api/**"], severity: "blocking", forbids: { deps: ["axios"], symbols: [], patterns: [] } }));
+  store.reindex(); store.close();
+  mkdirSync(join(root, "src", "util"));
+  writeFileSync(join(root, "src", "util", "y.ts"), 'import axios from "axios";\nexport const y = 1;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "legacy"]);
+  const s = session();
+  hook(root, { hook_event_name: "PreToolUse", session_id: s });
+  mkdirSync(join(root, "src", "api"));
+  execFileSync("git", ["-C", root, "mv", "src/util/y.ts", "src/api/y.ts"]);
+  const at = new Date(Date.now() + 2000);
+  utimesSync(join(root, "src", "api", "y.ts"), at, at);
+  const out = JSON.parse(hook(root, { hook_event_name: "PostToolUse", session_id: s }));
+  assert.equal(out.decision, "block");
+  assert.match(out.reason, /con_noaxios/);
 });
 
 test("strict: a git mv that also appends a forbidden import still blocks the added line", t => {

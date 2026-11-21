@@ -4,6 +4,7 @@
  *  real HunchStore, and so the model-facing refusal text lives in one audited
  *  place. Mirrors the `hunch check` direct/near logic, blocking-severity only. */
 import type { HunchStore } from "../store/hunchStore.js";
+import type { Constraint } from "./types.js";
 import { effectiveForbids, matchForbids, importedDeps } from "./constraintmatch.js";
 
 export interface BlockingHit {
@@ -55,35 +56,33 @@ export function blockingInScope(store: HunchStore, file: string, proposedAddedLi
   return null;
 }
 
-/** A shell command already WROTE `file`: does what it added break a CONTENT-MATCHED
- *  blocking invariant? Only content matchers apply — the write is a fact, and a
- *  scope-only invariant cannot tell a breaking write from a harmless one (that file
- *  still gets the scope grounding). The file's whole current text is matched first
- *  (no git, and a subset of lines cannot match where the whole text does not);
- *  only a hit asks `addedLines()` for the lines the file gained against its
- *  committed version, so a violation already in HEAD is not blamed on this
- *  command. `addedLines()` returns null when that cannot be known: no verdict. */
-export function shellWriteViolation(store: HunchStore, file: string, currentLines: string[], addedLines: () => string[] | null): BlockingHit | null {
-  if (!currentLines.length) return null;
-  const currentDeps = importedDeps(currentLines);
-  let added: { lines: string[]; deps: Set<string> } | null | undefined;
+/** Do `lines`, already written to `file` outside the edit tools, break a
+ *  CONTENT-MATCHED blocking invariant? Only content matchers apply: the write is a
+ *  fact, and a scope-only invariant cannot tell a breaking write from a harmless one
+ *  (that file still gets the scope grounding). The shell-write counterpart of the
+ *  pre-edit gate, judged by shellveto.ts on the lines a file gained against HEAD, so
+ *  a violation already committed is never blamed on the write. Like the Veto's text,
+ *  the reason names the invariant and never a way around it. */
+export function constraintInLines(store: HunchStore, file: string, lines: string[], only: (c: Constraint) => boolean = () => true): BlockingHit | null {
+  if (!lines.length) return null;
+  let deps: Set<string> | undefined;
   for (const c of store.checkConstraints(file)) {
-    if (c.severity !== "blocking") continue;
+    if (c.severity !== "blocking" || !only(c)) continue;
     const forbids = effectiveForbids(c);
-    if (!forbids || !matchForbids(forbids, currentDeps, currentLines)) continue;
-    if (added === undefined) {
-      const lines = addedLines();
-      added = lines ? { lines, deps: importedDeps(lines) } : null;
-    }
-    if (!added) return null;
-    const m = matchForbids(forbids, added.deps, added.lines);
+    if (!forbids) continue;
+    const m = matchForbids(forbids, (deps ??= importedDeps(lines)), lines);
     if (!m) continue;
     return {
-      reason: `Hunch: ${file}, just written by a shell command, now has uncommitted lines that break a BLOCKING invariant — "${c.statement}" (${c.id}; ${m.evidence.join(", ")}). Writing through the shell does not bypass the rule: remove those lines unless the change is meant to modify that invariant (if you did not add them, ask the user).`,
+      reason: `Hunch: ${file} now has uncommitted lines that break a BLOCKING invariant — "${c.statement}" (${c.id}; ${m.evidence.join(", ")}). Remove them unless this change is meant to modify that invariant; if you did not add them, ask the user.`,
       event: { kind: "constraint", constraint: c.id },
     };
   }
   return null;
+}
+
+/** Whether a content-matched blocking invariant covers `file` at all (no file read). */
+export function forbidsCover(store: HunchStore, file: string): boolean {
+  return store.checkConstraints(file).some((c) => c.severity === "blocking" && !!effectiveForbids(c));
 }
 
 /** Return a BlockingHit if the proposed added lines for `file` re-introduce an

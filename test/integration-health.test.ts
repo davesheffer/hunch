@@ -518,6 +518,8 @@ test("CLI upgrade repairs installed Codex hooks into a runnable handler", () => 
     const args = hooks.hooks.SessionStart[0].hooks[0].command.split(" ").slice(4);
     const result = spawnSync(process.execPath, [cli, ...args], {
       cwd: f.root, encoding: "utf8", timeout: 15_000,
+      // The loop is opt-in; turn it on so a healthy fresh graph still emits SessionStart output.
+      env: { ...process.env, HUNCH_LOOP: "1" },
       input: JSON.stringify({ hook_event_name: "SessionStart", cwd: f.root, session_id: "upgrade-smoke" }),
     });
     assert.equal(result.status, 0, result.stderr);
