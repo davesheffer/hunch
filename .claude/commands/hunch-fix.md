@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Fix a bug grounded in Hunch (past root causes, constraints, blast radius)
 ---
 We are fixing: **$ARGUMENTS**

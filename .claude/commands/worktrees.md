@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Which worktrees and branches are open on which machine, what is merged and deletable — from Hunch's workspace ledger, not from git spelunking
 ---
 Answer **$ARGUMENTS** (default: "what is open, and what can I delete?") from the workspace ledger.
