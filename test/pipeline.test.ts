@@ -25,8 +25,6 @@ import {
   loadPipelineState,
   onCommand,
   onEdit,
-  verifyCue,
-  VERIFY_CUE,
   onPrompt,
   onSkill,
   normalizeExecutableProbes,
@@ -734,24 +732,4 @@ test("pipeline state follows a TEMP/TMP/TMPDIR change made after import (a hook 
   savePipelineState(id, onPrompt(emptyState()));
   assert.ok(existsSync(join(dir, "hunch-pipeline", `${id}.json`)));
   assert.equal(loadPipelineState(id).turn, 1);
-});
-
-test("verifyCue: fires on the first product edit only", () => {
-  const s0 = emptyState();
-  const s1 = onEdit(s0, "src/a.ts");
-  const first = verifyCue(s0, s1);
-  assert.equal(first.cue, VERIFY_CUE);
-  assert.equal(first.state.verifyCued, true);
-  const s2 = onEdit(first.state, "src/b.ts");
-  assert.equal(verifyCue(first.state, s2).cue, "");
-  const noEdit = onEdit(s0, "README.md");
-  assert.equal(verifyCue(s0, noEdit).cue, "", "a non-product path is no edit");
-});
-
-test("verifyCued persists through savePipelineState/loadPipelineState; a non-boolean reads as false", () => {
-  const sid = `cue-reload-${process.pid}-${Date.now()}`;
-  savePipelineState(sid, { ...emptyState(), verifyCued: true });
-  assert.equal(loadPipelineState(sid).verifyCued, true);
-  savePipelineState(sid, { ...emptyState(), verifyCued: "yes" as unknown as boolean });
-  assert.equal(loadPipelineState(sid).verifyCued, false);
 });

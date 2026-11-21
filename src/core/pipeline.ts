@@ -223,8 +223,6 @@ export interface PipelineState {
   verifyAfterEdit: boolean;
   /** Monotonic product-edit generation; after-edit proofs bind to this value. */
   editGeneration: number;
-  /** The one-line post-edit verify cue was shown this session (loop off only). Optional: older state. */
-  verifyCued?: boolean;
   /** Specific proofs supplied by memory, an episode, or an orchestrator. */
   obligations: TrackedExecutionObligation[];
   /** Relevant PostToolUse activity observed while a proof plan is armed. */
@@ -1272,18 +1270,6 @@ export const PIPELINE_LOOP = [
 export const UNVERIFIED_NAG =
   "Hunch pipeline: earlier product edits are still UNVERIFIED — run the relevant test/build/typecheck before claiming anything about them.";
 
-/** With the SessionStart loop off (the default since loop1/gap1), this one line is
- *  the post-edit verify cue: the full loop doubled test runs, and dropping every
- *  cue once cost the pylint-6528 bench runs to crashing patches never re-run. */
-export const VERIFY_CUE =
-  "Hunch: you edited a product file. After your last edit, run the check that covers it (test/build/typecheck) and read its exit code before reporting.";
-
-/** The verify cue fires once per session, on the first product edit. */
-export function verifyCue(before: PipelineState, after: PipelineState): { state: PipelineState; cue: string } {
-  if (after.verifyCued || after.editGeneration === before.editGeneration) return { state: after, cue: "" };
-  return { state: { ...after, verifyCued: true }, cue: VERIFY_CUE };
-}
-
 export function unverifiedNag(state: PipelineState): string {
   const pending = pendingExecutionObligations(state);
   const generic = !state.verifyAfterEdit ? UNVERIFIED_NAG : "Hunch Execution Controller: completion evidence is still incomplete.";
@@ -1398,7 +1384,6 @@ export function loadPipelineState(sessionId: string): PipelineState {
     state.proofReminderActivity = Number.isSafeInteger(raw.proofReminderActivity) && raw.proofReminderActivity! >= 0 ? raw.proofReminderActivity! : 0;
     state.proofReminders = Number.isSafeInteger(raw.proofReminders) && raw.proofReminders! >= 0 ? raw.proofReminders! : 0;
     state.probeBlocks = Number.isSafeInteger(raw.probeBlocks) && raw.probeBlocks! >= 0 ? raw.probeBlocks! : 0;
-    state.verifyCued = raw.verifyCued === true;
     state.vetoBlocks = Number.isSafeInteger(raw.vetoBlocks) && raw.vetoBlocks! >= 0 ? raw.vetoBlocks! : 0;
     state.shellWritten = (Array.isArray(raw.shellWritten) ? raw.shellWritten : []).filter((f): f is string => typeof f === "string").slice(-MAX_SHELL_WRITTEN);
     state.vetoLogged = (Array.isArray(raw.vetoLogged) ? raw.vetoLogged : []).filter((k): k is string => typeof k === "string");
