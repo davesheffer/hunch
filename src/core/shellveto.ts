@@ -196,6 +196,11 @@ export interface MovePairing {
   /** Read staged renames for every new file, even with no deletion on disk (the
    *  invariant check: a source path written again after `git mv` is still the move's source). */
   alwaysRenames?: boolean;
+  /** New paths whose staged pairing is a copy (`C`), not a rename. */
+  copies?: Set<string>;
+  /** Whether a copy's source may baseline it: a source still holding the violation
+   *  was copied, not moved aside, so the copy brings the violation in as new. */
+  copyOk?: (src: string, file: string) => boolean;
 }
 export const newMovePairing = (): MovePairing => ({ deleted: null, deletedOids: new Map(), keys: new Map(), consumed: new Set(), fetched: 0, bytes: 0, newFiles: new Set(), encoded: new Set(), dirs: new Map(), renamed: new Map(), movedFrom: new Map() });
 
@@ -215,7 +220,7 @@ function unbornHead(root: string, deadline: number): boolean {
 /** Staged renames from one `git diff --cached -M --name-status -z HEAD`: new -> source.
  *  With `copies`, also a staged copy of a file the index modified (`-C`): a file
  *  moved aside, then a new file staged at its old path, is a copy to git. */
-function stagedRenames(root: string, deadline: number, copies = false): Map<string, string> | null {
+function stagedRenames(root: string, deadline: number, copies?: Set<string>): Map<string, string> | null {
   const raw = git(root, ["diff", "--cached", copies ? "-C" : "-M", "-z", "--name-status", "--relative", "HEAD"], deadline);
   // No commit yet: nothing can have been renamed. Told by exit status (1 = HEAD
   // does not resolve), never by a timeout or another failure.
@@ -225,7 +230,10 @@ function stagedRenames(root: string, deadline: number, copies = false): Map<stri
   for (let i = 0; i < f.length; i++) {
     // "R<score>\0<old>\0<new>\0" (and C for copies); every other status has one path.
     if (/^[RC]\d*$/.test(f[i]!)) {
-      if (f[i + 1] && f[i + 2] && (f[i]![0] === "R" || (copies && !map.has(f[i + 2]!)))) map.set(f[i + 2]!, f[i + 1]!);
+      if (f[i + 1] && f[i + 2]) {
+        if (f[i]![0] === "R") { map.set(f[i + 2]!, f[i + 1]!); copies?.delete(f[i + 2]!); }
+        else if (copies && !map.has(f[i + 2]!)) { map.set(f[i + 2]!, f[i + 1]!); copies.add(f[i + 2]!); }
+      }
       i += 2;
     } else i++;
   }
@@ -410,10 +418,11 @@ export function addedLinesSinceHead(root: string, files: readonly string[], dead
   // A moved-away source is on the deleted list, so with no deletion there is no
   // rename to look up (and no git call).
   const wantRenames = deleted.length > 0 || pairing.alwaysRenames === true;
-  if (rest.length && wantRenames && pairing.renames === undefined && Date.now() < deadline) pairing.renames = stagedRenames(root, deadline, pairing.alwaysRenames === true);
+  if (rest.length && wantRenames && pairing.renames === undefined && Date.now() < deadline) pairing.renames = stagedRenames(root, deadline, pairing.alwaysRenames ? (pairing.copies ??= new Set()) : undefined);
   const srcOf = (f: string): string | undefined => {
     const s = pairing.renames?.get(f);
-    return s && (pairing.alwaysRenames || deleted.includes(s)) && !pairing.consumed.has(s) && eligible(f, s) ? s : undefined;
+    if (!s || !(pairing.alwaysRenames || deleted.includes(s)) || pairing.consumed.has(s) || !eligible(f, s)) return undefined;
+    return pairing.copies?.has(f) && !pairing.copyOk?.(s, f) ? undefined : s;
   };
   const srcs = [...new Set(rest.map(srcOf).filter((s): s is string => !!s))];
   const srcBlobs = srcs.length && Date.now() < deadline ? headBlobs(root, srcs, deadline) : null;
@@ -539,10 +548,37 @@ export function constraintForWrittenFiles(store: HunchStore, root: string, files
       return judge(f, looseLines(readFileSync(join(root, f)))) !== null;
     } catch { return false; }
   });
+  const copyVerdicts = new Map<string, boolean>();
+  const textOf = (f: string): string[] | null => {
+    if (Date.now() >= deadline) return null;
+    const st = statSync(join(root, f));
+    return st.isFile() && st.size <= MAX_FILE_BYTES ? looseLines(readFileSync(join(root, f))) : null;
+  };
   // Any move pairs (one scope covering everything), and is judged per rule: a rule
   // that covered the source judges only what the file gained against it; a rule
   // that covers only the new path sees the moved text in full.
-  const pairing: MovePairing = { ...newMovePairing(), alwaysRenames: true };
+  const pairing: MovePairing = {
+    ...newMovePairing(),
+    alwaysRenames: true,
+    // A copy baselines on its source unless the source, on disk, still breaks a rule
+    // the copy breaks too: then it was copied, not moved aside and rewritten.
+    // Unreadable, too big or past the budget: the baseline stands (fail open).
+    copyOk: (src, file) => {
+      const memo = `${src}\u0000${file}`;
+      const known = copyVerdicts.get(memo);
+      if (known !== undefined) return known;
+      let ok = true;
+      try {
+        const copied = new Set<string>();
+        const text = textOf(file);
+        for (let h: BlockingHit | null; text && (h = constraintInLines(store, file, text, (c) => !copied.has(c.id)));) copied.add(h.event.constraint ?? "");
+        const source = copied.size ? textOf(src) : null;
+        ok = !source || constraintInLines(store, src, source, (c) => copied.has(c.id)) === null;
+      } catch { ok = true; }
+      copyVerdicts.set(memo, ok);
+      return ok;
+    },
+  };
   const hit = judgeWrittenFiles(root, tripped, [[]], judge, deadline, opts, pairing);
   if (hit) return hit;
   for (const [target, src] of pairing.movedFrom) {
@@ -608,5 +644,6 @@ export function shellVetoReason(target: string, hit: BlockingHit, when: "write" 
     ? `A shell command just wrote ${target}, outside the Edit/Write tools.`
     : when === "tree" ? `${target} differs from HEAD with ${what} at the end of this turn.`
     : `${target}, written by a shell command this session, still holds ${what} at the end of this turn.`;
-  return `${how} ${hit.reason} Revert that change in ${target} before continuing.`;
+  // An invariant's reason already says what to do (and to ask when the lines aren't the agent's).
+  return hit.event.kind === "constraint" ? `${how} ${hit.reason}` : `${how} ${hit.reason} Revert that change in ${target} before continuing.`;
 }

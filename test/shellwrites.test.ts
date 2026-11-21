@@ -393,6 +393,47 @@ test("strict: a legacy file moved aside, replaced and then staged (git add -A) i
   assert.equal(constraintForWrittenFiles(store, root, ["src/b.ts", "src/legacy/b.ts"])?.target, "src/legacy/b.ts");
 });
 
+test("strict: a staged copy of a file that still holds a forbidden import brings it in as new", t => {
+  const root = lodashRepo(t, "strict");
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\nexport const c = 2;\nexport const d = 3;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "legacy"]);
+  const store = new HunchStore(hunchPaths(root));
+  t.after(() => store.close());
+  // An exact copy, its source edited too: git calls it a copy (C100).
+  writeFileSync(join(root, "src", "new.ts"), 'import _ from "lodash";\nexport const b = 1;\nexport const c = 2;\nexport const d = 3;\n');
+  writeFileSync(join(root, "src", "b.ts"), 'import _ from "lodash";\nexport const b = 1;\nexport const c = 2;\nexport const d = 3;\nexport const e = 4;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  assert.match(execFileSync("git", ["-C", root, "diff", "--cached", "-C", "--name-status", "HEAD"], { encoding: "utf8" }), /^C\d+\tsrc\/b\.ts\tsrc\/new\.ts$/m);
+  assert.equal(constraintForWrittenFiles(store, root, ["src/b.ts", "src/new.ts"])?.target, "src/new.ts");
+});
+
+test("a file moved aside is not blamed when its rewritten source still breaks only a different rule", t => {
+  const root = lodashRepo(t, "strict");
+  const setup = new HunchStore(hunchPaths(root));
+  setup.json.put("constraints", mkConstraint({ id: "con_noaxios", statement: "never use axios", scope: ["src/api/**"], severity: "blocking", forbids: { deps: ["axios"], symbols: [], patterns: [] } }));
+  setup.reindex(); setup.close();
+  const store = new HunchStore(hunchPaths(root));
+  t.after(() => store.close());
+  mkdirSync(join(root, "src", "api"), { recursive: true });
+  writeFileSync(join(root, "src", "api", "b.ts"), 'import _ from "lodash";\nimport ax from "axios";\nexport const b = 1;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  execFileSync("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "legacy"]);
+  mkdirSync(join(root, "src", "legacy"));
+  execFileSync("git", ["-C", root, "mv", "src/api/b.ts", "src/legacy/b.ts"]);
+  writeFileSync(join(root, "src", "api", "b.ts"), 'import ax from "axios";\nexport const b = 2;\n');
+  execFileSync("git", ["-C", root, "add", "-A"]);
+  assert.equal(constraintForWrittenFiles(store, root, ["src/api/b.ts", "src/legacy/b.ts"]), null);
+});
+
+test("the invariant block text tells the model what to do once, without a contradicting revert order", t => {
+  const root = lodashRepo(t, "strict");
+  const out = JSON.parse(shellRun(root, session(), join(root, "src", "x.ts"), 'import _ from "lodash";\n', 1));
+  assert.equal(out.decision, "block");
+  assert.match(out.reason, /if you did not add them, ask the user\./);
+  assert.doesNotMatch(out.reason, /Revert that change/);
+});
+
 test("a git-redirecting environment gives the invariant check no verdict (another repository's HEAD is not this write's baseline)", t => {
   const root = lodashRepo(t, "strict");
   const other = repo(t);
