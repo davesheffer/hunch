@@ -99,6 +99,23 @@ test("first hook runs in-process and starts the daemon; the next is served with 
   assert.equal(second.stderr, off.stderr);
 });
 
+// Loop off (the default): a SessionStart the daemon serves is the in-process one, loop-free.
+test("with HUNCH_LOOP unset a daemon-served SessionStart matches in-process and carries no loop", { skip: !built, timeout: 60_000 }, async (t) => {
+  const f = fixture(t);
+  const env = { ...f.env };
+  delete env.HUNCH_LOOP;
+  const input = payload(f.root, "s-loopoff");
+  const off = hook(f.root, { ...env, HUNCH_HOOK_DAEMON: "0" }, input);
+  hook(f.root, env, input);
+  await until(() => daemons(f.log).length === 1);
+  const served = hook(f.root, env, input);
+  assert.ok(lines(f.log).some((l) => l.endsWith(" served")), lines(f.log).join("\n"));
+  assert.equal(off.status, 0);
+  assert.equal(served.status, 0);
+  assert.equal(norm(served.stdout), norm(off.stdout));
+  assert.doesNotMatch(served.stdout, /operating loop/);
+});
+
 // 1.54: the daemon is the default route. With the env unset it starts and serves; a
 // committed `.hooks.daemon: false` keeps every hook in-process and never starts one.
 test("with HUNCH_HOOK_DAEMON unset the daemon is the default route", { skip: !built, timeout: 60_000 }, async (t) => {
