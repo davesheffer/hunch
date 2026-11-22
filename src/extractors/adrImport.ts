@@ -23,6 +23,7 @@
  */
 import { createHash } from "node:crypto";
 import { decisionId } from "../core/ids.js";
+import { normalizeEol } from "../core/eol.js";
 import type { Decision } from "../core/types.js";
 
 /** Directories probed (in order) when no explicit dir is given — adr-tools'
@@ -301,7 +302,9 @@ export function parseAdrMarkdown(text: string, relPath: string): ParsedAdr | nul
     consequences: consequenceItems(consequencesText),
     consideredOptions,
     chosenOption: chosenMatch ? chosenMatch[1]!.trim() : null,
-    sourceHash: createHash("sha256").update(text).digest("hex"),
+    // Line endings and a BOM are checkout artifacts (core.autocrlf), not content: hash the
+    // canonical text so an approval binds the same ADR on every platform (#673).
+    sourceHash: createHash("sha256").update(normalizeEol(text).replace(/^\uFEFF/, "")).digest("hex"),
     supersedesNumbers: [...new Set(supersedesNumbers)],
     supersededByNumbers: [...new Set(supersededByNumbers)],
   };
