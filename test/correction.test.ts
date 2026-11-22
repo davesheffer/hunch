@@ -71,6 +71,27 @@ test("looksLikeCorrection ignores quoted, pasted and code text (#677)", () => {
     "you're using ``` wrong in the readme. I told you to use ~~~",
     "“never use lodash” is wrong, don’t do that",
   ]) assert.ok(looksLikeCorrection(p), `should detect: ${p}`);
+  // A mid-line, one-line or unclosed fence never swallows the human's words after it,
+  // and a stray quote or backtick does not pair with a later one (review findings).
+  for (const p of [
+    "here is the error: ```\nTypeError: x\n```\nthat's wrong, don't do that",
+    "I get this: ```\nerr\n```\nno, revert that",
+    "Error:\n```\nboom\n```\nand again: ```\nboom2\n```\nyou must always run lint",
+    "```npm test``` fails, you must always run lint first",
+    "```\ncode```\nthat's wrong, revert that",
+    "here:\n```\nfoo\nno, don't do that. never use lodash",
+    "```bash is what I meant. no, don't do that",
+    "> \n>no, don't do that",
+    `use 12 " margins — that's wrong, never use 5" cards`,
+    `rename "Foo to Bar — that's wrong, never use "Baz"`,
+    "don't use the ` key; you must always use `x`",
+    "log:\r\n```\r\nboom\r\n```\r\nthat's wrong, revert that",
+  ]) assert.ok(looksLikeCorrection(p), `should detect: ${p}`);
+  // A closed fence with an info word, and a CRLF fence, are still quoted text.
+  for (const p of [
+    "see:\n```bash\nno, that's wrong\n```\nwhat now?",
+    "see:\r\n```\r\nthat's wrong, never use lodash\r\n```\r\nwhat now?",
+  ]) assert.ok(!looksLikeCorrection(p), `should NOT detect: ${p}`);
   // The human's own words around a quote still count.
   assert.ok(looksLikeCorrection(`that's wrong — never use "lodash" here`));
   assert.ok(looksLikeCorrection("No, revert that.\n```\nnpm test\n```"));

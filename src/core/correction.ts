@@ -52,16 +52,23 @@ export function stripHostBlocks(prompt: string): string {
  *  double-quoted strings and `>` blockquote lines. A correction phrase inside them
  *  is data (a command to run, a test fixture, a log), not a rebuke of the agent
  *  (#677). Single quotes are left alone: they double as apostrophes ("that's").
- *  A fence opens only at a line start (a ``` mentioned in prose is not one), and a
+ *  A fenced block is a line holding only the fence (plus an info word such as
+ *  `bash`) through a line holding only the closing fence. A fence left unclosed
+ *  drops only its own line, never the human's text below, as for host tags; a
+ *  ``` mid-line is prose, so it never pairs with a later fence line. A one-line
+ *  ```x``` span is inline code. Inline spans must not start or end with a space,
+ *  so a stray `"` or backtick does not swallow the words up to the next one, and a
  *  straight `"` opens only after a non-word character (an inch mark like 3" is not one). */
 const QUOTED_SPANS: RegExp[] = [
   /<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content>/gi,
-  /^[ \t]*```[\s\S]*?(?:^[ \t]*```|(?![\s\S]))/gm,
-  /^[ \t]*~~~[\s\S]*?(?:^[ \t]*~~~|(?![\s\S]))/gm,
-  /`[^`\n]*`/g,
-  /(?<!\w)"[^"\n]*"/g,
+  /```[^`\n]+```/g,
+  /^[ \t]*```[\w+#.-]*[ \t]*\r?\n[\s\S]*?^[ \t]*```[ \t]*\r?$/gm,
+  /^[ \t]*~~~[\w+#.-]*[ \t]*\r?\n[\s\S]*?^[ \t]*~~~[ \t]*\r?$/gm,
+  /^[ \t]*(?:```|~~~)[\w+#.-]*[ \t]*\r?$/gm,
+  /`(?!\s)[^`\n]*(?<!\s)`/g,
+  /(?<!\w)"(?!\s)[^"\n]*(?<!\s)"(?!\w)/g,
   /“[^”\n]*”/g,
-  /^[ \t]*>[^\n]*/gm,
+  /^[ \t]*>(?:[ \t][^\n]*)?\r?$/gm,
 ];
 
 /** Stands in for a removed quote. Not whitespace, so a word right after a leading
