@@ -426,6 +426,50 @@ test("a file moved aside is not blamed when its rewritten source still breaks on
   assert.equal(constraintForWrittenFiles(store, root, ["src/api/b.ts", "src/legacy/b.ts"]), null);
 });
 
+/** The hook with the pipeline on (the Stop gate needs it), its session state in `tmp`. */
+function pipelineHook(root: string, tmp: string, provider: string, payload: Record<string, unknown>, defaultBudget = false): Record<string, unknown> | null {
+  const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp, HUNCH_SHELL_VETO_BUDGET_MS: "30000" };
+  delete env.HUNCH_PIPELINE;
+  if (defaultBudget) delete env.HUNCH_SHELL_VETO_BUDGET_MS;
+  const out = execFileSync(process.execPath, ["--import", tsxLoaderUrl(), hookCli, "hook", "--provider", provider], {
+    cwd: root, env, input: JSON.stringify({ cwd: root, ...payload }), encoding: "utf8",
+  }).trim();
+  return out ? JSON.parse(out) as Record<string, unknown> : null;
+}
+function stateDir(t: { after: (f: () => void) => void }): string {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "hunch-shellwrites-state-")));
+  t.after(() => cleanupDir(tmp));
+  return tmp;
+}
+
+test("strict: the Stop gate holds the turn while a shell-written forbidden import is still in the tree", t => {
+  const root = lodashRepo(t, "strict");
+  const tmp = stateDir(t);
+  const s = session();
+  const run = (payload: Record<string, unknown>) => pipelineHook(root, tmp, "claude", { session_id: s, prompt_id: "p1", tool_name: "Bash", tool_input: { command: "ls" }, ...payload });
+  run({ hook_event_name: "PreToolUse" });
+  write(join(root, "src", "a.ts"), 'import _ from "lodash";\nexport const a = 2;\n', 1);
+  assert.equal(run({ hook_event_name: "PostToolUse" })?.decision, "block");
+  const stop = run({ hook_event_name: "Stop", stop_hook_active: false });
+  assert.equal(stop?.decision, "block");
+  assert.match(String(stop?.reason), /src\/a\.ts, written by a shell command this session, still holds a broken blocking invariant/);
+  assert.match(String(stop?.reason), /never use lodash/);
+  // Reverted: the turn may end.
+  write(join(root, "src", "a.ts"), "export const a = 1;\n", 2);
+  assert.notEqual(run({ hook_event_name: "Stop", stop_hook_active: false })?.decision, "block");
+});
+
+test("strict antigravity (no post-tool event): the tree-mode Stop gate catches a forbidden import at the default budget", t => {
+  const root = lodashRepo(t, "strict");
+  const tmp = stateDir(t);
+  const run = (payload: Record<string, unknown>) => pipelineHook(root, tmp, "antigravity", { conversationId: "ag-lodash", ...payload }, true);
+  run({ invocationNum: 1 });
+  writeFileSync(join(root, "src", "a.ts"), 'import _ from "lodash";\nexport const a = 2;\n');
+  const stop = run({ executionNum: 1 });
+  assert.match(String(stop?.reason), /src\/a\.ts differs from HEAD with a broken blocking invariant/);
+  assert.match(String(stop?.reason), /never use lodash/);
+});
+
 test("the invariant block text tells the model what to do once, without a contradicting revert order", t => {
   const root = lodashRepo(t, "strict");
   const out = JSON.parse(shellRun(root, session(), join(root, "src", "x.ts"), 'import _ from "lodash";\n', 1));
