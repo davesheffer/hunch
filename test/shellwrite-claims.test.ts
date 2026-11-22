@@ -108,7 +108,7 @@ test("a shell result claims nothing: overlapping commands both ground a shared w
   assert.deepEqual(ground(root, a).grounded, ["src/a.ts"], "b finishing first must not take a's write");
 });
 
-test("sessions that spell the root differently share claims (Windows drive case)", { skip: process.platform !== "win32" }, t => {
+test("sessions that spell the root differently share claims (Windows drive case)", t => {
   const root = repo(t);
   const mine = session();
   const other = session();

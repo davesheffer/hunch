@@ -146,10 +146,11 @@ function observerKey(root: string, sessionId: string, agentId?: string): string 
   return createHash("sha256").update(`${sessionId}\u0000${root}${agentId ? `\u0000${agentId}` : ""}`).digest("hex").slice(0, 24);
 }
 
-/** Sessions that spell the same root differently (a lower-case Windows drive)
+/** Sessions that spell the same root differently (a lower-case Windows drive;
+ *  lowered everywhere, so no platform branch: a case-only clash is harmless)
  *  must meet in one claims file, and one observer must stay one owner. */
 function normRoot(root: string): string {
-  return process.platform === "win32" ? resolve(root).toLowerCase() : resolve(root);
+  return resolve(root).toLowerCase();
 }
 
 function claimOwner(root: string, sessionId: string, agentId?: string): string {
