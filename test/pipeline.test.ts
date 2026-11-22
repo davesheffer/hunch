@@ -24,6 +24,9 @@ import {
   isProductPath,
   loadPipelineState,
   onCommand,
+  NODE_CHECK,
+  CHECK_SHAPE,
+  TASK_VERIFY_LAUNCHER,
   onEdit,
   onPrompt,
   onSkill,
@@ -112,6 +115,62 @@ test("bespoke node -e / node --test checks count as verification", () => {
   let st2 = onEdit(emptyState(), "src/core/topics.ts");
   st2 = onCommand(st2, "node --test test/");
   assert.equal(st2.verifyAfterEdit, true);
+});
+
+test("node check with flags before -e/--test counts (#679)", () => {
+  const ok = { status: "success" as const, output: "" };
+  const edited = () => onEdit(onEdit(emptyState(), "src/core/a.ts"), "src/core/c.ts");
+  for (const cmd of [
+    `node --experimental-strip-types -e "import('./x.mjs')"`,
+    "node --import tsx --test x.test.mjs",
+    "node --import=tsx --no-warnings --test x.test.mjs",
+  ]) {
+    assert.equal(onCommand(edited(), cmd, ok).verifyAfterEdit, true, cmd);
+  }
+  assert.equal(onCommand(edited(), "node --no-warnings script.js", ok).verifyAfterEdit, false);
+  assert.equal(onCommand(edited(), "node script.js", ok).verifyAfterEdit, false);
+});
+
+test("task verify launcher runs count unless they failed (#679)", () => {
+  const ok = { status: "success" as const, output: "" };
+  const edited = () => onEdit(onEdit(emptyState(), "src/core/a.ts"), "src/core/c.ts");
+  for (const cmd of [
+    "node '/r/dist/cli/index.js' task verify htask_abc123 -- ls",
+    "hunch task verify htask_abc123 --timeout 60 -- ls",
+    "hunch task verify htask_abc123 --timeout=60 -- ls",
+    "hunch task verify htask_abc123 --label x --json -- ls",
+    "hunch task verify --timeout 60 htask_abc123 -- ls",
+    "npx --no-install hunch task verify htask_abc123 -- ls",
+  ]) {
+    assert.equal(onCommand(edited(), cmd, ok).verifyAfterEdit, true, cmd);
+  }
+  assert.equal(onCommand(edited(), "hunch task verify htask_abc123 -- ls", { status: "failure", output: "" }).verifyAfterEdit, false);
+  assert.equal(onCommand(edited(), "hunch task verify htask_abc123 ls", ok).verifyAfterEdit, false);
+});
+
+test("check-shape patterns stay linear on long flag runs (#679)", () => {
+  const timed = (re: RegExp, text: string) => { const t = performance.now(); const hit = re.test(text); return { hit, ms: performance.now() - t }; };
+  const miss = "node " + "--x ".repeat(40) + "y";
+  for (const re of [NODE_CHECK, CHECK_SHAPE]) {
+    const r = timed(re, miss);
+    assert.equal(r.hit, false);
+    assert.ok(r.ms < 50, `${r.ms}ms`);
+    assert.equal(re.test("node " + "--x ".repeat(40) + "-e 1"), true);
+  }
+  const launcher = "hunch task verify " + "--x ".repeat(40) + "id";
+  const r = timed(TASK_VERIFY_LAUNCHER, launcher);
+  assert.equal(r.hit, false);
+  assert.ok(r.ms < 50, `${r.ms}ms`);
+});
+
+test("failing check blocks; a passing flagged node check naming no edited file clears the next Stop (#679)", () => {
+  let st = onEdit(emptyState(), "src/core/a.ts");
+  st = onCommand(st, "hunch task verify htask_abc123 -- npx --no-install tsc", { status: "failure", output: "" });
+  const first = stopVerdict(st, "firm");
+  assert.ok(first.block);
+  if (first.block) st = first.state;
+  st = onCommand(st, `node --experimental-strip-types -e "import('./x.mjs')"`, { status: "success", output: "" });
+  assert.equal(stopVerdict(st, "firm").block, false);
 });
 
 test("a command naming an edited file counts as verification", () => {

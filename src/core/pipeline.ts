@@ -1059,6 +1059,13 @@ export function onEdit(state: PipelineState, path: string, profiles = DEFAULT_PR
   };
 }
 
+/** A node invocation in check shape: any option flags (`--experimental-strip-types`,
+ *  `--import=tsx`, `--import tsx`, `--no-warnings`) may precede the check flag. */
+const NODE_CHECK_SOURCE = String.raw`\bnode(?:\s+(?:(?:--import|--require|-r|--loader)\s+[^\s-]\S*|--?\w[\w-]*(?:=\S+)?))*\s+(?:--test\b|-e\b|--eval\b|-p\b|--print\b|--check\b|-c\b)`;
+export const NODE_CHECK = new RegExp(NODE_CHECK_SOURCE);
+/** Hunch's own verify launcher: `<launcher> task verify [options] <id> [options] -- <cmd>`. */
+export const TASK_VERIFY_LAUNCHER = /\btask\s+verify(?:\s+(?!--(?:\s|$))\S+)*?\s+--(?:\s|$)/;
+
 /** A shell command ran. After an edit, it counts as verification when it is
  *  verify-shaped for an active domain, a generic runner (`node --test`,
  *  `node -e` assertions), or names an edited file — a bespoke check on the
@@ -1116,7 +1123,7 @@ export function onCommand(
     const base = f.replace(/\\/g, "/").split("/").pop();
     return !!base && command.includes(base);
   });
-  const verifyShaped = verifyPattern(state, profiles).test(command) || /node (--test|-e\b)/.test(command);
+  const verifyShaped = verifyPattern(state, profiles).test(command) || NODE_CHECK.test(command) || TASK_VERIFY_LAUNCHER.test(command);
   if ((verifyShaped || editedFileNamed) && outcome.status !== "failure") return { ...state, obligations, verifyAfterEdit: true };
   return { ...state, obligations };
 }
@@ -1281,7 +1288,7 @@ const MAX_LESSONS = 6;
 const MAX_RECALLED = 50;
 /** Any profile's check shape: the reminder fires when the agent starts proving
  *  its work, whatever the domain. */
-const CHECK_SHAPE = new RegExp([...Object.values(DEFAULT_PROFILES).map((p) => p.verify.source), "node (--test|-e\\b)"].join("|"), "i");
+export const CHECK_SHAPE = new RegExp([...Object.values(DEFAULT_PROFILES).map((p) => p.verify.source), NODE_CHECK_SOURCE].join("|"), "i");
 
 /** Record lessons the grounding just delivered (dedup by id; first delivery keeps its baseline). */
 export function onLessonsDelivered(state: PipelineState, lessons: readonly Omit<PendingLesson, "reminded">[]): PipelineState {
