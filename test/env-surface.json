@@ -955,6 +955,16 @@
       }
     ]
   },
+  "HUNCH_HOOK_NPX_TIMEOUT_MS": {
+    "class": "hunch-config",
+    "purpose": "Optional cap in milliseconds on the agent-hook bootstrap's and launcher's pinned npx fallback; unset means no cap",
+    "tests": [
+      {
+        "file": "test/hook-launcher.test.ts",
+        "title": "#680: HUNCH_HOOK_NPX_TIMEOUT_MS only caps when a positive finite number; 1.5, Infinity and 1e400 never throw"
+      }
+    ]
+  },
   "CLAUDE_PROJECT_DIR": {
     "class": "platform",
     "purpose": "Project root Claude Code sets for hook commands; the agent-hook bootstrap runs .claude/hunch-hook-launch.cjs from there, or the pinned npx when unset",
