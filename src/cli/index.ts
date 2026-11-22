@@ -7202,7 +7202,7 @@ program
           console.log(lagging.length
             ? `\n${lagging.length} doc(s) lag a merge — transient; the next capture commit or \`hunch grounding --refresh\` heals it.`
             : newer.length
-              ? `\n${newer.length} doc(s) written by a newer Hunch — kept as written; upgrade Hunch to check them fully.`
+              ? `\n${newer.length} doc(s) written by a newer Hunch — kept as written; upgrade Hunch if a newer release exists, or run \`hunch grounding --refresh --force\` to re-render with this version (this replaces a newer teammate's block, so prefer upgrading when one exists).`
               : "✓ grounding docs are fresh.");
         }
       }

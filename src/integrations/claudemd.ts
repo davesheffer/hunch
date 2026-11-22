@@ -20,8 +20,9 @@ const START = HUNCH_START;
 const END = HUNCH_END;
 
 /** Version of the block's PROSE. Bump it whenever renderHunchSection's wording
- *  changes. A block without the stamp is template 1. */
-export const GROUNDING_TEMPLATE = 2;
+ *  changes. A block without the stamp is template 1. Skips 3-7: pre-release builds
+ *  stamped 4 and 7, so it must stay monotonic across release and pre-release lines. */
+export const GROUNDING_TEMPLATE = 8;
 /** The pre-edit hook injects each in-scope invariant in full; the always-loaded
  *  list only has to name it (fnd_a65f71f38f, #369). Blocking statements are never
  *  clipped; others are cut at a word boundary within this many chars. */

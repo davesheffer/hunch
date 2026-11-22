@@ -148,7 +148,7 @@ export function describeGroundingFreshness(doc: string, verdict: GroundingFreshn
       // A newer Hunch may have written records this version skips as unreadable, and a
       // plain refresh keeps a newer block's prose: only an upgrade or --force settles it.
       if (verdict.newerTemplate) {
-        return `${doc}: counts run AHEAD of the store (${delta(verdict.committed, verdict.generated, verdict.ahead)}) in a block written by a newer Hunch (template ${verdict.newerTemplate.committed} > ${verdict.newerTemplate.renderer}) — this version may skip records it cannot read, or the record was removed; upgrade Hunch, or run \`hunch grounding --refresh --force\` and commit`;
+        return `${doc}: counts run AHEAD of the store (${delta(verdict.committed, verdict.generated, verdict.ahead)}) in a block written by a newer Hunch (template ${verdict.newerTemplate.committed} > ${verdict.newerTemplate.renderer}) — this version may skip records it cannot read, or the record was removed; upgrade Hunch if a newer release exists, or run \`hunch grounding --refresh --force\` to re-render with this version, and commit`;
       }
       return `${doc}: counts run AHEAD of the store (${delta(verdict.committed, verdict.generated, verdict.ahead)}) — the doc counted a record this repository does not carry; commit the missing .hunch/ record or regenerate`;
     case "diverged":
@@ -156,6 +156,6 @@ export function describeGroundingFreshness(doc: string, verdict: GroundingFreshn
     case "newer":
       return `${doc}: written by a newer Hunch (template ${verdict.committedTemplate} > ${verdict.rendererTemplate}); ${verdict.countsReadable
         ? "its prose is kept and a refresh updates only the counts"
-        : "this version cannot read its counts sentence, so a refresh leaves the block as written"}. Upgrade Hunch, or run \`hunch grounding --refresh --force\` to re-render with this version`;
+        : "this version cannot read its counts sentence, so a refresh leaves the block as written"}. Upgrade Hunch if a newer release exists, or run \`hunch grounding --refresh --force\` to re-render with this version`;
   }
 }

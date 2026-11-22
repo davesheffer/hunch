@@ -1,7 +1,7 @@
 # Copilot instructions
 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
-<!-- hunch:template 2 -->
+<!-- hunch:template 8 -->
 ## 🧠 Hunch (Engineering Memory)
 
 This repo has **Hunch**, a graph of *why* the code is the way it is. It holds **0 decisions, 0 bugs, 32 constraints, 21 components, 3 policies, 2 open findings**. Use the `hunch_*` MCP tools by moment:
