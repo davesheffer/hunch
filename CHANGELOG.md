@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Tests now cover the Stop gate blocking a shell-written forbidden import, on Claude Code and in Antigravity's tree mode.
+
 ## 1.58.0 — 2026-11-21
 
 - **`hunch switches` says when the loop switch is inactive.** With `HUNCH_PIPELINE=0`, `loop on` now reads `inactive: HUNCH_PIPELINE=0 disables the pipeline`, since no loop text is delivered then. A daemon test pins the default loop-off SessionStart: served by the daemon, it matches the in-process output and carries no loop text. (#682)
