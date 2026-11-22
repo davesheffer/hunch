@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A shell command is no longer blamed for another session's edits.** With two sessions in one checkout, a file the other session changed through its Edit or Write tool while this session's shell command ran was grounded as "this shell command wrote" it. Each session's successful edit-tool writes now leave a short-lived claim of the file's fingerprint in a per-repository claims file next to the shell baselines. A written file whose current fingerprint is another session's or subagent's claim is left out of that grounding; a file changed again after the claim is grounded as before. Enforcement is unchanged: the shell Veto, the invariant check and the Stop gate still judge every file that changed, because the command may have written the file before the other edit landed. Shell results never claim.
 - Tests now cover the Stop gate blocking a shell-written forbidden import, on Claude Code and in Antigravity's tree mode.
 
 ## 1.58.0 — 2026-11-21
