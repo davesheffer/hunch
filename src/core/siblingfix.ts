@@ -97,8 +97,8 @@ const MAX_CHANGE_LINES = 12;
 /** A fix commit's change is the lesson itself: capping it at 12 hid the second
  *  half of a two-commit fix (trap-310 v5 carried one commit, missed the other). */
 const MAX_FIX_CHANGE_LINES = 32;
-/** Bumped when the cached lesson shape changes. */
-const CACHE_VERSION = 9;
+/** Bumped when the cached lesson shape or the divergence filter changes. */
+const CACHE_VERSION = 10;
 /** Cached answers kept; past it the least recently written go (pruned on write). */
 const MAX_CACHE_ENTRIES = 256;
 const INVENTORY_FILE = "inventory.json";
@@ -213,31 +213,63 @@ export function parseLineLog(output: string): LineLogCommit[] {
   return commits;
 }
 
-/** A whole-line comment (`#`, `//`, a block-comment line). A C preprocessor
- *  directive starts with `#` but is code. */
-function isCommentLine(line: string): boolean {
-  const t = line.trim();
-  if (/^#\s*(include|define|undef|if|ifdef|ifndef|elif|else|endif|pragma|error|warning|line)\b/.test(t)) return false;
-  return /^(#|\/\/|\/\*|\*\/|\*(\s|$))/.test(t);
-}
+/** Whole-line comment syntax by file extension. Only where the prefix can never
+ *  start code: `#` is a private field in JS/TS and an attribute in PHP, `//` is
+ *  floor division and a leading `*` a continuation in Python. An extension not
+ *  listed strips nothing. */
+const HASH_COMMENT = /^#/;
+const SLASH_COMMENT = /^(\/\/|\/\*|\*\/|\*(\s|$))/;
+const COMMENT_BY_EXT: Record<string, RegExp> = {
+  py: HASH_COMMENT, pyi: HASH_COMMENT, rb: HASH_COMMENT, sh: HASH_COMMENT, bash: HASH_COMMENT,
+  yaml: HASH_COMMENT, yml: HASH_COMMENT, ex: HASH_COMMENT, exs: HASH_COMMENT, r: HASH_COMMENT,
+  ts: SLASH_COMMENT, tsx: SLASH_COMMENT, mts: SLASH_COMMENT, cts: SLASH_COMMENT,
+  js: SLASH_COMMENT, jsx: SLASH_COMMENT, mjs: SLASH_COMMENT, cjs: SLASH_COMMENT,
+  go: SLASH_COMMENT, java: SLASH_COMMENT, kt: SLASH_COMMENT, scala: SLASH_COMMENT, swift: SLASH_COMMENT,
+  cs: SLASH_COMMENT, rs: SLASH_COMMENT, c: SLASH_COMMENT, h: SLASH_COMMENT, cc: SLASH_COMMENT, cpp: SLASH_COMMENT, hpp: SLASH_COMMENT,
+};
 
 /** A commit whose removed and added lines differ only in whitespace/line
- *  endings (a reformat, a CRLF→LF sweep, a re-indent) or in whole-line
- *  comments (a reworded comment, a `# type:` comment) changed nothing. */
-export function isSubstantive(commit: LineLogCommit): boolean {
-  const norm = (lines: string[]) => lines.filter((l) => !isCommentLine(l)).map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
+ *  endings (a reformat, a CRLF→LF sweep, a re-indent) or, in a file whose
+ *  comment syntax is known, in whole-line comments (a reworded comment, a
+ *  `# type:` comment) changed nothing. */
+export function isSubstantive(commit: LineLogCommit, file = ""): boolean {
+  const comment = COMMENT_BY_EXT[(/\.([A-Za-z0-9]+)$/.exec(file)?.[1] ?? "").toLowerCase()];
+  const norm = (lines: string[]) => lines.filter((l) => !comment?.test(l.trim())).map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
   return norm(commit.added) !== norm(commit.removed);
 }
+
+/** A defect or an issue reference: the commit changed behaviour someone hit. */
+const DEFECT = /\b(bugs?|crash\w*|regress\w*|errors?|\w+Error|exceptions?|wrong|incorrect\w*|broken|break(s|ing)?|fail\w*|leak\w*|hang(s|ing)?|race|deadlock\w*|overflow\w*|off-by-one|security|cve|vulnerab\w*|segfault\w*|ignored|not)\b|#\d+/i;
+/** The cosmetic word is the object of the subject's handling ("Fix whitespace
+ *  handling", "Fix docstring parsing"): it is the feature, not the sweep. */
+const FEATURE_OBJECT = /(?<![\w.])(handling|handlers?|pars(e|er|ing)|render(s|ed|er|ing)?|process(es|ed|or|ing)?|support|resolution|resolv(e|es|ed|er|ing)|evaluat(e|es|ed|ion|ing)|output|generat(e|es|ed|ion|or|ing)|detect(s|ed|ion|or|ing)?|lookup|extract(s|ed|ion|or|ing)?|attributes?|names?|signatures?|values?|format(ter|ting)?)(?![\w(])/i;
+/** A commit's KIND, said in change position: the sweep is the whole subject
+ *  ("Fix typo", "Fix flake8 warnings", "Fix annotations of f()", "Migrate to py3
+ *  style type annotation: mod"), never a word somewhere inside it. */
+const COSMETIC_KIND: RegExp[] = [
+  /^(style|refactor|chore|docs|lint)(\([^)]*\))?!?:/i,
+  /^(refactor\w*|clean ?up|cleanup|cosmetic\w*|reformat\w*|re-?indent\w*)\b/i,
+  /\b(fix(e[sd])?|add(s|ed)?|update[sd]?|migrate[sd]?(\s+to)?|correct(s|ed)?|improve[sd]?|use)\s+(the\s+)?(py3[- ]style\s+)?(type\s+)?(annotations?|type hints?|type comments?)(?![.\w])/i,
+  /\b(fix(e[sd])?|resolve[sd]?|silence[sd]?|address(es|ed)?|appease[sd]?|satisfy)\s+(\w+\s+)?(lint|linter|flake8|pylint|mypy|eslint|pyflakes|pycodestyle|pep ?8|isort|ruff)(\s+(errors?|warnings?|violations?|issues?|complaints?))?\s*$/i,
+  /\bfix(e[sd])?\s+(a\s+|some\s+)?(typos?|spelling)(\s+in\s+(the\s+)?(comments?|docstrings?|docs?|documentation))?\s*$/i,
+  /\b(fix(e[sd])?|update[sd]?|improve[sd]?|add(s|ed)?|reword\w*|clean ?up)\s+(the\s+)?(docstrings?|comments?)(\s+(of|for|in)\s+\S+)?\s*$/i,
+  /\b(remove[sd]?|strip(s|ped)?|fix(e[sd])?)\s+(trailing\s+)?whitespace\s*$/i,
+];
 
 /** A subject that names a cosmetic change: type annotations, lint, typos,
  *  docstrings, a refactor or style sweep. Such a commit is not a gap the copy
  *  must close, even when its subject says "fix" ("Fix annotations of f()").
- *  A subject that also names a defect or an issue (`#123`) stays a change. */
+ *  A lint sweep ("Fix mypy errors") is cosmetic by its whole form; otherwise a
+ *  subject that names a defect, an issue (`#123`) or a feature it handles stays
+ *  a change. */
 export function isCosmeticSubject(subject: string): boolean {
-  const defect = /\b(bugs?|crash(es|ed)?|regressions?|errors?|exceptions?|wrong|incorrect(ly)?|broken|fail(s|ed|ure|ing)?|leaks?|hangs?|race|security|cve|vulnerab\w*|segfault|missing|ignored|not)\b|#\d+/i;
-  if (defect.test(subject)) return false;
-  return /^(style|refactor|chore|docs|lint)(\([^)]*\))?!?:/i.test(subject)
-    || /\b(annotations?|type hints?|type comments?|typing|mypy|lint(ing|er)?|flake8|pylint|pyflakes|pycodestyle|pep ?8|eslint|isort|pyupgrade|typos?|spelling|docstrings?|whitespace|cosmetics?|code style|coding style|py3 style|refactor(s|ed|ing)?|clean ?up)\b/i.test(subject);
+  const s = subject.trim();
+  if (COSMETIC_KIND[3]!.test(s)) return true;
+  if (DEFECT.test(s)) return false;
+  // A conventional `refactor:`/`style:` type is the author's own label for the kind.
+  if (COSMETIC_KIND[0]!.test(s)) return true;
+  if (FEATURE_OBJECT.test(s)) return false;
+  return COSMETIC_KIND.some((re) => re.test(s));
 }
 
 function gitEnv(): NodeJS.ProcessEnv {
@@ -817,7 +849,7 @@ function computeLessons(
     // Divergence: substantive changes to the sibling that never touched the
     // target. Shared commits already carried their change to both copies.
     // The sibling's creation is not a change made to it.
-    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c) && !isCosmeticSubject(c.subject));
+    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c, pair.siblingFile) && !isCosmeticSubject(c.subject));
     // A reverted fix is no longer in the sibling, and its revert carries the
     // fix's subject: the pair cancels out.
     if (divergent.some((c) => isFixSubject(c.subject))) {

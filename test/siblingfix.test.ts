@@ -192,19 +192,38 @@ test("a non-fix divergence alone is not surfaced", t => {
 
 test("comment-only and cosmetic commits are not a gap: annotation, lint and refactor sweeps", () => {
   const base = { sha: "a".repeat(40), subject: "x", span: 4, created: false, diff: [] };
-  assert.ok(!isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }), "a `# type:` comment");
-  assert.ok(!isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }), "a reworded comment");
-  assert.ok(isSubstantive({ ...base, added: ["  # return a"], removed: ["  return a"] }), "commenting code out removes it");
-  assert.ok(isSubstantive({ ...base, added: ["#ifdef WIN32", "  close(fd);", "#endif"], removed: ["  close(fd);"] }), "a preprocessor directive is code");
-  assert.ok(isCosmeticSubject("Fix annotations of process_link()"));
-  assert.ok(isCosmeticSubject("Migrate to py3 style type annotation: sphinx.domains.javascript"));
-  assert.ok(isCosmeticSubject("refactor(core): extract helper"));
-  assert.ok(isCosmeticSubject("Fix flake8 violations"));
-  assert.ok(isCosmeticSubject("Fix typo in docstring"));
-  assert.ok(!isCosmeticSubject("Fix #7291: type annotations ignored for overloads"), "an issue or a defect wins");
-  assert.ok(!isCosmeticSubject("Fix crash when refactoring a module"));
-  assert.ok(!isCosmeticSubject("fix(providers): a mixed hook entry keeps the user's command"));
-  assert.ok(!isCosmeticSubject("Fix style attribute handling in HTML writer"), "a bare 'style' is a feature word");
+  assert.ok(!isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }, "sphinx/domains/javascript.py"), "a `# type:` comment");
+  assert.ok(!isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }, "src/a.ts"), "a reworded comment");
+  assert.ok(isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }, "notes.unknownext"), "an unknown syntax strips nothing");
+  assert.ok(isSubstantive({ ...base, added: ["  # return a"], removed: ["  return a"] }, "a.py"), "commenting code out removes it");
+  assert.ok(isSubstantive({ ...base, added: ["        * rate / 100"], removed: ["        * rate"] }, "a.py"), "a Python continuation line is code");
+  assert.ok(isSubstantive({ ...base, added: ["        // 3"], removed: ["        // 2"] }, "a.py"), "Python floor division is code");
+  assert.ok(isSubstantive({ ...base, added: ["  #count = 1;"], removed: ["  #count = 0;"] }, "a.ts"), "a JS private field is code");
+  for (const s of [
+    "Fix annotations of process_link()",
+    "Migrate to py3 style type annotation: sphinx.domains.javascript",
+    "refactor(core): extract helper",
+    "Fix flake8 violations",
+    "Fix mypy errors",
+    "Fix lint errors",
+    "Fix typo",
+    "Fix typos in docstrings",
+    "Remove trailing whitespace",
+  ]) assert.ok(isCosmeticSubject(s), `cosmetic: ${s}`);
+  for (const s of [
+    "Fix #7291: type annotations ignored for overloads",
+    "Fix crash when refactoring a module",
+    "fix(providers): a mixed hook entry keeps the user's command",
+    "Fix style attribute handling in HTML writer",
+    "Fix typo in handler attribute name",
+    "Fix whitespace handling in tokenizer",
+    "Fix docstring parsing for numpy sections",
+    "Fix typing.Optional rendering",
+    "Fix type annotation causing TypeError on py3.8",
+    "Fix: clean up leaked file handles",
+    "refactor: fix off-by-one in pagination",
+    "Fix pylint crash on star imports",
+  ]) assert.ok(!isCosmeticSubject(s), `a real change: ${s}`);
 });
 
 test("a sibling 'fix' that only touched annotations is not surfaced, and a cosmetic commit is not listed beside a real fix", t => {
