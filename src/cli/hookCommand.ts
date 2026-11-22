@@ -38,7 +38,7 @@ import { premiseEscalations } from "../core/premises.js";
 import { parseDocAnchors, renderDocGrounding } from "../core/docanchors.js";
 import { pathMatchesGlob } from "../core/glob.js";
 import { SIBLING_HEADING, functionBodyHash, siblingGrounding } from "../core/siblingfix.js";
-import { noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
+import { claimedByOthers, noteEditedFiles, refreshShellBaseline, shellWrittenFiles } from "../core/shellwrites.js";
 import { constraintForWrittenFiles, filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles } from "../core/shellveto.js";
 import { isRegistryPath, lockDenyReason, lockFor, lockProblemReason, readLocks, verifyLocks } from "../core/locks.js";
 import type { Decision } from "../core/types.js";
@@ -127,14 +127,19 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
                 // strict interrupts the agent; looser modes name the violation as context.
                 if (firmness === "strict") shellVeto = shellVeto ?? broken;
                 const note = broken && firmness !== "strict" ? shellVetoReason(broken.target, broken.hit, "write") : "";
-                shellGround = [note, shellWriteGrounding(root, opened, provider, evt, written, processRoot)].filter(Boolean).join("\n\n");
+                // Files another session's or subagent's edit tool just wrote are not
+                // "this command's" writes to ground; the checks above still judged them.
+                let others = new Set<string>();
+                try { others = claimedByOthers(root, evt.session_id, evt.agent_id, written); } catch { /* ground all */ }
+                const own = written.filter((f) => !others.has(f));
+                shellGround = [note, own.length ? shellWriteGrounding(root, opened, provider, evt, own, processRoot) : ""].filter(Boolean).join("\n\n");
               }
             }
           } else {
             // An edit tool wrote known files: move just those baseline entries.
             // Any other tool (and a first observation) re-reads the tree.
             const edited = EDIT_TOOLS.has(evt.tool_name ?? "") || evt.tool_input?.patch_files?.length ? editTargets(root, evt.tool_input).map((t) => t.target) : [];
-            if (edited.length) noteEditedFiles(root, evt.session_id, evt.agent_id, edited);
+            if (edited.length) noteEditedFiles(root, evt.session_id, evt.agent_id, edited, evt.tool_outcome?.status !== "failure");
             else refreshShellBaseline(root, evt.session_id, evt.agent_id);
           }
         } catch { shellGround = ""; }
