@@ -213,34 +213,23 @@ export function parseLineLog(output: string): LineLogCommit[] {
   return commits;
 }
 
-/** Whole-line comment syntax by file extension. Only where the prefix can never
- *  start code: `#` is a private field in JS/TS and an attribute in PHP, `//` is
- *  floor division and a leading `*` a continuation in Python, and rustfmt,
- *  Google Java Style and clang-format put a binary operator first on a
- *  continuation line, so a bare `*` line is a comment only in JS/TS/Go. An
- *  extension not listed strips nothing. */
-const HASH_COMMENT = /^#/;
-const SLASH_COMMENT = /^(\/\/|\/\*|\*\/)/;
-const SLASH_STAR_COMMENT = /^(\/\/|\/\*|\*\/|\*(\s|$))/;
-const COMMENT_BY_EXT: Record<string, RegExp> = {
-  py: HASH_COMMENT, pyi: HASH_COMMENT, rb: HASH_COMMENT, sh: HASH_COMMENT, bash: HASH_COMMENT,
-  yaml: HASH_COMMENT, yml: HASH_COMMENT, ex: HASH_COMMENT, exs: HASH_COMMENT, r: HASH_COMMENT,
-  ts: SLASH_STAR_COMMENT, tsx: SLASH_STAR_COMMENT, mts: SLASH_STAR_COMMENT, cts: SLASH_STAR_COMMENT,
-  js: SLASH_STAR_COMMENT, jsx: SLASH_STAR_COMMENT, mjs: SLASH_STAR_COMMENT, cjs: SLASH_STAR_COMMENT, go: SLASH_STAR_COMMENT,
-  java: SLASH_COMMENT, kt: SLASH_COMMENT, scala: SLASH_COMMENT, swift: SLASH_COMMENT,
-  cs: SLASH_COMMENT, rs: SLASH_COMMENT, c: SLASH_COMMENT, h: SLASH_COMMENT, cc: SLASH_COMMENT, cpp: SLASH_COMMENT, hpp: SLASH_COMMENT,
-};
+/** A Python type comment (`# type: (int) -> str`) on its own line: read by
+ *  type checkers only, never by the interpreter. The only comment shape
+ *  stripped: a line-start test cannot tell a comment from code in general
+ *  (code after an inline block comment, `#` inside a string, `* rate`
+ *  continuations), so wider
+ *  stripping hides real sibling fixes. */
+const PY_TYPE_COMMENT = /^#\s*type:/;
+const PY_FILE = /\.pyi?$/i;
 
 /** A commit whose removed and added lines differ only in whitespace/line
- *  endings (a reformat, a CRLF→LF sweep, a re-indent) or, in a file whose
- *  comment syntax is known, in whole-line comments (a reworded comment, a
- *  `# type:` comment such as sphinx's "Fix annotations of process_link()")
- *  changed nothing. The subject is never consulted: "Fix typo" and
- *  "refactor … and fix …" commits change behaviour often enough that only the
- *  diff can say a commit is cosmetic. */
+ *  endings (a reformat, a CRLF→LF sweep, a re-indent) or, in a Python file, in
+ *  `# type:` comments (sphinx's "Fix annotations of process_link()") changed
+ *  nothing. The subject is never consulted: "Fix typo" and "refactor … and
+ *  fix …" commits change behaviour often enough that only the diff can tell. */
 export function isSubstantive(commit: LineLogCommit, file = ""): boolean {
-  const comment = COMMENT_BY_EXT[(/\.([A-Za-z0-9]+)$/.exec(file)?.[1] ?? "").toLowerCase()];
-  const norm = (lines: string[]) => lines.filter((l) => !comment?.test(l.trim())).map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
+  const typed = PY_FILE.test(file);
+  const norm = (lines: string[]) => lines.filter((l) => !(typed && PY_TYPE_COMMENT.test(l.trim()))).map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
   return norm(commit.added) !== norm(commit.removed);
 }
 

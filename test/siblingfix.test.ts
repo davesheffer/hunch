@@ -190,33 +190,14 @@ test("a non-fix divergence alone is not surfaced", t => {
   assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false }), []);
 });
 
-test("comment-only commits are not a gap; a code change is, whatever its subject says", () => {
+test("a Python `# type:` comment is not a gap; every other change is, whatever its subject says", () => {
   const base = { sha: "a".repeat(40), subject: "x", span: 4, created: false, diff: [] };
-  assert.ok(!isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }, "sphinx/domains/javascript.py"), "a `# type:` comment");
-  assert.ok(!isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }, "src/a.ts"), "a reworded comment");
-  assert.ok(!isSubstantive({ ...base, added: ["   * keeps mixed entries"], removed: ["   * keeps entries"] }, "src/a.ts"), "a JSDoc line");
-  assert.ok(isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }, "notes.unknownext"), "an unknown syntax strips nothing");
-  assert.ok(isSubstantive({ ...base, added: ["  # return a"], removed: ["  return a"] }, "a.py"), "commenting code out removes it");
-  assert.ok(isSubstantive({ ...base, added: ["        * rate / 100"], removed: ["        * rate"] }, "a.py"), "a Python continuation line is code");
-  assert.ok(isSubstantive({ ...base, added: ["        // 3"], removed: ["        // 2"] }, "a.py"), "Python floor division is code");
-  assert.ok(isSubstantive({ ...base, added: ["  #count = 1;"], removed: ["  #count = 0;"] }, "a.ts"), "a JS private field is code");
-  for (const f of ["A.java", "lib.rs", "a.cpp"]) {
-    assert.ok(isSubstantive({ ...base, added: ["            * rate / 100;"], removed: ["            * rate;"] }, f), `a leading-operator continuation is code in ${f}`);
-  }
-  // The subject is never consulted: sphinx's "Fix typo" be65bded7 renamed a config attribute.
-  assert.ok(isSubstantive({ ...base, subject: "Fix typo", added: ["    if self._config.napoleon_preprocess_types:"], removed: ["    if self._config.napoleon_enable_type_preprocessor:"] }, "sphinx/ext/napoleon/docstring.py"));
-});
-
-test("a sibling 'fix' that only touched comments is not surfaced, and is not listed beside a real fix", t => {
-  const root = repo(t);
-  const providers = (fn: string) => `\n${fn}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`;
-  writeFileSync(join(root, "src", "providers.ts"), providers(matcher("isOurProviderHook", "\n    // the command is a string from here on")));
-  commit(root, "Fix annotations of isOurProviderHook()");
-  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), [], "a comment-only fix is not a gap");
-  writeFileSync(join(root, "src", "providers.ts"), providers(fixedMatcher("isOurProviderHook")));
-  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
-  const lessons = siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 });
-  assert.deepEqual(lessons[0]?.commits.map((c) => c.subject), ["fix(providers): a mixed hook entry keeps the user's command"]);
+  assert.ok(!isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }, "sphinx/domains/javascript.py"), "sphinx 7caf34c6e");
+  assert.ok(isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }, "src/a.ts"), "only Python reads it as a comment");
+  assert.ok(isSubstantive({ ...base, added: ["  # keep mixed entries"], removed: ["  # keep entries"] }, "a.py"), "other comments keep base behaviour");
+  assert.ok(isSubstantive({ ...base, added: ["  /* istanbul ignore next */ if (!x) return null;"], removed: [] }, "a.ts"), "code after a block comment");
+  assert.ok(isSubstantive({ ...base, added: ["        * rate / 100"], removed: ["        * rate"] }, "a.py"));
+  assert.ok(isSubstantive({ ...base, subject: "Fix typo", added: ["    if self._config.napoleon_preprocess_types:"], removed: ["    if self._config.napoleon_enable_type_preprocessor:"] }, "sphinx/ext/napoleon/docstring.py"), "sphinx be65bded7: the subject is never consulted");
 });
 
 test("a caller is not a copy of its callee", t => {
