@@ -238,6 +238,9 @@ function mapStatus(raw: string): ParsedAdr["status"] {
 /** Parse one ADR markdown file (MADR 3.x/4 frontmatter style, MADR 2.x header
  *  bullets, or Nygard heading style). Returns null when the filename doesn't follow NNNN-slug.md. */
 export function parseAdrMarkdown(text: string, relPath: string): ParsedAdr | null {
+  // Line endings and a BOM are checkout artifacts (core.autocrlf), not content: parse and
+  // hash one canonical text so an approval binds the same ADR on every platform (#673).
+  text = normalizeEol(text).replace(/^\uFEFF/, "");
   const base = relPath.split("/").pop() ?? relPath;
   const nameMatch = ADR_FILE_RE.exec(base);
   if (!nameMatch) return null;
@@ -302,9 +305,7 @@ export function parseAdrMarkdown(text: string, relPath: string): ParsedAdr | nul
     consequences: consequenceItems(consequencesText),
     consideredOptions,
     chosenOption: chosenMatch ? chosenMatch[1]!.trim() : null,
-    // Line endings and a BOM are checkout artifacts (core.autocrlf), not content: hash the
-    // canonical text so an approval binds the same ADR on every platform (#673).
-    sourceHash: createHash("sha256").update(normalizeEol(text).replace(/^\uFEFF/, "")).digest("hex"),
+    sourceHash: createHash("sha256").update(text).digest("hex"),
     supersedesNumbers: [...new Set(supersedesNumbers)],
     supersededByNumbers: [...new Set(supersededByNumbers)],
   };
