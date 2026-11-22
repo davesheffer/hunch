@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  attributable, changeLines, codeTokens, isFixSubject, isSubstantive, nameTokens, overlap, parseLineLog,
+  attributable, changeLines, codeTokens, isCosmeticSubject, isFixSubject, isSubstantive, nameTokens, overlap, parseLineLog,
   renderSiblingLessons, siblingCounters, siblingLessonsFor, warmSiblingCache, writtenOver,
 } from "../src/core/siblingfix.js";
 import { emptyState, lessonReminder, onLessonsDelivered } from "../src/core/pipeline.js";
@@ -188,6 +188,35 @@ test("a non-fix divergence alone is not surfaced", t => {
   writeFileSync(join(root, "src", "providers.ts"), `\n${matcher("isOurProviderHook", "\n    if (!command) return false;")}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`);
   commit(root, "feat(providers): early return");
   assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false }), []);
+});
+
+test("comment-only and cosmetic commits are not a gap: annotation, lint and refactor sweeps", () => {
+  const base = { sha: "a".repeat(40), subject: "x", span: 4, created: false, diff: [] };
+  assert.ok(!isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }), "a `# type:` comment");
+  assert.ok(!isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }), "a reworded comment");
+  assert.ok(isSubstantive({ ...base, added: ["  # return a"], removed: ["  return a"] }), "commenting code out removes it");
+  assert.ok(isSubstantive({ ...base, added: ["#ifdef WIN32", "  close(fd);", "#endif"], removed: ["  close(fd);"] }), "a preprocessor directive is code");
+  assert.ok(isCosmeticSubject("Fix annotations of process_link()"));
+  assert.ok(isCosmeticSubject("Migrate to py3 style type annotation: sphinx.domains.javascript"));
+  assert.ok(isCosmeticSubject("refactor(core): extract helper"));
+  assert.ok(isCosmeticSubject("Fix flake8 violations"));
+  assert.ok(isCosmeticSubject("Fix typo in docstring"));
+  assert.ok(!isCosmeticSubject("Fix #7291: type annotations ignored for overloads"), "an issue or a defect wins");
+  assert.ok(!isCosmeticSubject("Fix crash when refactoring a module"));
+  assert.ok(!isCosmeticSubject("fix(providers): a mixed hook entry keeps the user's command"));
+  assert.ok(!isCosmeticSubject("Fix style attribute handling in HTML writer"), "a bare 'style' is a feature word");
+});
+
+test("a sibling 'fix' that only touched annotations is not surfaced, and a cosmetic commit is not listed beside a real fix", t => {
+  const root = repo(t);
+  const providers = (fn: string) => `\n${fn}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`;
+  writeFileSync(join(root, "src", "providers.ts"), providers(matcher("isOurProviderHook").replace("(entry: { hooks?: { command?: string }[] }): boolean", "(entry: { hooks?: { command?: string | undefined }[] }): boolean")));
+  commit(root, "Fix annotations of isOurProviderHook()");
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), [], "an annotation fix is not a gap");
+  writeFileSync(join(root, "src", "providers.ts"), providers(fixedMatcher("isOurProviderHook")));
+  commit(root, "fix(providers): a mixed hook entry keeps the user's command");
+  const lessons = siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 });
+  assert.deepEqual(lessons[0]?.commits.map((c) => c.subject), ["fix(providers): a mixed hook entry keeps the user's command"]);
 });
 
 test("a caller is not a copy of its callee", t => {

@@ -213,11 +213,31 @@ export function parseLineLog(output: string): LineLogCommit[] {
   return commits;
 }
 
+/** A whole-line comment (`#`, `//`, a block-comment line). A C preprocessor
+ *  directive starts with `#` but is code. */
+function isCommentLine(line: string): boolean {
+  const t = line.trim();
+  if (/^#\s*(include|define|undef|if|ifdef|ifndef|elif|else|endif|pragma|error|warning|line)\b/.test(t)) return false;
+  return /^(#|\/\/|\/\*|\*\/|\*(\s|$))/.test(t);
+}
+
 /** A commit whose removed and added lines differ only in whitespace/line
- *  endings (a reformat, a CRLF→LF sweep, a re-indent) changed nothing. */
+ *  endings (a reformat, a CRLF→LF sweep, a re-indent) or in whole-line
+ *  comments (a reworded comment, a `# type:` comment) changed nothing. */
 export function isSubstantive(commit: LineLogCommit): boolean {
-  const norm = (lines: string[]) => lines.map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
+  const norm = (lines: string[]) => lines.filter((l) => !isCommentLine(l)).map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
   return norm(commit.added) !== norm(commit.removed);
+}
+
+/** A subject that names a cosmetic change: type annotations, lint, typos,
+ *  docstrings, a refactor or style sweep. Such a commit is not a gap the copy
+ *  must close, even when its subject says "fix" ("Fix annotations of f()").
+ *  A subject that also names a defect or an issue (`#123`) stays a change. */
+export function isCosmeticSubject(subject: string): boolean {
+  const defect = /\b(bugs?|crash(es|ed)?|regressions?|errors?|exceptions?|wrong|incorrect(ly)?|broken|fail(s|ed|ure|ing)?|leaks?|hangs?|race|security|cve|vulnerab\w*|segfault|missing|ignored|not)\b|#\d+/i;
+  if (defect.test(subject)) return false;
+  return /^(style|refactor|chore|docs|lint)(\([^)]*\))?!?:/i.test(subject)
+    || /\b(annotations?|type hints?|type comments?|typing|mypy|lint(ing|er)?|flake8|pylint|pyflakes|pycodestyle|pep ?8|eslint|isort|pyupgrade|typos?|spelling|docstrings?|whitespace|cosmetics?|code style|coding style|py3 style|refactor(s|ed|ing)?|clean ?up)\b/i.test(subject);
 }
 
 function gitEnv(): NodeJS.ProcessEnv {
@@ -797,7 +817,7 @@ function computeLessons(
     // Divergence: substantive changes to the sibling that never touched the
     // target. Shared commits already carried their change to both copies.
     // The sibling's creation is not a change made to it.
-    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c));
+    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c) && !isCosmeticSubject(c.subject));
     // A reverted fix is no longer in the sibling, and its revert carries the
     // fix's subject: the pair cancels out.
     if (divergent.some((c) => isFixSubject(c.subject))) {
