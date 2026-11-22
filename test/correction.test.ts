@@ -56,6 +56,21 @@ test("looksLikeCorrection ignores quoted, pasted and code text (#677)", () => {
     `<pasted_content id="p1">No, that's wrong. Never call the API.</pasted_content>`,
     "the test string is “I told you to keep writes atomic”, add it as a fixture",
   ]) assert.ok(!looksLikeCorrection(p), `should NOT detect: ${p}`);
+  // A word right after a leading quote is not the prompt's opening word (review finding).
+  for (const p of [
+    "`hunch drift` no longer exits non-zero, nice",
+    "`npm test` no errors now, ship it",
+    `"fix the build" no longer needed, I did it`,
+    "```\nlog\n```\nno longer reproduces",
+    "> quoted line from doc\nno longer applies, update it",
+    "`foo` stop",
+  ]) assert.ok(!looksLikeCorrection(p), `should NOT detect: ${p}`);
+  // Inch marks, a fence named in prose and curly apostrophes keep the human's words.
+  for (const p of [
+    `make the card 3" wide — that's wrong, never use 5" cards`,
+    "you're using ``` wrong in the readme. I told you to use ~~~",
+    "“never use lodash” is wrong, don’t do that",
+  ]) assert.ok(looksLikeCorrection(p), `should detect: ${p}`);
   // The human's own words around a quote still count.
   assert.ok(looksLikeCorrection(`that's wrong — never use "lodash" here`));
   assert.ok(looksLikeCorrection("No, revert that.\n```\nnpm test\n```"));

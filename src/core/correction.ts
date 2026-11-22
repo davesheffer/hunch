@@ -23,13 +23,14 @@ const CORRECTION_PATTERNS: RegExp[] = [
   // "no way to fix this") firing the nudge and training users to ignore it.
   /^\s*no\b(?!\s+(problem|worries|idea|rush|need|biggie|thanks|thank|prob|clue|luck|difference|harm|reason|point|test|tests|way|ways|chance|context|functions?|method|file|files|change|changes|diff|other|more))/i,
   /^\s*(nope|stop)\b/i,
-  /\b(that'?s|that is|this is) (wrong|incorrect|not right|not what)\b/i,
-  /\b(never|do not ever|don'?t ever) (do|use|call|add|write|put|import|commit|touch)\b/i,
-  /\b(don'?t|do not) (do|use|call|add|write|put|commit) (that|this|it)\b/i,
+  // ['’]? accepts the curly apostrophe smart punctuation types ("don’t", "that’s").
+  /\b(that['’]?s|that is|this is) (wrong|incorrect|not right|not what)\b/i,
+  /\b(never|do not ever|don['’]?t ever) (do|use|call|add|write|put|import|commit|touch)\b/i,
+  /\b(don['’]?t|do not) (do|use|call|add|write|put|commit) (that|this|it)\b/i,
   /\b(you must|must always|you should always|make sure (to|you|that you))\b/i,
   /\b(i (already )?told you|i said|as i said|like i said)\b/i,
   /\b(undo|revert) (that|this|it|your)\b/i,
-  /\b(not like that|don'?t do (that|this)( again)?|stop doing (that|this))\b/i,
+  /\b(not like that|don['’]?t do (that|this)( again)?|stop doing (that|this))\b/i,
 ];
 
 /** Host-generated blocks a prompt can carry: a background task's completion
@@ -50,20 +51,26 @@ export function stripHostBlocks(prompt: string): string {
 /** Text the human quoted rather than said: pasted blocks, fenced and inline code,
  *  double-quoted strings and `>` blockquote lines. A correction phrase inside them
  *  is data (a command to run, a test fixture, a log), not a rebuke of the agent
- *  (#677). Single quotes are left alone: they double as apostrophes ("that's"). */
+ *  (#677). Single quotes are left alone: they double as apostrophes ("that's").
+ *  A fence opens only at a line start (a ``` mentioned in prose is not one), and a
+ *  straight `"` opens only after a non-word character (an inch mark like 3" is not one). */
 const QUOTED_SPANS: RegExp[] = [
   /<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content>/gi,
-  /```[\s\S]*?(?:```|$)/g,
-  /~~~[\s\S]*?(?:~~~|$)/g,
+  /^[ \t]*```[\s\S]*?(?:^[ \t]*```|(?![\s\S]))/gm,
+  /^[ \t]*~~~[\s\S]*?(?:^[ \t]*~~~|(?![\s\S]))/gm,
   /`[^`\n]*`/g,
-  /"[^"\n]*"/g,
+  /(?<!\w)"[^"\n]*"/g,
   /“[^”\n]*”/g,
   /^[ \t]*>[^\n]*/gm,
 ];
 
-/** The human's own words: host blocks and quoted or pasted text removed. */
+/** Stands in for a removed quote. Not whitespace, so a word right after a leading
+ *  quote ("`npm test` no errors now") is not read as the prompt's opening word. */
+const QUOTE_PLACEHOLDER = " … ";
+
+/** The human's own words: quoted or pasted text replaced by a placeholder. */
 export function stripQuotedText(text: string): string {
-  return QUOTED_SPANS.reduce((acc, re) => acc.replace(re, " "), text);
+  return QUOTED_SPANS.reduce((acc, re) => acc.replace(re, QUOTE_PLACEHOLDER), text);
 }
 
 export function looksLikeCorrection(prompt: string | undefined | null): boolean {
