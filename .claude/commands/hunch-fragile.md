@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Report the most fragile parts of this codebase, with evidence
 ---
 Ask Hunch for the fragility ranking (run `hunch fragile` or query Hunch),

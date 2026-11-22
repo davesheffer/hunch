@@ -187,6 +187,19 @@ test("writeSlashCommands keeps a user-owned capture.md and refreshes marker-carr
   } finally { cleanup(); }
 });
 
+test("writeSlashCommands: every generated command is user-only (kept out of the model's per-turn skill listing)", () => {
+  const { root, cleanup } = tempStore();
+  try {
+    const { written } = writeSlashCommands(root);
+    assert.equal(written.length, 7);
+    for (const p of written) {
+      const front = /^---\n([\s\S]*?)\n---\n/.exec(readFileSync(p, "utf8"))?.[1] ?? "";
+      assert.match(front, /^disable-model-invocation: true$/m, `${p} frontmatter`);
+      assert.match(front, /^description: \S/m, `${p} keeps its description for the / menu`);
+    }
+  } finally { cleanup(); }
+});
+
 test("writeWindsurfMcp MERGES and refuses to clobber an unparseable config", () => {
   const { store, root, cleanup } = tempStore();
   try {
