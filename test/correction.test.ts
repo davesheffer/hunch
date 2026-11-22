@@ -86,7 +86,13 @@ test("looksLikeCorrection ignores quoted, pasted and code text (#677)", () => {
     `rename "Foo to Bar — that's wrong, never use "Baz"`,
     "don't use the ` key; you must always use `x`",
     "log:\r\n```\r\nboom\r\n```\r\nthat's wrong, revert that",
+    "> quoted line\rthat's wrong, revert that",
+    "> quoted line\u2028that's wrong, revert that",
   ]) assert.ok(looksLikeCorrection(p), `should detect: ${p}`);
+  // A very long prompt is not scanned for quotes, so it cannot stall the hook.
+  const started = Date.now();
+  assert.ok(looksLikeCorrection("```a\n".repeat(20_000) + "that's wrong, revert that"));
+  assert.ok(Date.now() - started < 2_000, "long prompt stays fast");
   // A closed fence with an info word, and a CRLF fence, are still quoted text.
   for (const p of [
     "see:\n```bash\nno, that's wrong\n```\nwhat now?",

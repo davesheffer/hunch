@@ -61,22 +61,26 @@ export function stripHostBlocks(prompt: string): string {
  *  straight `"` opens only after a non-word character (an inch mark like 3" is not one). */
 const QUOTED_SPANS: RegExp[] = [
   /<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content>/gi,
-  /```[^`\n]+```/g,
+  /```[^`\r\n\u2028\u2029]+```/g,
   /^[ \t]*```[\w+#.-]*[ \t]*\r?\n[\s\S]*?^[ \t]*```[ \t]*\r?$/gm,
   /^[ \t]*~~~[\w+#.-]*[ \t]*\r?\n[\s\S]*?^[ \t]*~~~[ \t]*\r?$/gm,
   /^[ \t]*(?:```|~~~)[\w+#.-]*[ \t]*\r?$/gm,
-  /`(?!\s)[^`\n]*(?<!\s)`/g,
-  /(?<!\w)"(?!\s)[^"\n]*(?<!\s)"(?!\w)/g,
-  /“[^”\n]*”/g,
-  /^[ \t]*>(?:[ \t][^\n]*)?\r?$/gm,
+  /`(?!\s)[^`\r\n\u2028\u2029]*(?<!\s)`/g,
+  /(?<!\w)"(?!\s)[^"\r\n\u2028\u2029]*(?<!\s)"(?!\w)/g,
+  /“[^”\r\n\u2028\u2029]*”/g,
+  /^[ \t]*>(?:[ \t][^\r\n\u2028\u2029]*)?\r?$/gm,
 ];
 
 /** Stands in for a removed quote. Not whitespace, so a word right after a leading
  *  quote ("`npm test` no errors now") is not read as the prompt's opening word. */
 const QUOTE_PLACEHOLDER = " … ";
+/** Some spans backtrack quadratically on many unclosed openers. A prompt this long
+ *  is a paste; it is read as typed (the pre-#677 behaviour) rather than stalling the hook. */
+const MAX_QUOTE_SCAN = 64 * 1024;
 
 /** The human's own words: quoted or pasted text replaced by a placeholder. */
 export function stripQuotedText(text: string): string {
+  if (text.length > MAX_QUOTE_SCAN) return text;
   return QUOTED_SPANS.reduce((acc, re) => acc.replace(re, QUOTE_PLACEHOLDER), text);
 }
 
