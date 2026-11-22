@@ -47,6 +47,20 @@ test("looksLikeCorrection catches bare 'don't do that' rebukes (no 'again' neede
   }
 });
 
+test("looksLikeCorrection ignores quoted, pasted and code text (#677)", () => {
+  for (const p of [
+    `run \`echo "No, that's wrong. Never do X again."\` in the background`,
+    `run echo "No, that's wrong. Never do X again." in the background`,
+    "check this log:\n```\nthat's wrong, never use lodash\n```\nwhat does it mean?",
+    "the doc says:\n> never import lodash in src/\nis that still true?",
+    `<pasted_content id="p1">No, that's wrong. Never call the API.</pasted_content>`,
+    "the test string is “I told you to keep writes atomic”, add it as a fixture",
+  ]) assert.ok(!looksLikeCorrection(p), `should NOT detect: ${p}`);
+  // The human's own words around a quote still count.
+  assert.ok(looksLikeCorrection(`that's wrong — never use "lodash" here`));
+  assert.ok(looksLikeCorrection("No, revert that.\n```\nnpm test\n```"));
+});
+
 test("looksLikeCorrection is null-safe", () => {
   assert.equal(looksLikeCorrection(undefined), false);
   assert.equal(looksLikeCorrection(null), false);

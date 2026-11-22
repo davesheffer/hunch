@@ -47,9 +47,28 @@ export function stripHostBlocks(prompt: string): string {
   return prompt.replace(HOST_BLOCK, " ").replace(HOST_OPEN_LINE, " ");
 }
 
+/** Text the human quoted rather than said: pasted blocks, fenced and inline code,
+ *  double-quoted strings and `>` blockquote lines. A correction phrase inside them
+ *  is data (a command to run, a test fixture, a log), not a rebuke of the agent
+ *  (#677). Single quotes are left alone: they double as apostrophes ("that's"). */
+const QUOTED_SPANS: RegExp[] = [
+  /<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content>/gi,
+  /```[\s\S]*?(?:```|$)/g,
+  /~~~[\s\S]*?(?:~~~|$)/g,
+  /`[^`\n]*`/g,
+  /"[^"\n]*"/g,
+  /“[^”\n]*”/g,
+  /^[ \t]*>[^\n]*/gm,
+];
+
+/** The human's own words: host blocks and quoted or pasted text removed. */
+export function stripQuotedText(text: string): string {
+  return QUOTED_SPANS.reduce((acc, re) => acc.replace(re, " "), text);
+}
+
 export function looksLikeCorrection(prompt: string | undefined | null): boolean {
   if (!prompt || typeof prompt !== "string") return false;
-  const human = stripHostBlocks(prompt);
+  const human = stripQuotedText(stripHostBlocks(prompt));
   return CORRECTION_PATTERNS.some((re) => re.test(human));
 }
 
