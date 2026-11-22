@@ -3118,26 +3118,45 @@ function onlyManagedGroundingChanged(
   return !!beforeEnvelope && !!afterEnvelope && beforeEnvelope.equals(afterEnvelope);
 }
 
-/** The text outside the managed region, with line endings and a BOM normalised:
- * a commit that only re-wrote a doc's EOLs alongside a count refresh is still
- * Hunch's own output, not a human edit. */
-function groundingAuthoredText(blob: Buffer): string | null {
+/** The bytes outside the managed region, with a UTF-8 BOM dropped and CRLF or a
+ * lone CR turned into LF: a commit that only re-wrote a doc's EOLs alongside a
+ * count refresh is still Hunch's own output, not a human edit. Compared as bytes,
+ * never decoded, so two different non-UTF-8 texts can never compare equal. */
+function groundingAuthoredBytes(blob: Buffer): Buffer | null {
   const envelope = groundingEnvelope(blob);
   if (!envelope) return null;
-  return envelope.toString("utf8").replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+  const start = envelope[0] === 0xef && envelope[1] === 0xbb && envelope[2] === 0xbf ? 3 : 0;
+  const out = Buffer.alloc(envelope.length - start);
+  let n = 0;
+  for (let i = start; i < envelope.length; i++) {
+    const byte = envelope[i]!;
+    if (byte === 0x0d) {
+      out[n++] = 0x0a;
+      if (envelope[i + 1] === 0x0a) i++;
+    } else out[n++] = byte;
+  }
+  return out.subarray(0, n);
 }
+
+const GROUNDING_PATHS = [...FULLY_MANAGED_GROUNDING_PATHS, ...PARTIALLY_MANAGED_GROUNDING_PATHS];
 
 /** Does commit `sha` change only Hunch-generated grounding output (issue #658)?
  * True when every changed path is a fully generated rules file, or a partially
  * managed doc (AGENTS.md, CLAUDE.md, copilot instructions) whose bytes outside the
  * one HUNCH:START…END region are unchanged up to line endings. Any other path, a
  * deletion, a mode change, or an unreadable blob answers false: a human edit to the
- * authored part of AGENTS.md stays a capture candidate. */
+ * authored part of AGENTS.md stays a capture candidate. `files` are relative to the
+ * git top-level (as diff-tree prints them); the grounding docs live at the Hunch
+ * root, which may be a subdirectory. */
 export function commitOnlyRefreshesGrounding(sha: string, files: readonly string[], root: string): boolean {
-  if (!files.length) return false;
+  // Cheap screen first: almost every commit has some other path, and must not pay a git spawn.
+  if (!files.length || !files.every((f) => GROUNDING_PATHS.some((g) => f === g || f.endsWith(`/${g}`)))) return false;
   const env = revertGitEnv();
+  const prefix = revertGit(["rev-parse", "--show-prefix"], root, env);
+  const rel = files.map((f) => (f.startsWith(prefix) ? f.slice(prefix.length) : null));
+  if (rel.some((f) => f === null || !GROUNDING_PATHS.includes(f))) return false;
   const parent = revertGit(["rev-parse", "--verify", "--quiet", `${sha}^1^{commit}`], root, env);
-  for (const path of files) {
+  for (const path of rel as string[]) {
     const after = regularBlobAt(sha, path, root, env);
     if (!after) return false; // deleted, symlink, submodule, or unreadable
     if (FULLY_MANAGED_GROUNDING_PATHS.has(path)) continue;
@@ -3147,8 +3166,9 @@ export function commitOnlyRefreshesGrounding(sha: string, files: readonly string
     const beforeBytes = blobBytes(before.oid, root, env);
     const afterBytes = blobBytes(after.oid, root, env);
     if (!beforeBytes || !afterBytes) return false;
-    const beforeText = groundingAuthoredText(beforeBytes);
-    if (beforeText === null || beforeText !== groundingAuthoredText(afterBytes)) return false;
+    const beforeAuthored = groundingAuthoredBytes(beforeBytes);
+    const afterAuthored = groundingAuthoredBytes(afterBytes);
+    if (!beforeAuthored || !afterAuthored || !beforeAuthored.equals(afterAuthored)) return false;
   }
   return true;
 }

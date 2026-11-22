@@ -88,6 +88,34 @@ test("a grounding refresh riding along with a code change is still captured", as
   } finally { cleanup(); }
 });
 
+test("a Hunch root in a monorepo subdirectory recognises its own grounding docs", async () => {
+  const { root, commit, cleanup } = repo();
+  try {
+    const pkg = join(root, "pkg");
+    mkdirSync(pkg, { recursive: true });
+    commit("docs: add package agent instructions", { "pkg/AGENTS.md": BASE["AGENTS.md"], "AGENTS.md": BASE["AGENTS.md"] });
+    const sha = commit("docs: refresh package grounding", { "pkg/AGENTS.md": agents("Follow the repo rules.", "652 decisions") });
+    assert.equal(commitOnlyRefreshesGrounding(sha, ["pkg/AGENTS.md"], pkg), true);
+    // The top-level AGENTS.md is outside this root: never this root's generated output.
+    const top = commit("docs: refresh top grounding", { "AGENTS.md": agents("Follow the repo rules.", "653 decisions") });
+    assert.equal(commitOnlyRefreshesGrounding(top, ["AGENTS.md"], pkg), false);
+  } finally { cleanup(); }
+});
+
+test("a non-UTF-8 edit outside the block is a human edit, not a refresh", async () => {
+  const { root, cleanup } = repo();
+  try {
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
+    const doc = (word: Buffer, stats: string) => Buffer.concat([Buffer.from("# Agents\n\n"), word, Buffer.from(`\n\n${START}\nHunch holds ${stats}.\n${END}\n`)]);
+    writeFileSync(join(root, "AGENTS.md"), doc(Buffer.from([0x63, 0x61, 0x66, 0xe9]), "651 decisions"));
+    git("add", "AGENTS.md"); git("commit", "-qm", "docs: latin-1 notes");
+    writeFileSync(join(root, "AGENTS.md"), doc(Buffer.from([0x63, 0x61, 0x66, 0xe8]), "652 decisions"));
+    git("add", "AGENTS.md"); git("commit", "-qm", "docs: fix accent");
+    const sha = git("rev-parse", "HEAD").trim();
+    assert.equal(commitOnlyRefreshesGrounding(sha, ["AGENTS.md"], root), false);
+  } finally { cleanup(); }
+});
+
 test("a doc that loses or duplicates its managed region is not treated as generated", async () => {
   const { root, commit, cleanup } = repo();
   try {
