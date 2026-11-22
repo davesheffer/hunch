@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  attributable, changeLines, codeTokens, isCosmeticSubject, isFixSubject, isSubstantive, nameTokens, overlap, parseLineLog,
+  attributable, changeLines, codeTokens, isFixSubject, isSubstantive, nameTokens, overlap, parseLineLog,
   renderSiblingLessons, siblingCounters, siblingLessonsFor, warmSiblingCache, writtenOver,
 } from "../src/core/siblingfix.js";
 import { emptyState, lessonReminder, onLessonsDelivered } from "../src/core/pipeline.js";
@@ -190,48 +190,29 @@ test("a non-fix divergence alone is not surfaced", t => {
   assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false }), []);
 });
 
-test("comment-only and cosmetic commits are not a gap: annotation, lint and refactor sweeps", () => {
+test("comment-only commits are not a gap; a code change is, whatever its subject says", () => {
   const base = { sha: "a".repeat(40), subject: "x", span: 4, created: false, diff: [] };
   assert.ok(!isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }, "sphinx/domains/javascript.py"), "a `# type:` comment");
   assert.ok(!isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }, "src/a.ts"), "a reworded comment");
+  assert.ok(!isSubstantive({ ...base, added: ["   * keeps mixed entries"], removed: ["   * keeps entries"] }, "src/a.ts"), "a JSDoc line");
   assert.ok(isSubstantive({ ...base, added: ["  // keep mixed entries"], removed: ["  // keep entries"] }, "notes.unknownext"), "an unknown syntax strips nothing");
   assert.ok(isSubstantive({ ...base, added: ["  # return a"], removed: ["  return a"] }, "a.py"), "commenting code out removes it");
   assert.ok(isSubstantive({ ...base, added: ["        * rate / 100"], removed: ["        * rate"] }, "a.py"), "a Python continuation line is code");
   assert.ok(isSubstantive({ ...base, added: ["        // 3"], removed: ["        // 2"] }, "a.py"), "Python floor division is code");
   assert.ok(isSubstantive({ ...base, added: ["  #count = 1;"], removed: ["  #count = 0;"] }, "a.ts"), "a JS private field is code");
-  for (const s of [
-    "Fix annotations of process_link()",
-    "Migrate to py3 style type annotation: sphinx.domains.javascript",
-    "refactor(core): extract helper",
-    "Fix flake8 violations",
-    "Fix mypy errors",
-    "Fix lint errors",
-    "Fix typo",
-    "Fix typos in docstrings",
-    "Remove trailing whitespace",
-  ]) assert.ok(isCosmeticSubject(s), `cosmetic: ${s}`);
-  for (const s of [
-    "Fix #7291: type annotations ignored for overloads",
-    "Fix crash when refactoring a module",
-    "fix(providers): a mixed hook entry keeps the user's command",
-    "Fix style attribute handling in HTML writer",
-    "Fix typo in handler attribute name",
-    "Fix whitespace handling in tokenizer",
-    "Fix docstring parsing for numpy sections",
-    "Fix typing.Optional rendering",
-    "Fix type annotation causing TypeError on py3.8",
-    "Fix: clean up leaked file handles",
-    "refactor: fix off-by-one in pagination",
-    "Fix pylint crash on star imports",
-  ]) assert.ok(!isCosmeticSubject(s), `a real change: ${s}`);
+  for (const f of ["A.java", "lib.rs", "a.cpp"]) {
+    assert.ok(isSubstantive({ ...base, added: ["            * rate / 100;"], removed: ["            * rate;"] }, f), `a leading-operator continuation is code in ${f}`);
+  }
+  // The subject is never consulted: sphinx's "Fix typo" be65bded7 renamed a config attribute.
+  assert.ok(isSubstantive({ ...base, subject: "Fix typo", added: ["    if self._config.napoleon_preprocess_types:"], removed: ["    if self._config.napoleon_enable_type_preprocessor:"] }, "sphinx/ext/napoleon/docstring.py"));
 });
 
-test("a sibling 'fix' that only touched annotations is not surfaced, and a cosmetic commit is not listed beside a real fix", t => {
+test("a sibling 'fix' that only touched comments is not surfaced, and is not listed beside a real fix", t => {
   const root = repo(t);
   const providers = (fn: string) => `\n${fn}\nexport function unrelated(): number {\n  const a = 1;\n  return a + 1;\n}\n`;
-  writeFileSync(join(root, "src", "providers.ts"), providers(matcher("isOurProviderHook").replace("(entry: { hooks?: { command?: string }[] }): boolean", "(entry: { hooks?: { command?: string | undefined }[] }): boolean")));
+  writeFileSync(join(root, "src", "providers.ts"), providers(matcher("isOurProviderHook", "\n    // the command is a string from here on")));
   commit(root, "Fix annotations of isOurProviderHook()");
-  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), [], "an annotation fix is not a gap");
+  assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 }), [], "a comment-only fix is not a gap");
   writeFileSync(join(root, "src", "providers.ts"), providers(fixedMatcher("isOurProviderHook")));
   commit(root, "fix(providers): a mixed hook entry keeps the user's command");
   const lessons = siblingLessonsFor(root, "src/claude.ts", [], { cache: false, budgetMs: 60_000 });
