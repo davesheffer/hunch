@@ -8,7 +8,7 @@
  * and `proposed` until confirmed — advisory and cheap to discard.
  */
 import type { HunchStore } from "../store/hunchStore.js";
-import { commitMeta, commitDiff, headSha, currentBranch, commitPatchIds, isCompleteRepo } from "../extractors/git.js";
+import { commitMeta, commitDiff, headSha, currentBranch, commitPatchIds, isCompleteRepo, commitOnlyRefreshesGrounding } from "../extractors/git.js";
 import { PATCH_ID_PREFIX } from "../core/commitrepair.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
 import { selectProvider, selectEnsemble, selectVerifier, verifyDecisionSafe, DeterministicProvider, UnusableOutputError, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
@@ -96,6 +96,12 @@ export async function syncCommit(
   }
   const substantiveFiles = meta.files.filter(isSubstantive);
   if (!substantiveFiles.length) return { status: "skipped", reason: "no code or markdown files changed" };
+  // A grounding refresh is Hunch's own output too (#658): capturing it records a
+  // decision about the stats line, and that decision then bumps the count it describes.
+  // Only the managed region may differ; a human edit to AGENTS.md's own text stays eligible.
+  if (commitOnlyRefreshesGrounding(meta.sha, meta.files, root)) {
+    return { status: "skipped", reason: "commit only refreshes Hunch-generated grounding (HUNCH:START…END blocks and rules files)" };
+  }
 
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
   // (which varies) — so re-syncing a commit updates rather than dupes.

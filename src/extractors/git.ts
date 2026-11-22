@@ -3118,6 +3118,41 @@ function onlyManagedGroundingChanged(
   return !!beforeEnvelope && !!afterEnvelope && beforeEnvelope.equals(afterEnvelope);
 }
 
+/** The text outside the managed region, with line endings and a BOM normalised:
+ * a commit that only re-wrote a doc's EOLs alongside a count refresh is still
+ * Hunch's own output, not a human edit. */
+function groundingAuthoredText(blob: Buffer): string | null {
+  const envelope = groundingEnvelope(blob);
+  if (!envelope) return null;
+  return envelope.toString("utf8").replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+}
+
+/** Does commit `sha` change only Hunch-generated grounding output (issue #658)?
+ * True when every changed path is a fully generated rules file, or a partially
+ * managed doc (AGENTS.md, CLAUDE.md, copilot instructions) whose bytes outside the
+ * one HUNCH:START…END region are unchanged up to line endings. Any other path, a
+ * deletion, a mode change, or an unreadable blob answers false: a human edit to the
+ * authored part of AGENTS.md stays a capture candidate. */
+export function commitOnlyRefreshesGrounding(sha: string, files: readonly string[], root: string): boolean {
+  if (!files.length) return false;
+  const env = revertGitEnv();
+  const parent = revertGit(["rev-parse", "--verify", "--quiet", `${sha}^1^{commit}`], root, env);
+  for (const path of files) {
+    const after = regularBlobAt(sha, path, root, env);
+    if (!after) return false; // deleted, symlink, submodule, or unreadable
+    if (FULLY_MANAGED_GROUNDING_PATHS.has(path)) continue;
+    if (!PARTIALLY_MANAGED_GROUNDING_PATHS.has(path) || !parent) return false;
+    const before = regularBlobAt(parent, path, root, env);
+    if (!before || before.mode !== after.mode) return false;
+    const beforeBytes = blobBytes(before.oid, root, env);
+    const afterBytes = blobBytes(after.oid, root, env);
+    if (!beforeBytes || !afterBytes) return false;
+    const beforeText = groundingAuthoredText(beforeBytes);
+    if (beforeText === null || beforeText !== groundingAuthoredText(afterBytes)) return false;
+  }
+  return true;
+}
+
 function hunchJsonKind(path: string): "record" | "auxiliary" | null {
   if (REVERTABLE_AUXILIARY_PATHS.has(path)) return "auxiliary";
   const match = path.match(/^\.hunch\/([^/]+)\/([A-Za-z0-9][A-Za-z0-9._-]*\.json)$/);
