@@ -1082,8 +1082,12 @@ function emitContext(
   const output = contextHookOutput(provider, event, text);
   if (output) process.stdout.write(JSON.stringify(provider === "claude" && systemMessage ? { ...output, systemMessage } : output));
 }
+/** Appended to every deny: a scripted batch (Code Mode, a multi-call script) sees the
+ *  denial as one call's exception and may carry on, so the writes around it can land
+ *  and leave the batch partly applied (#676). */
+export const BATCH_DENY_NOTE = "If this call was part of a scripted batch, other writes in it may already have landed: review or revert them before you continue.";
 function emitDeny(provider: HookProvider, reason: string): void {
-  const result = denyHookOutput(provider, reason);
+  const result = denyHookOutput(provider, `${reason}\n\n${BATCH_DENY_NOTE}`);
   if (result.output) process.stdout.write(JSON.stringify(result.output));
   if (result.stderr) process.stderr.write(`${result.stderr}\n`);
   if (result.exitCode !== undefined) process.exitCode = result.exitCode;
