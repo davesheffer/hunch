@@ -10,7 +10,7 @@ import { HUNCH_VERSION } from "../core/version.js";
 import { readConfig } from "../core/config.js";
 import { hunchPaths } from "../core/paths.js";
 import { readHookObservations, type HookObservation } from "../core/hookObservations.js";
-import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE, isLauncherHookCommand, isLegacyLauncherHookCommand, bootstrapRunsLauncher, declaredLauncherPin, launcherIsCurrent, launcherPinOf, ownsLauncherText, renderHookLauncher } from "./hookLauncher.js";
+import { HOOK_LAUNCHER_FILE, HOOK_LAUNCHER_MARKER, LEGACY_HOOK_LAUNCHER_FILE, isLauncherHookCommand, isShape1LauncherHookCommand, isLegacyLauncherHookCommand, bootstrapRunsLauncher, declaredLauncherPin, launcherIsCurrent, launcherPinOf, ownsLauncherText, renderHookLauncher } from "./hookLauncher.js";
 
 /** Normalized hook events that prove each capability was delivered by the host. */
 const CAPABILITY_EVIDENCE: Record<Exclude<Capability, "mcp">, readonly string[]> = {
@@ -265,8 +265,9 @@ export function inspectIntegrations(root: string, selected?: Harness): Integrati
         events = object(harness === "antigravity" ? config.hunch : config.hooks);
         const commands = Object.values(events).flatMap(v => hookCommands(v));
         recordPins(hooksFile, commands);
-        if (commands.some(isLegacyLauncherHookCommand)) report.notes.push(`${hooksFile} hooks run the legacy launcher (${LEGACY_HOOK_LAUNCHER_FILE}); run \`hunch init\` to migrate`);
-        if (commands.some((c) => isLauncherHookCommand(c) && !isLegacyLauncherHookCommand(c))) checkLauncher();
+        if (commands.some(isShape1LauncherHookCommand)) report.notes.push(`${hooksFile} hooks run the legacy launcher (${LEGACY_HOOK_LAUNCHER_FILE}); run \`hunch init\` to migrate`);
+        else if (commands.some(isLegacyLauncherHookCommand)) report.notes.push(`${hooksFile} hooks use an older hook command; run \`hunch init\` to get the fail-open npx fallback`);
+        if (commands.some((c) => isLauncherHookCommand(c) && !isShape1LauncherHookCommand(c))) checkLauncher();
         if (commands.some(misroutedHook)) report.issues.push({
           file: hooksFile, code: "hook-command",
           detail: "Hunch hooks invoke the MCP subcommand instead of the hook handler; run hunch integrations repair-pins",
