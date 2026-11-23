@@ -140,14 +140,23 @@ test("boundedExecFileSync: non-zero exit throws with status and stderr", () => {
   );
 });
 
-test("boundedExecFileSync: timeout kills the whole tree and throws ETIMEDOUT", { timeout: 30_000 }, async (t) => {
+test("boundedExecFileSync: timeout kills the whole tree and throws ETIMEDOUT", { timeout: 45_000 }, async (t) => {
   const pidFile = join(tempDir(t), "grandchild.pid");
+  // The deadline must outlast the child's own startup (node -e, spawn the grandchild,
+  // print "started"): 1 s lost that race on a loaded Windows machine and killed the
+  // child before it printed anything (#671). The child then idles for 60 s, so the
+  // deadline still decides how the call ends.
   const started = Date.now();
-  assert.throws(
-    () => boundedExecFileSync(process.execPath, ["-e", treeScript(pidFile)], { timeout: 1_000 }),
-    (e: BoundedExecError) => e.code === "ETIMEDOUT" && e.stdout === "started\n",
-  );
-  assert.ok(Date.now() - started < 15_000, "returned promptly after the deadline");
+  let caught: BoundedExecError | undefined;
+  try {
+    boundedExecFileSync(process.execPath, ["-e", treeScript(pidFile)], { timeout: 5_000 });
+  } catch (e) {
+    caught = e as BoundedExecError;
+  }
+  assert.ok(caught, "the call threw at its deadline");
+  assert.equal(caught.code, "ETIMEDOUT");
+  assert.equal(caught.stdout, "started\n", "output written before the deadline is kept");
+  assert.ok(Date.now() - started < 25_000, "returned promptly after the deadline");
   await assertDead(await waitForPid(pidFile));
 });
 
