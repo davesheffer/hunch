@@ -484,8 +484,12 @@ function writeWindsurfHookFile(file: string, inv: Invocation): string {
   return writeHookConfig(file, Object.fromEntries(WINDSURF_EVENTS.map((event) => [event, [{ command, show_output: false }]])));
 }
 
-function antigravityHandler(command: string): Record<string, unknown> {
-  return { type: "command", command, timeout: 15 };
+/** Seconds. Stop gets Antigravity's documented 30 s default: Hunch wires no
+ *  post-tool event there, so its Stop gate judges the whole tree (changed-file list, then the Veto
+ *  and invariant checks, each with its own budget), which can pass 15 s on slow
+ *  git; a killed hook gives no verdict and loses its Stop bookkeeping. */
+function antigravityHandler(command: string, timeout = 15): Record<string, unknown> {
+  return { type: "command", command, timeout };
 }
 
 /** Antigravity keeps hook groups at the top level (not under `hooks`). Hunch
@@ -516,7 +520,7 @@ export function writeAntigravityHooks(root: string, inv: Invocation): string {
       hooks: [antigravityHandler(command)],
     },
   ];
-  group.Stop = [...keep("Stop"), antigravityHandler(command)];
+  group.Stop = [...keep("Stop"), antigravityHandler(command, 30)];
   json.hunch = group;
   return writeJson(file, json);
 }

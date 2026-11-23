@@ -72,6 +72,9 @@ test("scaffoldProviders writes MCP config + grounding for every assistant", () =
     const antigravityHooks = JSON.parse(readFileSync(join(root, ".agents/hooks.json"), "utf8"));
     assert.match(antigravityHooks.hunch.PreInvocation[0].command, /hook.*--provider.*antigravity/);
     assert.match(antigravityHooks.hunch.PreToolUse[0].matcher, /write_to_file/);
+    // The tree-path Stop gate (no post-tool event wired) can outrun 15 s on slow git.
+    assert.equal(antigravityHooks.hunch.Stop[0].timeout, 30);
+    assert.equal(antigravityHooks.hunch.PreToolUse[0].hooks[0].timeout, 15);
   } finally { cleanup(); }
 });
 
