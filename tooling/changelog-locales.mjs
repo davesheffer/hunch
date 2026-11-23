@@ -8,6 +8,7 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "הוקים שקטים יותר ואישורי ADR שעמידים לסופי שורות",
       "פרומפטים רזים יותר, בדיקת אילוצים לרשימת נתיבים, ושיוך כתיבות shell לפי סשן",
       "כתיבות דרך ה-shell תחת ה-Veto, HLD ננעלים, ולולאת סשן אופציונלית",
       "בדיקות staged מהירות בקומיטים גדולים",
@@ -115,6 +116,7 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Более тихие хуки и одобрения ADR, не зависящие от концов строк",
       "Более короткие промпты, проверка ограничений по списку путей и привязка записей через shell к сессии",
       "Записи через shell под Veto, блокируемые HLD и необязательный цикл сессии",
       "Быстрые проверки staged для больших коммитов",
@@ -222,6 +224,7 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "خطافات أهدأ وموافقات ADR لا تتأثر بنهايات الأسطر",
       "مطالبات أخف، وفحص القيود لقائمة مسارات، ونسب كتابات الـ shell إلى كل جلسة",
       "كتابات الـ shell تحت Veto، وHLD قابلة للقفل، وحلقة جلسة اختيارية",
       "فحوصات staged سريعة للإيداعات الكبيرة",
@@ -329,6 +332,7 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Hooks más silenciosos y aprobaciones de ADR inmunes a los finales de línea",
       "Prompts más ligeros, comprobación de restricciones por lista de rutas y escrituras por shell atribuidas por sesión",
       "Escrituras por shell bajo el Veto, HLD bloqueables y un bucle de sesión opcional",
       "Comprobaciones staged rápidas en commits grandes",
