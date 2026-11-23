@@ -324,6 +324,27 @@ test("grounding refresh keeps a CRLF doc all-CRLF when the counts change", (t) =
   assert.ok(after.startsWith("# Proj\r\n\r\nUser prose.\r\n"), "user prose kept verbatim");
 });
 
+test("a refresh keeps the Cursor and Windsurf rules all-CRLF, front matter and end marker included (#657)", (t) => {
+  const { store, root, cleanup } = tempStore();
+  t.after(cleanup);
+  writeCursorRule(root, store);
+  for (const rel of [join(".cursor", "rules", "hunch.mdc"), join(".windsurf", "rules", "hunch.md")]) {
+    const file = join(root, rel);
+    mkdirSync(join(file, ".."), { recursive: true });
+    if (rel.includes("windsurf")) writeFileSync(file, "---\r\ntrigger: always_on\r\n---\r\n\r\n");
+    else writeFileSync(file, readFileSync(file, "utf8").replace(/\r?\n/g, "\r\n"));
+  }
+  store.json.put("constraints", mkConstraint({ id: "con_eol_rules", severity: "warning", statement: "EOL rules marker" }));
+  const refreshed = refreshExistingGrounding(root, store);
+  for (const rel of [join(".cursor", "rules", "hunch.mdc"), join(".windsurf", "rules", "hunch.md")]) {
+    assert.ok(refreshed.includes(rel), `${rel} refreshed`);
+    const after = readFileSync(join(root, rel), "utf8");
+    assert.ok(crlfOnly(after), `${rel} is all-CRLF`);
+    assert.ok(after.startsWith("---\r\n"), `${rel} front matter is CRLF`);
+    assert.ok(after.includes(`${HUNCH_END}\r\n`), `${rel} end marker is CRLF`);
+  }
+});
+
 test("grounding refresh with identical content does not rewrite an LF or CRLF doc", (t) => {
   const { store, root, cleanup } = tempStore();
   t.after(cleanup);

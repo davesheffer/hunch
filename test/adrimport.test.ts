@@ -270,6 +270,22 @@ test("source hashes and dates make undated imports deterministic and reviewable"
   assert.ok(withGit.provenance.evidence.includes(`source-commit:${sourceRevision}`));
 });
 
+test("a CRLF or BOM checkout of an unchanged ADR keeps the LF source hash (#673)", () => {
+  const relPath = "adr/0003-PHPUnit-this-over-self.md";
+  const lf = INFECTION_HEADING_STYLE.replace(/\r\n?/g, "\n");
+  const crlf = lf.replace(/\n/g, "\r\n");
+  const hashOf = (text: string) => importedAdrSourceHash(mapAdrCorpus([{ relPath, text }]).decisions[0]!);
+  const expected = hashOf(lf);
+  assert.ok(expected);
+  assert.equal(hashOf(crlf), expected);
+  assert.equal(hashOf("\uFEFF" + crlf), expected);
+  assert.equal(hashOf(lf.replace(/\n/g, "\r")), expected);
+  // The mapped meaning must match too, or the review hash still drops the approval.
+  const reviewOf = (text: string) => importedAdrReviewHash(mapAdrCorpus([{ relPath, text }]).decisions[0]!);
+  for (const variant of [crlf, "\uFEFF" + lf, "\uFEFF" + crlf, lf.replace(/\n/g, "\r")]) assert.equal(reviewOf(variant), reviewOf(lf));
+  assert.notEqual(hashOf(lf + "\nchanged\n"), expected);
+});
+
 test("mapAdrCorpus closes the superseded window and sets both pointers from a one-sided link", () => {
   const { decisions, warnings } = mapAdrCorpus([
     { relPath: "doc/adr/0002-store-sessions-in-redis.md", text: NYGARD_SUPERSEDED },
