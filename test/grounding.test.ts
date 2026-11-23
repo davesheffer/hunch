@@ -282,6 +282,32 @@ test("refreshExistingGrounding keeps newer prose unless forced", (t) => {
   assert.match(forced, /^# Mine/, "user prose outside the block survives");
 });
 
+// #659: pre-release builds stamped 7 (CLAUDE.md) and 4 (AGENTS.md); the release must outrank both.
+test("pre-release stamps 7 and 4 are older, re-render on a normal refresh, and 9 stays newer (#659)", (t) => {
+  const { store, cleanup } = tempStore();
+  t.after(cleanup);
+  const root = mkdtempSync(join(tmpdir(), "hunch-template-659-"));
+  t.after(() => cleanupDir(root));
+  const generated = renderHunchSection(store, root);
+  const stamped = (n: number) => generated.replace(`<!-- hunch:template ${GROUNDING_TEMPLATE} -->`, `<!-- hunch:template ${n} -->`).replace("## 🧠 Hunch (Engineering Memory)", "## 🧠 Hunch (Engineering Memory)\nPRE_RELEASE_PROSE");
+  assert.ok(GROUNDING_TEMPLATE > 7, "above every pre-release stamp (4, 7)");
+  for (const n of [4, 7]) {
+    const v = classifyGroundingBlock(stamped(n), generated);
+    assert.notEqual(v.kind, "newer", `template ${n} is not newer`);
+  }
+  assert.equal(classifyGroundingBlock(stamped(9), generated).kind, "newer", "template 9 is still newer");
+
+  writeFileSync(join(root, "CLAUDE.md"), `# Mine\n\n${stamped(7)}\n\nTail claude.\n`);
+  writeFileSync(join(root, "AGENTS.md"), `# Agents\n\n${stamped(4)}\n\nTail agents.\n`);
+  refreshExistingGrounding(root, store);
+  for (const [rel, head, tail] of [["CLAUDE.md", "# Mine\n\n", "\n\nTail claude.\n"], ["AGENTS.md", "# Agents\n\n", "\n\nTail agents.\n"]]) {
+    const text = readFileSync(join(root, rel), "utf8");
+    assert.equal(groundingTemplate(text), GROUNDING_TEMPLATE, `${rel} re-rendered to the current template`);
+    assert.doesNotMatch(text, /PRE_RELEASE_PROSE/);
+    assert.ok(text.startsWith(head) && text.endsWith(tail), `${rel} keeps text outside the block`);
+  }
+});
+
 test("Top invariants never clip a blocking statement; others clip at a word boundary", (t) => {
   const { store, cleanup } = tempStore();
   t.after(cleanup);

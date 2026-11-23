@@ -36,7 +36,7 @@ Data flows: **events → extract → synthesize → store → ground**. Source o
 This repo's full engineering memory lives in a **private overlay**; only the enforced constraints, policies and components are committed under `.hunch/`, so public CI can check them. Maintainers with the overlay configured (`hunch private`) see the full graph via the `hunch_*` MCP tools.
 
 <!-- HUNCH:START — auto-generated, do not edit by hand -->
-<!-- hunch:template 2 -->
+<!-- hunch:template 8 -->
 ## 🧠 Hunch (Engineering Memory)
 
 This repo has **Hunch**, a graph of *why* the code is the way it is. It holds **0 decisions, 0 bugs, 32 constraints, 21 components, 3 policies, 2 open findings**. Use the `hunch_*` MCP tools by moment:
