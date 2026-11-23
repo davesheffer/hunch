@@ -23,13 +23,14 @@ const CORRECTION_PATTERNS: RegExp[] = [
   // "no way to fix this") firing the nudge and training users to ignore it.
   /^\s*no\b(?!\s+(problem|worries|idea|rush|need|biggie|thanks|thank|prob|clue|luck|difference|harm|reason|point|test|tests|way|ways|chance|context|functions?|method|file|files|change|changes|diff|other|more))/i,
   /^\s*(nope|stop)\b/i,
-  /\b(that'?s|that is|this is) (wrong|incorrect|not right|not what)\b/i,
-  /\b(never|do not ever|don'?t ever) (do|use|call|add|write|put|import|commit|touch)\b/i,
-  /\b(don'?t|do not) (do|use|call|add|write|put|commit) (that|this|it)\b/i,
+  // ['’]? accepts the curly apostrophe smart punctuation types ("don’t", "that’s").
+  /\b(that['’]?s|that is|this is) (wrong|incorrect|not right|not what)\b/i,
+  /\b(never|do not ever|don['’]?t ever) (do|use|call|add|write|put|import|commit|touch)\b/i,
+  /\b(don['’]?t|do not) (do|use|call|add|write|put|commit) (that|this|it)\b/i,
   /\b(you must|must always|you should always|make sure (to|you|that you))\b/i,
   /\b(i (already )?told you|i said|as i said|like i said)\b/i,
   /\b(undo|revert) (that|this|it|your)\b/i,
-  /\b(not like that|don'?t do (that|this)( again)?|stop doing (that|this))\b/i,
+  /\b(not like that|don['’]?t do (that|this)( again)?|stop doing (that|this))\b/i,
 ];
 
 /** Host-generated blocks a prompt can carry: a background task's completion
@@ -47,9 +48,45 @@ export function stripHostBlocks(prompt: string): string {
   return prompt.replace(HOST_BLOCK, " ").replace(HOST_OPEN_LINE, " ");
 }
 
+/** Text the human quoted rather than said: pasted blocks, fenced and inline code,
+ *  double-quoted strings and `>` blockquote lines. A correction phrase inside them
+ *  is data (a command to run, a test fixture, a log), not a rebuke of the agent
+ *  (#677). Single quotes are left alone: they double as apostrophes ("that's").
+ *  A fenced block is a line holding only the fence (plus an info word such as
+ *  `bash`) through a line holding only the closing fence. A fence left unclosed
+ *  drops only its own line, never the human's text below, as for host tags; a
+ *  ``` mid-line is prose, so it never pairs with a later fence line. A one-line
+ *  ```x``` span is inline code. Inline spans must not start or end with a space,
+ *  so a stray `"` or backtick does not swallow the words up to the next one, and a
+ *  straight `"` opens only after a non-word character (an inch mark like 3" is not one). */
+const QUOTED_SPANS: RegExp[] = [
+  /<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content>/gi,
+  /```[^`\r\n\u2028\u2029]+```/g,
+  /^[ \t]*```[\w+#.-]*[ \t]*\r?\n[\s\S]*?^[ \t]*```[ \t]*\r?$/gm,
+  /^[ \t]*~~~[\w+#.-]*[ \t]*\r?\n[\s\S]*?^[ \t]*~~~[ \t]*\r?$/gm,
+  /^[ \t]*(?:```|~~~)[\w+#.-]*[ \t]*\r?$/gm,
+  /`(?!\s)[^`\r\n\u2028\u2029]*(?<!\s)`/g,
+  /(?<!\w)"(?!\s)[^"\r\n\u2028\u2029]*(?<!\s)"(?!\w)/g,
+  /“[^”\r\n\u2028\u2029]*”/g,
+  /^[ \t]*>(?:[ \t][^\r\n\u2028\u2029]*)?\r?$/gm,
+];
+
+/** Stands in for a removed quote. Not whitespace, so a word right after a leading
+ *  quote ("`npm test` no errors now") is not read as the prompt's opening word. */
+const QUOTE_PLACEHOLDER = " … ";
+/** Some spans backtrack quadratically on many unclosed openers. A prompt this long
+ *  is a paste; it is read as typed (the pre-#677 behaviour) rather than stalling the hook. */
+const MAX_QUOTE_SCAN = 64 * 1024;
+
+/** The human's own words: quoted or pasted text replaced by a placeholder. */
+export function stripQuotedText(text: string): string {
+  if (text.length > MAX_QUOTE_SCAN) return text;
+  return QUOTED_SPANS.reduce((acc, re) => acc.replace(re, QUOTE_PLACEHOLDER), text);
+}
+
 export function looksLikeCorrection(prompt: string | undefined | null): boolean {
   if (!prompt || typeof prompt !== "string") return false;
-  const human = stripHostBlocks(prompt);
+  const human = stripQuotedText(stripHostBlocks(prompt));
   return CORRECTION_PATTERNS.some((re) => re.test(human));
 }
 
