@@ -12,7 +12,7 @@ import { kindOfId, editRecord, linkRecord, removeRecord, restoreRecord } from ".
 import { TESTIMONY_CORRECTION_RATIONALE, VOUCHED_CORRECTION_RATIONALE } from "../src/core/correction.js";
 import { hunchCliArgs } from "./cli-invocation.js";
 import { cleanupDir } from "./helpers.js";
-import { isolatedCliEnv } from "./fixtures.js";
+import { cleanupDir, isolatedCliEnv, personTokenEnv, tempDir } from "./fixtures.js";
 
 const NOW = "2026-06-01T00:00:00.000Z";
 const prov = { source: "agent_recorded", confidence: 0.8, evidence: [] as string[] };
@@ -238,8 +238,11 @@ test("restoreRecord: reopens decisions (default inverts remove), constraints and
   const superseded = decision("dec_2", { status: "superseded", valid_to: NOW });
   assert.equal((must(restoreRecord("decision", superseded, {}, NOW)).record as Decision).status, "accepted");
   assert.equal((must(restoreRecord("decision", superseded, { status: "proposed" }, NOW)).record as Decision).status, "proposed");
-  const c = must(restoreRecord("constraint", constraint("con_1", { status: "retired", valid_to: NOW }), {}, NOW)).record as Constraint;
+  const c = must(restoreRecord("constraint", constraint("con_1", { status: "retired", valid_to: NOW, retired_from: "active" }), {}, NOW)).record as Constraint;
   assert.deepEqual([c.status, c.valid_to], ["active", null]);
+  // No recorded pre-remove status: only a human-confirmed rule returns active; others return as drafts.
+  const legacy = must(restoreRecord("constraint", constraint("con_1", { status: "retired", valid_to: NOW }), {}, NOW)).record as Constraint;
+  assert.equal(legacy.status, constraint("con_1").provenance.source.split("+").includes("human_confirmed") ? "active" : "draft");
   assert.equal((must(restoreRecord("finding", finding("fnd_1", { triage: "stale" }), {}, NOW)).record as Finding).triage, "open");
   assert.equal((must(restoreRecord("finding", finding("fnd_1", { triage: "resolved" }), { status: "scheduled" }, NOW)).record as Finding).triage, "scheduled");
 });
@@ -264,7 +267,11 @@ test("restoreRecord: refuses a replaced decision, bad statuses, a topic conflict
 function git(root: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
-const cliEnv = (): NodeJS.ProcessEnv => isolatedCliEnv({ NO_COLOR: "1" });
+// Rule (con_*) edits are person-only; the spawned CLI gets a registered person token.
+const personHome = tempDir("hunch-person-");
+const personEnv = personTokenEnv(personHome);
+process.on("exit", () => cleanupDir(personHome));
+const cliEnv = (): NodeJS.ProcessEnv => isolatedCliEnv({ NO_COLOR: "1", ...personEnv });
 
 /** A temp git repo with a .hunch store, committed, on a feature branch (public memory
  *  auto-commits are held on the default branch). */
@@ -601,4 +608,15 @@ test("cli:edit of a human-confirmed decision drops the signature; cli:link keeps
     const onDisk = read<Decision>(root, "decisions", "dec_signed");
     assert.deepEqual([onDisk.provenance.source, onDisk.provenance.confidence], ["agent_recorded", 0.75]);
   } finally { cleanupDir(root); }
+});
+
+test("remove then restore returns a draft or active rule to its pre-retire status", () => {
+  for (const status of ["draft", "active"] as const) {
+    const removed = must(removeRecord("constraint", constraint("con_r", { status }), NOW)).record as Constraint;
+    assert.equal(removed.status, "retired");
+    assert.equal(removed.retired_from, status);
+    const back = must(restoreRecord("constraint", removed, {}, NOW)).record as Constraint;
+    assert.equal(back.status, status);
+    assert.equal(back.retired_from, undefined);
+  }
 });

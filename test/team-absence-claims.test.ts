@@ -46,6 +46,7 @@ const CLASSIFICATION: Record<string, string> = {
   hunch_hld: "exempt: question_id names a question inside the HLD draft file in the working tree, not a team-memory record",
   hunch_capture_decision: "exempt: topic is a proposal for the interview; writes nothing and reads no record",
   hunch_record_correction: "exempt: write; source_decision is only validated against the public home",
+  hunch_challenge: "exempt: write; rule_id is looked up in the local store and the refusal (no such rule) claims nothing about team memory",
   nuryel_records: "exempt: nuryel.state/1 contract; ids resolve against the served partition's grants and ledger, not the team-memory pull",
   hunch_constitution_g2_behavior_candidates: "exempt: private G2 review packet over code history; decision_id selects a batch",
   hunch_constitution_g2_behavior_replay: "exempt: private G2 replay bound to an exact reviewed packet hash",

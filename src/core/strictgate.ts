@@ -20,6 +20,7 @@ export function isHumanConfirmed(source: string | undefined): boolean {
 }
 
 export interface StrictConstraint {
+  status?: string;
   severity?: string;
   provenance?: { confidence?: number; source?: string };
 }
@@ -29,6 +30,7 @@ export interface StrictConstraint {
  *  human-confirmed source (a person vouched for it). Near/blast-radius hits never
  *  reach here — the caller passes only directly-scoped invariants. */
 export function isStrictBlocker(c: StrictConstraint, stale: boolean): boolean {
+  if (c.status === "draft" || c.status === "retired") return false; // a draft warns, never blocks
   if (c.severity !== "blocking") return false;
   if (stale) return false;
   const confidence = c.provenance?.confidence ?? 0;

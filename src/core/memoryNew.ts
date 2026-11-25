@@ -43,6 +43,8 @@ export interface NewContext {
   knownComponents: ReadonlySet<string>;
   decisions: readonly Decision[];
   home: "public" | "private";
+  /** The person gate passed for this write. Without it a new constraint lands as an unapproved draft. */
+  byPerson?: boolean;
   /** The record already holding this id in either home, if any. */
   existing: (kind: NewKind, id: string) => { title?: string; statement?: string; status?: string; triage?: string } | undefined;
   /** Whether either home has a file for this id that the loader skipped (corrupt or
@@ -121,6 +123,7 @@ export function newRecord(kind: NewKind, input: NewInput, ctx: NewContext): Edit
       rule: text, severity, rationale: input.rationale?.trim() ?? "", root: ctx.root, knownDeps: ctx.knownDeps,
       applies_to_all: !files.length, vouched: false,
     }, now);
+    if (!ctx.byPerson) rec.status = "draft";
   } else {
     const severity = input.severity ?? "medium";
     if (!["low", "medium", "high", "critical"].includes(severity)) return refuse(`--severity for a finding must be low, medium, high or critical, not "${severity}"`);

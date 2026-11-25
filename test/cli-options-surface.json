@@ -191,6 +191,18 @@
       }
     ]
   },
+  "challenge --reason": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      },
+      {
+        "file": "test/json-views.test.ts",
+        "title": "review --json and why --json emit rule entries with displayState"
+      }
+    ]
+  },
   "change-id --json": {
     "tests": [
       {
@@ -1256,6 +1268,30 @@
       }
     ]
   },
+  "export-hld --check": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "export-hld --dry-run": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "export-hld --force": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
   "findings --all": {
     "tests": [
       {
@@ -1332,6 +1368,38 @@
       }
     ]
   },
+  "hld --json": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-answer --question": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-answer --skip": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
+  "hld-approve --reviewed-by": {
+    "tests": [
+      {
+        "file": "test/hld.test.ts",
+        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
+      }
+    ]
+  },
   "hook --provider": {
     "tests": [
       {
@@ -1385,110 +1453,6 @@
       {
         "file": "test/hld.test.ts",
         "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "hld --json": {
-    "tests": [
-      {
-        "file": "test/hld.test.ts",
-        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "hld-answer --skip": {
-    "tests": [
-      {
-        "file": "test/hld.test.ts",
-        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "hld-answer --question": {
-    "tests": [
-      {
-        "file": "test/hld.test.ts",
-        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "hld-approve --reviewed-by": {
-    "tests": [
-      {
-        "file": "test/hld.test.ts",
-        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "export-hld --check": {
-    "tests": [
-      {
-        "file": "test/hld.test.ts",
-        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "export-hld --dry-run": {
-    "tests": [
-      {
-        "file": "test/hld.test.ts",
-        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "export-hld --force": {
-    "tests": [
-      {
-        "file": "test/hld.test.ts",
-        "title": "cli: import-hld, hld, hld-answer, hld-approve (terminal only) and export-hld --check"
-      }
-    ]
-  },
-  "lock --kind": {
-    "tests": [
-      {
-        "file": "test/locks.test.ts",
-        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
-      }
-    ]
-  },
-  "lock --note": {
-    "tests": [
-      {
-        "file": "test/locks.test.ts",
-        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
-      }
-    ]
-  },
-  "lock --reviewed-by": {
-    "tests": [
-      {
-        "file": "test/locks.test.ts",
-        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
-      }
-    ]
-  },
-  "locks --check": {
-    "tests": [
-      {
-        "file": "test/locks.test.ts",
-        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
-      }
-    ]
-  },
-  "locks --json": {
-    "tests": [
-      {
-        "file": "test/locks.test.ts",
-        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
-      }
-    ]
-  },
-  "unlock --reviewed-by": {
-    "tests": [
-      {
-        "file": "test/locks.test.ts",
-        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
       }
     ]
   },
@@ -1745,6 +1709,46 @@
       }
     ]
   },
+  "lock --kind": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "lock --note": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "lock --reviewed-by": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "locks --check": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
+  "locks --json": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
   "log --diff": {
     "tests": [
       {
@@ -1793,6 +1797,14 @@
       }
     ]
   },
+  "memory-policy migrate --dry-run": {
+    "tests": [
+      {
+        "file": "test/memory-policy-cli.test.ts",
+        "title": "§9 memory-policy migrate --dry-run lists the move and writes nothing"
+      }
+    ]
+  },
   "memory-policy strays --import": {
     "tests": [
       {
@@ -1801,11 +1813,99 @@
       }
     ]
   },
-  "memory-policy migrate --dry-run": {
+  "new --component": {
     "tests": [
       {
-        "file": "test/memory-policy-cli.test.ts",
-        "title": "§9 memory-policy migrate --dry-run lists the move and writes nothing"
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --context": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --evidence": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
+  },
+  "new --feature": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --file": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --json": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --rationale": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
+  },
+  "new --rejected": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --severity": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new constraint and finding; the human text output names the confirm command"
+      }
+    ]
+  },
+  "new --status": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --text": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "new --title": {
+    "tests": [
+      {
+        "file": "test/memory-new.test.ts",
+        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
       }
     ]
   },
@@ -2597,6 +2697,22 @@
       }
     ]
   },
+  "replace --reason": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
+  "replace --with": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
   "report --before": {
     "tests": [
       {
@@ -2945,6 +3061,30 @@
       {
         "file": "test/integration-cross-area.test.ts",
         "title": "core->constitution: review-memory prepare hashes evidence canonically and capture --apply persists the rule"
+      }
+    ]
+  },
+  "rule show --json": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
+  "rules --json": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
+  "rules --status": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
       }
     ]
   },
@@ -3520,6 +3660,14 @@
       }
     ]
   },
+  "sync --max": {
+    "tests": [
+      {
+        "file": "test/sync-range.test.ts",
+        "title": "sync --range --max keeps only the newest commits"
+      }
+    ]
+  },
   "sync --no-commit": {
     "tests": [
       {
@@ -3556,11 +3704,27 @@
       }
     ]
   },
+  "sync --range": {
+    "tests": [
+      {
+        "file": "test/sync-range.test.ts",
+        "title": "sync --range captures substantive commits deterministically and is idempotent"
+      }
+    ]
+  },
   "sync --samples": {
     "tests": [
       {
         "file": "test/cli-flags-ops.test.ts",
         "title": "cli:sync flags"
+      }
+    ]
+  },
+  "sync --synthesize": {
+    "tests": [
+      {
+        "file": "test/sync-range.test.ts",
+        "title": "sync --range captures substantive commits deterministically and is idempotent"
       }
     ]
   },
@@ -3740,6 +3904,14 @@
       }
     ]
   },
+  "unlock --reviewed-by": {
+    "tests": [
+      {
+        "file": "test/locks.test.ts",
+        "title": "cli: lock refuses without an interactive terminal; locks --check fails on a changed file"
+      }
+    ]
+  },
   "update --dry-run": {
     "todo": "talks to the npm registry and refuses inside a source checkout; not exercised hermetically"
   },
@@ -3863,6 +4035,14 @@
       {
         "file": "test/integration-cli-commands-a.test.ts",
         "title": "cli:why: an unresolvable --as-of ref fails with a clear message"
+      }
+    ]
+  },
+  "why --json": {
+    "tests": [
+      {
+        "file": "test/json-views.test.ts",
+        "title": "review --json and why --json emit rule entries with displayState"
       }
     ]
   },
@@ -4050,123 +4230,11 @@
       }
     ]
   },
-  "new --title": {
+  "person-token init --rotate": {
     "tests": [
       {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --text": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --context": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --rejected": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --feature": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --file": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --component": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --status": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --json": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
-      }
-    ]
-  },
-  "new --rationale": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new constraint and finding; the human text output names the confirm command"
-      }
-    ]
-  },
-  "new --severity": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new constraint and finding; the human text output names the confirm command"
-      }
-    ]
-  },
-  "new --evidence": {
-    "tests": [
-      {
-        "file": "test/memory-new.test.ts",
-        "title": "cli:new constraint and finding; the human text output names the confirm command"
-      }
-    ]
-  },
-  "sync --range": {
-    "tests": [
-      {
-        "file": "test/sync-range.test.ts",
-        "title": "sync --range captures substantive commits deterministically and is idempotent"
-      }
-    ]
-  },
-  "sync --max": {
-    "tests": [
-      {
-        "file": "test/sync-range.test.ts",
-        "title": "sync --range --max keeps only the newest commits"
-      }
-    ]
-  },
-  "sync --synthesize": {
-    "tests": [
-      {
-        "file": "test/sync-range.test.ts",
-        "title": "sync --range captures substantive commits deterministically and is idempotent"
+        "file": "test/person-gate.test.ts",
+        "title": "person-token init refuses without a terminal (exit 4)"
       }
     ]
   }

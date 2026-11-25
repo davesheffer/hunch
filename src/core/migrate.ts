@@ -21,7 +21,7 @@ import type { EntityKind } from "./types.js";
 import type { HunchPaths } from "./paths.js";
 
 /** The schema generation this build writes and reads. Bump on any breaking change. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** A repo whose `.hunch/` predates manifests is treated as v1. Migrations are
  *  numbered from 2 (each `version` is the number it PRODUCES), so a baseline repo
@@ -82,6 +82,19 @@ export const MIGRATIONS: Migration[] = [
         if (raw.environment === undefined) raw.environment = null;
         if (raw.metadata === undefined) raw.metadata = {};
       }
+      return raw;
+    },
+  },
+  {
+    // v4: rule lifecycle (draft/challenge) + session/run provenance. Never changes status.
+    version: 4,
+    kinds: ["decisions", "constraints"],
+    description: "Add source_session/source_run (decisions, constraints) and challenge (constraints)",
+    up(kind, raw) {
+      if (kind !== "decisions" && kind !== "constraints") return raw;
+      if (raw.source_session === undefined) raw.source_session = null;
+      if (raw.source_run === undefined) raw.source_run = null;
+      if (kind === "constraints" && raw.challenge === undefined) raw.challenge = null;
       return raw;
     },
   },

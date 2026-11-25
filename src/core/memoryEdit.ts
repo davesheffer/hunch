@@ -16,6 +16,8 @@
 import type { Bug, Constraint, Decision, Finding } from "./types.js";
 import { safeRepoScope, toPosixTarget } from "./paths.js";
 import { captureConflicts, isLive } from "./topics.js";
+import { retireRecord } from "./lifecycle.js";
+import { isHumanConfirmed } from "./strictgate.js";
 import { withoutHumanSignature } from "./countersign.js";
 import { isImportedAdrDecision } from "./importReview.js";
 import { TESTIMONY_CORRECTION_RATIONALE, VOUCHED_CORRECTION_RATIONALE } from "./correction.js";
@@ -239,7 +241,7 @@ export function removeRecord(kind: MemoryKind, rec: MemoryRecord, now: string, c
     const con = rec as Constraint;
     if (con.status === "retired") return refuse(`constraint "${con.id}" is already retired`);
     if (con.valid_to) return refuse(`constraint "${con.id}" already stopped applying on ${con.valid_to}`);
-    return { ok: true, changed: true, record: stamp(con, { status: "retired", valid_to: now }, now) };
+    return { ok: true, changed: true, record: stamp(retireRecord(con, now), {}, now) };
   }
   const fnd = rec as Finding;
   if (fnd.triage === "stale" || fnd.triage === "resolved") return refuse(`finding "${fnd.id}" is already ${fnd.triage}`);
@@ -276,8 +278,11 @@ export function restoreRecord(kind: MemoryKind, rec: MemoryRecord, change: Resto
   if (kind === "constraint") {
     const con = rec as Constraint;
     if (con.status !== "retired") return refuse(`constraint "${con.id}" is ${con.status}, not removed`);
-    if (change.status !== undefined) return refuse("--status doesn't apply to a constraint; it returns to active");
-    return { ok: true, changed: true, record: stamp(con, { status: "active", valid_to: null }, now) };
+    if (change.status !== undefined) return refuse("--status doesn't apply to a constraint; it returns to its status before removal");
+    // Only a person may approve a draft: restore never promotes. Without a recorded
+    // pre-remove status, only a human-confirmed rule comes back active.
+    const back = con.retired_from ?? (isHumanConfirmed(con.provenance?.source) ? "active" : "draft");
+    return { ok: true, changed: true, record: stamp(con, { status: back, valid_to: null, retired_from: undefined }, now) };
   }
   const fnd = rec as Finding;
   if (fnd.triage !== "stale" && fnd.triage !== "resolved") return refuse(`finding "${fnd.id}" is ${fnd.triage}, not removed`);

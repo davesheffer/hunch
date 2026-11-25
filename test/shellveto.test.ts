@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
-import { addedLinesSinceHead, filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles } from "../src/core/shellveto.js";
+import { addedLinesSinceHead, filesChangedSinceHead, shellVetoReason, vetoForWrittenFiles, constraintForWrittenFiles } from "../src/core/shellveto.js";
 import { postToolBlockOutput } from "../src/core/agenthook.js";
 
 // A repo whose committed users-list.tsx already contains the rejected pattern once:
@@ -1023,4 +1023,21 @@ test("confirm spawns: one tracked violator among 50 rewrites → at most 4 git s
     if (prior === undefined) delete process.env.GIT_TRACE; else process.env.GIT_TRACE = prior;
     cleanupDir(trace);
   }
+});
+
+test("constraintForWrittenFiles: a draft rule does not veto a shell write, an active challenged one does", t => {
+  const { root, store } = repo(t);
+  const put = (status: "draft" | "active", challenge: unknown) => {
+    store.json.put("constraints", {
+      id: "con_lc", statement: "no localStorage", scope: ["src/**"], severity: "blocking", status, challenge,
+      forbids: { deps: ["lodash"], symbols: [], patterns: [] }, rationale: "",
+      provenance: { source: "human_confirmed", confidence: 1, evidence: [] },
+    } as never);
+    store.reindex();
+  };
+  writeFileSync(join(root, LIST), ['import _ from "lodash";', "export const UsersList = () => null;", ""].join("\n"));
+  put("draft", null);
+  assert.equal(constraintForWrittenFiles(store, root, [LIST], 30_000), null);
+  put("active", { reason: "r", by_session: null, by_run: null, at: "2026-01-01T00:00:00Z" });
+  assert.ok(constraintForWrittenFiles(store, root, [LIST], 30_000), "challenged active rule still vetoes");
 });

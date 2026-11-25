@@ -13,6 +13,7 @@
 import { resolve, join, dirname, isAbsolute, relative } from "node:path";
 import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { toPosixTarget, repoRelativeTarget, isRepoFile, hunchPathsForDir, safeRepoScope, type HunchPaths } from "../core/paths.js";
+import { retireRecord } from "../core/lifecycle.js";
 import { ENTITY_KINDS, type Component, type Constraint, type Bug, type Decision, type Symbol, type Edge, type Finding, type RejectedTripwire, type EntityKind, type EntityFor, type TaskRecord } from "../core/types.js";
 import { openDb, withTx, type DB } from "./db.js";
 import { RESET_SQL, embedHash } from "./schema.js";
@@ -2316,7 +2317,7 @@ export class HunchStore {
    *  nullable return. Writes to whichever store already holds the record
    *  (`putWhereItLives`), so a public/private twin can never be forked. */
   retireConstraint(existing: Constraint): Constraint {
-    return this.putWhereItLives("constraints", { ...existing, status: "retired", valid_to: new Date().toISOString() });
+    return this.putWhereItLives("constraints", retireRecord(existing, new Date().toISOString()));
   }
 
   /** Invalidate, don't delete (Zep edge-invalidation): close `oldId`'s valid-time
@@ -2391,7 +2392,7 @@ export class HunchStore {
     // decisions tied to an active blocking constraint via source_decision
     const blockingDec = new Set(
       this.recs("constraints")
-        .filter((c) => c.severity === "blocking" && c.status !== "retired" && c.source_decision)
+        .filter((c) => c.severity === "blocking" && c.status === "active" && c.source_decision)
         .map((c) => c.source_decision as string),
     );
     const out: RegressionHit[] = [];

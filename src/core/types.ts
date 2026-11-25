@@ -369,6 +369,8 @@ export const DecisionSchema = z.object({
   // valid-time / last_verified signals rather than a separate clock.
   topic: z.string().nullable().default(null).describe("decision-grounding anchor; one topic per decision, null = un-anchored"),
   status: z.enum(["proposed", "accepted", "rejected", "superseded"]).default("proposed"),
+  source_session: z.string().nullable().optional(),
+  source_run: z.string().nullable().optional(),
   context: z.string().default(""),
   decision: z.string().default(""),
   consequences: z.array(z.string()).default([]),
@@ -462,7 +464,22 @@ export const ConstraintSchema = z.object({
   // Bi-temporal VALID-TIME: a constraint can be RETIRED without deletion, so
   // "what invariants were in force as of commit X?" stays answerable. `valid_to`
   // null = still active. A retired constraint is excluded from enforcement at HEAD.
-  status: z.enum(["active", "retired"]).default("active"),
+  // "draft" = proposed rule: shown as a warning, NEVER blocks until promoted to active.
+  status: z.enum(["active", "retired", "draft"]).default("active"),
+  // Open challenge against an ACTIVE rule; the rule keeps blocking while challenged.
+  challenge: z
+    .object({
+      reason: z.string(),
+      by_session: z.string().nullable().default(null),
+      by_run: z.string().nullable().default(null),
+      at: z.string(),
+    })
+    .nullable()
+    .optional(),
+  // Status before `hunch remove`, so `hunch restore` returns a draft as a draft.
+  retired_from: z.enum(["draft", "active"]).optional(),
+  source_session: z.string().nullable().optional(),
+  source_run: z.string().nullable().optional(),
   valid_from: z.string().optional().describe("ISO instant the invariant took effect"),
   valid_to: z.string().nullable().default(null).describe("ISO instant it was retired (null = active)"),
   provenance: ProvenanceSchema,

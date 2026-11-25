@@ -123,7 +123,7 @@ function fromDecision(d: Decision, components: readonly Component[]): MemoryItem
 function fromConstraint(c: Constraint, components: readonly Component[]): MemoryItem {
   return item({
     id: c.id, kind: "rule", title: c.statement, summary: c.rationale, status: c.status,
-    active: c.status === "active" && !c.valid_to, feature: null,
+    active: c.status !== "retired" && !c.valid_to, feature: null,
     components: componentLinks([], c.scope, components), files: c.scope, commits: [],
     delivery: c.severity === "blocking" ? "block" : c.severity === "warning" ? "warn" : "inform",
     signed: humanSigned(c.provenance.source), date: c.valid_from ?? "",

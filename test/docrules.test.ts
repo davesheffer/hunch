@@ -1,4 +1,4 @@
-import { cleanupDir } from "./fixtures.js";
+import { cleanupDir, personTokenEnv, sharedPersonEnv, tempDir } from "./fixtures.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -105,7 +105,7 @@ test("planDocRules: create / unchanged / moved / changed / orphaned / conflict /
 test("hunch derive-rules: writes constraints, is idempotent, gates edits, reports orphans, --check exits 1", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-docrules-"));
   const cli = (...args: string[]) => spawnSync(process.execPath, [TSX, CLI, "derive-rules", ...args], {
-    cwd: root, encoding: "utf8", env: { ...process.env, HUNCH_PRIVATE_DIR: "", GIT_CONFIG_NOSYSTEM: "1" },
+    cwd: root, encoding: "utf8", env: { ...process.env, ...sharedPersonEnv(), HUNCH_PRIVATE_DIR: "", GIT_CONFIG_NOSYSTEM: "1" },
   });
   const git = (...args: string[]) => execFileSync("git", args, { cwd: root });
   const write = (body: string) => { writeFileSync(join(root, "CONTRIBUTING.md"), body); git("add", "CONTRIBUTING.md"); };
@@ -227,7 +227,7 @@ test("enqueueProposals skips pending, dropped, and existing-statement duplicates
 
 test("hunch derive-rules --propose/--proposals/--accept/--drop: review queue round-trip", () => {
   const root = mkdtempSync(join(tmpdir(), "hunch-docrules-prop-"));
-  const env = { ...process.env, HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic", GIT_CONFIG_NOSYSTEM: "1" };
+  const env = { ...process.env, ...personTokenEnv(tempDir("hunch-docrules-person-")), HUNCH_PRIVATE_DIR: "", HUNCH_SYNTH_PROVIDER: "deterministic", GIT_CONFIG_NOSYSTEM: "1" };
   const run = (...args: string[]) => spawnSync(process.execPath, [TSX, CLI, ...args], { cwd: root, encoding: "utf8", env });
   try {
     execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
@@ -382,7 +382,7 @@ test("validateProposals rejects short quotes; the proposal hash covers provider 
 function mkRepo(prefix: string) {
   const root = mkdtempSync(join(tmpdir(), prefix));
   const run = (...args: string[]) => spawnSync(process.execPath, [TSX, CLI, "derive-rules", ...args], {
-    cwd: root, encoding: "utf8", env: { ...process.env, HUNCH_PRIVATE_DIR: "", GIT_CONFIG_NOSYSTEM: "1" },
+    cwd: root, encoding: "utf8", env: { ...process.env, ...sharedPersonEnv(), HUNCH_PRIVATE_DIR: "", GIT_CONFIG_NOSYSTEM: "1" },
   });
   const git = (...args: string[]) => execFileSync("git", args, { cwd: root });
   git("init", "-q", "-b", "main");
@@ -501,6 +501,55 @@ test("hunch derive-rules: rename holds until --accept-changes; malformed marker 
     assert.match(r.stdout, /marker present but malformed/);
     assert.doesNotMatch(r.stdout.match(/^.*malformed.*$/gm)!.join(" "), /retire/);
     assert.equal(run(".", "--check").status, 1);
+  } finally {
+    cleanupDir(root);
+  }
+});
+
+test("planDocRules: a doc edit keeps a draft rule a draft and an active rule active", () => {
+  for (const status of ["draft", "active"] as const) {
+    const old = docRuleToConstraint(rule({ key: "k" }), undefined, NOW);
+    const prev: Constraint = { ...old, status };
+    const plan = planDocRules({ rules: [rule({ key: "k", statement: "Validate everything." })], issues: [] }, [prev], sameDoc, new Set(), NOW);
+    assert.equal(plan.changed[0]!.next.statement, "Validate everything.");
+    assert.equal(plan.changed[0]!.next.status, status);
+  }
+});
+
+test("hunch derive-rules --accept-changes keeps a challenged rule's lifecycle (status and challenge)", () => {
+  const root = mkdtempSync(join(tmpdir(), "hunch-docrules-keep-"));
+  const cli = (...args: string[]) => spawnSync(process.execPath, [TSX, CLI, "derive-rules", ...args], {
+    cwd: root, encoding: "utf8", env: { ...process.env, ...sharedPersonEnv(), HUNCH_PRIVATE_DIR: "", GIT_CONFIG_NOSYSTEM: "1" },
+  });
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: root });
+  const write = (body: string) => { writeFileSync(join(root, "CONTRIBUTING.md"), body); git("add", "CONTRIBUTING.md"); };
+  const rule = (text: string) => `<!-- hunch:rule scope=src/ui/** severity=blocking id=ui-no-billing -->\n${text}\n`;
+  try {
+    git("init", "-q", "-b", "main");
+    git("config", "user.email", "docrules@test.invalid");
+    git("config", "user.name", "DocRules Test");
+    writeFileSync(join(root, ".gitignore"), ".hunch/hunch.sqlite*\n.hunch/local.json\n");
+    git("add", ".gitignore");
+    const bootstrap = new HunchStore(hunchPaths(root));
+    bootstrap.json.ensureDirs();
+    bootstrap.close();
+    write(`# Rules\n\n${rule("UI must not import billing.")}`);
+    const conPath = join(hunchPaths(root).hunch, "constraints", `${constraintId("doc-rule:ui-no-billing")}.json`);
+    let r = cli();
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const id = constraintId("doc-rule:ui-no-billing");
+    const ch = spawnSync(process.execPath, [TSX, CLI, "challenge", id, "--reason", "looks wrong"], { cwd: root, encoding: "utf8", env: { ...process.env, HUNCH_PRIVATE_DIR: "", GIT_CONFIG_NOSYSTEM: "1" } });
+    assert.equal(ch.status, 0, ch.stdout + ch.stderr);
+    const challenged = JSON.parse(readFileSync(conPath, "utf8")) as Constraint;
+    assert.ok(challenged.challenge, "the challenge is recorded");
+
+    write(`# Rules\n\n${rule("UI must not import the billing client.")}`);
+    r = cli("--accept-changes");
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const after = JSON.parse(readFileSync(conPath, "utf8")) as Constraint;
+    assert.equal(after.statement, "UI must not import the billing client.", "the edit was applied");
+    assert.equal(after.status, challenged.status, "a re-derive keeps the status");
+    assert.deepEqual(after.challenge, challenged.challenge, "a re-derive keeps the challenge");
   } finally {
     cleanupDir(root);
   }

@@ -131,6 +131,16 @@ export function findStrays(store: HunchStore, root: string): StrayScan {
   return { home, strays, tracked };
 }
 
+/** Fields the v4 migration adds as null; a copy loaded under an older manifest lacks them, so a null is the same as absent. */
+const V4_NULLABLE = ["source_session", "source_run", "challenge"] as const;
+function withoutV4Nulls(record: unknown): unknown {
+  if (typeof record !== "object" || record === null) return record;
+  const copy = { ...(record as Record<string, unknown>) };
+  for (const key of V4_NULLABLE) if (copy[key] === null) delete copy[key];
+  return copy;
+}
+const sameRecord = (a: unknown, b: unknown): boolean => sameCanonical(withoutV4Nulls(a), withoutV4Nulls(b));
+
 const pathKey = (path: string): string => process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
 
 /** Scan one kind of one checkout into `strays`; returns how many of its files git tracks. */
@@ -179,12 +189,12 @@ function scanKind(store: HunchStore, json: JsonStore, checkout: string, kind: En
     // must not be shadowed by an overlay copy written over it.
     const publicCopy = store.json.get(kind, id);
     if (publicCopy && !isRoot) {
-      if (!sameCanonical(publicCopy, record)) strays.push({ checkout, kind, id, status: "differs", source: sourceOf(id), note: "differs from the repo's public copy" });
+      if (!sameRecord(publicCopy, record)) strays.push({ checkout, kind, id, status: "differs", source: sourceOf(id), note: "differs from the repo's public copy" });
       continue;
     }
     const existing = store.getPrivateRec(kind, id);
     if (existing) {
-      if (!sameCanonical(existing, record)) strays.push({ checkout, kind, id, status: "differs", source: sourceOf(id) });
+      if (!sameRecord(existing, record)) strays.push({ checkout, kind, id, status: "differs", source: sourceOf(id) });
       continue;
     }
     // A file the overlay loader skipped (invalid, corrupt, 0-byte tombstone) is not an
@@ -228,7 +238,7 @@ function scanKind(store: HunchStore, json: JsonStore, checkout: string, kind: En
     const id = idOf(raw);
     if (id !== null && firstById.has(id)) {
       const parsed = SCHEMAS[kind].safeParse(migrateRaw(kind, raw, version));
-      if (parsed.success && sameCanonical(parsed.data, firstById.get(id))) continue;
+      if (parsed.success && sameRecord(parsed.data, firstById.get(id))) continue;
     }
     strays.push({ checkout, kind, id, status: "invalid", source: file, note: "the loader could not read this file" });
   }
@@ -266,7 +276,7 @@ export function importStrays(store: HunchStore, scan: StrayScan): StrayImport {
           continue;
         }
         // An identical copy already landed (another checkout's): the record is safe.
-        if (existing && sameCanonical(existing, stray.record)) {
+        if (existing && sameRecord(existing, stray.record)) {
           result.imported.push(stray);
           continue;
         }

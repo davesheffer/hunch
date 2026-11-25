@@ -264,12 +264,28 @@ test("hunch_review_imported_adr approve lands when the human confirms in the cli
   } finally { s.cleanup(); }
 });
 
-test("hunch_review_imported_adr decline still works without elicitation and grants nothing", async () => {
+test("hunch_review_imported_adr decline is refused without human confirmation and writes nothing", async () => {
   const adr = importedAdr();
   const s = await setup("no-capability", { decisions: [adr] });
   try {
+    const before = JSON.stringify(s.read<Decision>("decisions", adr.id));
+    const out = await s.call("hunch_review_imported_adr", reviewArgs(adr, "decline"));
+    assert.equal(out.isError, true, out.text);
+    assert.match(out.text, /hunch review --decline-import /);
+    const after = s.read<Decision>("decisions", adr.id);
+    assert.equal(JSON.stringify(after), before, "nothing was written");
+    assert.equal(isHuman(after), false);
+    assert.equal(isPendingImportedAdrReview(after), true);
+  } finally { s.cleanup(); }
+});
+
+test("hunch_review_imported_adr decline with human confirmation is recorded and grants nothing", async () => {
+  const adr = importedAdr();
+  const s = await setup(CONFIRM, { decisions: [adr] });
+  try {
     const out = await s.call("hunch_review_imported_adr", reviewArgs(adr, "decline"));
     assert.equal(out.isError, false, out.text);
+    assert.equal(s.elicited.length, 1);
     const after = s.read<Decision>("decisions", adr.id);
     assert.equal(isHuman(after), false);
     assert.equal(importedAdrReview(after)?.disposition, "decline");

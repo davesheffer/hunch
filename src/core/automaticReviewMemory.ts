@@ -81,7 +81,7 @@ export async function automateReviewMemory(options: {
       // A discussion's rule lives in the file it was scoped to.
       if (!entry.file) entry.file = previous[0]!.scope[0] ?? "";
       if (unchanged) {
-        for (const r of previous.filter(r => r.status === "active" && r.provenance.evidence.includes("review-memory:auto/1"))) {
+        for (const r of previous.filter(r => (r.status === "active" || r.status === "draft") && r.provenance.evidence.includes("review-memory:auto/1"))) {
           try {
             const codeHash = `code:${canonicalHash(options.readCurrent(item.candidate?.file ?? r.scope[0] ?? ""))}`;
             if (!r.provenance.evidence.includes(codeHash)) {

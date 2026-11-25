@@ -194,6 +194,7 @@ Profiles retain their revision, sources, confidence, and freshness.
 
 - [Full documentation](https://www.hunchmemory.com/docs)
 - [Copy-paste cookbook](https://www.hunchmemory.com/cookbook)
+- [Rule lifecycle](docs/rule-lifecycle.md): draft, active, challenged and retired rules
 - [Changelog](CHANGELOG.md)
 - [VS Code extension](vscode-extension/README.md)
 - [Contributing](CONTRIBUTING.md)
