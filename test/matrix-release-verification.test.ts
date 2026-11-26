@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -467,7 +468,17 @@ test("withoutPersonToken removes every spelling of the name, as Windows env name
 
 test("hasPersonToken sees every spelling of the name, which the anonymous lane's absence check relies on", () => {
   assert.equal(hasPersonToken({ PATH: "p", HUNCH_PERSON_TOKEN_X: "fake" }), false);
-  assert.equal(hasPersonToken(undefined), false);
+  // An absent env means "inherit process.env", the same as run(), so it is checked, not assumed clean.
+  const saved = Object.fromEntries(Object.keys(process.env).filter((k) => /^HUNCH_PERSON_TOKEN$/i.test(k)).map((k) => [k, process.env[k]]));
+  for (const k of Object.keys(saved)) delete process.env[k];
+  try {
+    assert.equal(hasPersonToken(undefined), false);
+    process.env.Hunch_Person_Token = "fake";
+    assert.equal(hasPersonToken(undefined), true);
+  } finally {
+    for (const k of Object.keys(process.env)) if (/^HUNCH_PERSON_TOKEN$/i.test(k)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
   for (const name of ["HUNCH_PERSON_TOKEN", "hunch_person_token", "Hunch_Person_Token"]) assert.equal(hasPersonToken({ [name]: "fake" }), true, name);
   assert.equal(hasPersonToken(Object.assign(Object.create({ hunch_person_token: "fake" }), { PATH: "p" })), true);
 });
@@ -512,4 +523,16 @@ test("run() without an env strips a lower-case person token from process.env", (
     delete process.env.hunch_person_token;
     for (const [k, v] of saved) process.env[k] = v;
   }
+});
+
+test("runAnonymousLane's absence check calls hasPersonToken on the actor env and requires it to be false", () => {
+  // runAnonymousLane clones repos and runs the installed CLI, so it cannot run in a unit test; pin its call site in the source.
+  const src = readFileSync(new URL("../tooling/matrix-release-verification.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const start = src.indexOf("function runAnonymousLane(");
+  assert.ok(start > 0, "runAnonymousLane exists");
+  const end = src.indexOf("\n}\n", start);
+  assert.ok(end > start, "runAnonymousLane ends");
+  const body = src.slice(start, end);
+  assert.match(body, /const personTokenAbsent = !hasPersonToken\(actor\.env\)\s*&& !existsSync\(/);
+  assert.match(body, /person_token_absent: personTokenAbsent/);
 });

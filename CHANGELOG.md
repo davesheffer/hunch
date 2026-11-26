@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **A cold or failing npx download no longer blocks every tool call.** When the hook's pinned npx fallback cannot run Hunch (the download fails or times out, or npx exits non-zero), hosts that fail closed on a non-zero hook exit (Claude Code Code Mode) blocked every tool call with no Hunch message. Now that call runs without Hunch checks and says so on stderr and as a system message in Claude Code, with the fix (run `npx @davesheffer/hunch@<version> init` or install that version to warm the cache). A deliberate deny (exit 2) still passes through, and `HUNCH_HOOK_NPX_TIMEOUT_MS` optionally caps the npx fallback (unset: no cap). Re-running `hunch init` installs the new hook command, and `hunch doctor` now notes older hook commands and tells you to do so (#680).
+- **The person token is stripped in every spelling inside the CLI too.** `takePersonToken` now removes every case-insensitive spelling of `HUNCH_PERSON_TOKEN` from the process environment (it still reads the token from `HUNCH_PERSON_TOKEN`), as `hunch ui` already did for its children. In the matrix release tooling, `hasPersonToken(undefined)` now checks `process.env` (what `run()` inherits) instead of reporting no token, and a test pins the anonymous lane's use of it.
 
 ## 1.61.0 — 2026-11-26
 

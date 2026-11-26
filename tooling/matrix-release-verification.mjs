@@ -602,8 +602,9 @@ export function withoutPersonToken(env) {
   return Object.fromEntries(keys.filter((key) => !isPersonTokenKey(key)).map((key) => [key, env[key]]));
 }
 
+// An absent env means the child inherits process.env (as run() does), so that is what gets checked.
 export function hasPersonToken(env) {
-  if (!env) return false;
+  env ??= process.env;
   for (const key in env) if (isPersonTokenKey(key)) return true;
   return false;
 }
