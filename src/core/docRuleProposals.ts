@@ -130,7 +130,7 @@ export function writeProposalQueue(hunchDir: string, q: QueueFile): void {
  *  dropped, or already a constraint (by id or identical statement). */
 export function enqueueProposals(q: QueueFile, fresh: readonly DocRuleProposal[], existing: readonly Constraint[]): { queue: QueueFile; added: DocRuleProposal[] } {
   const known = new Set([...q.pending.map((p) => p.id), ...q.dropped, ...existing.map((c) => c.id)]);
-  const statements = new Set(existing.filter((c) => c.status === "active").map((c) => squash(c.statement).toLowerCase()));
+  const statements = new Set(existing.filter((c) => c.status !== "retired").map((c) => squash(c.statement).toLowerCase()));
   const added = fresh.filter((p) => {
     if (known.has(p.id) || statements.has(p.statement.toLowerCase())) return false;
     known.add(p.id);

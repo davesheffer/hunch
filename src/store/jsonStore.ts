@@ -799,11 +799,26 @@ export class JsonStore {
     }
   }
 
+  /** A record carrying v4 data (draft status, run/session link, challenge) raises a v3
+   *  manifest to v4, so an older build gets the "newer schema" signal instead of silently
+   *  dropping a status it cannot parse. Only v3 -> v4: raising an older manifest would
+   *  skip the v2/v3 migrations of its other records. The v4 migration only adds
+   *  optional nullable fields, so the remaining unmigrated records still load. */
+  private raiseManifestForV4(kind: EntityKind, record: unknown): void {
+    if (kind !== "constraints" && kind !== "decisions") return;
+    const r = record as { status?: unknown; source_session?: unknown; source_run?: unknown; challenge?: unknown };
+    if (r.status !== "draft" && !r.source_session && !r.source_run && !r.challenge) return;
+    if (SCHEMA_VERSION < 4 || this.schemaVersion() !== 3) return;
+    const hunch = this.safeHunchDirectory(true)!;
+    this.writeContainedFile(hunch, this.paths.manifest, JSON.stringify({ schema_version: 4 }, null, 2) + "\n", MAX_JSON_MANIFEST_BYTES);
+  }
+
   /** Write a single record (validated) to its JSON file / into the index array. */
   put<K extends EntityKind>(kind: K, record: EntityFor[K]): EntityFor[K] {
     this.writeGuard?.(kind);
     const schema = SCHEMAS[kind];
     const validated = schema.parse(record) as EntityFor[K] & { id: string };
+    this.raiseManifestForV4(kind, validated);
     const single = SINGLE_FILE[kind];
     if (!single) this.assertSafeRecordId(validated.id);
     const directory = this.safeKindDirectory(kind, true)!;

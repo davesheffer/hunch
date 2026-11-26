@@ -94,6 +94,7 @@ export const RELEASE_TEST_COVERAGE = Object.freeze({
     "test/matrix-release-verification.test.ts",
     "test/team-matrix-e2e.test.ts",
     "tooling/matrix-release-verification.mjs",
+    "test/support/personHomePreload.mjs",
   ],
 });
 

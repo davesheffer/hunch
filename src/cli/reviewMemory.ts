@@ -10,7 +10,7 @@ function readJson(file: string): unknown {
 }
 
 export function registerReviewMemoryCommands(program: Command,
-  capture: (records: Constraint[], repository: string, privateOnly: boolean) => void,
+  capture: (records: Constraint[], repository: string, privateOnly: boolean) => Constraint[] | void,
   context: (repository: string, privateOnly?: boolean) => ReviewMemoryContext): void {
   const command = program.command("review-memory").description("Turn sourced PR review threads into scoped review rules");
   registerAutomaticReviewMemory(command, context, capture);
@@ -30,7 +30,7 @@ export function registerReviewMemoryCommands(program: Command,
       if (opts.apply && !!opts.private === !!opts.public) throw new Error("--apply requires exactly one of --private or --public");
       const packet = validateReviewPacket(readJson(opts.from));
       const records = compileReviewRules(packet, readJson(opts.rules), new Date().toISOString());
-      if (opts.apply) capture(records, packet.repository, !!opts.private);
-      console.log(JSON.stringify({ applied: !!opts.apply, authority: "advisory", rules: records }, null, 2));
+      const written = opts.apply ? capture(records, packet.repository, !!opts.private) : undefined;
+      console.log(JSON.stringify({ applied: !!opts.apply, authority: "advisory", rules: written ?? records }, null, 2));
     });
 }

@@ -43,6 +43,8 @@ import { constraintForWrittenFiles, filesChangedSinceHead, shellVetoReason, veto
 import { isRegistryPath, lockDenyReason, lockFor, lockProblemReason, readLocks, verifyLocks } from "../core/locks.js";
 import type { Decision } from "../core/types.js";
 import { openTeamStore } from "./teamStore.js";
+import { appendRuleLog, currentRunContext } from "../core/lifecycle.js";
+import { refusedLifecycleCommand } from "../core/lifecycleShellGuard.js";
 
 /** `input` supplies the event JSON; it defaults to the process's stdin. The hook daemon passes
  *  the payload it already holds. */
@@ -571,6 +573,9 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
       // before it (a parallel tool call, another process, a host that skipped the
       // last PostToolUse) is not this command's to be blamed for.
       if (evt.tool_name === "Bash" || evt.tool_name === "PowerShell") {
+        const shellCommand = (evt.tool_input as { command?: unknown } | undefined)?.command;
+        const refused = typeof shellCommand === "string" ? refusedLifecycleCommand(shellCommand) : null;
+        if (refused) { emitDeny(provider, refused); return; }
         refreshShellBaseline(root, evt.session_id, evt.agent_id);
         return;
       }
@@ -653,12 +658,14 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
           const reason = denials.length === 1
             ? denials[0]!.hit.reason
             : `Hunch: this patch is denied for ${denials.length} files (${denials.map((d) => d.target).join(", ")}).\n${denials.map((d) => d.hit.reason).join("\n")}`;
+          logRuleChecks(root, store, targets, new Set(denials.map((d) => d.hit.event.constraint as string | undefined).filter((x): x is string => !!x)), evt, true);
           emitDeny(provider, reason);
           for (const d of denials) observeHookDenial(processRoot, provider, evt, d.target, d.hit);
           return;
         }
       }
 
+      logRuleChecks(root, store, targets, new Set(), evt, false);
       // advisory / firm / strict(non-blocking): inject the relevant Hunch slice.
       const grounded = fileGrounding(root, store, provider, evt, target, abs, processRoot);
       if (!grounded) return; // no noise on files Hunch hasn't learned yet
@@ -675,6 +682,29 @@ export async function runHookCommand(opts: { provider?: string }, input: () => P
     } finally {
       store?.close();
     }
+}
+
+/** One rule-check line per rule in scope of the edit targets, written in a single
+ *  append (never contents: repo-relative path only). Fails silent. */
+function logRuleChecks(root: string, store: HunchStore, targets: Array<{ target: string }>, blocked: Set<string>, evt: HunchHookInput, denied: boolean): void {
+  try {
+    const at = new Date().toISOString();
+    const ctx = currentRunContext(evt.session_id);
+    const seen = new Set<string>();
+    const lines: Array<Record<string, unknown>> = [];
+    for (const t of targets) {
+      for (const c of store.checkConstraints(t.target)) {
+        const key = `${c.id}\0${t.target}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const enforced = c.severity === "blocking" && c.status !== "draft";
+        // A denied edit (any guard, blast radius included) was not allowed through an enforced rule in scope.
+        const verdict = blocked.has(c.id) || (denied && enforced) ? "blocked" : enforced ? "allowed" : "warned";
+        lines.push({ kind: "check", at, rule_id: c.id, verdict, status: c.status, file: t.target, tool: evt.tool_name ?? null, ...ctx });
+      }
+    }
+    if (lines.length) appendRuleLog(root, lines);
+  } catch { /* logging never affects the hook */ }
 }
 
 // --- agent-hook helpers (used by `hunch hook`) -----------------------------

@@ -24,7 +24,7 @@ const CLI = join(PROJECT_ROOT, "src/cli/index.ts");
 const VERSION = (JSON.parse(readFileSync(join(PROJECT_ROOT, "package.json"), "utf8")) as { version: string }).version;
 
 const EXPECTED_TOOLS = [
-  "hunch_blast_radius", "hunch_bug_lineage", "hunch_capture_decision", "hunch_change_identity", "hunch_change_proof",
+  "hunch_blast_radius", "hunch_bug_lineage", "hunch_capture_decision", "hunch_challenge", "hunch_change_identity", "hunch_change_proof",
   "hunch_check_constraints", "hunch_compare", "hunch_conformance", "hunch_constitution_g2_behavior_candidates",
   "hunch_constitution_g2_behavior_materialization", "hunch_constitution_g2_behavior_policy_materialize",
   "hunch_constitution_g2_behavior_replay", "hunch_constitution_g2_candidates", "hunch_constitution_g2_operational_drill",
@@ -82,6 +82,7 @@ const VALID: Record<string, Case> = {
   hunch_runbook: { args: () => ({ task: "add an orders endpoint" }) },
   hunch_why: { args: () => ({ target: "src/orders.ts" }) },
   hunch_bug_lineage: { args: () => ({ symptom_or_symbol: "orders" }) },
+  hunch_challenge: { args: (ctx) => ({ rule_id: ctx.constraintId, reason: "surface probe" }) },
   hunch_check_constraints: { args: () => ({ scope: "src/orders.ts" }) },
   hunch_get_dependents: { args: () => ({ symbol: "listOrders" }) },
   hunch_blast_radius: { args: () => ({ target: "src/orders.ts" }) },

@@ -240,7 +240,7 @@ export function readState(store: HunchStore, input: unknown, options: StateAcces
     if (facets.has("constraints")) for (const c of store.recs("constraints")) {
       if (c.id !== subject && !c.scope.includes(subject)) continue;
       const scope = admit("constraints", c); if (!scope) continue;
-      if (c.status === "active" && c.valid_to == null) inForce.push(keep("constraints", c, scope));
+      if (c.status !== "retired" && c.valid_to == null) inForce.push(keep("constraints", c, scope));
     }
     if (facets.has("receipts")) for (const r of store.recs("receipts")) {
       const targets = r.id === subject || r.invalidates.some(isSubject) || isSubject(subjectOfRef(r.target));
@@ -671,6 +671,16 @@ function writeStateAuthorized(store: HunchStore, input: unknown, opts: WriteOpti
   const record = normalizeRecord(facet, request.scope, request.record, request.principal);
   const deny = () => { throw new StateRefusal('outside-grants', 'record unavailable or operation not permitted'); };
   const id = (record as { id: string }).id;
+  // Rule lifecycle is a person act (CLI): this path never sets, clears or moves a rule's status, challenge or source.
+  // An existing constraint keeps them; a new one is always an unapproved draft.
+  if (facet === "constraints") {
+    const prior = getHere(id) as Record<string, unknown> | undefined;
+    const rule = record as unknown as Record<string, unknown>;
+    for (const k of ["status", "challenge", "retired_from", "source_session", "source_run"]) {
+      if (prior && k in prior) rule[k] = prior[k]; else delete rule[k];
+    }
+    if (!prior) { rule.status = "draft"; rule.challenge = null; }
+  }
   /** The normalized PAYLOAD hash: what idempotency recognizes on a re-send. */
   const hash = stateHash(record);
   const ledger = opts.ledgerCache?.ledger ?? readLedger(hunchDir, request.scope);

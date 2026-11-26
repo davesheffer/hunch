@@ -1,4 +1,6 @@
-import { cleanupDir } from "./fixtures.js";
+import { sharedPersonEnv, cleanupDir } from "./fixtures.js";
+// The CLI refuses person-only rule actions without a person; these tests act as one.
+Object.assign(process.env, sharedPersonEnv());
 /**
  * The team-wide `auto_commit` switch in .hunch/config.json: on which branches Hunch
  * auto-commits PUBLIC memory. Every repository here is a temp repo under os.tmpdir(),

@@ -396,3 +396,21 @@ test("mergeReadResponses: a union read concatenates refs per partition, unions i
   assert.deepEqual(bare.scopes, [user, org]);
   assert.deepEqual(bare.denied_scopes, [team]);
 });
+
+test("write: the constraints facet cannot set or change status, challenge or source", () => {
+  const { store, cleanup } = tempStore();
+  try {
+    const fresh = write(store, "constraints", mkConstraint({ id: "con_nw1", status: "active", challenge: { reason: "x", by_session: null, by_run: null, at: "2026-01-01T00:00:00.000Z" }, source_session: "s" } as never) as never, "nw-new");
+    const created = fresh.record as unknown as Record<string, unknown>;
+    assert.equal(created.status, "draft", "a new rule is always a draft");
+    assert.equal(created.challenge, null);
+    store.json.put("constraints", mkConstraint({ id: "con_nw2", status: "active", source_session: "sess", source_run: "run", provenance: { source: "agent_recorded", confidence: 0.8, evidence: [] } } as never));
+    store.reindex();
+    const upd = write(store, "constraints", mkConstraint({ id: "con_nw2", statement: "changed", status: "retired", challenge: null, source_session: "evil", provenance: { source: "agent_recorded", confidence: 0.8, evidence: [] } } as never) as never, "nw-upd");
+    const after = upd.record as unknown as Record<string, unknown>;
+    assert.equal(after.statement, "changed");
+    assert.equal(after.status, "active");
+    assert.equal(after.source_session, "sess");
+    assert.equal(after.source_run, "run");
+  } finally { cleanup(); }
+});

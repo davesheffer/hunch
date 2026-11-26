@@ -1,4 +1,6 @@
-import { cleanupDir, writeLocalPointer } from "./fixtures.js";
+import { sharedPersonEnv, cleanupDir, writeLocalPointer } from "./fixtures.js";
+// The CLI refuses person-only rule actions without a person; these tests act as one.
+Object.assign(process.env, sharedPersonEnv());
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";

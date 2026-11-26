@@ -524,7 +524,7 @@ export function vetoForWrittenFiles(store: HunchStore, root: string, files: read
 /** Scopes of the content-matched BLOCKING invariants (forbidden deps, symbols,
  *  patterns): the only ones a write's text can break. */
 export function blockingForbidScopes(store: HunchStore): string[][] {
-  return store.recs("constraints").filter((c) => c.status !== "retired" && c.severity === "blocking" && !!effectiveForbids(c)).map((c) => c.scope);
+  return store.recs("constraints").filter((c) => c.status === "active" && c.severity === "blocking" && !!effectiveForbids(c)).map((c) => c.scope);
 }
 
 /** The first content-matched blocking invariant broken by what `files` gained

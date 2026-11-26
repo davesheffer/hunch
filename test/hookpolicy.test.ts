@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { hunchPaths } from "../src/core/paths.js";
 import { HunchStore } from "../src/store/hunchStore.js";
 import { indexRepo } from "../src/extractors/indexer.js";
-import { blockingInScope, vetoInScope, proposedEditLines } from "../src/core/hookpolicy.js";
+import { blockingInScope, constraintInLines, forbidsCover, vetoInScope, proposedEditLines } from "../src/core/hookpolicy.js";
 import { prov } from "./helpers.js";
 
 // jwt.ts ← session.ts ← charge.ts : a 2-hop dependency chain (mirrors check.test).
@@ -159,5 +159,40 @@ test("vetoInScope denies a MultiEdit whose edits[] re-introduce a rejected depen
     const hit = vetoInScope(store, fileOf("charge"), lines);
     assert.ok(hit, "the forbidden import in a later MultiEdit chunk is caught");
     assert.match(hit!.reason, /REVERSE decision dec_ext/);
+  } finally { cleanup(); }
+});
+
+const forbidding = (status: "draft" | "active", challenge: unknown, scopeFile: string) => ({
+  id: "con_lc", statement: "no moment", scope: [scopeFile], severity: "blocking", status, challenge,
+  forbids: { deps: ["moment"], symbols: [], patterns: [] }, rationale: "", provenance: prov(),
+}) as never;
+
+test("lifecycle: a DRAFT blocking rule with a matching forbids never blocks; a challenged ACTIVE one does", () => {
+  const { store, fileOf, cleanup } = indexed();
+  try {
+    const charge = fileOf("charge");
+    const lines = [`import moment from "moment";`];
+    store.json.put("constraints", forbidding("draft", null, charge));
+    store.reindex();
+    assert.equal(blockingInScope(store, charge, lines), null, "draft does not block");
+    assert.equal(constraintInLines(store, charge, lines), null, "draft does not block shell writes");
+    assert.equal(forbidsCover(store, charge), false);
+    assert.equal(vetoInScope(store, charge, lines), null);
+    store.json.put("constraints", forbidding("active", { reason: "too strict", by_session: null, by_run: null, at: "2026-01-01T00:00:00Z" }, charge));
+    store.reindex();
+    assert.ok(blockingInScope(store, charge, lines), "challenged active rule still blocks");
+    assert.ok(constraintInLines(store, charge, lines), "challenged active rule still blocks shell writes");
+  } finally { cleanup(); }
+});
+
+test("lifecycle: a draft constraint round-trips through the store", () => {
+  const { store, fileOf, cleanup } = indexed();
+  try {
+    store.json.put("constraints", forbidding("draft", null, fileOf("charge")));
+    store.reindex();
+    const got = store.json.loadAll("constraints").find((c) => c.id === "con_lc")!;
+    assert.equal(got.status, "draft");
+    assert.equal(got.challenge ?? null, null);
+    assert.equal(got.source_session ?? null, null);
   } finally { cleanup(); }
 });
