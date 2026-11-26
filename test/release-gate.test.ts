@@ -92,6 +92,19 @@ function passingMatrixReceipt(candidateClean = true) {
       legacy_current_proof_approval_refused: true,
       legacy_reproof_activation_refused: true,
     },
+    anonymous: {
+      person_token_absent: true,
+      read_succeeded: true,
+      draft_write_succeeded: true,
+      draft_not_active: true,
+      rerecord_refused: true,
+      retire_refused: true,
+      confirm_refused: true,
+      refusals_exit_person_required: true,
+      active_rule_bytes_preserved: true,
+      draft_state_preserved: true,
+      no_remote_commit_from_refusals: true,
+    },
     crash_recovery: {
       injected: true,
       commit_seam_reached: true,
@@ -247,7 +260,8 @@ test("Phase 2O release gate is fail-closed, content-addressed, and publish-neutr
   assert.ok(RELEASE_TEST_COVERAGE.release_pipeline_contract.includes("tooling/vscode-publish-tools/package-lock.json"),
     "the receipt binds the reviewed transitive publisher-tool closure");
   assert.deepEqual(RELEASE_TEST_COVERAGE.matrix_release_resilience,
-    ["test/matrix-release-verification.test.ts", "test/team-matrix-e2e.test.ts", "tooling/matrix-release-verification.mjs"],
+    ["test/matrix-release-verification.test.ts", "test/team-matrix-e2e.test.ts", "tooling/matrix-release-verification.mjs",
+      "test/support/personHomePreload.mjs"],
     "the release receipt binds pinned-version compatibility, crash recovery, and concurrent convergence");
   assert.deepEqual(RELEASE_TEST_COVERAGE.md1_correction_bridge.slice(-2),
     ["test/md1-benchmark.test.ts", "tooling/md1-benchmark.mjs"],

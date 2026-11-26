@@ -219,6 +219,19 @@ export function undoFor(action: UiAction | "new", result: MoveResult): Undo | nu
     : { action: "remove", body: {} };
 }
 
+/** Exit code of a CLI refusal because only a person may do the action. */
+export const EXIT_PERSON_REQUIRED = 4;
+
+/** The exact command a person runs in their own terminal for a UI write the CLI refused (no `--json`). */
+export function personCommand(args: readonly string[]): string {
+  const quote = (a: string): string => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(a) ? a : `"${a.replace(/(["\$`])/g, "\$1")}"`);
+  return `hunch ${args.filter((a) => a !== "--json").map(quote).join(" ")}`;
+}
+
+export function personRequiredMessage(args: readonly string[]): string {
+  return `Only a person can do this, and this page is not a person. Run this in your own terminal: ${personCommand(args)}`;
+}
+
 /** The refusal a person should read, from the CLI's stderr (`error: <msg>` lines). */
 export function cliError(stderr: string, stdout: string): string {
   const lines = `${stderr}\n${stdout}`.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   accessSync,
   chmodSync,
@@ -195,6 +195,20 @@ function expectedBaseline(options = {}) {
   };
 }
 
+const ANONYMOUS_CLAIMS = [
+  "person_token_absent",
+  "read_succeeded",
+  "draft_write_succeeded",
+  "draft_not_active",
+  "rerecord_refused",
+  "retire_refused",
+  "confirm_refused",
+  "refusals_exit_person_required",
+  "active_rule_bytes_preserved",
+  "draft_state_preserved",
+  "no_remote_commit_from_refusals",
+];
+
 function finiteNonnegativeInteger(value) {
   return Number.isSafeInteger(value) && value >= 0;
 }
@@ -238,6 +252,7 @@ function evidencePasses(evidence, options = {}) {
     && evidence.compatibility?.attack_clone_policy_authority_preserved === true
     && evidence.compatibility?.legacy_current_proof_approval_refused === true
     && evidence.compatibility?.legacy_reproof_activation_refused === true
+    && ANONYMOUS_CLAIMS.every((claim) => evidence.anonymous?.[claim] === true)
     && evidence.crash_recovery?.injected === true
     && evidence.crash_recovery?.commit_seam_reached === true
     && evidence.crash_recovery?.process_killed === true
@@ -577,7 +592,28 @@ function windowsCommandQuote(value) {
   return /^[A-Za-z0-9_./:=@-]+$/.test(value) ? value : `"${value.replace(/"/g, '\\"')}"`;
 }
 
-function run(command, args, options = {}) {
+// Windows env names are case-insensitive, so any ASCII spelling of the name is the token.
+// Keys are walked with for...in because spawn copies the env that way (inherited keys included).
+export function withoutPersonToken(env) {
+  if (!env) return env;
+  const keys = [];
+  for (const key in env) keys.push(key);
+  if (!keys.some(isPersonTokenKey)) return env;
+  return Object.fromEntries(keys.filter((key) => !isPersonTokenKey(key)).map((key) => [key, env[key]]));
+}
+
+export function hasPersonToken(env) {
+  if (!env) return false;
+  for (const key in env) if (isPersonTokenKey(key)) return true;
+  return false;
+}
+
+function isPersonTokenKey(key) {
+  return /^HUNCH_PERSON_TOKEN$/i.test(key);
+}
+
+// Strips the person credential from every child by default (git, hooks, probes); only the CLI opts in.
+export function run(command, args, options = {}) {
   const requestedTimeout = options.timeout ?? 300_000;
   const remaining = remainingMatrixMilliseconds();
   if (remaining <= 0) {
@@ -587,7 +623,7 @@ function run(command, args, options = {}) {
   const deadlineBound = timeout < requestedTimeout;
   const child = spawnSync(command, args, {
     cwd: options.cwd,
-    env: options.env,
+    env: options.allowPersonToken ? options.env : withoutPersonToken(options.env ?? process.env),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout,
@@ -772,12 +808,29 @@ function installTarball(pack, installRoot) {
   return { cli, version: installed.version };
 }
 
-function actorEnvironment(home, name, isolationEnv, extra = {}) {
+function actorEnvironment(home, name, isolationEnv, extra = {}, { person = true } = {}) {
   if (!isolationEnv?.NODE_OPTIONS) {
     throw new Error("Matrix actor environment requires the installed Node network guard");
   }
+  // The matrix actors stand in for a person: rule writes and policy upgrades are person-only (draft otherwise).
+  // Register a token store outside the actor's home and point the CLI's os.userInfo() at it through the same
+  // test-only preload the test suite uses; the person gate itself is unchanged.
+  const personHome = `${home}-person`;
+  const personToken = randomBytes(32).toString("base64url");
+  mkdirSync(join(personHome, ".hunch"), { recursive: true });
+  // An anonymous actor still gets the (empty) person home so it can never read the runner's real ~/.hunch.
+  if (person) {
+    writeFileSync(
+      join(personHome, ".hunch", "person-token.json"),
+      `${JSON.stringify({ v: 1, sha256: createHash("sha256").update(personToken, "utf8").digest("hex"), created: "2026-01-01T00:00:00.000Z" })}
+`,
+    );
+  }
+  const preload = `--import=${JSON.stringify(pathToFileURL(join(projectRoot, "test", "support", "personHomePreload.mjs")).href)}`;
   return cleanEnvironment(home, {
-    NODE_OPTIONS: isolationEnv.NODE_OPTIONS,
+    NODE_OPTIONS: `${isolationEnv.NODE_OPTIONS} ${preload}`,
+    HUNCH_TEST_PERSON_HOME: personHome,
+    ...(person ? { HUNCH_PERSON_TOKEN: personToken } : {}),
     GIT_AUTHOR_NAME: name,
     GIT_AUTHOR_EMAIL: `${name.toLowerCase()}@matrix-release.test`,
     GIT_COMMITTER_NAME: name,
@@ -794,6 +847,7 @@ function cliOutcome(actor, installation, args, options = {}) {
     env: options.env ?? actor.env,
     timeout: options.timeout ?? 180_000,
     allowFailure: options.allowFailure,
+    allowPersonToken: true,
     maxBuffer: 16 * 1024 * 1024,
   });
 }
@@ -858,11 +912,11 @@ function seedRemotes(temp, candidate, env) {
   return { codeRemote, memoryRemote, actorNetworkGuardVerified };
 }
 
-function cloneActor(temp, codeRemote, name, env, trustWith) {
+function cloneActor(temp, codeRemote, name, env, trustWith, { person = true } = {}) {
   const root = join(temp, name.toLowerCase());
   const home = join(temp, `${name.toLowerCase()}-home`);
   run(actualGit, ["clone", "-q", codeRemote, root], { env, timeout: 120_000 });
-  const actorEnv = actorEnvironment(home, name, env);
+  const actorEnv = actorEnvironment(home, name, env, {}, { person });
   configureRepo(root, name, actorEnv, join(temp, `${name.toLowerCase()}-hooks`));
   const actor = { name, root, env: actorEnv };
   // A fresh clone's advertised team store stays unwired until this machine
@@ -1008,6 +1062,55 @@ function runLegacyReproofAttack(temp, codeRemote, memoryRemote, legacy, policyId
     && /(?:source-currentness|activation gate)/i.test(`${accept.stdout}${accept.stderr}`));
 }
 
+const ANON_DRAFT = `${SENTINEL_PREFIX}ANON_DRAFT: an anonymous rule must land as a draft`;
+
+// The person gate against the installed candidate: an actor with no person token may read and draft,
+// but every person-only verb must exit 4 and leave the shared memory untouched.
+function runAnonymousLane(temp, codeRemote, memoryRemote, candidate, env, activeRuleId) {
+  const actor = cloneActor(temp, codeRemote, "AnonymousLane", env, candidate, { person: false });
+  const personHome = actor.env.HUNCH_TEST_PERSON_HOME;
+  const personTokenAbsent = !hasPersonToken(actor.env)
+    && !existsSync(join(personHome, ".hunch", "person-token.json"));
+  const activePath = `.hunch/constraints/${activeRuleId}.json`;
+  const read = cliText(actor, candidate, ["query", COMPAT_CANDIDATE]);
+  const readSucceeded = read.includes(activeRuleId);
+  const draftWrite = cliText(actor, candidate, [
+    "record-constraint", ANON_DRAFT,
+    "--scope", "src/service.ts", "--severity", "warning", "--type", "correctness",
+  ]);
+  const draftId = constraintIdFromOutput(draftWrite);
+  const draftPath = `.hunch/constraints/${draftId}.json`;
+  const draftBytesBefore = remoteFile(memoryRemote, draftPath, env);
+  const draftBefore = JSON.parse(draftBytesBefore);
+  const draftNotActive = draftBefore.status === "draft" && draftBefore.provenance?.source === "agent_recorded";
+  const activeBytesBefore = remoteFile(memoryRemote, activePath, env);
+  const headBefore = gitBare(memoryRemote, ["rev-parse", "main"], env);
+  const refused = (args) => {
+    const outcome = cliOutcome(actor, candidate, args, { allowFailure: true, timeout: 180_000 });
+    return { exit4: outcome.status === 4, text: /Only a person can/.test(`${outcome.stdout}${outcome.stderr}`) };
+  };
+  const rerecord = refused([
+    "record-constraint", COMPAT_CANDIDATE,
+    "--scope", "src/service.ts", "--severity", "warning", "--type", "correctness",
+  ]);
+  const retire = refused(["retire-constraint", activeRuleId, "--reason", "anonymous lane"]);
+  const confirm = refused(["review", "--confirm", draftId]);
+  const probes = [rerecord, retire, confirm];
+  return {
+    person_token_absent: personTokenAbsent,
+    read_succeeded: readSucceeded,
+    draft_write_succeeded: /committed \+ pushed/.test(draftWrite),
+    draft_not_active: draftNotActive,
+    rerecord_refused: rerecord.exit4 && rerecord.text,
+    retire_refused: retire.exit4 && retire.text,
+    confirm_refused: confirm.exit4 && confirm.text,
+    refusals_exit_person_required: probes.every((probe) => probe.exit4),
+    active_rule_bytes_preserved: remoteFile(memoryRemote, activePath, env) === activeBytesBefore,
+    draft_state_preserved: remoteFile(memoryRemote, draftPath, env) === draftBytesBefore,
+    no_remote_commit_from_refusals: gitBare(memoryRemote, ["rev-parse", "main"], env) === headBefore,
+  };
+}
+
 function runCompatibilityLane(temp, codeRemote, memoryRemote, candidate, legacy, env) {
   const actor = cloneActor(temp, codeRemote, "CompatibilityLane", env, candidate);
   const candidateVersion = cliText(actor, candidate, ["--version"]).trim();
@@ -1074,7 +1177,9 @@ function runCompatibilityLane(temp, codeRemote, memoryRemote, candidate, legacy,
   const policyBytesAfter = remoteFile(memoryRemote, policyPath, env);
   const policyAfter = JSON.parse(policyBytesAfter);
 
-  return {
+  const anonymous = runAnonymousLane(temp, codeRemote, memoryRemote, candidate, env, candidateId);
+
+  return { compatibility: {
     sequence: ["candidate", "legacy", "candidate"],
     candidate_record_read_by_legacy: candidateRecordReadByLegacy,
     candidate_record_bytes_preserved_by_legacy_write: candidateBytesBefore === candidateBytesAfter,
@@ -1096,7 +1201,7 @@ function runCompatibilityLane(temp, codeRemote, memoryRemote, candidate, legacy,
     attack_clone_policy_authority_preserved: legacyReproofAttack.localPolicyAuthorityPreserved,
     legacy_current_proof_approval_refused: legacyCurrentProofApprovalRefused,
     legacy_reproof_activation_refused: legacyReproofAttack.refused,
-  };
+  }, anonymous };
 }
 
 function writeCrashGitWrapper(wrapperRoot) {
@@ -1242,7 +1347,7 @@ function killProcessTree(child) {
   if (!child.pid) return false;
   try {
     if (process.platform === "win32") {
-      const killed = spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
+      const killed = spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", env: withoutPersonToken(process.env) });
       return killed.status === 0;
     }
     process.kill(-child.pid, "SIGKILL");
@@ -1524,7 +1629,7 @@ async function executeMatrixVerification(options) {
 
     enterMatrixPhase("candidate-legacy-candidate compatibility");
     let laneStarted = performance.now();
-    const compatibility = runCompatibilityLane(temp, codeRemote, memoryRemote, candidate, legacy, env);
+    const { compatibility, anonymous } = runCompatibilityLane(temp, codeRemote, memoryRemote, candidate, legacy, env);
     const compatibilityMs = measuredMilliseconds(laneStarted);
     enterMatrixPhase("crash recovery");
     laneStarted = performance.now();
@@ -1569,6 +1674,7 @@ async function executeMatrixVerification(options) {
         },
       },
       compatibility,
+      anonymous,
       crash_recovery: crashRecovery,
       soak,
       performance: performanceEvidence,

@@ -47,6 +47,14 @@
       }
     ]
   },
+  "challenge": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
   "change-id": {
     "tests": [
       {
@@ -1019,6 +1027,14 @@
       }
     ]
   },
+  "replace": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
   "report": {
     "tests": [
       {
@@ -1095,6 +1111,30 @@
       {
         "file": "test/integration-cross-area.test.ts",
         "title": "core->constitution: review-memory prepare hashes evidence canonically and capture --apply persists the rule"
+      }
+    ]
+  },
+  "rule": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
+  "rule show": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
+      }
+    ]
+  },
+  "rules": {
+    "tests": [
+      {
+        "file": "test/cli-lifecycle.test.ts",
+        "title": "rules, rule show, challenge, clear, replace, confirm and remove drive the lifecycle"
       }
     ]
   },
@@ -1691,6 +1731,22 @@
       {
         "file": "test/memory-new.test.ts",
         "title": "cli:new decision writes one unsigned decision with its links, commits one capture, --json returns it"
+      }
+    ]
+  },
+  "person-token": {
+    "tests": [
+      {
+        "file": "test/person-gate.test.ts",
+        "title": "person-token init refuses without a terminal (exit 4)"
+      }
+    ]
+  },
+  "person-token init": {
+    "tests": [
+      {
+        "file": "test/person-gate.test.ts",
+        "title": "person-token init refuses without a terminal (exit 4)"
       }
     ]
   }

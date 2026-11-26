@@ -262,7 +262,7 @@ export function planDocRules(
       // Only the doc-owned fields move; enforcement, match, forbids, source_decision,
       // violations and valid_from are graph-side and survive an accepted edit.
       const { statement, scope, severity, type, rationale, provenance } = fresh;
-      plan.changed.push({ rule, prev, next: { ...prev, statement, scope, severity, type, rationale, provenance, status: "active", valid_to: null } });
+      plan.changed.push({ rule, prev, next: { ...prev, statement, scope, severity, type, rationale, provenance, status: prev.status, valid_to: null } });
     } else if (!prev.provenance.evidence.includes(`${rule.file}:${rule.line}`)) {
       // Location-only refresh: keep every graph-side edit (severity raised by a
       // reviewer, violations) — only the provenance pointer moves.
@@ -275,7 +275,7 @@ export function planDocRules(
     }
   }
   for (const c of existing) {
-    if (c.status !== "active" || !isDocRuleConstraint(c) || seen.has(c.id)) continue;
+    if (c.status === "retired" || !isDocRuleConstraint(c) || seen.has(c.id)) continue;
     const src = recordedDocRuleSource(c);
     if (!src || !covers(src)) continue;
     (parsed.issues.some((i) => i.file === src) ? plan.malformed : plan.orphaned).push(c);

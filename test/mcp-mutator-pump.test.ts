@@ -159,6 +159,62 @@ test("MCP correction capture commits refreshed assistant grounding with the cons
   }
 });
 
+test("MCP hunch_challenge persists through flushCapture like other mutators", async () => {
+  const fixture = publicFixture("challenge-pump");
+  let client: Client | null = null;
+  try {
+    client = await connect(fixture.root);
+    const response = await callText(client, "hunch_record_correction", {
+      rule: "Order exports must remain synchronous.",
+      scope_hint_file: "src/orders.ts",
+      severity: "warning",
+      type: "correctness",
+      rationale: "The consuming support script cannot await this boundary.",
+    });
+    const id = response.match(/constraint (con_[a-f0-9]+)/)?.[1];
+    assert.ok(id, response);
+    const before = git(fixture.root, "rev-parse", "HEAD");
+    await callText(client, "hunch_challenge", { rule_id: id, reason: "blocks legitimate async export work" });
+    await client.close();
+    client = null;
+    assert.notEqual(git(fixture.root, "rev-parse", "HEAD"), before, "challenge must be committed");
+    assert.match(git(fixture.root, "show", `HEAD:.hunch/constraints/${id}.json`), /blocks legitimate async export work/);
+    assert.equal(git(fixture.root, "status", "--porcelain", "--", ".hunch/constraints"), "");
+  } finally {
+    if (client) await client.close();
+    fixture.cleanup();
+  }
+});
+
+test("MCP hunch_challenge on a private-overlay rule commits to the overlay, not the public history", async () => {
+  const fixture = publicFixture("challenge-private-pump");
+  const overlay = privateOverlay(fixture.root, "challenge-private-pump", "private");
+  let client: Client | null = null;
+  try {
+    const rule = buildCorrectionConstraint({
+      vouched: true, rule: "Keep the order module straightforward for the support team.", scope_hint_file: "src/orders.ts",
+      severity: "warning", type: "architecture", rationale: "Private fixture rule.", knownDeps: [],
+    }, "2026-07-19T10:00:00.000Z");
+    const store = new HunchStore(hunchPaths(fixture.root));
+    store.putPrivate("constraints", rule);
+    store.close();
+    commitAll(overlay.overlayRoot, "fixture: private rule");
+    const publicBefore = git(fixture.root, "rev-parse", "HEAD");
+    const privateBefore = git(overlay.overlayRoot, "rev-parse", "HEAD");
+    client = await connect(fixture.root);
+    await callText(client, "hunch_challenge", { rule_id: rule.id, reason: "private challenge reason" });
+    await client.close();
+    client = null;
+    assert.notEqual(git(overlay.overlayRoot, "rev-parse", "HEAD"), privateBefore, "the private challenge must be committed in the overlay");
+    assert.match(git(overlay.overlayRoot, "show", `HEAD:.hunch/constraints/${rule.id}.json`), /private challenge reason/);
+    assert.doesNotMatch(git(fixture.root, "log", "-p", `${publicBefore}..HEAD`), new RegExp(rule.id));
+    assert.equal(git(overlay.overlayRoot, "status", "--porcelain", "--", ".hunch"), "");
+  } finally {
+    if (client) await client.close();
+    fixture.cleanup();
+  }
+});
+
 test("MCP policy evaluation scans exact working content without mutating Git or the public graph", async () => {
   const fixture = publicFixture("evaluate-pump");
   let client: Client | null = null;

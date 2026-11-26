@@ -8,6 +8,9 @@ export const changelogLocales = {
       footer: "© Hunch — תיעוד משותף לסוכני AI.", home: "בית", githubReleases: "גרסאות ב-GitHub"
     },
     titles: [
+      "מחזור חיים לכללים עם שער אדם",
+      "הוקים שקטים יותר ואישורי ADR שעמידים לסופי שורות",
+      "פרומפטים רזים יותר, בדיקת אילוצים לרשימת נתיבים, ושיוך כתיבות shell לפי סשן",
       "כתיבות דרך ה-shell תחת ה-Veto, HLD ננעלים, ולולאת סשן אופציונלית",
       "בדיקות staged מהירות בקומיטים גדולים",
       "קליטת קומיטים שדילגו על ה-hook, ומקור שניתן לתקן אחרי rebase",
@@ -114,6 +117,9 @@ export const changelogLocales = {
       footer: "© Hunch — общие записи для ИИ-агентов.", home: "Главная", githubReleases: "Релизы на GitHub"
     },
     titles: [
+      "Жизненный цикл правил с проверкой человека",
+      "Более тихие хуки и одобрения ADR, не зависящие от концов строк",
+      "Более короткие промпты, проверка ограничений по списку путей и привязка записей через shell к сессии",
       "Записи через shell под Veto, блокируемые HLD и необязательный цикл сессии",
       "Быстрые проверки staged для больших коммитов",
       "Захват коммитов, прошедших мимо хука, и восстановимое происхождение после rebase",
@@ -220,6 +226,9 @@ export const changelogLocales = {
       footer: "© Hunch — سجل مشترك لوكلاء الذكاء الاصطناعي.", home: "الرئيسية", githubReleases: "الإصدارات على GitHub"
     },
     titles: [
+      "دورة حياة للقواعد مع بوابة الشخص",
+      "خطافات أهدأ وموافقات ADR لا تتأثر بنهايات الأسطر",
+      "مطالبات أخف، وفحص القيود لقائمة مسارات، ونسب كتابات الـ shell إلى كل جلسة",
       "كتابات الـ shell تحت Veto، وHLD قابلة للقفل، وحلقة جلسة اختيارية",
       "فحوصات staged سريعة للإيداعات الكبيرة",
       "التقاط الإيداعات التي تجاوزت الخطاف، ومصدر قابل للإصلاح بعد rebase",
@@ -326,6 +335,9 @@ export const changelogLocales = {
       footer: "© Hunch — un registro compartido para agentes de IA.", home: "Inicio", githubReleases: "Versiones en GitHub"
     },
     titles: [
+      "Ciclo de vida de las reglas con una puerta de persona",
+      "Hooks más silenciosos y aprobaciones de ADR inmunes a los finales de línea",
+      "Prompts más ligeros, comprobación de restricciones por lista de rutas y escrituras por shell atribuidas por sesión",
       "Escrituras por shell bajo el Veto, HLD bloqueables y un bucle de sesión opcional",
       "Comprobaciones staged rápidas en commits grandes",
       "Captura de commits que se saltaron el hook, y procedencia reparable tras un rebase",

@@ -40,7 +40,7 @@ import { MEMORY_KINDS, componentDetail, componentMap, countMemory, filterMemory,
 import { uiCss, uiHtml, uiJs } from "./page.js";
 import { createPulse } from "./pulse.js";
 import { memoryHistory, type HistorySource } from "./history.js";
-import { actionArgs, cliError, isUiAction, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
+import { EXIT_PERSON_REQUIRED, actionArgs, cliError, isUiAction, personCommand, personRequiredMessage, newArgs, undoFor, type MoveResult, type UiAction } from "./actions.js";
 import { defaultAskRunner, type AskRunner } from "./ask.js";
 import { canGrill, evidenceView, gatherEvidence, grillPrompt, grillRequest, readTurn, type GrillFlag } from "./grill.js";
 import { reviewCards, type Review } from "./review.js";
@@ -273,14 +273,19 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     const parsed = id === null ? newArgs(body.value) : actionArgs(move as UiAction, id, body.value, { private: store.hasPrivate });
     if (!parsed.ok) return send(res, 400, { error: parsed.error });
     const cli = opts.cli;
+    // The page is never a person: the spawned CLI must not hold a person token, whatever the server's own env had.
+    const childEnv: NodeJS.ProcessEnv = { ...(cli.env ?? process.env), NO_COLOR: "1" };
+    // Windows env names ignore case, so every spelling of the name is the token; no other key is touched.
+    for (const key of Object.keys(childEnv)) if (/^HUNCH_PERSON_TOKEN$/i.test(key)) delete childEnv[key];
     const job = writing.then(() => boundedSpawn(cli.file, [...cli.args, ...parsed.args], {
-      cwd: opts.root, env: { ...(cli.env ?? process.env), NO_COLOR: "1" }, timeoutMs: WRITE_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024,
+      cwd: opts.root, env: childEnv, timeoutMs: WRITE_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024,
     }));
     writing = job.catch(() => undefined);
     const r = await job;
     if (r.timedOut) return send(res, 504, { error: "The change took too long and was stopped." });
     // The CLI didn't start or was cut off: that's not a refusal, so say what went wrong.
     if (r.error || r.overflowed) return send(res, 500, { error: `The change could not run: ${r.error?.message ?? "its output was too large"}.` });
+    if (r.status === EXIT_PERSON_REQUIRED) return send(res, 403, { error: personRequiredMessage(parsed.args), personRequired: true, command: personCommand(parsed.args) });
     if (r.status !== 0) return send(res, 422, { error: cliError(r.stderr, r.stdout) });
     const last = r.stdout.trim().split(/\r?\n/).pop() ?? "";
     let result: MoveResult;

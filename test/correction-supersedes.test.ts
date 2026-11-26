@@ -97,7 +97,7 @@ test("no disclosure when no other active rule shares the scope", async () => {
   } finally { s.cleanup(); }
 });
 
-test("supersedes retires the reversed agent-recorded rule; the new one stays active", async () => {
+test("supersedes challenges the reversed agent-recorded rule (an agent never retires); the new one is a draft", async () => {
   const s = await setup();
   const dir = join(s.root, ".hunch", "constraints");
   try {
@@ -105,11 +105,13 @@ test("supersedes retires the reversed agent-recorded rule; the new one stays act
     const oldId = constraintId(PALETTE_OLD);
     const out = await s.call({ rule: PALETTE_NEW, scope_hint_file: "site/dna-hero.js", supersedes: [oldId] });
     const old = byId(dir, oldId)!;
-    assert.equal(old.status, "retired", "the reversed rule is no longer enforced");
-    assert.ok(old.valid_to, "its valid-time window is closed, not deleted");
-    assert.equal(byId(dir, constraintId(PALETTE_NEW))!.status, "active");
-    assert.match(out, new RegExp(`Retired ${oldId}`));
-    assert.doesNotMatch(out, /same scope/i, "a retired rule is not disclosed as active");
+    assert.equal(old.status, "draft", "the reversed rule keeps its status: a person replaces it");
+    assert.equal(old.valid_to, null, "its valid-time window stays open");
+    assert.match((old as unknown as { challenge: { reason: string } }).challenge.reason, new RegExp(`superseded by ${constraintId(PALETTE_NEW)}`));
+    assert.match(readFileSync(join(s.root, ".hunch", "local", "rule-checks.jsonl"), "utf8"), new RegExp(`"rule_id":"${oldId}"`), "the challenge is logged like hunch_challenge");
+    assert.equal(byId(dir, constraintId(PALETTE_NEW))!.status, "draft");
+    assert.match(out, new RegExp(`Challenged ${oldId}`));
+    assert.match(out, /hunch replace/);
   } finally { s.cleanup(); }
 });
 
@@ -129,7 +131,7 @@ test("supersedes naming the rule being recorded is refused", async () => {
     await s.call({ rule: PALETTE_NEW, scope_hint_file: "site/dna-hero.js" });
     const out = await s.call({ rule: PALETTE_NEW, scope_hint_file: "site/dna-hero.js", supersedes: [constraintId(PALETTE_NEW)] });
     assert.match(out, /^Refused:/);
-    assert.equal(byId(join(s.root, ".hunch", "constraints"), constraintId(PALETTE_NEW))!.status, "active");
+    assert.equal(byId(join(s.root, ".hunch", "constraints"), constraintId(PALETTE_NEW))!.status, "draft");
   } finally { s.cleanup(); }
 });
 
@@ -194,14 +196,14 @@ test("a refused supersede does not burn the capture token", async () => {
   } finally { s.cleanup(); }
 });
 
-test("a supersede target that is already retired is named, not silently dropped", async () => {
+test("a supersede target that is already challenged is named, not silently dropped", async () => {
   const s = await setup();
   try {
     await s.call({ rule: PALETTE_OLD, scope_hint_file: "site/dna-hero.js" });
     const oldId = constraintId(PALETTE_OLD);
     await s.call({ rule: PALETTE_NEW, scope_hint_file: "site/dna-hero.js", supersedes: [oldId] });
     const out = await s.call({ rule: "keep the hero palette green", scope_hint_file: "site/dna-hero.js", supersedes: [oldId] });
-    assert.match(out, new RegExp(`Already retired, left as is: ${oldId}`));
+    assert.match(out, new RegExp(`Already challenged, left as is: ${oldId}`));
   } finally { s.cleanup(); }
 });
 

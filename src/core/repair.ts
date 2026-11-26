@@ -69,7 +69,7 @@ export function planRepair(
     }
   }
   for (const c of constraints) {
-    if (c.status && c.status !== "active") continue;
+    if (c.status === "retired") continue;
     for (const s of c.scope ?? []) {
       const to = isExactPath(s) ? map.get(s) : undefined;
       if (to) rewrites.push({ kind: "constraints", id: c.id, field: "scope", from: s, to });

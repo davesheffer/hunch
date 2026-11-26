@@ -1,4 +1,6 @@
-import { cleanupDir } from "./fixtures.js";
+import { sharedPersonEnv, cleanupDir } from "./fixtures.js";
+// The CLI refuses person-only rule actions without a person; these tests act as one.
+Object.assign(process.env, sharedPersonEnv());
 /**
  * Capture tokens prove an interview protocol was issued — never that a HUMAN answered.
  *

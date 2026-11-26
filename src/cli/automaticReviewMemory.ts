@@ -149,7 +149,7 @@ export function registerAutomaticReviewMemory(command: Command,
           }
         }
         report.rules = report.rules.filter(r => report.entries.some(e => e.status === "ready" && e.rule_id === r.id));
-        if (report.rules.length) capture(report.rules, packet.repository, !!opts.private);
+        if (report.rules.length) report.rules = capture(report.rules, packet.repository, !!opts.private) ?? report.rules;
         for (const entry of report.entries) if (entry.status === "ready") entry.status = "saved";
       }
       report.applied = !opts.dryRun;

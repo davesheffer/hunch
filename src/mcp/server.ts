@@ -105,6 +105,7 @@ import { premiseEscalations } from "../core/premises.js";
 import { applyImportedAdrReview, pendingImportedAdrReviews } from "../core/importReview.js";
 import { issueCaptureToken as issueToken, consumeCaptureToken as consumeToken, HUMAN_CONFIRMATION_SCHEMA, isHumanConfirmationAnswer } from "../core/capturetoken.js";
 import { GRILL_ONE_AT_A_TIME } from "../core/grillrule.js";
+import { challengeRule, currentRunContext, appendRuleLog } from "../core/lifecycle.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync, lstatSync } from "node:fs";
 import { join, isAbsolute, resolve, relative, sep, parse, dirname } from "node:path";
@@ -2368,21 +2369,21 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         if (!decision) return invalid(`Imported ADR ${decision_id} is not present in the current advisory memory home.`);
         // Approval grants human authority, so the agent's report that the human approved
         // is not enough: the human confirms in the client prompt, a channel the agent does
-        // not control, or approves with the CLI. A decline keeps the ADR advisory.
-        if (disposition === "approve") {
+        // not control, or approves with the CLI. An unconfirmed decline is refused and writes nothing.
+        {
           const confirmation = await askHumanToConfirm(server, [
-            "Hunch: an agent reports that you approved this imported ADR as your decision. Confirm only if YOU approve it.",
+            disposition === "approve" ? "Hunch: an agent reports that you approved this imported ADR as your decision. Confirm only if YOU approve it." : "Hunch: an agent reports that you declined this imported ADR. Confirm only if YOU decline it.",
             "",
             `Title: ${clipForPrompt(decision.title, 200)}`,
             `Decision: ${clipForPrompt(decision.decision || "(none)")}`,
             `Source hash: ${expected_source_hash}`,
             "",
-            "Confirmed, it carries your authority (human_confirmed). Unconfirmed, it stays advisory.",
+            disposition === "approve" ? "Confirmed, it carries your authority (human_confirmed). Unconfirmed, it stays advisory." : "Confirmed, the decline is recorded and the ADR stays advisory. Unconfirmed, nothing is written.",
           ].join("\n"));
           if (confirmation !== "confirmed") {
             return refused(
-              `Not approved: ${unconfirmedReason(confirmation)}, so ${decision_id} stays advisory and nothing was written. ` +
-                `The human approves it by running: hunch review --approve-import ${decision_id} --expected-source-hash ${expected_source_hash} --expected-review-hash ${expected_review_hash} --reviewed-by <you>`,
+              `Not ${disposition === "approve" ? "approved" : "declined"}: ${unconfirmedReason(confirmation)}, so ${decision_id} stays advisory and nothing was written. ` +
+                (disposition === "decline" ? `The human declines it by running: hunch review --decline-import ${decision_id} --expected-source-hash ${expected_source_hash} --expected-review-hash ${expected_review_hash} --reviewed-by <you>` : `The human approves it by running: hunch review --approve-import ${decision_id} --expected-source-hash ${expected_source_hash} --expected-review-hash ${expected_review_hash} --reviewed-by <you>`),
             );
           }
         }
@@ -2663,6 +2664,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           commit: decision.commit ?? existing?.commit ?? null,
           valid_from: existing?.valid_from ?? now,
           valid_to: existing?.valid_to ?? null,
+          source_session: existing?.source_session ?? currentRunContext().session_id,
+          source_run: existing?.source_run ?? currentRunContext().run_id,
           retired: existing?.retired ?? { symbols: [], deps: [] },
           ...(existing?.conformance ? { conformance: existing.conformance } : {}),
           ...(existing?.visibility ? { visibility: existing.visibility } : {}),
@@ -2810,7 +2813,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
     {
       title: "Capture a correction as an enforced constraint (Never Twice)",
       description:
-        "When a human corrects the agent ('never call X here'), persist it as a SCOPED Constraint with provenance, so the pre-edit hook and CI Constraint Guard hold every assistant to it. severity:'blocking' only when the human said never/must; applies_to_all:true only for a genuinely repo-wide rule (else scoped to scope_hint_file). supersedes:[con_*] retires a rule this one reverses. Returns the constraint id, scope, and other active rules on that scope. Not for a design choice (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
+        "When a human corrects the agent ('never call X here'), persist it as a SCOPED Constraint with provenance, so the pre-edit hook and CI Constraint Guard hold every assistant to it. severity:'blocking' only when the human said never/must; applies_to_all:true only for a genuinely repo-wide rule (else scoped to scope_hint_file). supersedes:[con_*] challenges a rule this one reverses (a person replaces it with `hunch replace`). Returns the constraint id, scope, and other active rules on that scope. Not for a design choice (hunch_record_decision) or an observed gap with no rule yet (hunch_record_finding).",
       inputSchema: {
         rule: z.string().describe("The invariant in the human's words, e.g. \"never call the pay-per-token API here\"."),
         scope_hint_file: z.string().optional().describe("File the correction was about; scopes the constraint to it (conservative default). Prefer a repo-relative path — an absolute one is relativized, and one outside the repo is discarded rather than scoped to a path that could never match."),
@@ -2821,7 +2824,7 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         source_decision: z.string().optional().describe("id of a decision this correction derives from."),
         private: z.boolean().optional().describe("write into the PRIVATE overlay store (HUNCH_PRIVATE_DIR), not the committed repo — enforced locally (pre-edit hook + check), never in a public PR comment. Errors if no private store is configured."),
         capture_token: z.string().optional().describe("token from hunch_capture_decision. Recorded and enforced either way, as agent testimony capped at severity 'warning'. A token never lets it DENY: blocking authority needs a human running the printed `hunch review --confirm <id> --severity <s>`."),
-        supersedes: z.array(z.string()).max(16).optional().describe("con_* ids of earlier rules this correction REVERSES. Each is retired (status retired + valid_to, never deleted) in the same memory home, so the edit hook stops serving it. Only agent testimony can be retired here; a human-confirmed rule is retired by the human: `hunch retire-constraint <id>`. Any bad target refuses the whole write."),
+        supersedes: z.array(z.string()).max(16).optional().describe("con_* ids of earlier rules this correction REVERSES. Each gets a challenge (reason: superseded by <new id>) in the same memory home and stays enforced; an agent never retires a rule, a person replaces it with `hunch replace <old> <new>`. Only agent testimony can be targeted here; a human-confirmed rule is handled by the human: `hunch retire-constraint <id>`. Any bad target refuses the whole write."),
         task_id: saveTaskIdField,
         cwd: cwdHintField,
       },
@@ -2866,8 +2869,21 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           const location = store.getPrivateRec("decisions", requested.source_decision) ? "exists only in the private overlay" : "does not exist in the public home";
           return refused(`source decision ${requested.source_decision} ${location}; refusing to record public correction ${requested.id}.`);
         }
-        const rec = buildCorrectionConstraint({ ...input, knownDeps, root, vouched: false }, now);
-        const existing = home === "private" ? store.getPrivateRec("constraints", rec.id) : store.json.get("constraints", rec.id);
+        const built = buildCorrectionConstraint({ ...input, knownDeps, root, vouched: false }, now);
+        const existing = home === "private" ? store.getPrivateRec("constraints", built.id) : store.json.get("constraints", built.id);
+        // LIFECYCLE: an agent-recorded rule is a Draft (enforced, but unapproved) until a person
+        // runs `hunch review --confirm <id>`. It warns but never blocks. A re-record keeps the existing status and challenge.
+        const runCtx = currentRunContext();
+        const rec: Constraint = {
+          ...built,
+          // A retired rule re-recorded by an agent comes back as an unapproved draft, never as live authority.
+          status: existing && existing.status !== "retired" ? existing.status : "draft",
+          challenge: existing && existing.status !== "retired" ? existing.challenge ?? null : null,
+          ...(existing && existing.status !== "retired" && existing.retired_from ? { retired_from: existing.retired_from } : {}),
+          ...(existing?.status === "retired" ? { valid_to: null } : {}),
+          source_session: existing?.source_session ?? runCtx.session_id,
+          source_run: existing?.source_run ?? runCtx.run_id,
+        };
         // A human-confirmed rule is changed only by the same human act that confirmed it.
         // Writing `rec` here would replace the signature with testimony and cap its severity.
         if (existing && existing.provenance.source.split("+").includes("human_confirmed")) {
@@ -2876,11 +2892,20 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
               `A change needs the human, outside the agent channel: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`,
           );
         }
+        // An agent cannot rewrite a live rule's scope, severity or rationale by re-recording it: that is
+        // a change to approved memory. Only a draft may be re-recorded (and a retired rule returns as a draft).
+        if (existing && existing.status === "active") {
+          return refused(
+            `Constraint ${rec.id} already exists as an ${existing.status} rule; an agent re-record cannot change its scope, severity or rationale, so nothing was written. ` +
+              `If it is wrong, call hunch_challenge on ${rec.id}; a person decides what changes.`,
+          );
+        }
         // A correction that REVERSES an earlier one retires it, so the edit hook never
         // serves both. Every target is checked before any write: a refusal leaves both
         // homes as they were. Same-home only, like a decision supersede.
         const toRetire: Constraint[] = [];
         const alreadyRetired: string[] = [];
+        const alreadyChallenged: string[] = [];
         const supersedes = new Set(input.supersedes ?? []);
         if (supersedes.size && home === "private" && !store.hasPrivate) {
           return refused("No private store configured — set HUNCH_PRIVATE_DIR before a private correction can supersede a rule; nothing was written.");
@@ -2922,7 +2947,13 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         const gated = consumeCaptureToken(input.capture_token);
         const observed = observeReportCapture(root, input.task_id, "constraints", stored, home, !!existing, home === "private" ? store.privateDir ?? undefined : hunchPaths(root).hunch);
         // Invalidate, don't delete: the retired rule keeps its why-it-changed trail.
-        for (const old of toRetire) store.putCapture("constraints", { ...old, status: "retired", valid_to: now }, !!input.private);
+        // An agent never retires a rule: the superseded rule gets a challenge, and a person replaces it.
+        const ctxSup = currentRunContext();
+        for (const old of toRetire) {
+          if (old.challenge) { alreadyChallenged.push(old.id); continue; }
+          challengeRule(store, old.id, { reason: `superseded by ${rec.id}`, by_session: ctxSup.session_id, by_run: ctxSup.run_id });
+          appendRuleLog(root, { kind: "challenge", at: now, rule_id: old.id, reason: `superseded by ${rec.id}`, session_id: ctxSup.session_id, run_id: ctxSup.run_id });
+        }
         store.reindex();
         // Propagate the new rule to EVERY assistant's ambient grounding (Cursor/Copilot/
         // Windsurf/AGENTS.md/CLAUDE.md), so a correction captured in one assistant is held
@@ -2933,8 +2964,8 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
         // selector to skip them and leave successful captures with stale HEAD plus
         // dirty AGENTS/assistant docs. Manual mode still refreshes in place.
         if (home === "public" && !store.autoCommit) refreshExistingGrounding(root, store); // overlay rules never render into committed grounding
-        const retiredIds = toRetire.map((c) => c.id).join(", ");
-        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}${retiredIds ? `, retire ${retiredIds}` : ""}`, startupTeamRoute ?? undefined, observed.observe, "constraints");
+        const retiredIds = toRetire.filter((c) => !alreadyChallenged.includes(c.id)).map((c) => c.id).join(", ");
+        const flush = flushCapture(store, hunchPaths(root).hunch, !!input.private, `hunch: capture ${rec.id}${retiredIds ? `, challenge ${retiredIds}` : ""}`, startupTeamRoute ?? undefined, observed.observe, "constraints");
         const flushed = flushNote(flush, home, store.mode, hunchPaths(root).hunch) + publicHomeNote(home, store.hasPrivate, rec, hunchPaths(root).hunch) + observed.note;
         const enforce = rec.severity === "blocking"
           ? "blocks a DIRECT edit to its scope at strict firmness, and fails a PR whose diff touches that scope (CI guard); blast-radius hits and lower firmness stay advisory"
@@ -2953,16 +2984,17 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
           : "Recorded WITHOUT a capture interview or a human confirmation";
         const tierNote = `
 
-⚠ ${why} — this rule is agent_recorded TESTIMONY${capped ? ` and was capped from "${requested.severity}" to "${rec.severity}"` : ""}. It IS enforced: the pre-edit hook and CI surface it on every matching edit from now on. What it cannot do is DENY an edit — only a rule a human confirmed outside the agent channel may block. The human confirms it by running: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`;
+⚠ ${rec.status === "draft" ? "This rule is a DRAFT: it warns on matching edits but never blocks until a person approves it. " : ""}${why} — this rule is agent_recorded TESTIMONY${capped ? ` and was capped from "${requested.severity}" to "${rec.severity}"` : ""}. ${rec.status === "draft" ? "Once approved it is a full rule; until then the pre-edit hook surfaces it as a warning. " : "It IS enforced: the pre-edit hook and CI surface it on every matching edit. "}What it cannot do is DENY an edit — only a rule a human confirmed outside the agent channel may block. The human confirms it by running: ${confirmCommand(rec.id, { private: home === "private", severity: requested.severity })}`;
         const dest = destinationNote(destinationRoot(home, store, root));
-        const retiredNote = (retiredIds ? ` Retired ${retiredIds} (superseded by ${rec.id}; window closed at ${now}).` : "") +
+        const retiredNote = (retiredIds ? ` Challenged ${retiredIds} (superseded by ${rec.id}); they stay enforced until a person replaces them: hunch replace <old> ${rec.id}.` : "") +
+          (alreadyChallenged.length ? ` Already challenged, left as is: ${alreadyChallenged.join(", ")}.` : "") +
           (alreadyRetired.length ? ` Already retired, left as is: ${alreadyRetired.join(", ")}.` : "");
         // Exact scope match only — deterministic, no similarity guessing. The caller
         // decides whether this correction reverses one of them. This write's home only:
         // those are the rules supersedes can retire, and a public write never echoes
         // overlay rules.
         const scopes = new Set(rec.scope);
-        const sameScope = store.recsInHome("constraints", home).filter((c) => c.id !== rec.id && c.status === "active" && c.scope.some((g) => scopes.has(g)));
+        const sameScope = store.recsInHome("constraints", home).filter((c) => c.id !== rec.id && (c.status === "active" || c.status === "draft") && c.scope.some((g) => scopes.has(g)));
         const SAME_SCOPE_SHOWN = 8;
         const sameScopeNote = sameScope.length
           ? `\n\nSame scope: ${sameScope.length} other active rule(s) on ${rec.scope.join(", ")}: ` +
@@ -2970,9 +3002,41 @@ export function buildServerWithRootControl(initialRoot: string, options: RootCon
             (sameScope.length > SAME_SCOPE_SHOWN ? `; +${sameScope.length - SAME_SCOPE_SHOWN} more` : "") +
             `. If this correction REVERSES one, re-record it with supersedes:["<id>"] so the reversed rule is retired instead of served beside this one.`
           : "";
+        if (existing?.status === "retired") {
+          return ok(`Recorded ${rec.id} as a draft; a person approves it with \`hunch review --confirm ${rec.id}\`.${where}${dest}${retiredNote}${reviewNote}${tierNote}${sameScopeNote}`);
+        }
         return ok(`${existing ? "Updated" : "Recorded"} ${rec.severity} constraint ${rec.id}: "${rec.statement}" (scope: ${rec.scope.join(", ")}).${where}${dest}${retiredNote} It now ${enforce}.${reviewNote}${tierNote}${sameScopeNote}`);
       } catch (e) {
         return err(`Failed to record correction: ${(e as Error).message}`);
+      }
+    },
+  );
+
+  // -- hunch_challenge (lifecycle: an agent disputes a rule) -----------------
+  // Deliberately the ONLY lifecycle tool: there is no MCP tool to clear a challenge or
+  // activate a draft. Those are human acts (CLI).
+  server.registerTool(
+    "hunch_challenge",
+    {
+      title: "Challenge a rule you believe is wrong",
+      description:
+        "Any agent may challenge a rule it believes is wrong or blocking legitimate work. The rule stays enforced until a person clears the challenge; the challenge and your reason are recorded for review. Returns the rule id and state. Errors: 'Refused:' unknown or retired rule; 'Invalid:' empty reason.",
+      inputSchema: {
+        rule_id: z.string().min(1).describe("constraint id (con_...)"),
+        reason: z.string().min(1).describe("why the rule is wrong; no prompts, transcripts or code"),
+      },
+    },
+    async ({ rule_id, reason }) => {
+      try {
+        const ctx = currentRunContext();
+        const c = challengeRule(store, rule_id, { reason, by_session: ctx.session_id, by_run: ctx.run_id });
+        appendRuleLog(root, { kind: "challenge", at: new Date().toISOString(), rule_id, reason, session_id: ctx.session_id, run_id: ctx.run_id });
+        store.reindex();
+        flushCapture(store, hunchPaths(root).hunch, !!store.getPrivateRec("constraints", c.id), `hunch: challenge ${c.id}`, startupTeamRoute ?? undefined, undefined, "constraints");
+        return ok(`Challenge recorded on ${c.id}. The rule stays enforced until a person clears it (a person runs: hunch challenge clear ${c.id} --reason "<why>").`);
+      } catch (e) {
+        const m = (e as Error).message;
+        return /reason/.test(m) ? err(`Invalid: ${m}`) : refused(m);
       }
     },
   );

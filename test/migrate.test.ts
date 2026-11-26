@@ -259,3 +259,32 @@ test("persistMigration: a corrupt record of a kind no pending migration touches 
   assert.equal(readFileSync(badPath, "utf8"), "{ not json", "left untouched");
   cleanup();
 });
+
+test("v3 -> v4: constraint keeps status, gains null challenge/source fields; retired stays retired", () => {
+  const prov = { source: "human_confirmed", confidence: 1, evidence: [] };
+  const base = { id: "con_v3", type: "correctness", statement: "s", scope: [], severity: "blocking", provenance: prov, valid_to: null };
+  const active = migrateRaw("constraints", { ...base, status: "active" }, 3) as Record<string, unknown>;
+  assert.equal(active.status, "active");
+  assert.equal(active.challenge, null);
+  assert.equal(active.source_session, null);
+  assert.equal(active.source_run, null);
+  const retired = migrateRaw("constraints", { ...base, status: "retired" }, 3) as Record<string, unknown>;
+  assert.equal(retired.status, "retired");
+});
+
+test("first write of a draft rule raises a v3 manifest to v4 (older builds see 'newer schema'); an older manifest is left alone", () => {
+  const { root, cleanup } = tmp();
+  try {
+    const store = new JsonStore(hunchPaths(root));
+    store.ensureDirs();
+    const base = { statement: "s", rationale: "r", severity: "warning", scope: ["src/**"], source_decision: null, valid_from: "2026-01-01T00:00:00Z", valid_to: null, provenance: { source: "agent_recorded", confidence: 0.5, evidence: [] } };
+    writeManifest(hunchPaths(root), 3);
+    store.put("constraints", { id: "con_active", status: "active", ...base } as never);
+    assert.equal(readManifest(hunchPaths(root)).schema_version, 3, "a plain active rule changes nothing");
+    store.put("constraints", { id: "con_draft", status: "draft", ...base } as never);
+    assert.equal(readManifest(hunchPaths(root)).schema_version, 4);
+    writeManifest(hunchPaths(root), 2);
+    store.put("constraints", { id: "con_draft2", status: "draft", ...base } as never);
+    assert.equal(readManifest(hunchPaths(root)).schema_version, 2, "never skip the v3 migration of other records");
+  } finally { cleanup(); }
+});

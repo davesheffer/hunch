@@ -72,6 +72,8 @@ import { writeTeamConfig, ensureTeamOverlay, readTeamConfig, isTeamStoreTrusted,
 import { runbookId, decisionId } from "../core/ids.js";
 import { deriveForbids, effectiveForbids } from "../core/constraintmatch.js";
 import type { Runbook } from "../core/types.js";
+import { requirePerson, personTokenVerified, personTokenHome, initPersonToken, takePersonToken } from "../core/personGate.js";
+import { appendRuleLog, challengeRule, clearChallenge, currentRunContext, replaceRule, ruleDetail, ruleView } from "../core/lifecycle.js";
 import { extractInlineIntent } from "../extractors/comments.js";
 import { parseDocRules, planDocRules, docRulePlanIsDirty, withoutMarkedRules, recordedDocRuleKey, recordedDocRuleSource, recordedDocRuleHash, docRuleHash, type DocRule, type DocRuleIssue } from "../extractors/docRules.js";
 import { hunchDirHasChanges, trackedFiles } from "../extractors/git.js";
@@ -211,6 +213,7 @@ import { scopePath } from "../core/stateContract.js";
 import { movePublicMemoryToPrivate } from "../store/privateMigrate.js";
 import { ENTITY_KINDS } from "../core/types.js";
 import { formatWhyRecord } from "../core/whyRecord.js";
+import { reviewJson, whyJson } from "./jsonViews.js";
 import { planCompaction } from "../store/compact.js";
 import { repairDecisionReference } from "../core/refrepair.js";
 import { resolveInvocation, dim, synthesisStatusLines, maybeWarnOllamaContext } from "./invocation.js";
@@ -219,6 +222,7 @@ import { runHookCommand } from "./hookCommand.js";
 import { openTeamStore, clearTrackedStore, trackedStore, type TeamStoreOptions } from "./teamStore.js";
 import { markerFor } from "./optOutGate.js";
 
+takePersonToken(); // hold the token in memory and keep it out of every child process environment
 const program = new Command();
 program.name("hunch").description("Hunch — engineering memory and a deterministic Change Gate for AI-assisted codebases.").version(HUNCH_VERSION);
 program.option("--initiator <name>", "bind agent launches to the originating CLI (Claude, Codex, Kimi, or a configured adapter)")
@@ -264,10 +268,14 @@ registerReviewMemoryCommands(program, (records, repository, privateOnly) => {
     const existing = store.recs("constraints").find(r => r.id === record.id);
     if (existing) throw new Error(`constraint ${record.id} already exists; use the existing correction review flow to change it`);
   }
-  for (const record of records) store.putCapture("constraints", record, privateOnly);
+  // Without a verified person the captured rules are drafts: they warn but never block until approved.
+  const byPerson = personTokenVerified();
+  const written = records.map((record) => byPerson ? record : { ...record, status: "draft" as const });
+  for (const record of written) store.putCapture("constraints", record, privateOnly);
   store.reindex();
   if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
   pumpMemoryHome(store, root, home, `hunch: capture ${records.length} sourced review rule(s)`);
+  return written;
 }, (repository, privateOnly) => {
   const { store, root } = storeFor();
   if (!repositoryUsesRemote(root, `https://github.com/${repository}.git`)) {
@@ -2600,10 +2608,13 @@ program
   .command("capture-comments")
   .description("Capture inline intent comments into the graph: `hunch-why:` → a decision, `hunch-rule:` → a file-scoped constraint. Deterministic + idempotent.")
   .option("--private", "write captured records into the private overlay (HUNCH_PRIVATE_DIR)")
-  .action((opts: { private?: boolean }) => {
+  .action(async (opts: { private?: boolean }) => {
     const { store, root } = storeFor();
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     const intents = extractInlineIntent(root);
+    // Rules from comments enforce only when a person ran this; otherwise they land as unapproved drafts.
+    const byPerson = intents.some((i) => i.kind !== "why") ? (await requirePerson("capture rules from comments", "capture-comments")).ok : false;
+    let heldBack = 0;
     const now = new Date().toISOString();
     // Decisions and constraints can have different homes under a memory policy, so each
     // kind resolves its own (lazily: a constraint-only file must not need an overlay).
@@ -2631,15 +2642,18 @@ program
       } else {
         const id = constraintId(`inline:${it.file}:${it.text}`);
         const prev = store.recsInHome("constraints", homeOf("constraints")).find((c) => c.id === id);
+        // Without a person an existing rule is left exactly as it is (no status or provenance rewrite).
+        if (prev && !byPerson) { heldBack++; continue; }
         const rec: Constraint = {
           id, type: "correctness", statement: it.text, scope: [it.file],
           // Advisory by default — an inline rule never auto-blocks a build; raise severity
           // deliberately if you want enforcement. Keeps day-one zero false-positive rage.
           severity: "warning", enforcement: "advisory_v1", match: null, forbids: null,
           rationale: `Captured from an inline hunch-rule comment (${it.file}:${it.line}).`,
-          source_decision: null, violations: [], status: "active",
+          source_decision: null, violations: [], status: byPerson ? "active" : "draft",
           valid_from: prev?.valid_from ?? now, valid_to: null,
-          provenance: { source: "human_confirmed", confidence: 0.9, evidence: ev },
+          provenance: byPerson ? { source: "human_confirmed", confidence: 0.9, evidence: ev } : { source: "agent_recorded", confidence: 0.75, evidence: ev },
+          ...keepLifecycle(prev),
         };
         store.putCapture("constraints", rec, opts.private);
         con++;
@@ -2661,6 +2675,8 @@ program
     }
     if (!intents.length) console.log("No `hunch-why:` / `hunch-rule:` comments found.");
     else console.log(`✓ captured ${dec} decision(s) + ${con} constraint(s) from inline comments${opts.private ? " [private overlay]" : ""}`);
+    if (con && !byPerson) console.log(`  ↳ rules from comments were recorded as DRAFTS (agent_recorded): a person must approve each with "hunch review --confirm <id>" before it is enforced.`);
+    if (heldBack) console.log(`  ↳ ${heldBack} existing rule(s) left unchanged: only a person can re-capture a rule that already exists.`);
     if (flush === "held") console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
     store.close();
   });
@@ -2707,11 +2723,13 @@ program
         if (!p) return fail(`no queued proposal ${id} (see \`hunch derive-rules --proposals\`)`);
         const rest = { ...q, pending: q.pending.filter((x) => x.id !== id) };
         if (opts.drop) {
+          if (!await gatePerson("drop a rule proposal", id)) return;
           writeProposalQueue(hunchDir, { ...rest, dropped: [...rest.dropped, id] });
           console.log(`✓ dropped proposal ${id}`);
           return;
         }
         if (!opts.expect) return fail("--accept requires --expect <hash> (printed with the proposal)");
+        if (!await gatePerson("accept a rule proposal", id)) return;
         let rec: Constraint;
         try {
           rec = acceptProposal(p, opts.expect, createRepoFileReader(root)(p.file), new Date().toISOString());
@@ -2827,10 +2845,27 @@ program
         console.log(`✓ dry run: ${writes.length} write(s) planned, nothing written`);
         return;
       }
+      // Person-only: rewriting an existing rule's text, scope, severity or type; stamping new rules as approved.
+      // Every gate runs before the first write, so a refusal leaves the store untouched.
+      if (opts.acceptChanges) {
+        for (const x of plan.changed) if (!await gatePerson("edit a rule", x.next.id)) return;
+      }
+      const needsPerson = plan.create.length > 0 || plan.moved.length > 0 || (opts.acceptChanges && plan.held.length > 0);
+      const byPerson = needsPerson ? (await requirePerson("derive rules from docs", "derive-rules")).ok : false;
       const written = new Set<string>();
+      let drafted = 0;
       for (const rec of writes) {
         try {
-          store.putCapture("constraints", rec, opts.private);
+          const prev = store.recsInHome("constraints", home).find((c) => c.id === rec.id);
+          let out: Constraint = { ...rec, ...keepLifecycle(prev) };
+          if (!byPerson && !(opts.acceptChanges && plan.changed.some((x) => x.next.id === rec.id))) {
+            // No person: a new rule is an unapproved draft; a moved rule keeps the authority it already had.
+            out = prev
+              ? { ...out, provenance: { ...out.provenance, source: prev.provenance.source, confidence: prev.provenance.confidence } }
+              : { ...out, status: "draft", provenance: { ...out.provenance, source: "agent_recorded+imported:doc-rule", confidence: 0.75 } };
+            if (!prev) drafted++;
+          }
+          store.putCapture("constraints", out, opts.private);
           written.add(rec.id);
         } catch (error) {
           console.log(`  ✗ ${rec.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -2848,6 +2883,7 @@ program
       const applied = opts.acceptChanges ? plan.changed.filter((x) => written.has(x.next.id)).length : 0;
       const created = plan.create.filter((x) => written.has(x.next.id)).length + (opts.acceptChanges ? plan.held.filter((x) => written.has(x.next.id)).length : 0);
       console.log(`✓ ${created} new, ${applied} updated, ${plan.moved.length} moved, ${plan.unchanged.length} unchanged${opts.private ? " [private overlay]" : ""}`);
+      if (drafted) console.log(`  ↳ ${drafted} new rule(s) recorded as DRAFTS (agent_recorded): a person must approve each with "hunch review --confirm <id>" before it is enforced.`);
       if (plan.changed.length > applied || (!opts.acceptChanges && plan.held.length) || plan.orphaned.length || plan.malformed.length || plan.conflicts.length) console.log(dim("  pending items above need a human call; nothing was applied for them."));
       if (writes.some((c) => c.severity === "blocking" && c.scope.includes("**"))) console.log("  ⚠ repo-wide blocking rule: it can deny any edit at strict firmness and fail hunch check --strict.");
       if (flush === "held") console.log(`  ↳ ${heldNotice(hunchPaths(root).hunch)}`);
@@ -4364,11 +4400,18 @@ program
   .description("Explain why a file/symbol is the way it is (decisions, bugs, constraints).")
   .argument("<target>", "file path, symbol name, or record id (dec_/con_/bug_/fnd_/cmp_)")
   .option("--as-of <ref>", "time-travel: what was believed as of a commit/tag/branch (e.g. v0.7.0, HEAD~5)")
-  .action((target: string, opts: { asOf?: string }) => {
+  .option("--json", "print the same data as one JSON object")
+  .action((target: string, opts: { asOf?: string; json?: boolean }) => {
     const { store, root } = storeFor();
     const asOf = opts.asOf ? asOfDate(opts.asOf, root) : undefined;
     if (opts.asOf && !asOf) return fail(`could not resolve --as-of "${opts.asOf}" to a commit (need a git repo and a valid ref)`);
     const w = store.why(target, { asOf });
+    if (opts.json) {
+      const stale = new Set(store.staleness((f) => lastChangeDate(f, root)).map((x) => x.id));
+      console.log(JSON.stringify(whyJson(target, w, stale), null, 2));
+      store.close();
+      return;
+    }
     if (w.byId?.record) {
       if (asOf) console.log(`Why "${target}" (as of ${opts.asOf} — ${asOf.slice(0, 10)}):\n`);
       console.log(formatWhyRecord(w.byId).join("\n"));
@@ -4425,12 +4468,13 @@ program
     const { store, root } = storeFor();
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     store.json.ensureDirs();
-    const r = await recordFailure(store, root, { test: opts.test, message: opts.message }, { private: opts.private });
+    const r = await recordFailure(store, root, { test: opts.test, message: opts.message }, { private: opts.private, byPerson: personTokenVerified() });
     store.reindex();
     pumpMemoryHomes(store, root, r.touchedHomes, `hunch: capture ${r.bug.id}`);
     console.log(`✓ recorded bug ${r.bug.id} via ${r.provider}: "${r.bug.title}"${opts.private ? " [private overlay; local-only synthesis]" : ""}`);
     if (r.bug.lineage.recurrence_of) console.log(`  ↳ recurrence of ${r.bug.lineage.recurrence_of}`);
-    if (r.constraint) console.log(`  ↳ promoted constraint ${r.constraint.id} [${r.constraint.severity}]: ${r.constraint.statement}`);
+    if (r.constraint && r.constraintKept) console.log(`  ↳ kept existing guard ${r.constraint.id} unchanged (${r.constraint.status})`);
+    else if (r.constraint) console.log(`  ↳ promoted constraint ${r.constraint.id} [${r.constraint.severity}]: ${r.constraint.statement}`);
     store.close();
   });
 
@@ -4895,7 +4939,7 @@ program
   .option("--forbid-symbol <names>", "comma-sep identifier names that break the rule")
   .option("--match <regex>", "textual line regex (lint-grade last resort; prefer --forbid-dep/--forbid-symbol)")
   .option("--private", "write the invariant into the private overlay (local enforcement only; never included in public CI output)")
-  .action((statement: string, opts: { scope: string; severity: string; type: string; rationale: string; sourceDecision?: string; enforcement: string; match?: string; forbidDep?: string; forbidSymbol?: string; private?: boolean }) => {
+  .action(async (statement: string, opts: { scope: string; severity: string; type: string; rationale: string; sourceDecision?: string; enforcement: string; match?: string; forbidDep?: string; forbidSymbol?: string; private?: boolean }) => {
     const SEV = ["advisory", "warning", "blocking"];
     if (!SEV.includes(opts.severity)) return fail(`--severity must be one of: ${SEV.join(", ")}`);
     const { store, root } = storeFor();
@@ -4932,8 +4976,18 @@ program
       forbids = deriveForbids(statement, deps.length ? deps : undefined);
       derived = !!forbids;
     }
+    // Overwriting an existing rule is person-only; a brand-new rule from a non-person lands as an unapproved draft.
+    const newId = constraintId(statement);
+    const prior = (opts.private ? store.getRec("constraints", newId) : store.json.get("constraints", newId)) ?? store.getPrivateRec("constraints", newId);
+    let byPerson = false;
+    if (prior) {
+      if (!await gatePerson("re-record an existing rule", newId)) { store.close(); return; }
+      byPerson = true;
+    } else {
+      byPerson = (await requirePerson("record a rule", newId)).ok;
+    }
     const c = store.putCapture("constraints", {
-      id: constraintId(statement),
+      id: newId,
       type: opts.type,
       statement,
       scope,
@@ -4944,16 +4998,22 @@ program
       rationale: opts.rationale,
       source_decision: opts.sourceDecision ?? null,
       violations: [],
-      status: "active",
+      status: byPerson ? "active" : "draft",
       valid_from: new Date().toISOString(),
       valid_to: null,
-      provenance: { source: "human_confirmed", confidence: 1, evidence: [], last_verified: new Date().toISOString() },
+      provenance: byPerson
+        ? { source: "human_confirmed", confidence: 1, evidence: [], last_verified: new Date().toISOString() }
+        : { source: "agent_recorded", confidence: 0.8, evidence: [] },
+      ...keepLifecycle(prior),
     } as Constraint, opts.private);
     store.reindex();
     // Public grounding is a publishable artifact. Private rules stay local and
     // are surfaced by local checks/MCP, never copied into committed agent docs.
     if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
     const flush = flushCapture(store, hunchPaths(root).hunch, !!opts.private, `hunch: capture ${c.id}`, undefined, undefined, "constraints");
+    if (!byPerson) console.log(`  ↳ recorded as a DRAFT (agent_recorded): a person must approve it with "hunch review --confirm ${c.id}" before it is enforced.`);
+    if (byPerson && prior?.status === "draft") console.log(`  ↳ kept as draft: approve with \`hunch review --confirm ${c.id}\``);
+    else if (byPerson && prior?.status === "retired") console.log("  ↳ kept retired");
     console.log(`✓ recorded ${c.severity} constraint ${c.id}: "${c.statement}" (scope: ${scope.join(", ") || "repo"})${opts.private ? " [private overlay]" : ""}`);
     if (derived && c.forbids?.deps.length) console.log(`  ↳ matcher: forbids import of ${c.forbids.deps.join(", ")} (precise, immune to staleness)`);
     if (c.severity === "blocking" && !effectiveForbids(c)) {
@@ -5003,9 +5063,10 @@ program
       return;
     }
 
-    const cap = await captureTestRun(store, root, { report, status: run.status, cmd: cmdStr, output, private: opts.private });
-    for (const { bug, constraint } of cap.results) {
-      if (constraint) console.log(`  ⚠ ${bug.id} "${bug.title}" → promoted constraint ${constraint.id} [${constraint.severity}]`);
+    const cap = await captureTestRun(store, root, { report, status: run.status, cmd: cmdStr, output, private: opts.private, byPerson: personTokenVerified() });
+    for (const { bug, constraint, constraintKept } of cap.results) {
+      if (constraint && constraintKept) console.log(`  ⚠ ${bug.id} "${bug.title}" → kept existing guard ${constraint.id} unchanged (${constraint.status})`);
+      else if (constraint) console.log(`  ⚠ ${bug.id} "${bug.title}" → promoted constraint ${constraint.id} [${constraint.severity}]${constraint.status === "draft" ? ` as a DRAFT: approve with \`hunch review --confirm ${constraint.id}\` to activate` : ""}`);
       else console.log(`  ✗ ${bug.id} "${bug.title}" [${bug.severity}]${bug.lineage.recurrence_of ? ` ↳ recurrence of ${bug.lineage.recurrence_of}` : ""}`);
     }
     for (const b of cap.fixed) console.log(`  ✓ ${b.id} "${b.title}" → fixed (test passing)`);
@@ -5014,10 +5075,10 @@ program
     if (cap.touchedHomes.length) pumpMemoryHomes(store, root, cap.touchedHomes, `hunch: capture test results`);
     store.close();
     const recurrences = cap.results.filter((r) => r.bug.lineage.recurrence_of).length;
-    const promoted = cap.results.filter((r) => r.constraint).length;
+    const promoted = cap.results.filter((r) => r.constraint && !r.constraintKept).length;
     console.log(
       `\n${run.status === 0 ? "✓ suite passed" : "✗ suite failed"} — ` +
-      `${cap.results.length} bug(s) captured (${recurrences} recurrence, ${promoted} constraint), ${cap.fixed.length} resolved.`,
+      `${cap.results.length} bug(s) captured (${recurrences} recurrence, ${promoted} constraint${promoted ? " draft(s) needing approval unless a person token was supplied" : ""}), ${cap.fixed.length} resolved.`,
     );
     if (run.status !== 0) process.exitCode = 1; // preserve CI semantics
   });
@@ -5648,7 +5709,8 @@ program
   .description("Retire an active constraint: close its valid-time window (invalidate, don't delete) so `hunch check` and the strict hook stop enforcing it.")
   .argument("<id>", "constraint id (con_*)")
   .option("--reason <text>", "why it's being retired — recorded in the commit body, never the subject")
-  .action((id: string, opts: { reason?: string }) => {
+  .action(async (id: string, opts: { reason?: string }) => {
+    if (!await gatePerson("retire a rule", id)) return;
     const { store, root } = storeFor();
     const existing = store.getRec("constraints", id);
     if (!existing) { store.close(); return fail(`constraint "${id}" not found`); }
@@ -5690,18 +5752,20 @@ program
  *  (`hunch: <verb> <id>`, no user text; `hunch log` files it under "edit"); `--reason`
  *  rides the body only. `--json` prints exactly one object so a UI can undo by issuing
  *  the inverse command from `before`/`after`. */
-function runMemoryMove(
+async function runMemoryMove(
   verb: "edit" | "link" | "remove" | "restore",
   id: string,
   opts: { json?: boolean; reason?: string },
   transform: (kind: MemoryKind, rec: MemoryRecord, store: HunchStore, now: string, home: MemoryHome) => EditResult,
-): void {
+): Promise<void> {
   const target = kindOfId(id);
   if (!target) return fail(`"${id}" is not a memory id — expected a dec_, con_, bug_ or fnd_ prefix`);
   const { store, root } = storeFor();
   try {
     const existing = store.getRec(target.collection, id) as MemoryRecord | undefined;
     if (!existing) return fail(`${target.kind} "${id}" not found`);
+    // Rules (constraints) are person-only: decided by the resolved record, not the id's spelling. Gate before any write.
+    if (target.collection === "constraints" && !await gatePerson(`${verb} a rule`, id)) return;
     const home: MemoryHome = (target.collection === "decisions" ? decisionMemoryHome(store, id) : store.getPrivateRec(target.collection, id) ? "private" : "public");
     const result = transform(target.kind, existing, store, new Date().toISOString(), home);
     if (!result.ok) return fail(result.reason);
@@ -5742,8 +5806,8 @@ program
   .option("--context <text>", "new context (decisions only)")
   .option("--rationale <text>", "new rationale (constraints only)")
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
-  .action((id: string, opts: { title?: string; text?: string; context?: string; rationale?: string; json?: boolean }) => {
-    runMemoryMove("edit", id, opts, (kind, rec, _store, now) => editRecord(kind, rec, opts, now));
+  .action(async (id: string, opts: { title?: string; text?: string; context?: string; rationale?: string; json?: boolean }) => {
+    return runMemoryMove("edit", id, opts, (kind, rec, _store, now) => editRecord(kind, rec, opts, now));
   });
 
 program
@@ -5757,8 +5821,8 @@ program
   .option("--add-component <cmp_id>", "link a component (decisions only; repeatable)", collectOption, [] as string[])
   .option("--remove-component <cmp_id>", "unlink a component (decisions only; repeatable)", collectOption, [] as string[])
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
-  .action((id: string, opts: { feature?: string; clearFeature?: boolean; addFile: string[]; removeFile: string[]; addComponent: string[]; removeComponent: string[]; json?: boolean }) => {
-    runMemoryMove("link", id, opts, (kind, rec, store, now, home) => linkRecord(kind, rec, {
+  .action(async (id: string, opts: { feature?: string; clearFeature?: boolean; addFile: string[]; removeFile: string[]; addComponent: string[]; removeComponent: string[]; json?: boolean }) => {
+    return runMemoryMove("link", id, opts, (kind, rec, store, now, home) => linkRecord(kind, rec, {
       feature: opts.feature,
       clearFeature: opts.clearFeature,
       addFiles: opts.addFile,
@@ -5778,11 +5842,101 @@ program
   .option("--reason <text>", "why — recorded in the commit body, never the subject")
   .option("--superseded-by <dec_id>", "decisions only: record the live decision that already says it replaces this one")
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
-  .action((id: string, opts: { reason?: string; supersededBy?: string; json?: boolean }) => {
-    runMemoryMove("remove", id, opts, (kind, rec, store, now, home) => removeRecord(kind, rec, now, {
+  .action(async (id: string, opts: { reason?: string; supersededBy?: string; json?: boolean }) => {
+    return runMemoryMove("remove", id, opts, (kind, rec, store, now, home) => removeRecord(kind, rec, now, {
       supersededBy: opts.supersededBy,
       successor: opts.supersededBy === undefined ? undefined : store.decisionInStore(opts.supersededBy, home === "private"),
     }));
+  });
+
+/** Run one rule-lifecycle mutation, then reindex and flush it like other memory moves. */
+function runRuleMove(verb: string, id: string, reason: string, mutate: (store: HunchStore) => unknown, logKind?: "challenge" | "challenge_clear"): void {
+  const { store, root } = storeFor();
+  try {
+    const result = mutate(store);
+    if (logKind) {
+      const ctx = currentRunContext();
+      appendRuleLog(root, { kind: logKind, at: new Date().toISOString(), rule_id: id, reason, session_id: ctx.session_id, run_id: ctx.run_id });
+    }
+    store.reindex();
+    const home: MemoryHome = store.getPrivateRec("constraints", id) ? "private" : "public";
+    if (home === "public" && !publicFlushCommitsGrounding(store, root)) refreshExistingGrounding(root, store);
+    pumpMemoryHome(store, root, home, `hunch: ${verb} ${id}
+
+${reason}`);
+    console.log(`✓ ${verb} ${id}`);
+    void result;
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+  } finally {
+    store.close();
+  }
+}
+
+program
+  .command("rules")
+  .description("List rules (constraints) with their lifecycle state: draft, active, challenged or retired.")
+  .option("--status <state>", "only rules in this state: draft|active|challenged|retired")
+  .option("--json", "print a JSON array of rule views")
+  .action((opts: { status?: string; json?: boolean }) => {
+    if (opts.status && !["draft", "active", "challenged", "retired"].includes(opts.status)) return fail("--status must be one of: draft, active, challenged, retired");
+    const { store } = storeFor();
+    try {
+      const views = store.recs("constraints").map((c) => ruleView(store, c)).filter((v) => !opts.status || v.status === opts.status);
+      if (opts.json) { console.log(JSON.stringify(views)); return; }
+      if (!views.length) { console.log("no rules"); return; }
+      for (const v of views) console.log(`${v.id}  ${v.status.padEnd(10)} ${v.severity.padEnd(9)} ${v.scope.join(",")}  ${v.statement}`);
+    } finally { store.close(); }
+  });
+
+const ruleCmd = program.command("rule").description("Inspect one rule.");
+ruleCmd
+  .command("show")
+  .description("Show one rule with the decision behind it and the options that decision rejected.")
+  .argument("<id>", "constraint id (con_*)")
+  .option("--json", "print the rule detail as JSON")
+  .action((id: string, opts: { json?: boolean }) => {
+    const { store } = storeFor();
+    try {
+      const d = ruleDetail(store, id);
+      if (opts.json) { console.log(JSON.stringify(d)); return; }
+      console.log(`${d.id}  ${d.status}  ${d.severity}
+${d.statement}
+scope: ${d.scope.join(", ")}`);
+      if (d.challenge) console.log(`challenged: ${d.challenge.reason}`);
+      if (d.why_detail) console.log(`why: ${d.why_detail.id} ${d.why_detail.title}`);
+    } catch (e) { fail(e instanceof Error ? e.message : String(e)); }
+    finally { store.close(); }
+  });
+
+program
+  .command("challenge")
+  .description("Challenge a rule: it keeps being enforced but is flagged for a person to review. `hunch challenge clear <id>` ends it (a person action).")
+  .argument("<id>", "constraint id (con_*), or `clear` followed by the id")
+  .argument("[clearId]", "the constraint id when the first argument is `clear`")
+  .option("--reason <text>", "why the rule looks wrong (or, with clear, why it stands)")
+  .action(async (first: string, second: string | undefined, opts: { reason?: string }) => {
+    if (!opts.reason?.trim()) return fail("--reason <text> is required");
+    const reason = opts.reason;
+    if (first === "clear") {
+      if (!second) return fail("usage: hunch challenge clear <id> --reason <text>");
+      if (!await gatePerson("clear a challenge", second)) return;
+      runRuleMove("challenge clear", second, reason, (store) => clearChallenge(store, second, { reason }), "challenge_clear");
+      return;
+    }
+    const ctx = currentRunContext();
+    runRuleMove("challenge", first, reason, (store) => challengeRule(store, first, { reason, by_session: ctx.session_id, by_run: ctx.run_id }), "challenge");
+  });
+
+program
+  .command("replace")
+  .description("Retire a rule in favour of another one.")
+  .argument("<old>", "constraint id being replaced")
+  .requiredOption("--with <new>", "constraint id that replaces it")
+  .requiredOption("--reason <text>", "why")
+  .action(async (oldId: string, opts: { with: string; reason: string }) => {
+    if (!await gatePerson("replace a rule", oldId)) return;
+    runRuleMove("replace", oldId, opts.reason, (store) => replaceRule(store, oldId, opts.with, { reason: opts.reason }));
   });
 
 program
@@ -5792,8 +5946,8 @@ program
   .option("--status <status>", "decision: proposed|accepted (default: the status before remove); finding: open|accepted-risk|scheduled (default open)")
   .option("--clear-superseded-by", "decisions only: also forget who replaced it, undoing `remove --superseded-by`")
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
-  .action((id: string, opts: { status?: string; clearSupersededBy?: boolean; json?: boolean }) => {
-    runMemoryMove("restore", id, opts, (kind, rec, store, now) => restoreRecord(kind, rec, { status: opts.status, decisions: store.recs("decisions"), clearSupersededBy: opts.clearSupersededBy }, now));
+  .action(async (id: string, opts: { status?: string; clearSupersededBy?: boolean; json?: boolean }) => {
+    return runMemoryMove("restore", id, opts, (kind, rec, store, now) => restoreRecord(kind, rec, { status: opts.status, decisions: store.recs("decisions"), clearSupersededBy: opts.clearSupersededBy }, now));
   });
 
 program
@@ -5812,10 +5966,12 @@ program
   .option("--severity <s>", "constraint: advisory | warning (blocking is granted on confirm); finding: low | medium | high | critical")
   .option("--status <status>", "decision: accepted (default) | proposed")
   .option("--json", "print { changed, id, kind, home, before, after, flush } as one JSON object")
-  .action((kind: string, opts: { title?: string; text?: string; context?: string; rationale?: string; rejected: string[]; evidence: string[]; feature?: string; file: string[]; component: string[]; severity?: string; status?: string; json?: boolean }) => {
+  .action(async (kind: string, opts: { title?: string; text?: string; context?: string; rationale?: string; rejected: string[]; evidence: string[]; feature?: string; file: string[]; component: string[]; severity?: string; status?: string; json?: boolean }) => {
     if (!isNewKind(kind)) return fail(`"${kind}" can't be added — choose ${NEW_KINDS.join(", ")}`);
     if (opts.text === undefined) return fail("--text is required");
     const collection = `${kind}s` as "decisions" | "constraints" | "findings";
+    // A rule enforces only once a person added it; otherwise it lands as an unapproved draft.
+    const byPerson = kind === "constraint" ? (await requirePerson("add a rule", constraintId(opts.text))).ok : false;
     const { store, root } = storeFor();
     try {
       const home = store.captureHome(false, collection);
@@ -5824,7 +5980,7 @@ program
         evidence: opts.evidence, feature: opts.feature, files: opts.file, components: opts.component, severity: opts.severity, status: opts.status,
       }, {
         now: new Date().toISOString(), root, knownDeps: kind === "constraint" ? knownRepoDeps(root) : undefined,
-        knownComponents: new Set(store.recs("components").map((c) => c.id)), decisions: store.recs("decisions"), home,
+        knownComponents: new Set(store.recs("components").map((c) => c.id)), decisions: store.recs("decisions"), home, byPerson,
         existing: (_k, id) => (store.getRec(collection, id) ?? store.json.get(collection, id) ?? store.getPrivateRec(collection, id)) as { title?: string; statement?: string; status?: string; triage?: string } | undefined,
         unreadable: (_k, id) => store.json.hasRecordFile(collection, id) || store.hasPrivateRecordFile(collection, id),
       });
@@ -5841,6 +5997,7 @@ program
         console.log(JSON.stringify({ changed: true, id: after.id, kind, home, before: null, after, flush, uncommitted }));
         return;
       }
+      if (kind === "constraint" && !byPerson) console.log(`  ↳ recorded as a DRAFT (agent_recorded): a person must approve it with "hunch review --confirm ${after.id}" before it is enforced.`);
       console.log(`✓ added ${kind} ${after.id} (unconfirmed). To sign it as yours: ${confirmCommand(after.id, { private: home === "private" })}`);
       if (uncommitted) console.log(`  ⚠ ${notCommitted(home)}`);
     } finally {
@@ -6073,7 +6230,7 @@ program
       }
       const servedIds = new Set(summary.rows.map((r) => r.record_id));
       const neverServed = [
-        ...store.recs("constraints").filter((c) => c.status === "active" && !servedIds.has(c.id)).map((c) => c.id),
+        ...store.recs("constraints").filter((c) => c.status !== "retired" && !servedIds.has(c.id)).map((c) => c.id),
         ...store.recs("decisions").filter((d) => d.status === "accepted" && !d.superseded_by && !servedIds.has(d.id)).map((d) => d.id),
       ];
       console.log(`\n  Never delivered on this machine: ${neverServed.length} in-force record(s)${neverServed.length ? ` — compact candidates start here (${neverServed.slice(0, 5).join(", ")}${neverServed.length > 5 ? ", …" : ""})` : ""}`);
@@ -6204,7 +6361,7 @@ program
   .option("--confirm <id>", "countersign an agent-recorded decision (dec_…) or correction (con_…) as human-confirmed WITHOUT changing its status or content — the human act a capture token alone cannot stand in for")
   .option("--unconfirm <id>", "take your countersign back: the decision (dec_…) or correction (con_…) is agent testimony again; status and content are untouched")
   .option("--severity <s>", "with --confirm on a correction: the severity you grant (advisory | warning | blocking); with --unconfirm: the severity it goes back to (advisory | warning); default keeps its current severity, except blocking becomes warning")
-  .option("--json", "with --confirm or --unconfirm: print { changed, id, kind, home, before, after, flush } as one JSON object")
+  .option("--json", "with --confirm or --unconfirm: print { changed, id, kind, home, before, after, flush } as one JSON object; with no action: print the review groups and draft rules as JSON")
   .option("--approve-import <id>", "approve one exact imported ADR as human-confirmed authority")
   .option("--decline-import <id>", "record that one exact imported ADR was reviewed and must stay advisory")
   .option("--expected-source-hash <hash>", "exact sha256 source hash printed with the imported-ADR question")
@@ -6214,19 +6371,22 @@ program
   .option("--reject-duplicates", "batch-reject drafts that near-duplicate an accepted record (deterministic term+file similarity — hygiene, not judgment)")
   .option("--min-grounded <n>", "grounded-ness threshold for the ready group / --accept-verified", String(READY_MIN_GROUNDED))
   .option("--private", "include local private/shared-overlay drafts; terminal output may contain private memory")
-  .action((opts: { accept?: string; reject?: string; confirm?: string; unconfirm?: string; severity?: string; json?: boolean; approveImport?: string; declineImport?: string; expectedSourceHash?: string; expectedReviewHash?: string; reviewedBy?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string; private?: boolean }) => {
+  .action(async (opts: { accept?: string; reject?: string; confirm?: string; unconfirm?: string; severity?: string; json?: boolean; approveImport?: string; declineImport?: string; expectedSourceHash?: string; expectedReviewHash?: string; reviewedBy?: string; acceptVerified?: boolean; rejectDuplicates?: boolean; minGrounded?: string; private?: boolean }) => {
+    if (opts.confirm && !opts.unconfirm && !await gatePerson("approve a draft or countersign a record", opts.confirm)) return;
+    if (opts.unconfirm && !opts.confirm && !await gatePerson("take back a countersign", opts.unconfirm)) return;
     const { store, root } = storeFor();
     const minGrounded = Number.isFinite(Number(opts.minGrounded)) ? Number(opts.minGrounded) : READY_MIN_GROUNDED;
     if (opts.private && !store.hasPrivate) { store.close(); return fail("--private needs HUNCH_PRIVATE_DIR set to a private store"); }
     const actionCount = [opts.accept, opts.reject, opts.confirm, opts.unconfirm, opts.approveImport, opts.declineImport, opts.acceptVerified, opts.rejectDuplicates].filter(Boolean).length;
     if (actionCount > 1) { store.close(); return fail("choose exactly one review action at a time"); }
     if (opts.severity && !opts.confirm && !opts.unconfirm) { store.close(); return fail("--severity applies only with --confirm or --unconfirm on a correction"); }
-    if (opts.json && !opts.confirm && !opts.unconfirm) { store.close(); return fail("--json applies only with --confirm or --unconfirm"); }
+    if (opts.json && actionCount && !opts.confirm && !opts.unconfirm) { store.close(); return fail("--json applies only with --confirm or --unconfirm, or with no action"); }
     const decisions = () => opts.private ? store.recs("decisions") : store.json.loadAll("decisions");
     let publicGroundingChanged = false;
     const touchedHomes = new Set<MemoryHome>();
     if (opts.approveImport || opts.declineImport) {
       const id = opts.approveImport ?? opts.declineImport!;
+      if (!await gatePerson(opts.approveImport ? "approve an imported ADR" : "decline an imported ADR", id)) { store.close(); return; }
       if (!opts.expectedSourceHash || !opts.expectedReviewHash || !opts.reviewedBy) {
         store.close();
         return fail("an imported-ADR answer requires --expected-source-hash <hash>, --expected-review-hash <hash>, and --reviewed-by <label>");
@@ -6294,8 +6454,9 @@ program
       } else {
         home = opts.private && store.getPrivateRec("constraints", id) ? "private" : "public";
         // The edit hook denies on severity alone, so an unconfirmed rule never stays blocking.
-        const next = signing ? countersignConstraint(c!, now, severity)
+        const signed = signing ? countersignConstraint(c!, now, severity)
           : { ...unsign(c!, false), severity: severity ?? (c!.severity === "blocking" ? "warning" : c!.severity) };
+        const next = signing && (signed.status as string) === "draft" ? { ...signed, status: "active" as const } : signed;
         after = next;
         if (home === "private") store.putPrivate("constraints", next);
         else store.json.put("constraints", next);
@@ -6312,6 +6473,7 @@ program
       const flush = pumpMemoryHome(store, root, home, `hunch: ${signing ? "confirm" : "unconfirm"} ${id}`);
       if (opts.json) console.log(JSON.stringify({ changed: true, id, kind: d ? "decision" : "constraint", home, before: (d ?? c)!, after, flush }));
     } else if (opts.accept) {
+      if (!await gatePerson("accept a draft", opts.accept)) { store.close(); return; }
       const d = opts.private ? store.getRec("decisions", opts.accept) : store.json.get("decisions", opts.accept);
       if (!d) { store.close(); return fail(`decision ${opts.accept} not found`); }
       if (isImportedAdrDecision(d)) {
@@ -6327,6 +6489,7 @@ program
       }
       console.log(`✓ accepted ${opts.accept} (now ${source}, confidence 0.95${armed ? `, ${armed} tripwire(s) now blocking` : ""})`);
     } else if (opts.reject) {
+      if (!await gatePerson("reject a draft", opts.reject)) { store.close(); return; }
       const d = opts.private ? store.getRec("decisions", opts.reject) : store.json.get("decisions", opts.reject);
       if (!d) { store.close(); return fail(`decision ${opts.reject} not found`); }
       if (d.status !== "proposed") {
@@ -6337,6 +6500,7 @@ program
       store.reindex();
       console.log(`✓ rejected ${d.id} (lifecycle retained for history and team sync)`);
     } else if (opts.rejectDuplicates) {
+      if (!await gatePerson("reject duplicate drafts", "reject-duplicates")) { store.close(); return; }
       // Deterministic hygiene, not a trust decision (dec_a466655539 stays intact):
       // only drafts, only against ACCEPTED records, conservative threshold.
       const all = decisions();
@@ -6357,6 +6521,7 @@ program
         console.log(`\n✓ Rejected ${rejected} duplicate draft(s). Accepted records untouched.`);
       }
     } else if (opts.acceptVerified) {
+      if (!await gatePerson("accept verified drafts", "accept-verified")) { store.close(); return; }
       // Batch path: only Critic-verified, well-grounded drafts qualify — still the
       // human-driven accept gate (the operator runs this), just over a safe subset.
       const proposed = decisions().filter((d) => d.status === "proposed");
@@ -6381,7 +6546,10 @@ program
       const imported = pendingImportedAdrReviews(allDecisions);
       const drafts = allDecisions.filter(isReviewDraft);
       const { ready, scrutiny } = partitionReview(drafts, minGrounded);
-      if (!ready.length && !scrutiny.length && !imported.length) {
+      if (opts.json) {
+        const draftRules = store.recs("constraints").filter((c) => c.status === "draft");
+        console.log(JSON.stringify(reviewJson({ imported, ready, scrutiny, rules: draftRules, minGrounded }), null, 2));
+      } else if (!ready.length && !scrutiny.length && !imported.length) {
         console.log("✓ No drafts awaiting review — captured memory auto-trusts (advisory) the moment it lands.");
       } else {
         if (imported.length) {
@@ -7202,7 +7370,7 @@ program
           console.log(lagging.length
             ? `\n${lagging.length} doc(s) lag a merge — transient; the next capture commit or \`hunch grounding --refresh\` heals it.`
             : newer.length
-              ? `\n${newer.length} doc(s) written by a newer Hunch — kept as written; upgrade Hunch to check them fully.`
+              ? `\n${newer.length} doc(s) written by a newer Hunch — kept as written; upgrade Hunch if a newer release exists, or run \`hunch grounding --refresh --force\` to re-render with this version (this replaces a newer teammate's block, so prefer upgrading when one exists).`
               : "✓ grounding docs are fresh.");
         }
       }
@@ -7999,6 +8167,44 @@ function reportClaudeConfigHeal(say: (text: string) => void = (text) => console.
   }
   say(dim(`  ↳ backup: ${res.backup}`));
 }
+/** Lifecycle state an automated rewrite of an existing rule must not reset (draft/challenged/retired, who recorded it). */
+function keepLifecycle(prev: Constraint | undefined): Partial<Constraint> {
+  if (!prev) return {};
+  const keep: Partial<Constraint> = { status: prev.status, valid_to: prev.valid_to };
+  if (prev.challenge !== undefined) keep.challenge = prev.challenge;
+  if (prev.retired_from !== undefined) keep.retired_from = prev.retired_from;
+  if (prev.source_session !== undefined) keep.source_session = prev.source_session;
+  if (prev.source_run !== undefined) keep.source_run = prev.source_run;
+  return keep;
+}
+/** Exit code for a refused person-only action (not a usage error, not a failed check). */
+const EXIT_PERSON_REQUIRED = 4;
+/** Gate a person-only action inside the CLI; call BEFORE any store mutation. False means refused (exit 4). */
+async function gatePerson(action: string, ruleId: string): Promise<boolean> {
+  const r = await requirePerson(action, ruleId);
+  if (r.ok) return true;
+  console.error(`error: ${r.message}`);
+  process.exitCode = EXIT_PERSON_REQUIRED;
+  return false;
+}
+const personTokenCmd = program.command("person-token").description("Manage the person token that lets a trusted tool (the Nuryel control plane) act as a person for rule-lifecycle commands.");
+personTokenCmd
+  .command("init")
+  .description("Create the person token (interactive terminal only). The token is printed once; only its sha256 is stored in ~/.hunch/person-token.json.")
+  .option("--rotate", "replace an existing token (the old one stops working)")
+  .action((opts: { rotate?: boolean }) => {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.error("error: only a person can create a person token. Run this in your own terminal.");
+      process.exitCode = EXIT_PERSON_REQUIRED;
+      return;
+    }
+    const r = initPersonToken(personTokenHome(), !!opts.rotate);
+    if (!r.ok) return fail(r.message);
+    console.log(`Person token created (hash stored in ${r.file}).`);
+    console.log("Store it in Nuryel's HUNCH_PERSON_TOKEN; it is shown only once and cannot be recovered:");
+    console.log(r.token);
+  });
+
 function fail(msg: string): void {
   console.error(`error: ${msg}`);
   process.exitCode = 1;

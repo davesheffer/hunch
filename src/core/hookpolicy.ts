@@ -31,7 +31,7 @@ export interface BlockingHit {
 export function blockingInScope(store: HunchStore, file: string, proposedAddedLines: string[] = []): BlockingHit | null {
   const addedDeps = importedDeps(proposedAddedLines); // parse imports out of the proposed edit
   for (const c of store.checkConstraints(file)) {
-    if (c.severity !== "blocking") continue;
+    if (c.severity !== "blocking" || c.status === "draft") continue;
     const forbids = effectiveForbids(c);
     // content-matched & not tripped by the proposed edit → allow (don't block every edit in scope)
     if (forbids && !matchForbids(forbids, addedDeps, proposedAddedLines)) continue;
@@ -42,7 +42,7 @@ export function blockingInScope(store: HunchStore, file: string, proposedAddedLi
   }
   for (const b of store.blastRadiusFiles(file)) {
     for (const c of store.checkConstraints(b.file)) {
-      if (c.severity !== "blocking") continue;
+      if (c.severity !== "blocking" || c.status === "draft") continue;
       // A content matcher tests the EDITED file's own added lines; it has nothing to
       // assert about a transitive dependency, so content-matched invariants don't fire
       // via blast radius — only scope-only invariants keep the blast-radius warning.
@@ -67,7 +67,7 @@ export function constraintInLines(store: HunchStore, file: string, lines: string
   if (!lines.length) return null;
   let deps: Set<string> | undefined;
   for (const c of store.checkConstraints(file)) {
-    if (c.severity !== "blocking" || !only(c)) continue;
+    if (c.severity !== "blocking" || c.status === "draft" || !only(c)) continue;
     const forbids = effectiveForbids(c);
     if (!forbids) continue;
     const m = matchForbids(forbids, (deps ??= importedDeps(lines)), lines);
@@ -82,7 +82,7 @@ export function constraintInLines(store: HunchStore, file: string, lines: string
 
 /** Whether a content-matched blocking invariant covers `file` at all (no file read). */
 export function forbidsCover(store: HunchStore, file: string): boolean {
-  return store.checkConstraints(file).some((c) => c.severity === "blocking" && !!effectiveForbids(c));
+  return store.checkConstraints(file).some((c) => c.severity === "blocking" && c.status !== "draft" && !!effectiveForbids(c));
 }
 
 /** Return a BlockingHit if the proposed added lines for `file` re-introduce an

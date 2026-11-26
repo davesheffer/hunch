@@ -20,8 +20,9 @@ const START = HUNCH_START;
 const END = HUNCH_END;
 
 /** Version of the block's PROSE. Bump it whenever renderHunchSection's wording
- *  changes. A block without the stamp is template 1. */
-export const GROUNDING_TEMPLATE = 2;
+ *  changes. A block without the stamp is template 1. Skips 3-7: pre-release builds
+ *  stamped 4 and 7, so it must stay monotonic across release and pre-release lines. */
+export const GROUNDING_TEMPLATE = 8;
 /** The pre-edit hook injects each in-scope invariant in full; the always-loaded
  *  list only has to name it (fnd_a65f71f38f, #369). Blocking statements are never
  *  clipped; others are cut at a word boundary within this many chars. */
@@ -109,7 +110,7 @@ function renderSectionFresh(store: HunchStore, root: string | undefined, variant
   const lean = variant === "lean";
   const constraints = store.json
     .loadAll("constraints")
-    .filter((c) => c.status === "active" && !c.valid_to)
+    .filter((c) => c.status !== "retired" && !c.valid_to)
     .sort((a, b) => sev(b.severity) - sev(a.severity))
     .slice(0, 8);
 
@@ -215,12 +216,12 @@ function readIfExists(file: string): string | undefined {
   return existsSync(file) ? readFileSync(file, "utf8") : undefined;
 }
 
-function pushInvariants(lines: string[], constraints: { severity: string; statement: string; scope: string[]; id: string }[]): void {
+function pushInvariants(lines: string[], constraints: { severity: string; status?: string; statement: string; scope: string[]; id: string }[]): void {
   if (!constraints.length) return;
   lines.push("");
   lines.push(INVARIANTS_HEADING + " (do not break)");
   for (const c of constraints) {
-    lines.push(`- **[${c.severity}]** ${c.severity === "blocking" ? c.statement : clip(c.statement, INVARIANT_CHARS)} _(scope: ${c.scope.join(", ") || "repo"}; ${c.id})_`);
+    lines.push(`- **[${c.severity}]**${c.status === "draft" ? " (draft)" : ""} ${c.severity === "blocking" ? c.statement : clip(c.statement, INVARIANT_CHARS)} _(scope: ${c.scope.join(", ") || "repo"}; ${c.id})_`);
   }
 }
 

@@ -1,4 +1,6 @@
-import { cleanupDir } from "./fixtures.js";
+import { sharedPersonEnv, cleanupDir } from "./fixtures.js";
+// The CLI refuses person-only rule actions without a person; these tests act as one.
+Object.assign(process.env, sharedPersonEnv());
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync } from "node:fs";

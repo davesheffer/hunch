@@ -512,9 +512,15 @@ type Post = (path: string, body: unknown, headers?: Record<string, string>) => P
 
 /** A committed git fixture on a feature branch, served with a real CLI behind the write routes. */
 /** cli: the real CLI (true), none (false), or a stand-in command to probe how the server reads its result. */
-async function withWriteServer(fn: (post: Post, get: Get, origin: string, root: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner): Promise<void> {
-  const root = tempDir("hunch-ui-write-");
+/** Run a CLI command as the person (token + registered home), the way they would in their own terminal. */
+function asPerson(root: string, ...args: string[]): void {
   const env = isolatedCliEnv({ HOME: root, USERPROFILE: root, HUNCH_PRIVATE_DIR: "", NO_COLOR: "1", CI: "1" });
+  execFileSync(process.execPath, hunchCliArgs(...args), { cwd: root, env, stdio: "pipe" });
+}
+
+async function withWriteServer(fn: (post: Post, get: Get, origin: string, root: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner, extraEnv: Record<string, string> = {}): Promise<void> {
+  const root = tempDir("hunch-ui-write-");
+  const env = { ...isolatedCliEnv({ HOME: root, USERPROFILE: root, HUNCH_PRIVATE_DIR: "", NO_COLOR: "1", CI: "1" }), ...extraEnv };
   const git = (...args: string[]): void => { execFileSync("git", args, { cwd: root, env, stdio: "ignore" }); };
   git("init", "-q"); git("config", "user.email", "t@example.com"); git("config", "user.name", "Test"); git("config", "commit.gpgsign", "false");
   const json = new JsonStore(hunchPaths(root));
@@ -584,8 +590,8 @@ test("ui server: /api/review needs the key, writes nothing, and reflects a chang
 });
 
 test("ui server: a confirmed record keeps its confirmation when its dead links are dropped", async () => {
-  await withWriteServer(async (post, get) => {
-    assert.equal((await post("/api/memory/dec_live/confirm", {})).status, 200);
+  await withWriteServer(async (post, get, _origin, root) => {
+    asPerson(root, "review", "--confirm", "dec_live"); // signing is a person's act; the page itself is refused
     const before = JSON.parse((await get("/api/memory/dec_live")).body) as { files: string[]; actions: { signed: boolean } };
     assert.equal(before.actions.signed, true);
     assert.ok(before.files.length > 0);
@@ -679,7 +685,7 @@ test("memoryHistory: record commits from both homes, newest first, with pushed s
 });
 
 test("ui server writes: edit, link and remove run the CLI, the list reloads, and each Undo puts it back", async () => {
-  await withWriteServer(async (post, get, origin) => {
+  await withWriteServer(async (post, get, origin, root) => {
     const detail = async (id: string) => JSON.parse((await get(`/api/memory/${id}`)).body);
 
     // As the page sends it: with this server's own Origin.
@@ -702,12 +708,14 @@ test("ui server writes: edit, link and remove run the CLI, the list reloads, and
     const unlinked = await detail("dec_loose");
     assert.deepEqual([unlinked.feature, unlinked.files], [null, []]);
 
+    // Removing a rule is person-only: the page is refused and told the exact command for the person's own terminal.
     const remove = await post("/api/memory/con_block/remove", { reason: "obsolete" });
-    assert.equal(remove.status, 200, JSON.stringify(remove.body));
-    assert.equal((await detail("con_block")).active, false);
-    const undoRemove = await post(`/api/memory/con_block/${remove.body.undo.action}`, remove.body.undo.body);
-    assert.equal(undoRemove.status, 200, JSON.stringify(undoRemove.body));
-    assert.equal((await detail("con_block")).active, true);
+    assert.equal(remove.status, 403, JSON.stringify(remove.body));
+    assert.equal(remove.body.personRequired, true);
+    assert.match(remove.body.error, /own terminal: hunch remove con_block/);
+    assert.equal((await detail("con_block")).active, true, "the refused request changed nothing");
+    asPerson(root, "remove", "con_block", "--reason=obsolete"); // the person does it in their terminal, and undoes it there
+    asPerson(root, "restore", "con_block");
 
     const refused = await post("/api/memory/bug_1/remove", {});
     assert.equal(refused.status, 422);
@@ -747,7 +755,6 @@ test("ui server new memory: guarded like every write; the CLI adds it unconfirme
     const id: string = created.body.id;
     assert.match(id, /^con_/);
     const detail = JSON.parse((await get(`/api/memory/${id}`)).body);
-    assert.equal(detail.active, true);
     assert.equal(detail.actions.signed, false, "adding never mints a person's confirmation; only Confirm as mine does");
     assert.equal(detail.source, "agent_recorded");
     assert.equal(await total(), baseline + 1, "the list reloads with it");
@@ -760,43 +767,54 @@ test("ui server new memory: guarded like every write; the CLI adds it unconfirme
     assert.equal(second.status, 422, JSON.stringify(second.body));
     assert.equal(JSON.parse((await get("/api/memory/dec_live")).body).active, true, "the live decision for the feature is untouched");
 
+    // The page is not a person: its new rule is an unapproved draft and removing it is the person's call.
     const undo = await post(`/api/memory/${id}/${created.body.undo.action}`, created.body.undo.body);
-    assert.equal(undo.status, 200, JSON.stringify(undo.body));
-    assert.equal(JSON.parse((await get(`/api/memory/${id}`)).body).active, false);
+    assert.equal(undo.status, 403, JSON.stringify(undo.body));
+    assert.match(undo.body.error, new RegExp(`own terminal: hunch remove ${id}`));
   });
 });
 
 test("ui server confirm: Confirm as mine signs a decision or a rule (with the severity chosen) through hunch review, and Undo takes it back", async () => {
-  await withWriteServer(async (post, get, origin) => {
+  await withWriteServer(async (post, get, origin, root) => {
     const detail = async (id: string) => JSON.parse((await get(`/api/memory/${id}`)).body);
-    const never = await post("/api/memory/dec_loose/unconfirm", {}, { origin });
-    assert.equal(never.status, 422);
-    assert.match(never.body.error, /not confirmed/);
-
+    // Confirming is person-only; the page is refused with the exact command for the person's terminal.
     const signed = await post("/api/memory/dec_loose/confirm", {}, { origin });
-    assert.equal(signed.status, 200, JSON.stringify(signed.body));
-    assert.equal(signed.body.flush, "committed");
-    const d = await detail("dec_loose");
-    assert.deepEqual([d.actions.signed, d.actions.confirmable, d.source], [true, false, "extracted+human_confirmed"]);
-    assert.equal(signed.body.undo.action, "unconfirm");
-    assert.match(signed.body.undo.note, /75%, not 90%/, "an extracted record can't get its old trust back");
-    const undo = await post(`/api/memory/dec_loose/${signed.body.undo.action}`, signed.body.undo.body);
-    assert.equal(undo.status, 200, JSON.stringify(undo.body));
-    assert.deepEqual([(await detail("dec_loose")).actions.signed, (await detail("dec_loose")).actions.confirmable], [false, true]);
+    assert.equal(signed.status, 403, JSON.stringify(signed.body));
+    assert.match(signed.body.error, /own terminal: hunch review .*dec_loose/);
+    assert.deepEqual([(await detail("dec_loose")).actions.signed, (await detail("dec_loose")).actions.confirmable], [false, true], "nothing changed");
 
     const created = await post("/api/memory", { kind: "rule", text: "Never charge twice", rationale: "Refunds are manual", files: ["src/billing/**"], severity: "warning" });
     const id: string = created.body.id;
-    assert.equal((await post(`/api/memory/${id}/confirm`, { severity: "forever" })).status, 422);
     const block = await post(`/api/memory/${id}/confirm`, { severity: "blocking" }, { origin });
-    assert.equal(block.status, 200, JSON.stringify(block.body));
-    assert.deepEqual(block.body.undo, { action: "unconfirm", body: { severity: "warning" } });
-    const blocking = await detail(id);
-    assert.deepEqual([blocking.actions.signed, blocking.actions.severity, blocking.delivery], [true, "blocking", "block"]);
-    const back = await post(`/api/memory/${id}/${block.body.undo.action}`, block.body.undo.body);
-    assert.equal(back.status, 200, JSON.stringify(back.body));
+    assert.equal(block.status, 403, JSON.stringify(block.body));
+    assert.match(block.body.error, new RegExp(`own terminal: hunch review .*${id}`));
     const warned = await detail(id);
     assert.deepEqual([warned.actions.signed, warned.actions.severity, warned.source], [false, "warning", "agent_recorded"]);
+    // A person signs it in their terminal; the page then shows it signed.
+    asPerson(root, "review", "--confirm", id, "--severity", "blocking");
+    assert.deepEqual([(await detail(id)).actions.signed, (await detail(id)).actions.severity], [true, "blocking"]);
   });
+});
+
+test("ui server: the spawned CLI never holds the person token, and a person-only refusal (exit 4) tells the person what to run", async () => {
+  // A stand-in CLI that succeeds only if it was handed the token the server's own env carries.
+  const standIn = { file: process.execPath, args: ["-e", "if (process.env.HUNCH_PERSON_TOKEN) { console.log(JSON.stringify({ changed: true, id: 'x', home: 'public', flush: null })); } else { console.error('error: Only a person can edit a rule.'); process.exit(4); }", "--"] };
+  await withWriteServer(async (post) => {
+    const r = await post("/api/memory/con_block/remove", { reason: "obsolete" });
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.equal(r.body.personRequired, true);
+    assert.equal(r.body.command, "hunch remove con_block --reason=obsolete");
+    assert.match(r.body.error, /own terminal: hunch remove con_block/);
+  }, standIn);
+});
+
+test("ui server: the spawned CLI holds no spelling of the person token, as Windows env names ignore case", async () => {
+  const probe = { file: process.execPath, args: ["-e", "const held = Object.keys(process.env).filter((k) => k.toUpperCase() === 'HUNCH_PERSON_TOKEN' || k === 'HUNCH_PERSON_TOKEN_X'); if (held.length === 1 && held[0] === 'HUNCH_PERSON_TOKEN_X') { console.log(JSON.stringify({ changed: true, id: 'x', home: 'public', flush: null })); } else { console.error('held: ' + held.join(',')); process.exit(1); }", "--"] };
+  const fake = { hunch_person_token: "fake-a", Hunch_Person_Token: "fake-b", HUNCH_PERSON_TOKEN: "fake-c", HUNCH_PERSON_TOKEN_X: "fake-d" };
+  await withWriteServer(async (post) => {
+    const r = await post("/api/memory/con_block/remove", { reason: "obsolete" });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+  }, probe, undefined, fake);
 });
 
 /** One process (tsx as a loader, not tsx's CLI wrapper), so kill() stops the server itself. */

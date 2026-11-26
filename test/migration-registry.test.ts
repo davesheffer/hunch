@@ -59,6 +59,18 @@ const STEP_TESTS: Record<number, Partial<Record<EntityKind, KindStep>>> = {
       loaded: { schema: "hunch.edge/1", environment: null },
     },
   },
+  4: {
+    decisions: {
+      fixture: () => ({ ...v1Decision(), valid_from: "2025-01-02T03:04:05Z", valid_to: null, superseded_by: null, retired: { symbols: [], deps: [] } }),
+      expected: { ...v1Decision(), valid_from: "2025-01-02T03:04:05Z", valid_to: null, superseded_by: null, retired: { symbols: [], deps: [] }, source_session: null, source_run: null },
+      loaded: { source_session: null, source_run: null },
+    },
+    constraints: {
+      fixture: () => ({ ...v1Constraint(), status: "active", valid_to: null }),
+      expected: { ...v1Constraint(), status: "active", valid_to: null, source_session: null, source_run: null, challenge: null },
+      loaded: { status: "active", challenge: null, source_session: null, source_run: null },
+    },
+  },
 };
 
 /** Kinds a migration touches: probe `up` on an empty record of every kind, plus the

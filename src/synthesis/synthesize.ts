@@ -8,7 +8,7 @@
  * and `proposed` until confirmed — advisory and cheap to discard.
  */
 import type { HunchStore } from "../store/hunchStore.js";
-import { commitMeta, commitDiff, headSha, currentBranch, commitPatchIds, isCompleteRepo } from "../extractors/git.js";
+import { commitMeta, commitDiff, headSha, currentBranch, commitPatchIds, isCompleteRepo, commitOnlyRefreshesGrounding } from "../extractors/git.js";
 import { PATCH_ID_PREFIX } from "../core/commitrepair.js";
 import { analyzeDiff, type DiffAnalysis } from "../extractors/diff.js";
 import { selectProvider, selectEnsemble, selectVerifier, verifyDecisionSafe, DeterministicProvider, UnusableOutputError, type SynthProvider, type DecisionDraft, type BugDraft, type CommitInput, type FailureInput } from "./provider.js";
@@ -96,6 +96,12 @@ export async function syncCommit(
   }
   const substantiveFiles = meta.files.filter(isSubstantive);
   if (!substantiveFiles.length) return { status: "skipped", reason: "no code or markdown files changed" };
+  // A grounding refresh is Hunch's own output too (#658): capturing it records a
+  // decision about the stats line, and that decision then bumps the count it describes.
+  // Only the managed region may differ; a human edit to AGENTS.md's own text stays eligible.
+  if (commitOnlyRefreshesGrounding(meta.sha, meta.files, root)) {
+    return { status: "skipped", reason: "commit only refreshes Hunch-generated grounding (HUNCH:START…END blocks and rules files)" };
+  }
 
   // Seed the id from the COMMIT (stable across runs), not the LLM-generated title
   // (which varies) — so re-syncing a commit updates rather than dupes.
@@ -287,6 +293,8 @@ export interface FailureResult {
   status: "written";
   bug: Bug;
   constraint?: Constraint;
+  /** The promoted guard already existed and was left unchanged (no verified person to change it). */
+  constraintKept?: boolean;
   provider: string;
   touchedHomes: Array<"public" | "private">;
 }
@@ -306,7 +314,7 @@ export async function recordFailure(
   store: HunchStore,
   root: string,
   failure: { test: string; message: string; recentDiff?: string },
-  opts: { private?: boolean } = {},
+  opts: { private?: boolean; byPerson?: boolean } = {},
 ): Promise<FailureResult> {
   const symbols = store.json.loadAll("symbols");
   const ranked = rankSuspects(symbols, failure.message);
@@ -370,9 +378,10 @@ export async function recordFailure(
   // policy can home bugs in the overlay while constraints/components stay public.
   const touched = new Set<SynthesisHome>([home]);
   let constraint: Constraint | undefined;
+  let constraintKept = false;
   if (shouldPromoteConstraint(draft.severity, bug.root_cause, !!prior)) {
     const constraintHome = store.captureHome(!!opts.private, "constraints");
-    constraint = promoteConstraint(store, bug, constraintHome, !!prior);
+    ({ constraint, kept: constraintKept } = promoteConstraint(store, bug, constraintHome, !!prior, !!opts.byPerson));
     touched.add(constraintHome);
     bug.lineage.spawned_constraint = constraint.id;
     putBugInHome(store, bug, home);
@@ -381,12 +390,13 @@ export async function recordFailure(
   raiseFragility(store, affectedFiles, componentHome);
   touched.add(componentHome);
 
-  return { status: "written", bug, constraint, provider: actualProvider, touchedHomes: [...touched] };
+  return { status: "written", bug, constraint, constraintKept, provider: actualProvider, touchedHomes: [...touched] };
 }
 
 export interface CapturedFailure {
   bug: Bug;
   constraint?: Constraint;
+  constraintKept?: boolean;
 }
 export interface TestRunCapture {
   results: CapturedFailure[];
@@ -405,7 +415,7 @@ export interface TestRunCapture {
 export async function captureTestRun(
   store: HunchStore,
   root: string,
-  input: { report: TestReport; status: number | null; cmd: string; output: string; private?: boolean },
+  input: { report: TestReport; status: number | null; cmd: string; output: string; private?: boolean; byPerson?: boolean },
 ): Promise<TestRunCapture> {
   const { report, status } = input;
   // Unrecognized output that still failed → one coarse bug from the tail, rather
@@ -421,9 +431,9 @@ export async function captureTestRun(
   const results: CapturedFailure[] = [];
   const touchedHomes = new Set<SynthesisHome>();
   for (const f of failures) {
-    const r = await recordFailure(store, root, f, { private: input.private });
+    const r = await recordFailure(store, root, f, { private: input.private, byPerson: input.byPerson });
     r.touchedHomes.forEach((home) => touchedHomes.add(home));
-    results.push({ bug: r.bug, constraint: r.constraint });
+    results.push({ bug: r.bug, constraint: r.constraint, constraintKept: r.constraintKept });
   }
 
   let sha: string | null = null;
@@ -476,7 +486,7 @@ export function shouldBlockOnPromotion(severity: Bug["severity"], affectedFiles:
   return severity === "critical" && affectedFiles.length > 0 && isRecurrence;
 }
 
-function promoteConstraint(store: HunchStore, bug: Bug, home: SynthesisHome, isRecurrence: boolean): Constraint {
+function promoteConstraint(store: HunchStore, bug: Bug, home: SynthesisHome, isRecurrence: boolean, byPerson: boolean): { constraint: Constraint; kept: boolean } {
   const scope = bug.affected_files.length ? bug.affected_files : ["**"];
   const blocking = shouldBlockOnPromotion(bug.severity, bug.affected_files, isRecurrence);
   const statement = `Regression guard: "${bug.title}" must not recur.`;
@@ -492,12 +502,24 @@ function promoteConstraint(store: HunchStore, bug: Bug, home: SynthesisHome, isR
     rationale: `Derived from ${bug.id}: ${bug.root_cause || bug.symptom}`,
     source_decision: null,
     violations: [],
-    status: "active",
+    // Without a verified person the promoted guard is a draft: it warns but never blocks until approved.
+    status: byPerson ? "active" : "draft",
     valid_from: new Date().toISOString(),
     valid_to: null,
     provenance: { source: "derived", confidence: Math.min(0.9, bug.provenance.confidence + 0.2), evidence: [`bug:${bug.id}`] },
   };
-  return putConstraintInHome(store, con, home);
+  // The id is deterministic, so a re-run lands on the same record. Without a verified person it must not
+  // overwrite an existing rule (status, severity, provenance, challenge, valid_to stay as they are).
+  if (!byPerson) {
+    // Check BOTH homes (merged reads prefer the overlay, so a twin in the other home would shadow the rule),
+    // and also bare files a validating loader skipped (invalid/future/corrupt): those count as existing too.
+    const existing = store.recsInHome("constraints", home).find((r) => r.id === con.id) ?? store.getRec("constraints", con.id);
+    if (existing) return { constraint: existing, kept: true };
+    if (store.json.hasRecordFile("constraints", con.id) || store.hasPrivateRecordFile("constraints", con.id)) {
+      return { constraint: { ...con, status: "unknown" as Constraint["status"] }, kept: true };
+    }
+  }
+  return { constraint: putConstraintInHome(store, con, home), kept: false };
 }
 
 /** Bump fragility on components owning the affected files. */

@@ -822,7 +822,7 @@ export function buildDeliveryEnvelope(ctx: AssembledContext, options: DeliveryOp
     );
     candidates.push({
       ref: { kind: "constraints", record_id: constraint.id },
-      mandatory: !retired && constraint.severity === "blocking",
+      mandatory: !retired && constraint.status !== "draft" && constraint.severity === "blocking",
       score: PROFILE_BASE_SCORE[profile].constraints + SEVERITY[constraint.severity] * 10 + (constraint.provenance.confidence ?? 0),
       provenance: validation.state,
       staleDetail: validation.detail,

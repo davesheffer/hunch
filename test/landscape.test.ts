@@ -112,7 +112,7 @@ test("schema v2 legacy edges forward-migrate before validation without becoming 
     strength: 1, provenance: prov(),
   };
   const migrated = migrateRaw("edges", legacy, 2) as Record<string, unknown>;
-  assert.equal(SCHEMA_VERSION, 3);
+  assert.equal(SCHEMA_VERSION, 4);
   assert.equal(migrated.schema, "hunch.edge/1");
   assert.equal(migrated.environment, null);
   assert.deepEqual(migrated.metadata, {});

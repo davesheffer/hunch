@@ -974,5 +974,35 @@
         "title": "the bootstrap hook command runs the launcher or the pinned npx identically in every available shell (CLAUDE_PROJECT_DIR)"
       }
     ]
+  },
+  "CLAUDE_SESSION_ID": {
+    "class": "agent-identity",
+    "purpose": "Session id recorded in rule-check and challenge provenance when the hook event carries none",
+    "tests": [
+      {
+        "file": "test/lifecycle.test.ts",
+        "title": "appendRuleLog writes jsonl, is self-ignored and never throws; run context"
+      }
+    ]
+  },
+  "HUNCH_RUN_ID": {
+    "class": "agent-identity",
+    "purpose": "Run id recorded in rule-check logs and challenge/draft provenance (source_run)",
+    "tests": [
+      {
+        "file": "test/lifecycle.test.ts",
+        "title": "appendRuleLog writes jsonl, is self-ignored and never throws; run context"
+      }
+    ]
+  },
+  "HUNCH_PERSON_TOKEN": {
+    "class": "hunch-config",
+    "purpose": "Person token that lets a trusted tool (Nuryel control plane) pass the CLI person gate for rule-lifecycle commands",
+    "tests": [
+      {
+        "file": "test/person-gate.test.ts",
+        "title": "a wrong token exits 4 and there is no terminal fallback"
+      }
+    ]
   }
 }

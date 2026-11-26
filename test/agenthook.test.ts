@@ -350,6 +350,7 @@ test("strict gate denies a multi-file patch when a later file hits a blocking in
   assert.match(reason, /src\/billing\/charge\.ts/);
   assert.match(reason, /con_billing_guard/);
   assert.doesNotMatch(reason, /src\/other\.ts/, "a clean file is not named as denied");
+  assert.match(reason, /scripted batch, other writes in it may already have landed/, "a deny warns that a batch may be partly applied (#676)");
   assert.equal(denialOf(preEdit(root, patchOf("*** Update File: src/other.ts", "@@", "-export const other = 1;", "+export const other = 2;"))), null);
 });
 

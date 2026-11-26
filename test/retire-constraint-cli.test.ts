@@ -12,7 +12,9 @@ import { updateClaudeMd } from "../src/integrations/claudemd.js";
 import { parseMemoryLog, MEMLOG_HEADER } from "../src/core/memorylog.js";
 import { hunchCliArgs } from "./cli-invocation.js";
 import { cleanupDir } from "./helpers.js";
-import { isolatedCliEnv } from "./fixtures.js";
+import { isolatedCliEnv, personTokenEnv, tempDir } from "./fixtures.js";
+// Spawned CLIs run person-only rule commands with a registered person token.
+Object.assign(process.env, personTokenEnv(tempDir("hunch-person-retire-")));
 
 function git(root: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
