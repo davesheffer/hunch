@@ -13,7 +13,9 @@ import {
   expectedInstalledDependencyPackages,
   installedDependencyProjection,
   parseMatrixReleaseArgs,
+  run,
   verifyMatrixReceipt,
+  withoutPersonToken,
 } from "../tooling/matrix-release-verification.mjs";
 
 function passingEvidence() {
@@ -54,6 +56,19 @@ function passingEvidence() {
       attack_clone_policy_authority_preserved: true,
       legacy_current_proof_approval_refused: true,
       legacy_reproof_activation_refused: true,
+    },
+    anonymous: {
+      person_token_absent: true,
+      read_succeeded: true,
+      draft_write_succeeded: true,
+      draft_not_active: true,
+      rerecord_refused: true,
+      retire_refused: true,
+      confirm_refused: true,
+      refusals_exit_person_required: true,
+      active_rule_bytes_preserved: true,
+      draft_state_preserved: true,
+      no_remote_commit_from_refusals: true,
     },
     crash_recovery: {
       injected: true,
@@ -200,6 +215,19 @@ test("every safety claim is required independently and authentic failed receipts
       "attack_clone_policy_authority_preserved",
       "legacy_current_proof_approval_refused",
       "legacy_reproof_activation_refused",
+    ],
+    anonymous: [
+      "person_token_absent",
+      "read_succeeded",
+      "draft_write_succeeded",
+      "draft_not_active",
+      "rerecord_refused",
+      "retire_refused",
+      "confirm_refused",
+      "refusals_exit_person_required",
+      "active_rule_bytes_preserved",
+      "draft_state_preserved",
+      "no_remote_commit_from_refusals",
     ],
     crash_recovery: [
       "injected",
@@ -410,4 +438,26 @@ test("Matrix verifier bounds its scale inputs and keeps dirty runs publish-neutr
   assert.equal(verifyMatrixReceipt(alternate), false,
     "a non-default rollback receipt requires the caller's exact expected baseline");
   assert.equal(verifyMatrixReceipt(alternate, alternateOptions), true);
+});
+
+test("a receipt without the anonymous person-gate section fails", () => {
+  const evidence: any = structuredClone(passingEvidence());
+  delete evidence.anonymous;
+  const receipt = buildMatrixReceipt(evidence);
+  assert.equal(receipt.result, "failed");
+  assert.equal(receipt.release_ready, false);
+});
+
+test("withoutPersonToken removes only the person token and leaves its input alone", () => {
+  const input = { HUNCH_PERSON_TOKEN: "t", PATH: "p" };
+  assert.deepEqual(withoutPersonToken(input), { PATH: "p" });
+  assert.deepEqual(input, { HUNCH_PERSON_TOKEN: "t", PATH: "p" });
+  assert.equal(withoutPersonToken(undefined), undefined);
+});
+
+test("run() strips the person token from children unless the caller opts in", () => {
+  const probe = ["-e", "process.stdout.write(process.env.HUNCH_PERSON_TOKEN ? 'set' : 'unset')"];
+  const env = { ...process.env, HUNCH_PERSON_TOKEN: "secret-for-test" };
+  assert.equal(run(process.execPath, probe, { env }).stdout, "unset");
+  assert.equal(run(process.execPath, probe, { env, allowPersonToken: true }).stdout, "set");
 });
