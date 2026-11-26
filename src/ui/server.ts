@@ -275,7 +275,8 @@ export function createUiServer(opts: UiServerOptions): Server & { closeStore(): 
     const cli = opts.cli;
     // The page is never a person: the spawned CLI must not hold a person token, whatever the server's own env had.
     const childEnv: NodeJS.ProcessEnv = { ...(cli.env ?? process.env), NO_COLOR: "1" };
-    delete childEnv.HUNCH_PERSON_TOKEN;
+    // Windows env names ignore case, so every spelling of the name is the token; no other key is touched.
+    for (const key of Object.keys(childEnv)) if (/^HUNCH_PERSON_TOKEN$/i.test(key)) delete childEnv[key];
     const job = writing.then(() => boundedSpawn(cli.file, [...cli.args, ...parsed.args], {
       cwd: opts.root, env: childEnv, timeoutMs: WRITE_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024,
     }));
