@@ -455,9 +455,53 @@ test("withoutPersonToken removes only the person token and leaves its input alon
   assert.equal(withoutPersonToken(undefined), undefined);
 });
 
+test("withoutPersonToken removes every spelling of the name, as Windows env names ignore case", () => {
+  const input = { hunch_person_token: "a", Hunch_Person_Token: "b", HUNCH_PERSON_TOKEN_X: "c", PATH: "p" };
+  assert.deepEqual(withoutPersonToken(input), { HUNCH_PERSON_TOKEN_X: "c", PATH: "p" });
+  const clean = { PATH: "p" };
+  assert.equal(withoutPersonToken(clean), clean);
+  const inherited = Object.assign(Object.create({ HUNCH_PERSON_TOKEN: "x" }), { PATH: "p" });
+  assert.deepEqual(withoutPersonToken(inherited), { PATH: "p" });
+});
+
 test("run() strips the person token from children unless the caller opts in", () => {
   const probe = ["-e", "process.stdout.write(process.env.HUNCH_PERSON_TOKEN ? 'set' : 'unset')"];
   const env = { ...process.env, HUNCH_PERSON_TOKEN: "secret-for-test" };
   assert.equal(run(process.execPath, probe, { env }).stdout, "unset");
   assert.equal(run(process.execPath, probe, { env, allowPersonToken: true }).stdout, "set");
+});
+
+// Sees the token under any spelling, so a lower-case key on Linux counts as leaked too.
+const anyCaseTokenProbe = [
+  "-e",
+  "process.stdout.write(Object.keys(process.env).some((k) => k.toUpperCase() === 'HUNCH_PERSON_TOKEN') ? 'set' : 'unset')",
+];
+
+test("run() strips a lower-case person token key", () => {
+  const env = { ...withoutPersonToken(process.env), hunch_person_token: "secret-for-test" };
+  assert.equal(run(process.execPath, anyCaseTokenProbe, { env }).stdout, "unset");
+});
+
+test("run() without an env strips the person token from the inherited process.env", () => {
+  const saved = process.env.HUNCH_PERSON_TOKEN;
+  process.env.HUNCH_PERSON_TOKEN = "secret-for-test";
+  try {
+    assert.equal(run(process.execPath, anyCaseTokenProbe).stdout, "unset");
+    assert.equal(run(process.execPath, anyCaseTokenProbe, { allowPersonToken: true }).stdout, "set");
+  } finally {
+    if (saved === undefined) delete process.env.HUNCH_PERSON_TOKEN;
+    else process.env.HUNCH_PERSON_TOKEN = saved;
+  }
+});
+
+test("run() without an env strips a lower-case person token from process.env", () => {
+  const saved = Object.keys(process.env).filter((k) => k.toUpperCase() === "HUNCH_PERSON_TOKEN").map((k) => [k, process.env[k]]);
+  for (const [k] of saved) delete process.env[k];
+  process.env.hunch_person_token = "secret-for-test";
+  try {
+    assert.equal(run(process.execPath, anyCaseTokenProbe).stdout, "unset");
+  } finally {
+    delete process.env.hunch_person_token;
+    for (const [k, v] of saved) process.env[k] = v;
+  }
 });
