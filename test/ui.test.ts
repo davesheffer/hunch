@@ -518,9 +518,9 @@ function asPerson(root: string, ...args: string[]): void {
   execFileSync(process.execPath, hunchCliArgs(...args), { cwd: root, env, stdio: "pipe" });
 }
 
-async function withWriteServer(fn: (post: Post, get: Get, origin: string, root: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner): Promise<void> {
+async function withWriteServer(fn: (post: Post, get: Get, origin: string, root: string) => Promise<void>, cli: boolean | { file: string; args: string[] } = true, asker?: AskRunner, extraEnv: Record<string, string> = {}): Promise<void> {
   const root = tempDir("hunch-ui-write-");
-  const env = isolatedCliEnv({ HOME: root, USERPROFILE: root, HUNCH_PRIVATE_DIR: "", NO_COLOR: "1", CI: "1" });
+  const env = { ...isolatedCliEnv({ HOME: root, USERPROFILE: root, HUNCH_PRIVATE_DIR: "", NO_COLOR: "1", CI: "1" }), ...extraEnv };
   const git = (...args: string[]): void => { execFileSync("git", args, { cwd: root, env, stdio: "ignore" }); };
   git("init", "-q"); git("config", "user.email", "t@example.com"); git("config", "user.name", "Test"); git("config", "commit.gpgsign", "false");
   const json = new JsonStore(hunchPaths(root));
@@ -806,6 +806,15 @@ test("ui server: the spawned CLI never holds the person token, and a person-only
     assert.equal(r.body.command, "hunch remove con_block --reason=obsolete");
     assert.match(r.body.error, /own terminal: hunch remove con_block/);
   }, standIn);
+});
+
+test("ui server: the spawned CLI holds no spelling of the person token, as Windows env names ignore case", async () => {
+  const probe = { file: process.execPath, args: ["-e", "const held = Object.keys(process.env).filter((k) => k.toUpperCase() === 'HUNCH_PERSON_TOKEN' || k === 'HUNCH_PERSON_TOKEN_X'); if (held.length === 1 && held[0] === 'HUNCH_PERSON_TOKEN_X') { console.log(JSON.stringify({ changed: true, id: 'x', home: 'public', flush: null })); } else { console.error('held: ' + held.join(',')); process.exit(1); }", "--"] };
+  const fake = { hunch_person_token: "fake-a", Hunch_Person_Token: "fake-b", HUNCH_PERSON_TOKEN: "fake-c", HUNCH_PERSON_TOKEN_X: "fake-d" };
+  await withWriteServer(async (post) => {
+    const r = await post("/api/memory/con_block/remove", { reason: "obsolete" });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+  }, probe, undefined, fake);
 });
 
 /** One process (tsx as a loader, not tsx's CLI wrapper), so kill() stops the server itself. */

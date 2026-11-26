@@ -602,6 +602,12 @@ export function withoutPersonToken(env) {
   return Object.fromEntries(keys.filter((key) => !isPersonTokenKey(key)).map((key) => [key, env[key]]));
 }
 
+export function hasPersonToken(env) {
+  if (!env) return false;
+  for (const key in env) if (isPersonTokenKey(key)) return true;
+  return false;
+}
+
 function isPersonTokenKey(key) {
   return /^HUNCH_PERSON_TOKEN$/i.test(key);
 }
@@ -1063,7 +1069,7 @@ const ANON_DRAFT = `${SENTINEL_PREFIX}ANON_DRAFT: an anonymous rule must land as
 function runAnonymousLane(temp, codeRemote, memoryRemote, candidate, env, activeRuleId) {
   const actor = cloneActor(temp, codeRemote, "AnonymousLane", env, candidate, { person: false });
   const personHome = actor.env.HUNCH_TEST_PERSON_HOME;
-  const personTokenAbsent = !("HUNCH_PERSON_TOKEN" in actor.env)
+  const personTokenAbsent = !hasPersonToken(actor.env)
     && !existsSync(join(personHome, ".hunch", "person-token.json"));
   const activePath = `.hunch/constraints/${activeRuleId}.json`;
   const read = cliText(actor, candidate, ["query", COMPAT_CANDIDATE]);

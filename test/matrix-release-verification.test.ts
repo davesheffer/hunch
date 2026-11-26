@@ -16,6 +16,7 @@ import {
   run,
   verifyMatrixReceipt,
   withoutPersonToken,
+  hasPersonToken,
 } from "../tooling/matrix-release-verification.mjs";
 
 function passingEvidence() {
@@ -462,6 +463,13 @@ test("withoutPersonToken removes every spelling of the name, as Windows env name
   assert.equal(withoutPersonToken(clean), clean);
   const inherited = Object.assign(Object.create({ HUNCH_PERSON_TOKEN: "x" }), { PATH: "p" });
   assert.deepEqual(withoutPersonToken(inherited), { PATH: "p" });
+});
+
+test("hasPersonToken sees every spelling of the name, which the anonymous lane's absence check relies on", () => {
+  assert.equal(hasPersonToken({ PATH: "p", HUNCH_PERSON_TOKEN_X: "fake" }), false);
+  assert.equal(hasPersonToken(undefined), false);
+  for (const name of ["HUNCH_PERSON_TOKEN", "hunch_person_token", "Hunch_Person_Token"]) assert.equal(hasPersonToken({ [name]: "fake" }), true, name);
+  assert.equal(hasPersonToken(Object.assign(Object.create({ hunch_person_token: "fake" }), { PATH: "p" })), true);
 });
 
 test("run() strips the person token from children unless the caller opts in", () => {
