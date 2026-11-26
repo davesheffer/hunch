@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The person token is stripped in every spelling inside the CLI too.** `takePersonToken` now removes every case-insensitive spelling of `HUNCH_PERSON_TOKEN` from the process environment (it still reads the token from `HUNCH_PERSON_TOKEN`), as `hunch ui` already did for its children. In the matrix release tooling, `hasPersonToken(undefined)` now checks `process.env` (what `run()` inherits) instead of reporting no token, and a test pins the anonymous lane's use of it.
+
 ## 1.61.0 — 2026-11-26
 
 - **Rules have a lifecycle: Draft, Active, Challenged, Retired.** A person approves a Draft with `hunch review --confirm <id>`; Draft rules warn but never block. Any agent can challenge a rule (`hunch_challenge` over MCP, or `hunch challenge <id> --reason`); a challenged rule keeps blocking until a person clears it (`hunch challenge clear <id> --reason`), replaces it (`hunch replace <old> --with <new> --reason`) or retires it (`hunch remove <id> --reason`). Challenging an already challenged rule is refused and keeps the first challenge. Rules link to their `source_session` (hook `session_id`) and `source_run` (`HUNCH_RUN_ID`). Rule checks are logged to the git-ignored `.hunch/local/rule-checks.jsonl`, which never leaves the machine and holds no code or prompt contents. New: `hunch rules --json`, `hunch rule show <id> --json`. See [docs/rule-lifecycle.md](docs/rule-lifecycle.md). (#701)

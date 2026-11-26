@@ -33,7 +33,9 @@ let heldToken: string | undefined;
  *  inherit it. The value is kept in memory for later gates in this process. */
 export function takePersonToken(): string | undefined {
   const fromEnv = process.env.HUNCH_PERSON_TOKEN;
-  if (fromEnv !== undefined) { delete process.env.HUNCH_PERSON_TOKEN; heldToken = fromEnv || undefined; }
+  if (fromEnv !== undefined) heldToken = fromEnv || undefined;
+  // Windows env names ignore case, so every spelling of the name is the token; no other key is touched.
+  for (const key of Object.keys(process.env)) if (/^HUNCH_PERSON_TOKEN$/i.test(key)) delete process.env[key];
   return heldToken;
 }
 /** Test helper: forget a held token. */

@@ -387,6 +387,19 @@ test("takePersonToken removes the token from the environment (so children never 
   } finally { resetHeldPersonToken(); delete process.env.HUNCH_PERSON_TOKEN; cleanupDir(dir); }
 });
 
+test("takePersonToken strips every spelling of the name but keeps reading the exact one", () => {
+  try {
+    // On Windows these spellings are one variable, so the exact name is set last and wins there too.
+    process.env.hunch_person_token = "other";
+    process.env.Hunch_Person_Token = "another";
+    process.env.HUNCH_PERSON_TOKEN = "held-token";
+    process.env.HUNCH_PERSON_TOKEN_X = "keep";
+    assert.equal(takePersonToken(), "held-token");
+    assert.deepEqual(Object.keys(process.env).filter((k) => /^HUNCH_PERSON_TOKEN$/i.test(k)), []);
+    assert.equal(process.env.HUNCH_PERSON_TOKEN_X, "keep");
+  } finally { resetHeldPersonToken(); for (const k of Object.keys(process.env)) if (/^HUNCH_PERSON_TOKEN/i.test(k)) delete process.env[k]; }
+});
+
 test("challenging an already challenged rule keeps the first challenge and refuses", () => {
   const f = makeRepo();
   try {
