@@ -13,7 +13,7 @@ import { inspectIntegrations, machineLocalIntegrationFiles, repairIntegrationPin
 import { applyUninstall, planUninstall } from "../src/integrations/uninstall.js";
 import { HUNCH_VERSION } from "../src/core/version.js";
 import {
-  CLAUDE_HOOK_LAUNCHER_COMMAND, HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, claudeAgentHookCommand, bootstrapRunsLauncher, claudeHookLauncherCommand, hookBootstrap, launcherPinOf, ownsLauncherText, removeLegacyHookLauncher, renderHookLauncher, writeHookLauncher,
+  CLAUDE_HOOK_LAUNCHER_COMMAND, isLauncherHookCommand, isLegacyLauncherHookCommand, HOOK_LAUNCHER_FILE, LEGACY_HOOK_LAUNCHER_FILE, claudeAgentHookCommand, bootstrapRunsLauncher, claudeHookLauncherCommand, hookBootstrap, hookBootstrapV3, launcherPinOf, ownsLauncherText, removeLegacyHookLauncher, renderHookLauncher, writeHookLauncher,
 } from "../src/integrations/hookLauncher.js";
 import { publishedMcpInvocation, shellInvocation } from "../src/cli/invocation.js";
 import { cleanupDir } from "./fixtures.js";
@@ -31,6 +31,7 @@ function tmp(t: T): string {
 test("the hook bootstrap carries no character bash, sh, PowerShell or cmd expands inside double quotes", () => {
   for (const ch of ["$", "`", "!", "%", "\\", "\"", "\n", "\r"]) assert.equal(hookBootstrap().includes(ch), false, `bootstrap contains ${JSON.stringify(ch)}`);
   assert.ok(hookBootstrap().startsWith("(function(){") && hookBootstrap().endsWith("})()"), "wrapped, so it leaks no globals");
+  for (const ch of ["$", "`", "!", "%", "\\", "\"", "\n", "\r"]) assert.equal(hookBootstrapV3().includes(ch), false, `shape-3 bootstrap contains ${JSON.stringify(ch)}`);
   assert.match(CLAUDE_HOOK_LAUNCHER_COMMAND, new RegExp(`--package=hunch-exact@npm:@davesheffer/hunch@${HUNCH_VERSION.replace(/\./g, "\\.")}'`));
 });
 
@@ -143,7 +144,7 @@ test("doctor reports a missing or markerless launcher and its pin drift; repair-
 });
 
 /** A project with a launcher pinned to 9.9.9, empty npm prefix/cache, and a fake npx-cli.js
- *  (HUNCH_HOOK_NPX_CLI) that echoes its args and stdin and exits 4. */
+ *  (HUNCH_HOOK_NPX_CLI) that echoes its args and stdin and exits 0. */
 function fixture(t: T) {
   const base = tmp(t);
   const proj = join(base, "proj");
@@ -151,7 +152,7 @@ function fixture(t: T) {
   mkdirSync(dirname(launcher), { recursive: true });
   writeFileSync(launcher, renderHookLauncher("9.9.9"));
   const fakeNpx = join(base, "fake-npx-cli.js");
-  writeFileSync(fakeNpx, `let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => { process.stdout.write("NPX " + process.argv.slice(2).join(" ") + " <" + s + ">"); process.exit(4); });`);
+  writeFileSync(fakeNpx, `let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => { process.stdout.write("NPX " + process.argv.slice(2).join(" ") + " <" + s + ">"); process.exit(0); });`);
   const cache = join(base, "cache");
   const prefix = join(base, "prefix");
   const env: NodeJS.ProcessEnv = {
@@ -209,26 +210,36 @@ test("hook launcher: a symlinked (npm link) package of the pinned version is nev
   assert.equal(r.stdout, NPX_OUT, r.stderr);
 });
 
+/** Make the fixture's fake npx fail with exit 4 after echoing, so the launcher's fail-open path runs. */
+function failNpx(f: { env: NodeJS.ProcessEnv }): void {
+  writeFileSync(String(f.env.HUNCH_HOOK_NPX_CLI), `let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => { process.stdout.write("NPX " + process.argv.slice(2).join(" ") + " <" + s + ">"); process.exit(4); });`);
+}
+function assertFailOpen(r: { status: number | null; stdout: unknown; stderr: unknown }): void {
+  assert.equal(r.status, 0, "fail-open: a failing npx never blocks the call");
+  assert.ok(String(r.stdout).startsWith(NPX_OUT), String(r.stdout));
+  assert.match(String(r.stderr), /could not run Hunch through npx \(exit 4\)/);
+  assert.match((JSON.parse(String(r.stdout).slice(NPX_OUT.length).trim()) as { systemMessage: string }).systemMessage, /ran without Hunch checks/);
+}
+
 test("hook launcher: another installed version is a miss and falls back to the pinned npx with stdin, exit code and no deprecation warning", (t) => {
   const f = fixture(t);
+  failNpx(f);
   f.pkg(join(f.cache, "_npx", "aaa", "node_modules", "hunch-exact"), "9.9.8");
   f.pkg(join(f.cache, "_npx", "bbb", "node_modules", "@davesheffer", "hunch"), "9.9.10");
   const r = f.run();
-  assert.equal(r.stdout, NPX_OUT, r.stderr);
-  assert.equal(r.status, 4);
+  assertFailOpen(r);
   assert.doesNotMatch(r.stderr, /DEP0190|DeprecationWarning/);
 });
 
 test("hook launcher: nothing installed falls back to npx; a CLI that fails to load falls back too", (t) => {
   const f = fixture(t);
+  failNpx(f);
   assert.ok(f.env.HUNCH_HOOK_NPX_CLI, "the fake npx stands in for npm's npx-cli.js");
   let r = f.run();
-  assert.equal(r.stdout, NPX_OUT, r.stderr);
-  assert.equal(r.status, 4);
+  assertFailOpen(r);
   f.pkg(join(f.cache, "_npx", "aaa", "node_modules", "hunch-exact"), "9.9.9", "HIT", `throw new Error("boom");`);
   r = f.run();
-  assert.equal(r.stdout, NPX_OUT, r.stderr);
-  assert.equal(r.status, 4);
+  assertFailOpen(r);
 });
 
 /** Shells available here that Claude Code may run a hook command in. */
@@ -248,7 +259,7 @@ function shells(): Array<{ name: string; run: (cmd: string, env: NodeJS.ProcessE
 /** PowerShell 5.1 `-Command` reports any failed native command as exit 1, whatever its code
  *  (the same for the old npx command); every other shell passes the code through. */
 function exitIs(shell: string, got: number | null, want: number, what: string): void {
-  if (shell === "powershell") assert.notEqual(got, 0, `${shell} ${what} exit`);
+  if (shell === "powershell" && want !== 0) assert.notEqual(got, 0, `${shell} ${what} exit`);
   else assert.equal(got, want, `${shell} ${what} exit`);
 }
 
@@ -266,7 +277,7 @@ test("the bootstrap hook command runs the launcher or the pinned npx identically
     delete unset.CLAUDE_PROJECT_DIR;
     const noEnv = sh.run(cmd, unset, cwd);
     assert.equal(String(noEnv.stdout), NPX_OUT, `${sh.name} env unset: ${String(noEnv.stderr)}`);
-    exitIs(sh.name, noEnv.status, 4, "env unset");
+    exitIs(sh.name, noEnv.status, 0, "env unset");
     const blocked = sh.run(cmd, f.env, cwd, "BLOCK");
     assert.match(String(blocked.stderr), /denied by hunch/, `${sh.name} stderr passthrough`);
     exitIs(sh.name, blocked.status, 2, "block");
@@ -276,7 +287,7 @@ test("the bootstrap hook command runs the launcher or the pinned npx identically
   for (const sh of shells()) {
     const missing = sh.run(cmd, f.env, cwd);
     assert.equal(String(missing.stdout), NPX_OUT, `${sh.name} missing: ${String(missing.stderr)}`);
-    exitIs(sh.name, missing.status, 4, "missing");
+    exitIs(sh.name, missing.status, 0, "missing");
   }
   writeFileSync(f.launcher, "throw new Error('not ours')\n");
   for (const sh of shells()) {
@@ -399,12 +410,12 @@ test("plain uninstall deletes a marker-owned launcher and keeps a user-owned one
   assert.equal(readFileSync(join(root, HOOK_LAUNCHER_FILE), "utf8"), "// mine\n");
 });
 
-test("re-init migrates a shape-1 repo: the .hunch launcher is removed and settings get one shape-2 entry per event", (t) => {
+test("re-init migrates a shape-1 repo: the .hunch launcher is removed and settings get one current-shape entry per event", (t) => {
   const root = tmp(t);
   const legacy = join(root, LEGACY_HOOK_LAUNCHER_FILE);
   mkdirSync(dirname(legacy), { recursive: true });
   writeFileSync(legacy, renderHookLauncher(HUNCH_VERSION));
-  const v1 = CLAUDE_HOOK_LAUNCHER_COMMAND.replace("P.join(d,'.claude','hunch-hook-launch.cjs')", "P.join(d,'.hunch','hook-launch.cjs')");
+  const v1 = `node -e "${hookBootstrap()}" hook`.replace("P.join(d,'.claude','hunch-hook-launch.cjs')", "P.join(d,'.hunch','hook-launch.cjs')");
   assert.notEqual(v1, CLAUDE_HOOK_LAUNCHER_COMMAND);
   assert.equal(isHunchHookCommand(v1, false), true, "the shipped shape stays ours");
   installClaudeHooks(root, v1);
@@ -583,9 +594,97 @@ test("#646: the frozen bootstrap runs a file with the marker off its header line
 
 test("doctor: shape-1 hooks get a legacy-launcher migrate note, not a missing .claude launcher", (t) => {
   const root = tmp(t);
-  const v1 = CLAUDE_HOOK_LAUNCHER_COMMAND.replace("P.join(d,'.claude','hunch-hook-launch.cjs')", "P.join(d,'.hunch','hook-launch.cjs')");
+  const v1 = `node -e "${hookBootstrap()}" hook`.replace("P.join(d,'.claude','hunch-hook-launch.cjs')", "P.join(d,'.hunch','hook-launch.cjs')");
   installClaudeHooks(root, v1);
   const notes = inspectIntegrations(root, "claude").notes.join("\n");
   assert.match(notes, /legacy launcher \(\.hunch\/hook-launch\.cjs\); run `hunch init` to migrate/);
   assert.doesNotMatch(notes, /hunch-hook-launch\.cjs is missing/);
+});
+
+test("#680: the shape-2 bootstrap is legacy (init upgrades it); the current command is recognised and not legacy", () => {
+  const shape2 = `node -e "${hookBootstrap("1.2.3")}" hook`;
+  assert.equal(isLauncherHookCommand(shape2), true);
+  assert.equal(isLegacyLauncherHookCommand(shape2), true);
+  assert.equal(isLauncherHookCommand(CLAUDE_HOOK_LAUNCHER_COMMAND), true);
+  assert.equal(isLegacyLauncherHookCommand(CLAUDE_HOOK_LAUNCHER_COMMAND), false);
+  assert.notEqual(CLAUDE_HOOK_LAUNCHER_COMMAND, `node -e "${hookBootstrap()}" hook`);
+});
+
+/** #680: a failing, slow or denying npx must never make the hook exit non-zero (except a deliberate exit 2). */
+function failOpenCases(t: T) {
+  const f = fixture(t);
+  const fake = (body: string) => { writeFileSync(join(f.base, "fake-npx-cli.js"), body); };
+  const cases: Array<[string, (extra: NodeJS.ProcessEnv) => ReturnType<typeof spawnSync>]> = [
+    ["launcher", (extra) => f.run(extra)],
+    ["bootstrap", (extra) => { const env = { ...f.env, ...extra }; delete env.CLAUDE_PROJECT_DIR; return spawnSync(process.execPath, ["-e", hookBootstrapV3("9.9.9"), "hook"], { env, input: "IN", encoding: "utf8", timeout: 30_000 }); }],
+  ];
+  return { f, fake, cases };
+}
+
+test("#680: npx exiting 1 or timing out runs without Hunch (exit 0, stderr says so); exit 2 and clean output pass through", (t) => {
+  const { fake, cases } = failOpenCases(t);
+  for (const [name, run] of cases) {
+    fake(`process.exit(1);`);
+    let r = run({});
+    assert.equal(r.status, 0, `${name} exit 1: ${String(r.stderr)}`);
+    assert.match(String(r.stderr), /ran without Hunch checks/, name);
+    assert.match(String(r.stderr), /exit 1/, name);
+    assert.match((JSON.parse(String(r.stdout).trim()) as { systemMessage: string }).systemMessage, /ran without Hunch checks/, `${name} systemMessage on stdout`);
+    fake(`setTimeout(() => {}, 20000);`);
+    r = run({ HUNCH_HOOK_NPX_TIMEOUT_MS: "500" });
+    assert.equal(r.status, 0, `${name} timeout: ${String(r.stderr)}`);
+    assert.match(String(r.stderr), /ran without Hunch checks/, name);
+    assert.match(String(r.stderr), /timed out/, name);
+    fake(`process.stderr.write("deny reason"); process.exit(2);`);
+    r = run({});
+    assert.equal(r.status, 2, `${name} exit 2: ${String(r.stderr)}`);
+    assert.match(String(r.stderr), /deny reason/, name);
+    assert.doesNotMatch(String(r.stderr), /ran without Hunch checks/, name);
+    fake(`process.stdout.write(JSON.stringify({ ok: true }));`);
+    r = run({});
+    assert.equal(r.status, 0, `${name} ok: ${String(r.stderr)}`);
+    assert.equal(String(r.stdout), '{"ok":true}', name);
+    assert.doesNotMatch(String(r.stderr), /ran without Hunch checks/, name);
+  }
+});
+
+test("#680: HUNCH_HOOK_NPX_TIMEOUT_MS only caps when a positive finite number; 1.5, Infinity and 1e400 never throw", (t) => {
+  const { fake, cases } = failOpenCases(t);
+  fake(`process.stdout.write("SLOWOK");`);
+  for (const [name, run] of cases) {
+    for (const v of ["Infinity", "1e400", "-5", "abc", ""]) {
+      const r = run({ HUNCH_HOOK_NPX_TIMEOUT_MS: v });
+      assert.equal(r.status, 0, `${name} ${v}: ${String(r.stderr)}`);
+      assert.equal(String(r.stdout), "SLOWOK", `${name} ${v} counts as unset`);
+    }
+    const r = run({ HUNCH_HOOK_NPX_TIMEOUT_MS: "1.5" });
+    assert.equal(r.status, 0, `${name} 1.5: ${String(r.stderr)}`);
+    assert.doesNotMatch(String(r.stderr), /RangeError|ERR_/, name);
+  }
+});
+
+test("#680: a shape-2 settings command is flagged older but still gets the launcher checks", (t) => {
+  const root = tmp(t);
+  installClaudeHooks(root, `node -e "${hookBootstrap()}" hook`);
+  let report = inspectIntegrations(root, "claude");
+  const notes = report.notes.join("\n");
+  assert.match(notes, /older hook command; run `hunch init` to get the fail-open npx fallback/);
+  assert.doesNotMatch(notes, /legacy launcher/);
+  assert.match(notes, /hunch-hook-launch\.cjs is missing/, "launcher-missing check still runs");
+  const file = join(root, HOOK_LAUNCHER_FILE);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `process.stdout.write("FORKED"); // forked from ${"hunch:hook-launcher"} 1.0.0
+`);
+  report = inspectIntegrations(root, "claude");
+  assert.ok(report.issues.some((i) => i.code === "hook-launcher"), "marker off the header line is still an issue");
+});
+
+test("#680: the launcher says so on stdout and exits 0 when the CLI fails to load after stdin was read", (t) => {
+  const f = fixture(t);
+  f.pkg(join(f.cache, "_npx", "aaa", "node_modules", "hunch-exact"), "9.9.9", "HIT",
+    `process.stdin.on("data", () => {}); await new Promise((r) => setTimeout(r, 200)); throw new Error("late boom");`);
+  const r = f.run();
+  assert.equal(r.status, 0, String(r.stderr));
+  assert.match(String(r.stderr), /ran without Hunch checks/);
+  assert.match(String(r.stdout), /"systemMessage":".*late boom/);
 });

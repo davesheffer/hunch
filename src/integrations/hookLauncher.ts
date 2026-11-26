@@ -15,6 +15,12 @@
  * inside double quotes ($, backtick, !, %, backslash, double quote), so one string
  * behaves the same in all four.
  *
+ * Shape 3 (current) fails open: when the pinned npx fallback cannot run Hunch (error, signal, timeout,
+ * any exit other than 0 or 2) the call runs without Hunch checks, a warning goes to stderr and to stdout as a
+ * Claude Code systemMessage, and the exit is 0 (hosts that fail closed on a non-zero hook exit would block
+ * every tool call). Exit 2 is a deliberate deny and passes through. HUNCH_HOOK_NPX_TIMEOUT_MS optionally
+ * caps the npx run (unset: no cap, so a slow cold download still finishes within the host's own timeout).
+ *
  * The launcher keeps the exact-version pin (a committed config must never run a
  * floating release): it looks for an installed @davesheffer/hunch whose
  * package.json version EQUALS the pin, reading files only: npx's own cache first,
@@ -75,6 +81,20 @@ function npxFallbackJs(version: string): string {
     + "process.exitCode=r.status==null?1:r.status;";
 }
 
+/** The pinned-npx fallback of shape 3 and the launcher: same resolution as npxFallbackJs, but an
+ *  optional timeout (only when HUNCH_HOOK_NPX_TIMEOUT_MS is a positive number) and fail-open: when npx cannot run Hunch (error,
+ *  timeout, signal, any exit but 0 or 2) it says so on stderr and as a Claude Code systemMessage on stdout, and exits 0, so a host that fails closed
+ *  on a non-zero hook exit does not block the tool call. Exit 2 (a deliberate deny) passes through.
+ *  Frozen text rules apply: no $, backtick, !, %, backslash or double quote. */
+function npxFallbackJsV3(version: string): string {
+  return "var N=P.dirname(process.execPath),c=e.HUNCH_HOOK_NPX_CLI||[P.join(N,'node_modules','npm','bin','npx-cli.js'),P.join(N,'..','lib','node_modules','npm','bin','npx-cli.js')].filter(F.existsSync)[0],"
+    + `A=['-y','--package=${npxSpec(version)}','hunch'].concat(a),C=require('child_process'),U=Number(e.HUNCH_HOOK_NPX_TIMEOUT_MS),U=U>0&&U<2147483648?Math.floor(U):0,`
+    + "r=c?C.spawnSync(process.execPath,[c].concat(A),{stdio:'inherit',windowsHide:true,timeout:U||undefined}):C.spawnSync('npx '+A.join(' '),{stdio:'inherit',shell:true,windowsHide:true,timeout:U||undefined,env:Object.assign({},e,{NoDefaultCurrentDirectoryInExePath:'1'})});"
+    + "if(r.error||r.signal||(r.status==0||r.status==2)==false){var W=r.error?(r.error.code=='ETIMEDOUT'?'timed out':r.error.message):r.signal?'timed out or killed by '+r.signal:'exit '+r.status,M='hunch hook: could not run Hunch through npx ('+W+'); this call ran without Hunch checks. Run npx @davesheffer/hunch@"
+    + `${version} init in the repo (writes .claude/hunch-hook-launch.cjs) or install @davesheffer/hunch@${version} to warm the cache.`
+    + "';process.stderr.write(M+String.fromCharCode(10));process.stdout.write(JSON.stringify({systemMessage:M})+String.fromCharCode(10));process.exitCode=0}else process.exitCode=r.status;";
+}
+
 /** Shape 1 of the `node -e` program (launcher under .hunch/). Frozen: matched only. */
 function hookBootstrapV1(version: string): string {
   return "(function(){var e=process.env,P=require('path'),F=require('fs'),a=process.argv.slice(1),d=e.CLAUDE_PROJECT_DIR,o=0;"
@@ -88,15 +108,20 @@ export function hookBootstrap(version: string = HUNCH_VERSION): string {
   return hookBootstrapV1(version).replace("P.join(d,'.hunch','hook-launch.cjs')", "P.join(d,'.claude','hunch-hook-launch.cjs')");
 }
 
+/** Shape 3: shape 2 with the fail-open, time-limited npx fallback. */
+export function hookBootstrapV3(version: string = HUNCH_VERSION): string {
+  return hookBootstrap(version).split(npxFallbackJs(version)).join(npxFallbackJsV3(version));
+}
+
 /** Every bootstrap shape a released Hunch has written, oldest first. The matcher owns
  *  exactly these texts (only the pinned version varies), so a later shape still lets
  *  `hunch init` replace an older one. Never edit a shipped shape: add a new function,
  *  append it here, and point claudeHookLauncherCommand at it. */
-const BOOTSTRAP_SHAPES: ReadonlyArray<(version: string) => string> = [hookBootstrapV1, hookBootstrap];
+const BOOTSTRAP_SHAPES: ReadonlyArray<(version: string) => string> = [hookBootstrapV1, hookBootstrap, hookBootstrapV3];
 
 /** The command `hunch init` writes into .claude/settings.json for every event. */
 export function claudeHookLauncherCommand(version: string = HUNCH_VERSION): string {
-  return `node -e "${hookBootstrap(version)}" hook`;
+  return `node -e "${hookBootstrapV3(version)}" hook`;
 }
 export const CLAUDE_HOOK_LAUNCHER_COMMAND = claudeHookLauncherCommand();
 
@@ -110,6 +135,10 @@ const LAUNCHER_COMMAND_RES = BOOTSTRAP_SHAPES.map((shape) => new RegExp(
  *  prefixed, appended or edited matches (con_8460b6770f). */
 export function isLauncherHookCommand(command: string): boolean {
   return LAUNCHER_COMMAND_RES.some((re) => re.test(command));
+}
+/** Is this the shape-1 bootstrap (launcher under .hunch/)? */
+export function isShape1LauncherHookCommand(command: string): boolean {
+  return LAUNCHER_COMMAND_RES[0]!.test(command);
 }
 /** Is this a bootstrap of an older shape (not the one `hunch init` writes now)? */
 export function isLegacyLauncherHookCommand(command: string): boolean {
@@ -177,9 +206,11 @@ function candidates() {
 }
 
 function viaNpx() {
-  try { ${npxFallbackJs(version)} } catch (x) {
-    process.stderr.write("hunch hook launcher: could not run npx: " + (x && x.message ? x.message : String(x)) + "\\n");
-    process.exitCode = 1;
+  try { ${npxFallbackJsV3(version)} } catch (x) {
+    const m = "hunch hook: could not run Hunch through npx (" + (x && x.message ? x.message : String(x)) + "); this call ran without Hunch checks.";
+    process.stderr.write(m + "\\n");
+    process.stdout.write(JSON.stringify({ systemMessage: m }) + "\\n");
+    process.exitCode = 0;
   }
 }
 
@@ -191,8 +222,10 @@ else {
   import(require("url").pathToFileURL(entry).href).catch((x) => {
     // Once the CLI has read stdin a second run would see none: report instead.
     if (process.stdin.readableDidRead) {
-      process.stderr.write("hunch hook launcher: " + (x && x.message ? x.message : String(x)) + "\\n");
-      process.exitCode = 1;
+      const m = "hunch hook: Hunch failed to load (" + (x && x.message ? x.message : String(x)) + "); this call ran without Hunch checks.";
+      process.stderr.write(m + "\\n");
+      process.stdout.write(JSON.stringify({ systemMessage: m }) + "\\n");
+      process.exitCode = 0;
       return;
     }
     viaNpx();
