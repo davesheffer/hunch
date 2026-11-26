@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A cold or failing npx download no longer blocks every tool call.** When the hook's pinned npx fallback cannot run Hunch (the download fails or times out, or npx exits non-zero), hosts that fail closed on a non-zero hook exit (Claude Code Code Mode) blocked every tool call with no Hunch message. Now that call runs without Hunch checks and says so on stderr and as a system message in Claude Code, with the fix (run `npx @davesheffer/hunch@<version> init` or install that version to warm the cache). A deliberate deny (exit 2) still passes through, and `HUNCH_HOOK_NPX_TIMEOUT_MS` optionally caps the npx fallback (unset: no cap). Re-running `hunch init` installs the new hook command, and `hunch doctor` now notes older hook commands and tells you to do so (#680).
+
 ## 1.61.0 — 2026-11-26
 
 - **Rules have a lifecycle: Draft, Active, Challenged, Retired.** A person approves a Draft with `hunch review --confirm <id>`; Draft rules warn but never block. Any agent can challenge a rule (`hunch_challenge` over MCP, or `hunch challenge <id> --reason`); a challenged rule keeps blocking until a person clears it (`hunch challenge clear <id> --reason`), replaces it (`hunch replace <old> --with <new> --reason`) or retires it (`hunch remove <id> --reason`). Challenging an already challenged rule is refused and keeps the first challenge. Rules link to their `source_session` (hook `session_id`) and `source_run` (`HUNCH_RUN_ID`). Rule checks are logged to the git-ignored `.hunch/local/rule-checks.jsonl`, which never leaves the machine and holds no code or prompt contents. New: `hunch rules --json`, `hunch rule show <id> --json`. See [docs/rule-lifecycle.md](docs/rule-lifecycle.md). (#701)
