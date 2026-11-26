@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   accessSync,
   chmodSync,
@@ -776,8 +776,22 @@ function actorEnvironment(home, name, isolationEnv, extra = {}) {
   if (!isolationEnv?.NODE_OPTIONS) {
     throw new Error("Matrix actor environment requires the installed Node network guard");
   }
+  // The matrix actors stand in for a person: rule writes and policy upgrades are person-only (draft otherwise).
+  // Register a token store outside the actor's home and point the CLI's os.userInfo() at it through the same
+  // test-only preload the test suite uses; the person gate itself is unchanged.
+  const personHome = `${home}-person`;
+  const personToken = randomBytes(32).toString("base64url");
+  mkdirSync(join(personHome, ".hunch"), { recursive: true });
+  writeFileSync(
+    join(personHome, ".hunch", "person-token.json"),
+    `${JSON.stringify({ v: 1, sha256: createHash("sha256").update(personToken, "utf8").digest("hex"), created: "2026-01-01T00:00:00.000Z" })}
+`,
+  );
+  const preload = `--import=${JSON.stringify(pathToFileURL(join(projectRoot, "test", "support", "personHomePreload.mjs")).href)}`;
   return cleanEnvironment(home, {
-    NODE_OPTIONS: isolationEnv.NODE_OPTIONS,
+    NODE_OPTIONS: `${isolationEnv.NODE_OPTIONS} ${preload}`,
+    HUNCH_TEST_PERSON_HOME: personHome,
+    HUNCH_PERSON_TOKEN: personToken,
     GIT_AUTHOR_NAME: name,
     GIT_AUTHOR_EMAIL: `${name.toLowerCase()}@matrix-release.test`,
     GIT_COMMITTER_NAME: name,
