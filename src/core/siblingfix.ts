@@ -97,8 +97,8 @@ const MAX_CHANGE_LINES = 12;
 /** A fix commit's change is the lesson itself: capping it at 12 hid the second
  *  half of a two-commit fix (trap-310 v5 carried one commit, missed the other). */
 const MAX_FIX_CHANGE_LINES = 32;
-/** Bumped when the cached lesson shape changes. */
-const CACHE_VERSION = 9;
+/** Bumped when the cached lesson shape or the divergence filter changes. */
+const CACHE_VERSION = 10;
 /** Cached answers kept; past it the least recently written go (pruned on write). */
 const MAX_CACHE_ENTRIES = 256;
 const INVENTORY_FILE = "inventory.json";
@@ -213,10 +213,23 @@ export function parseLineLog(output: string): LineLogCommit[] {
   return commits;
 }
 
+/** A Python type comment (`# type: (int) -> str`) on its own line: read by
+ *  type checkers only, never by the interpreter. The only comment shape
+ *  stripped: a line-start test cannot tell a comment from code in general
+ *  (code after an inline block comment, `#` inside a string, `* rate`
+ *  continuations), so wider
+ *  stripping hides real sibling fixes. */
+const PY_TYPE_COMMENT = /^#\s*type:/;
+const PY_FILE = /\.pyi?$/i;
+
 /** A commit whose removed and added lines differ only in whitespace/line
- *  endings (a reformat, a CRLF→LF sweep, a re-indent) changed nothing. */
-export function isSubstantive(commit: LineLogCommit): boolean {
-  const norm = (lines: string[]) => lines.map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
+ *  endings (a reformat, a CRLF→LF sweep, a re-indent) or, in a Python file, in
+ *  `# type:` comments (sphinx's "Fix annotations of process_link()") changed
+ *  nothing. The subject is never consulted: "Fix typo" and "refactor … and
+ *  fix …" commits change behaviour often enough that only the diff can tell. */
+export function isSubstantive(commit: LineLogCommit, file = ""): boolean {
+  const typed = PY_FILE.test(file);
+  const norm = (lines: string[]) => lines.filter((l) => !(typed && PY_TYPE_COMMENT.test(l.trim()))).map((l) => l.replace(/\s+/g, "")).filter(Boolean).sort().join("\n");
   return norm(commit.added) !== norm(commit.removed);
 }
 
@@ -797,7 +810,7 @@ function computeLessons(
     // Divergence: substantive changes to the sibling that never touched the
     // target. Shared commits already carried their change to both copies.
     // The sibling's creation is not a change made to it.
-    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c));
+    let divergent = siblingLog.commits.filter((c) => !history.touched.has(c.sha) && !c.created && !writtenOver(c, pair.sibling) && isSubstantive(c, pair.siblingFile));
     // A reverted fix is no longer in the sibling, and its revert carries the
     // fix's subject: the pair cancels out.
     if (divergent.some((c) => isFixSubject(c.subject))) {

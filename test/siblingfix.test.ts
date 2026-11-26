@@ -190,6 +190,16 @@ test("a non-fix divergence alone is not surfaced", t => {
   assert.deepEqual(siblingLessonsFor(root, "src/claude.ts", [], { cache: false }), []);
 });
 
+test("a Python `# type:` comment is not a gap; every other change is, whatever its subject says", () => {
+  const base = { sha: "a".repeat(40), subject: "x", span: 4, created: false, diff: [] };
+  assert.ok(!isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }, "sphinx/domains/javascript.py"), "sphinx 7caf34c6e");
+  assert.ok(isSubstantive({ ...base, added: ["    # type: (Env, nodes.Element) -> str"], removed: ["    # type: (Env, nodes.reference) -> str"] }, "src/a.ts"), "only Python reads it as a comment");
+  assert.ok(isSubstantive({ ...base, added: ["  # keep mixed entries"], removed: ["  # keep entries"] }, "a.py"), "other comments keep base behaviour");
+  assert.ok(isSubstantive({ ...base, added: ["  /* istanbul ignore next */ if (!x) return null;"], removed: [] }, "a.ts"), "code after a block comment");
+  assert.ok(isSubstantive({ ...base, added: ["        * rate / 100"], removed: ["        * rate"] }, "a.py"));
+  assert.ok(isSubstantive({ ...base, subject: "Fix typo", added: ["    if self._config.napoleon_preprocess_types:"], removed: ["    if self._config.napoleon_enable_type_preprocessor:"] }, "sphinx/ext/napoleon/docstring.py"), "sphinx be65bded7: the subject is never consulted");
+});
+
 test("a caller is not a copy of its callee", t => {
   const root = repo(t);
   const wrapper = `export function isOurClaudeHook(entry: { hooks?: { command?: string }[] }): boolean {\n  const hooks = entry.hooks ?? [];\n  if (!hooks.length) return false;\n  return isOurProviderHook({ hooks: hooks.filter((h) => typeof h.command === "string") });\n}\n`;
