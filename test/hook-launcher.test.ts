@@ -210,26 +210,36 @@ test("hook launcher: a symlinked (npm link) package of the pinned version is nev
   assert.equal(r.stdout, NPX_OUT, r.stderr);
 });
 
+/** Make the fixture's fake npx fail with exit 4 after echoing, so the launcher's fail-open path runs. */
+function failNpx(f: { env: NodeJS.ProcessEnv }): void {
+  writeFileSync(String(f.env.HUNCH_HOOK_NPX_CLI), `let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => { process.stdout.write("NPX " + process.argv.slice(2).join(" ") + " <" + s + ">"); process.exit(4); });`);
+}
+function assertFailOpen(r: { status: number | null; stdout: unknown; stderr: unknown }): void {
+  assert.equal(r.status, 0, "fail-open: a failing npx never blocks the call");
+  assert.ok(String(r.stdout).startsWith(NPX_OUT), String(r.stdout));
+  assert.match(String(r.stderr), /could not run Hunch through npx \(exit 4\)/);
+  assert.match((JSON.parse(String(r.stdout).slice(NPX_OUT.length).trim()) as { systemMessage: string }).systemMessage, /ran without Hunch checks/);
+}
+
 test("hook launcher: another installed version is a miss and falls back to the pinned npx with stdin, exit code and no deprecation warning", (t) => {
   const f = fixture(t);
+  failNpx(f);
   f.pkg(join(f.cache, "_npx", "aaa", "node_modules", "hunch-exact"), "9.9.8");
   f.pkg(join(f.cache, "_npx", "bbb", "node_modules", "@davesheffer", "hunch"), "9.9.10");
   const r = f.run();
-  assert.equal(r.stdout, NPX_OUT, r.stderr);
-  assert.equal(r.status, 0, "fail-open: a failing npx never blocks the call");
+  assertFailOpen(r);
   assert.doesNotMatch(r.stderr, /DEP0190|DeprecationWarning/);
 });
 
 test("hook launcher: nothing installed falls back to npx; a CLI that fails to load falls back too", (t) => {
   const f = fixture(t);
+  failNpx(f);
   assert.ok(f.env.HUNCH_HOOK_NPX_CLI, "the fake npx stands in for npm's npx-cli.js");
   let r = f.run();
-  assert.equal(r.stdout, NPX_OUT, r.stderr);
-  assert.equal(r.status, 0, "fail-open: a failing npx never blocks the call");
+  assertFailOpen(r);
   f.pkg(join(f.cache, "_npx", "aaa", "node_modules", "hunch-exact"), "9.9.9", "HIT", `throw new Error("boom");`);
   r = f.run();
-  assert.equal(r.stdout, NPX_OUT, r.stderr);
-  assert.equal(r.status, 0, "fail-open: a failing npx never blocks the call");
+  assertFailOpen(r);
 });
 
 /** Shells available here that Claude Code may run a hook command in. */
