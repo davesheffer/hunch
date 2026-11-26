@@ -592,10 +592,18 @@ function windowsCommandQuote(value) {
   return /^[A-Za-z0-9_./:=@-]+$/.test(value) ? value : `"${value.replace(/"/g, '\\"')}"`;
 }
 
+// Windows env names are case-insensitive, so any ASCII spelling of the name is the token.
+// Keys are walked with for...in because spawn copies the env that way (inherited keys included).
 export function withoutPersonToken(env) {
-  if (!env || !("HUNCH_PERSON_TOKEN" in env)) return env;
-  const { HUNCH_PERSON_TOKEN: _token, ...rest } = env;
-  return rest;
+  if (!env) return env;
+  const keys = [];
+  for (const key in env) keys.push(key);
+  if (!keys.some(isPersonTokenKey)) return env;
+  return Object.fromEntries(keys.filter((key) => !isPersonTokenKey(key)).map((key) => [key, env[key]]));
+}
+
+function isPersonTokenKey(key) {
+  return /^HUNCH_PERSON_TOKEN$/i.test(key);
 }
 
 // Strips the person credential from every child by default (git, hooks, probes); only the CLI opts in.
